@@ -43,7 +43,7 @@ services:
       - "127.0.0.1:7080:7080"
   hub-webapp:
     build:
-      context: hub-webapp
+      context: biothings-webapp
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8080:80"
