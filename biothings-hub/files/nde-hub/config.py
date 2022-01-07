@@ -6,6 +6,11 @@ import urllib.parse
 mongo_host = os.environ.get('MONGO_HOST', 'mongodb:27017')
 mongo_parsed = urllib.parse.urlparse(f'mongodb://{mongo_host}')
 
+# create directories in case volume changed
+for _ in ['datasources', 'plugins', 'dataupload', 'diff', 'logs', 'release',
+          'cache', 'run', 'esbackup']:
+    os.makedirs(f'/data/nde-hub/{_}', exist_ok=True)
+
 # hijack the loading progress so that the proper keys are in place before running hub
 if not os.path.isfile('/data/nde-hub/ssh_host_key'):
     if os.path.exists('/data/nde-hub/ssh_host_key'):
