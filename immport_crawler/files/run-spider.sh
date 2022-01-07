@@ -6,5 +6,7 @@
     cd /home/biothings || exit
     export PYTHONPATH="."
     export SCRAPY_SETTINGS_MODULE="settings"
-    su -c '/home/biothings/venv/bin/scrapy runspider spider.py' biothings
+    # only one instance will be running at a time
+    flock --verbose --nonblock /crawler.lock \
+      su -c '/home/biothings/venv/bin/scrapy runspider spider.py' biothings
 ) > /proc/1/fd/1 2> /proc/1/fd/2
