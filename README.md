@@ -27,6 +27,6 @@ For more details, see `NDEFileSystemDumper` and the code for harvesting data
 from ImmPort.
 
 ## Current Issues
-Due to the data transformation being incomplete. While data can be dumped and
+1. Due to the data transformation being incomplete. While data can be dumped and
 uploaded in the Hub, it cannot be indexed to Elasticsearch as it conflicts with
 the given mapping.
