@@ -25,9 +25,10 @@ class ImmPortSpider(scrapy.Spider):
     """
     Crawl ImmPort with Selenium
 
-    * User Selenium Chrome Driver to render dynamic contents
-    * Scrape HTML table elements to JSON dictionary
-    * Use mannually downloaded data ID file
+    * Queries API for list of items
+    * Uses Selenium Chrome Driver to render dynamic contents
+    * Wait until page loads the JS so it has the LD-JSON
+    * Extract LD-JSON
 
     """
 
