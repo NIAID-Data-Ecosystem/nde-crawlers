@@ -4,6 +4,7 @@ import os
 
 import orjson
 from biothings.hub.dataload.dumper import BaseDumper
+from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
 
 from config import DATA_ARCHIVE_ROOT
@@ -126,6 +127,7 @@ class NDEFileSystemDumper(BaseDumper):
 
 
 class NDESourceUploader(BaseSourceUploader):
+    storage_class = IgnoreDuplicatedStorage
 
     def load_data(self, data_folder):
         with open(os.path.join(data_folder, 'data.ndjson'), 'rb') as f:
