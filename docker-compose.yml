@@ -7,12 +7,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
-#  zenodo-crawler:
-#    build:
-#      context: zenodo_crawler
-#      dockerfile: Dockerfile
-#    volumes:
-#      - crawler-data:/data/crawler-data
+  zenodo-crawler:
+    build:
+      context: zenodo_crawler
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   mongodb:
     image: mongo:4.4
     ports:
