@@ -67,6 +67,8 @@ COPY --chown=biothings:biothings ./files/nde-hub .
 # RUN ln -sv /data/nde-hub/ssh_host_key bin/ssh_host_key
 # create dirs and change ownership
 USER root
+# makes sure the application folder is under the biothings user and not the root
+RUN chown -R biothings:biothings /home/biothings/nde-hub
 RUN mkdir -p /data/nde-hub/{datasources,plugins,dataupload,diff,logs,release,cache,run,esbackup} && \
     chown -R biothings:biothings /data
 ADD ./files/docker-entrypoint.sh /
