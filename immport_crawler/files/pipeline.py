@@ -23,6 +23,9 @@ class Immport2OutbreakDatasetPipeline:
         # see discussion
         #  https://suwulab.slack.com/archives/C01078YR6SW/p1631035614003000?thread_ts=1630687426.004000&cid=C01078YR6SW
         if author := item.pop('creator', None):
+            for data in author:
+                for key,value in data.items():
+                    data[key] = {"name": value} if key == "affiliation" else value
             item['author'] = author
         if cited_by := item.pop('citation', None):
             item['citedBy'] = cited_by
