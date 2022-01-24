@@ -3,26 +3,28 @@ from biothings.utils.loggers import setup_default_log
 import os
 import urllib.parse
 
-mongo_host = os.environ.get('MONGO_HOST', 'mongodb:27017')
+mongo_host = os.environ.get('MONGO_HOST', 'localhost:27017')
 mongo_parsed = urllib.parse.urlparse(f'mongodb://{mongo_host}')
+data_folder = os.environ.get('DATA_FOLDER', '/data/nde-hub')
 
 # create directories in case volume changed
 for _ in ['datasources', 'plugins', 'dataupload', 'diff', 'logs', 'release',
           'cache', 'run', 'esbackup']:
-    os.makedirs(f'/data/nde-hub/{_}', exist_ok=True)
+    os.makedirs(f'{data_folder}/{_}', exist_ok=True)
 
 # hijack the loading progress so that the proper keys are in place before running hub
-if not os.path.isfile('/data/nde-hub/ssh_host_key'):
-    if os.path.exists('/data/nde-hub/ssh_host_key'):
+ssh_key_file = f'{data_folder}/ssh_host_key'
+if not os.path.isfile(ssh_key_file):
+    if os.path.exists(ssh_key_file):
         raise FileExistsError(
-            "/data/nde-hub/ssh_host_key exists but is not a regular file")
+            f"{ssh_key_file} exists but is not a regular file")
 
     from cryptography.hazmat.primitives.asymmetric import rsa as pk
     from cryptography.hazmat.primitives import serialization as crypto_ser
 
     print("Generating SSH Keys for BioThings Hub...")
     privkey = pk.generate_private_key(65537, 2048)
-    with open('/data/nde-hub/ssh_host_key', 'wb') as f:
+    with open(ssh_key_file, 'wb') as f:
         f.write(
             privkey.private_bytes(
                 crypto_ser.Encoding.PEM,
@@ -32,30 +34,30 @@ if not os.path.isfile('/data/nde-hub/ssh_host_key'):
         )
     pubkey = privkey.public_key().public_bytes(crypto_ser.Encoding.OpenSSH,
                                                crypto_ser.PublicFormat.OpenSSH)
-    with open('/data/nde-hub/ssh_host_key.pub', 'wb') as f:
+    with open(f'{ssh_key_file}.pub', 'wb') as f:
         f.write(pubkey)
     print("SSH Key has been generated, Public Key:\n")
     print(pubkey.decode('ASCII'))
     print()
     del privkey, pubkey, crypto_ser, pk
 
-DATA_ARCHIVE_ROOT = f'/data/nde-hub/datasources'
-DATA_PLUGIN_FOLDER = f'/data/nde-hub/plugins'
-DATA_UPLOAD_FOLDER = f'/data/nde-hub/dataupload'
+DATA_ARCHIVE_ROOT = f'{data_folder}/datasources'
+DATA_PLUGIN_FOLDER = f'{data_folder}/plugins'
+DATA_UPLOAD_FOLDER = f'{data_folder}/dataupload'
 
-DIFF_PATH = f"/data/nde-hub/diff"
-RELEASE_PATH = f"/data/nde-hub/release"
-CACHE_FOLDER = f"/data/nde-hub/cache"
-ES_BACKUPS_FOLDER = f"/data/nde-hub/esbackup"
+DIFF_PATH = f"{data_folder}/diff"
+RELEASE_PATH = f"{data_folder}/release"
+CACHE_FOLDER = f"{data_folder}/cache"
+ES_BACKUPS_FOLDER = f"{data_folder}/esbackup"
 
-LOG_FOLDER = f"/data/nde-hub/logs"
+LOG_FOLDER = f"{data_folder}/logs"
 logger = setup_default_log("hub", LOG_FOLDER)
 
-RUN_DIR = f'/data/nde-hub/run'
+RUN_DIR = f'{data_folder}/run'
 
 DATA_SRC_SERVER = mongo_parsed.hostname or 'localhost'
 DATA_SRC_PORT = mongo_parsed.port or 27017
-DATA_SRC_DATABASE = 'nde_hub_sources'
+DATA_SRC_DATABASE = 'nde_hub_src'
 DATA_SRC_SERVER_USERNAME = urllib.parse.unquote(mongo_parsed.username) \
     if mongo_parsed.username else ''
 DATA_SRC_SERVER_PASSWORD = urllib.parse.unquote(mongo_parsed.password) \
@@ -63,12 +65,12 @@ DATA_SRC_SERVER_PASSWORD = urllib.parse.unquote(mongo_parsed.password) \
 
 DATA_TARGET_SERVER = DATA_SRC_SERVER
 DATA_TARGET_PORT = DATA_SRC_PORT
-DATA_TARGET_DATABASE = 'nde_hub_target'
+DATA_TARGET_DATABASE = 'nde_hub'
 DATA_TARGET_SERVER_USERNAME = DATA_SRC_SERVER_USERNAME
 DATA_TARGET_SERVER_PASSWORD = DATA_SRC_SERVER_PASSWORD
 
 # FIXME: deal with other uri later
-DATA_HUB_DB_DATABASE = 'nde_hub_db'
+DATA_HUB_DB_DATABASE = 'nde_hub_hubdb'
 HUB_DB_BACKEND = {
     "module": "biothings.utils.mongo",
     "uri": mongo_parsed.geturl(),
@@ -82,12 +84,12 @@ CONFIG_READONLY = False
 BIOTHINGS_VERSION = 'master'
 
 # SSH port for hub console
-HUB_SSH_PORT = 7022
-HUB_API_PORT = 7080
+HUB_SSH_PORT = 19522
+HUB_API_PORT = 19580
 
 # Hub name/icon url/version, for display purpose
-HUB_NAME = f"Studio for NDE"
-HUB_ICON = f"http://biothings.io/static/img/mygene-logo-shiny.svg"
+HUB_NAME = "Studio for NDE"
+HUB_ICON = "https://biothings.io/static/img/sdk-icon.svg"
 HUB_VERSION = "master"
 
 USE_RELOADER = True  # so no need to restart hub when a datasource has changed
@@ -100,7 +102,7 @@ INDEX_CONFIG = {
     },
     "env": {
         "localhub": {
-            "host": os.environ.get('ES_HOST', 'elasticsearch:9200'),
+            "host": os.environ.get('ES_HOST', 'localhost:9200'),
             "indexer": {
                 "args": {
                     "timeout": 300,
@@ -114,3 +116,13 @@ INDEX_CONFIG = {
 
 # cleanup config namespace
 del os, urllib, setup_default_log, mongo_host, mongo_parsed
+
+# This is the root data folder from output files NDEFileSystemDumper
+# is monitoring, where all crawlers save output files
+CRAWLER_OUTPUT_DATA_ROOT = '/data'
+
+# Allow to override any default settings with a config_local.py file
+try:
+    from config_local import *
+except ImportError:
+    pass

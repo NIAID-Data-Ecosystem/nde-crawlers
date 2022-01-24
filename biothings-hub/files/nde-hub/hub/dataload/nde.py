@@ -7,7 +7,7 @@ from biothings.hub.dataload.dumper import BaseDumper
 from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
 
-from config import DATA_ARCHIVE_ROOT
+from config import DATA_ARCHIVE_ROOT, CRAWLER_OUTPUT_DATA_ROOT
 
 
 __all__ = [
@@ -37,7 +37,7 @@ class NDEFileSystemDumper(BaseDumper):
         # source location in same shared volume
         src_name = self.SRC_NAME
         release_filename = os.path.join(
-            '/data', f'{src_name}_crawled', 'release.txt'
+            CRAWLER_OUTPUT_DATA_ROOT, f'{src_name}_crawled', 'release.txt'
         )
         if not os.path.exists(release_filename):
             # probably not crawled yet
