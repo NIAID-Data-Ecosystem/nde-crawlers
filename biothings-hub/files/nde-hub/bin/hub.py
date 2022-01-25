@@ -1,11 +1,11 @@
 # this file is more or less just copied over from other projects
+import os
+import os.path
 
 import biothings
-import config
-import hub.dataload.sources
 from biothings.hub import HubServer
 from biothings.utils.version import set_versions
-import os
+
 import logging
 # shut some mouths
 logging.getLogger("botocore").setLevel(logging.ERROR)
@@ -15,9 +15,12 @@ logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
 app_folder, _src = os.path.split(os.path.split(os.path.abspath(__file__))[0])
+import config
 set_versions(config, app_folder)
 biothings.config_for_app(config)
 logging = config.logger
+import hub.dataload.sources
+
 
 server = HubServer(hub.dataload.sources, name="BioThings Studio for NDE")
 
@@ -32,7 +35,6 @@ server = HubServer(hub.dataload.sources, name="BioThings Studio for NDE")
 if __name__ == "__main__":
     # vanilla or as a launcher of an API
     from optparse import OptionParser
-    import os
     import sys
     import glob
     import re
@@ -42,7 +44,7 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
     if options.api_folder:
         api_folder = os.path.abspath(options.api_folder)
-        logging.info("Lauching server from API located in: %s" % api_folder)
+        logging.info("Lauching server from API located in: %s", api_folder)
         origwd = os.path.abspath(os.path.curdir)
         # assuming a bin/hub.py module in this folder
         os.chdir(api_folder)
@@ -56,10 +58,10 @@ if __name__ == "__main__":
             if "bin/hub.py" in scripts:
                 startup = scripts[scripts.index("bin/hub.py")]
             else:
-                logging.error("Found more than one startup scripts, none of them named hub.py, " +
-                              "don't know which to choose: %s" % scripts)
+                logging.error("Found more than one startup scripts, none of them named hub.py, "
+                              "don't know which to choose: %s", scripts)
                 sys.exit(1)
-        logging.info("Found startup script '%s'" % startup)
+        logging.info("Found startup script '%s'", startup)
         strmod = re.sub(".py$", "", startup).replace("/", ".")
         import importlib
         mod = importlib.import_module(strmod)
@@ -68,7 +70,7 @@ if __name__ == "__main__":
         for name in dir(mod):
             server = getattr(mod, name)
             if issubclass(server.__class__, HubServer):
-                logging.info("Found hub server: %s" % server)
+                logging.info("Found hub server: %s", server)
                 # replace sources, dynamic discovery
                 if os.path.exists("hub/dataload/sources"):
                     server.source_list = "hub/dataload/sources"
@@ -80,7 +82,7 @@ if __name__ == "__main__":
     else:
         logging.info("Runing vanilla studio")
 
-    logging.info("Hub DB backend: %s" % biothings.config.HUB_DB_BACKEND)
-    logging.info("Hub database: %s" % biothings.config.DATA_HUB_DB_DATABASE)
+    logging.info("Hub DB backend: %s", biothings.config.HUB_DB_BACKEND)
+    logging.info("Hub database: %s", biothings.config.DATA_HUB_DB_DATABASE)
 
     server.start()
