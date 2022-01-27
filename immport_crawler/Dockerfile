@@ -72,9 +72,11 @@ ADD files .
 # crontab has to run as root
 # I really don't want to bother with reinventing the wheel
 USER root
+# make arg to decide whether to use dev-crontab or prod-crontab, defaults as prod (--build-arg CRONTAB=dev-crontab)
+ARG CRONTAB=prod-crontab
 # move files
 RUN mv docker-entrypoint.sh / && \
-    mv crontab /etc
+    mv ${CRONTAB} /etc/crontab
 RUN mkdir -p /data/immport_crawled && chown -R biothings:biothings /data
 ENV PYTHONPATH="."
 ENV SCRAPY_SETTINGS_MODULE="settings"

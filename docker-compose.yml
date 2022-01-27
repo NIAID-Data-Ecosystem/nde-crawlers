@@ -1,16 +1,31 @@
 version: '3'
 
 services:
-  immport-cralwer:
+  immport-crawler:
     build:
       context: immport_crawler
       dockerfile: Dockerfile
+      args:
+        # uncomment to run development crontab
+        # CRONTAB: dev-crontab
     volumes:
       - data:/data
   zenodo-crawler:
     build:
       context: zenodo_crawler
       dockerfile: Dockerfile
+      args:
+        # uncomment to run development crontab
+        # CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+  omicsdi_crawler:
+    build:
+      context: omicsdi_crawler
+      dockerfile: Dockerfile
+      args:
+        # uncomment to run development crontab
+        # CRONTAB: dev-crontab
     volumes:
       - data:/data
   mongodb:
@@ -39,8 +54,8 @@ services:
       # Update this to wherever you want VS Code to mount the folder of your project
       - data:/data
     ports:
-      - "127.0.0.1:7022:7022"
-      - "127.0.0.1:7080:7080"
+      - "127.0.0.1:7022:19522"
+      - "127.0.0.1:7080:19580"
   hub-webapp:
     build:
       context: biothings-webapp
@@ -49,3 +64,8 @@ services:
       - "127.0.0.1:8080:80"
 volumes:
   data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nde/data
