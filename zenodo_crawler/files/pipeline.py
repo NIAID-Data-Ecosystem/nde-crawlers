@@ -32,6 +32,7 @@ class ZenodoItemProcessorPipeline:
             'author': [],
             'description': item['metadata']['description'],
             'identifier': item['doi'],
+            'doi': item['doi'],
             'dateModified': datetime.datetime.fromisoformat(
                 item['updated']
             ).date().isoformat(),
