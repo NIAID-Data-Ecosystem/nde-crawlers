@@ -1,3 +1,8 @@
+# need to specify pythonpath because scrapy expects you to have the standard scrapy project structure
+# need to specify settings because there is no scrapy.cfg file 
+# PYTHONPATH="$PYTHONPATH:." SCRAPY_SETTINGS_MODULE="settings" scrapy runspider spider.py
+# If you are using the Dockerfile, runspider does this for you: /home/biothings/run-spider.sh
+
 import datetime
 import urllib.parse
 import re
