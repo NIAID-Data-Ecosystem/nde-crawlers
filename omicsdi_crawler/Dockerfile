@@ -1,3 +1,5 @@
+# when running in a development environment instead of a production environment specify crontab buildarg
+# docker build --build-arg CRONTAB=dev-crontab .
 FROM python:3.10 AS builder
 WORKDIR /build/wheels
 RUN apt-get -y -qq update && \
