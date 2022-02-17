@@ -25,8 +25,8 @@ services:
       context: omicsdi_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
   ncbi_geo_crawler:
