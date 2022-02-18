@@ -32,7 +32,7 @@ class NCBIGeoSpider(scrapy.Spider):
     }
 
     # gets the list of gse ids to request
-    def get_ids():
+    def get_ids(self):
         gse_li = []
         ftp_host = 'ftp.ncbi.nlm.nih.gov'
         ftp = FTP(ftp_host)
