@@ -36,31 +36,31 @@ class NCBIGeoSpider(scrapy.Spider):
         gse_li = []
         ftp_host = 'ftp.ncbi.nlm.nih.gov'
         ftp = FTP(ftp_host)
-        ftp.login('','')
+        ftp.login()
         ftp.cwd('/geo/series/')
         folder_li = ftp.nlst()
         for i in folder_li:
             ftp.cwd(i)
             gse_li = gse_li + ftp.nlst()
             ftp.cwd('..')
-        print(len(gse_li))
         ftp.close()
+        return gse_li
 
     # THIS USED FOR TESTING/DEBUGGING
     # for small tests can use (start, end) = (1,20)
     # this should be the most recent assession (GSE) link: https://www.ncbi.nlm.nih.gov/geo/browse/?view=series&display=1&zsort=acc
-    def start_requests(self):
-        start = 1
-        end = 20
-        prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
-        for acc_id in range(start, end + 1):
-            yield scrapy.Request(url=prefix + str(acc_id))
-    
     # def start_requests(self):
-    #     ids = self.get_ids()
-    #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
-    #     for acc_id in ids:
+    #     start = 1
+    #     end = 20
+    #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
+    #     for acc_id in range(start, end + 1):
     #         yield scrapy.Request(url=prefix + str(acc_id))
+    
+    def start_requests(self):
+        ids = self.get_ids()
+        prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
+        for acc_id in ids:
+            yield scrapy.Request(url=prefix + str(acc_id))
         
 
     def parse(self, response):
