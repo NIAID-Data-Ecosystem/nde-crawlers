@@ -19,6 +19,7 @@ import scrapy
 from ftplib import FTP
 
 
+# may take some time to start up as getting the ids takes a while
 class NCBIGeoSpider(scrapy.Spider):
 
     name = 'ncbi_geo'
@@ -49,11 +50,18 @@ class NCBIGeoSpider(scrapy.Spider):
     # for small tests can use (start, end) = (1,20)
     # this should be the most recent assession (GSE) link: https://www.ncbi.nlm.nih.gov/geo/browse/?view=series&display=1&zsort=acc
     def start_requests(self):
-        start = 196607
-        end = 196616
+        start = 1
+        end = 20
         prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
         for acc_id in range(start, end + 1):
             yield scrapy.Request(url=prefix + str(acc_id))
+    
+    # def start_requests(self):
+    #     ids = self.get_ids()
+    #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
+    #     for acc_id in ids:
+    #         yield scrapy.Request(url=prefix + str(acc_id))
+        
 
     def parse(self, response):
 
