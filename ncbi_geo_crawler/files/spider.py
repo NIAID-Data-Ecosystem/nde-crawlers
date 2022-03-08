@@ -3,6 +3,7 @@
 # need to specify settings because there is no scrapy.cfg file 
 # PYTHONPATH="$PYTHONPATH:." SCRAPY_SETTINGS_MODULE="settings" scrapy runspider spider.py
 # If you are using the Dockerfile, runspider does this for you: /home/biothings/run-spider.sh
+
 '''
     NCBI Geo Datasource
 
@@ -51,7 +52,7 @@ class NCBIGeoSpider(scrapy.Spider):
     # this should be the most recent assession (GSE) link: https://www.ncbi.nlm.nih.gov/geo/browse/?view=series&display=1&zsort=acc
     # def start_requests(self):
     #     start = 1
-    #     end = 20
+    #     end = 2000
     #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
     #     for acc_id in range(start, end + 1):
     #         yield scrapy.Request(url=prefix + str(acc_id))

@@ -6,6 +6,8 @@
 
 # useful for handling different item types with a single interface
 
+from datetime import datetime
+
 __all__ = [
     'GeoItemProcessorPipeline',
 ]
@@ -26,8 +28,9 @@ class GeoItemProcessorPipeline:
         output = {
             "@context": "http://schema.org/",
             "@type": "Dataset",
-            "_id": url,
+            "_id": "GEO_" + _id,
             "identifier": _id,
+            "url": url,
             "distribution": {
                 "@type": "dataDownload",
                 "contentUrl": url
@@ -60,15 +63,18 @@ class GeoItemProcessorPipeline:
         # rename keys
         if name := item.pop('Title', None):
             output['name'] = name
-        if organism := item.pop('Organism', None):
-            output['organism'] = organism
+        if species := item.pop('Organism', None):
+            output['species'] = species
         if measurement_technique := item.pop('Experiment type', None):
             output['measurementTechnique'] = measurement_technique
         if description := item.pop('Summary', None):
             output['description'] = description
         if date_published := item.pop('Submission date', None):
-            output['datePublished'] = date_published
+            output['datePublished'] = datetime.strptime(date_published, '%b %d, %Y').isoformat()
         if date_modified := item.pop('Last update date', None):
-            output['dateModified'] = date_modified
+            output['dateModified'] = datetime.strptime(date_modified, '%b %d, %Y').isoformat()
+        # this will be used to call the api to get citation and funding in the uploader
+        if pmids := item.pop('Citation(s)', None):
+            output['pmids'] = pmids
 
         return output
