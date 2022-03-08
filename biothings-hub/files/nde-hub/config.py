@@ -86,6 +86,7 @@ BIOTHINGS_VERSION = 'master'
 # SSH port for hub console
 HUB_SSH_PORT = 19522
 HUB_API_PORT = 19580
+READONLY_HUB_API_PORT = 19581
 
 # Hub name/icon url/version, for display purpose
 HUB_NAME = "Studio for NDE"

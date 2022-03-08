@@ -1,6 +1,7 @@
 import datetime
 import inspect
 import os
+import shutil
 
 import orjson
 from biothings.hub.dataload.dumper import BaseDumper
@@ -103,7 +104,11 @@ class NDEFileSystemDumper(BaseDumper):
         """
         target_dir = os.path.dirname(localfile)
         os.makedirs(target_dir, exist_ok=True)
-        os.link(remotefile, localfile)
+        try:
+            os.link(remotefile, localfile)
+        except OSError:
+            # if link does not work, let's just download the file, e.g. when source/target is a mounted network folder
+            shutil.copy(remotefile, localfile)
 
     @property
     def client(self):
