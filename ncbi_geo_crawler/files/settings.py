@@ -7,8 +7,8 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
-# LOG_LEVEL = 'INFO'
-LOG_LEVEL = 'DEBUG'
+LOG_LEVEL = 'INFO'
+# LOG_LEVEL = 'DEBUG'
 
 ###
 DEPTH_LIMIT = 0
