@@ -196,7 +196,22 @@ class NDESourceUploader(BaseSourceUploader):
                     "title": {"type": "text"},
                 }
             },
-            "citation": {"type": "text"},
+            "citation": {
+                "properties": {
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "name": {"type": "text", "copy_to": ["all"]}
+                        }
+                    },
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                    "datePublished": {"type": "date"},
+                }
+            },
             "citedBy": {
                 "properties": {
                     "@type": {"type": "keyword"},
