@@ -1,1 +1,2 @@
 git+https://github.com/biothings/biothings.api@master#egg=biothings[hub]
+biopython
