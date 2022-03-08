@@ -139,3 +139,7 @@ ssh_host_key
 
 # Config file
 config_local.py
+config.yml
+
+# macos settings
+.DS_Store
