@@ -2,8 +2,8 @@ import os
 import orjson
 import yaml
 import time
-import helper
 
+from .helper import batch_get_pmid_eutils
 from hub.dataload.nde import NDESourceUploader
 from itertools import islice
 from config import GEO_API_KEY, GEO_EMAIL
@@ -39,7 +39,7 @@ class NCBI_Geo_Uploader(NDESourceUploader):
                         pmid_list += [pmid.strip() for pmid in pmids.split(',')]
 
                 # batch request
-                eutils_info = geo_helper.batch_get_pmid_eutils(pmid_list, email, api_key)
+                eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
                 # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
                 if api_key:
                     time.sleep(0.1)
