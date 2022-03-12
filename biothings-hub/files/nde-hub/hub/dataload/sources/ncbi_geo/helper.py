@@ -9,33 +9,34 @@ import logging
 
 logger = logging.getLogger('nde-logger')
 
-"""helper method to solve the problem transforming dates such as "2000 Spring" into isoformat dates
-
-https://www.nlm.nih.gov/bsd/mms/medlineelements.html#dp
-Returns:
-    An isoformatted date depending on context:
-
-    Seasons use metrological start
-    Winter: December 1
-    Spring: March 1
-    Summer: June 1
-    Fall: September 1
-
-    Dates with only Y/M or Y/M-M take the first day of that month
-    Dates with only Y take first day of that year
-"""
-
-
 def get_pub_date(date: str):
+    """helper method to solve the problem transforming dates such as "2000 Spring" into isoformat dates
+
+        https://www.nlm.nih.gov/bsd/mms/medlineelements.html#dp
+        Returns:
+            An isoformatted date depending on context:
+
+            Seasons use metrological start
+            Winter: December 1
+            Spring: March 1
+            Summer: June 1
+            Fall: September 1
+
+            Dates with Y/M/D-D take only the beginning day
+            Dates with only Y/M or Y/M-M take the first day of that month
+            Dates with only Y or Y-Y take first day of that year
+            TODO: Not important since only one instance so far but fix edge case "2016 11-12"
+    """
+
     months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
     seasons = {"spring": " mar 1", "summer": " jun 1", "fall": " sep 1", "winter": " dec 1"}
 
     s_date = date.lower().split()
     date_len = len(s_date)
-    # if length is 1 just the year
+    # if length is 1 can either be year or year-year
     if date_len == 1:
-        return datetime.strptime(date, '%Y').isoformat()
-    # if length is 2 can either be year season or year month
+        return datetime.strptime(s_date[0].split('-')[0], '%Y').isoformat()
+    # if length is 2 can either be year season or year month or year month-month
     elif date_len == 2:
         if s_date[1][:3] in months:
             return datetime.strptime(s_date[0] + ' ' + s_date[1][:3], '%Y %b').isoformat()
@@ -44,14 +45,21 @@ def get_pub_date(date: str):
         else:
             logger.warning("Need to update isoformat transformation: %s", date)
             return None
-    # if length is 3 should be year month day
+    # if length is 3 should be year month day or year month day-day
     elif date_len == 3:
-        return datetime.strptime(date, '%Y %b %d').isoformat()
+        return datetime.strptime(s_date[0] + ' ' + s_date[1] + ' ' + s_date[2].split('-')[0], '%Y %b %d').isoformat()
+    # exception case there are quite a few entries with this case "2020 Jan - Feb"
+    elif date_len == 4:
+        if s_date[1] in months and s_date[3] in months and s_date[2] == "-":
+            return datetime.strptime(s_date[0] + ' ' + s_date[1], '%Y %b').isoformat()
+        else:
+            logger.warning("Need to update isoformat transformation %s", date)
     else:
         logger.warning("Need to update isoformat transformation: %s", date)
         return None
 
 
+# TODO add retry decorator to this function if getting too many imcompleteread errors
 def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
     """Use pmid to retrieve both citation and funding info in batch
     :param pmids: A list of PubMed PMIDs
@@ -69,9 +77,11 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
 
     ct_fd = {}
 
+    # api query to parse citations
     handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
 
     records = Medline.parse(handle)
+    # TODO: this can get an incompleteread error need implementation to rerun api query if this happens
     records = list(records)
     for record in records:
         citation = {}
@@ -111,6 +121,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     handle = Entrez.efetch(db="pubmed", id=pmids, retmode="xml")
 
     # Have to use Entrez.read() instead of Entrez.parse(). The problem is discussed here: https://github.com/biopython/biopython/issues/1027
+    # TODO: this can get an incompleteread error need implementation to rerun api query if this happens
     records = Entrez.read(handle)
     records = records['PubmedArticle']
 
