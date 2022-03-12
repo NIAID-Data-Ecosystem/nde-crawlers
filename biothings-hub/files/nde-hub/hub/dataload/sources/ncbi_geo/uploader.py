@@ -8,6 +8,9 @@ from hub.dataload.nde import NDESourceUploader
 from itertools import islice
 from config import GEO_API_KEY, GEO_EMAIL
 
+import logging
+logger = logging.getLogger('nde-logger')
+
 class NCBI_Geo_Uploader(NDESourceUploader):
     name = "ncbi_geo"
 
@@ -50,16 +53,23 @@ class NCBI_Geo_Uploader(NDESourceUploader):
                 for rec in doc_list:
                     if pmids := rec.pop('pmids', None):
                         pmids = [pmid.strip() for pmid in pmids.split(',')]
+                        # fixes issue where pmid numbers under 10 is read as 04 instead of 4
+                        pmids = [ele.lstrip('0') for ele in pmids]
                         for pmid in pmids:
-                            if citation := eutils_info[pmid].get('citation'):
-                                if rec.get('citation'):
-                                    rec['citation'].append(citation)
-                                else:
-                                    rec['citation'] = [citation]
-                            if funding := eutils_info[pmid].get('funding'):
-                                if rec.get('funding'):
-                                    rec['funding'] += funding
-                                else:
-                                    rec['funding'] = funding
+                            if not eutils_info.get(pmid):
+                                logger.info('There is an issue with this pmid. PMID: %s, rec_id: %s', pmid, rec['_id'])
+                            # this fixes the error where there is no pmid
+                            # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
+                            if eutils_info.get(pmid):
+                                if citation := eutils_info[pmid].get('citation'):
+                                    if rec.get('citation'):
+                                        rec['citation'].append(citation)
+                                    else:
+                                        rec['citation'] = [citation]
+                                if funding := eutils_info[pmid].get('funding'):
+                                    if rec.get('funding'):
+                                        rec['funding'] += funding
+                                    else:
+                                        rec['funding'] = funding
                     yield rec
 
