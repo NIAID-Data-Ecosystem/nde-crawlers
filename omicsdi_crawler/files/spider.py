@@ -12,7 +12,7 @@ class OmicsdiSpider(SitemapSpider):
     name = 'omicsdi'
     custom_settings = {
         'ITEM_PIPELINES': {
-            # TODO: add something here if transformations needed, which is likely
+            'pipeline.OmicsdiItemProcessorPipeline': 100,
             'ndjson.NDJsonWriterPipeline': 999,
         }
     }

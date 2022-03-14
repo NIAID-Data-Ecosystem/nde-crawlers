@@ -198,6 +198,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "citation": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "pmid": {"type": "text", "copy_to": ["all"]},
                     "author": {
@@ -272,6 +273,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "title": {"type": "text"},
                 }
             },
+            # TODO: AFTER FIXING ZENODO DELETE THIS MAPPING REPLACED BY includedInDataCatalog
             "curatedBy": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -354,6 +356,14 @@ class NDESourceUploader(BaseSourceUploader):
             "image": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+            },
+            "includedInDataCatalog": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                    "versionDate": {"type": "keyword"},
+                }
             },
             "inComplianceWith": {"type": "text"},
             "inLanguage": {
