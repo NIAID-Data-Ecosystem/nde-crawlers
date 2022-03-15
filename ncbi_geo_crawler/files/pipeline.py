@@ -6,7 +6,7 @@
 
 # useful for handling different item types with a single interface
 
-from datetime import datetime
+import datetime
 
 __all__ = [
     'GeoItemProcessorPipeline',
