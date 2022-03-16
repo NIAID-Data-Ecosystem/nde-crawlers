@@ -71,9 +71,9 @@ class GeoItemProcessorPipeline:
         if description := item.pop('Summary', None):
             output['description'] = description
         if date_published := item.pop('Submission date', None):
-            output['datePublished'] = datetime.strptime(date_published, '%b %d, %Y').isoformat()
+            output['datePublished'] = datetime.datetime.strptime(date_published, '%b %d, %Y').isoformat()
         if date_modified := item.pop('Last update date', None):
-            output['dateModified'] = datetime.strptime(date_modified, '%b %d, %Y').isoformat()
+            output['dateModified'] = datetime.datetime.strptime(date_modified, '%b %d, %Y').isoformat()
         # this will be used to call the api to get citation and funding in the uploader
         if pmids := item.pop('Citation(s)', None):
             output['pmids'] = pmids
