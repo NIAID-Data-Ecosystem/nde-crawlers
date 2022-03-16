@@ -18,6 +18,9 @@
 
 import scrapy
 from ftplib import FTP
+import logging
+
+logger = logging.getLogger('nde-logger')
 
 
 # may take some time to start up as getting the ids takes a while
@@ -41,10 +44,12 @@ class NCBIGeoSpider(scrapy.Spider):
         ftp.cwd('/geo/series/')
         folder_li = ftp.nlst()
         for i in folder_li:
+            logger.info("Retriving gse id list from ftp...")
             ftp.cwd(i)
             gse_li = gse_li + ftp.nlst()
             ftp.cwd('..')
         ftp.close()
+        logger.info("Completed gse id list.")
         return gse_li
 
     # THIS USED FOR TESTING/DEBUGGING
@@ -58,7 +63,18 @@ class NCBIGeoSpider(scrapy.Spider):
     #         yield scrapy.Request(url=prefix + str(acc_id))
     
     def start_requests(self):
-        ids = self.get_ids()
+        # there may be a connection error sometimes. Retry up to 5 times if there is one.
+        tries = 6
+        for attempt in range(tries):
+            try:
+                ids = self.get_ids()
+            except EOFError as e:
+                if attempt < (tries - 1):
+                    continue
+                else:
+                    raise e
+            else:
+                break
         prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
         for acc_id in ids:
             yield scrapy.Request(url=prefix + str(acc_id))
