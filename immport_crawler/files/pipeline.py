@@ -22,12 +22,14 @@ class Immport2OutbreakDatasetPipeline:
         #  but I'll leave it here for someone to fix the transformation
         # see discussion
         #  https://suwulab.slack.com/archives/C01078YR6SW/p1631035614003000?thread_ts=1630687426.004000&cid=C01078YR6SW
+        if _id := item.pop('_id', None):
+            item['_id'] = 'IMMPORT_' + _id.rsplit('/', 1)[-1]
         if author := item.pop('creator', None):
             for data in author:
                 for key,value in data.items():
                     data[key] = {"name": value} if key == "affiliation" else value
             item['author'] = author
-        if cited_by := item.pop('citation', None):
+        if cited_by := item.pop('citations', None):
             item['citedBy'] = cited_by
         if date := item.pop('curationDate', None):
             date = datetime.datetime.strptime(date, "%m/%d/%Y")  # mm/dd/YYYY is my guess
@@ -36,9 +38,13 @@ class Immport2OutbreakDatasetPipeline:
                     distribution, 'dateModified', date
                 )
             if curated_by := item.pop('curatedBy', None):
-                item['curatedBy'] = _set_single_element_or_all_in_list(
-                    curated_by, 'curationDate', date
-                )
+                # remove curatedBy
+                # item['curatedBy'] = _set_single_element_or_all_in_list(
+                #     curated_by, 'curationDate', date
+                # )
+                pass
+            if item.get('includedInDataCatalog'):
+                item['includedInDataCatalog']['versionDate'] = date
             if 'date' not in item:
                 item['date'] = date
         return item
