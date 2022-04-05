@@ -181,8 +181,8 @@ def parse():
         except StopIteration:
             # if StopIteration is raised, break from loop
             break
-        finally:
-            # output the missing transformations for @type
-            if len(missing_types.keys()) > 0:
-                logger.warning("Missing type transformation: {}".format(str(missing_types.keys())))
+        
+    # output the missing transformations for @type
+    if len(missing_types.keys()) > 0:
+        logger.warning("Missing type transformation: {}".format(str(missing_types.keys())))
 
