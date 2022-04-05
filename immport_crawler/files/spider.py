@@ -50,7 +50,7 @@ class ImmPortSpider(scrapy.Spider):
     immport_search_payload = {'pageSize': 1000, 'fromRecord': 0, 'sortFieldDirection': 'desc'}
 
     def start_requests(self):
-        base_url = "https://www.immport.org/shared/data/query/study_search_common?term="
+        base_url = "https://www.immport.org/shared/data/query/api/search/study?term="
         try:
             j = requests.get(base_url, timeout=5,
                              params=self.immport_search_payload,).json()

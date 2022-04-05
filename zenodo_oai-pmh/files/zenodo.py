@@ -68,7 +68,6 @@ def parse():
                 '_id': 'ZENODO_' + identifier,
                 'name': record.metadata.get('title')[0],
                 'author': [],
-                'description': record.metadata.get('description')[0],
                 'identifier': "zenodo." + identifier,
                 'dateModified': datetime.datetime.fromisoformat(
                     record.header.datestamp[:-1]).astimezone(datetime.timezone.utc)
@@ -76,8 +75,11 @@ def parse():
                 'url': "https://zenodo.org/record/" + identifier_split[-1],
             }
 
-            if date_published := record.metadata.get('date')[0]:
-                output['datePublished'] = date_published
+            if description := record.metadata.get('description'):
+                output['description'] = description[0]
+
+            if date_published := record.metadata.get('date'):
+                output['datePublished'] = date_published[0]
 
             if language := record.metadata.get('language'):
                 output['inLanguage'] = {'name': language[0]}
