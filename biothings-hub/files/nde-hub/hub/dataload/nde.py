@@ -191,6 +191,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "familyName": {"type": "text", "copy_to": ["all"]},
                     "givenName": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "role": {"type": "keyword"},
                     "title": {"type": "text"},
@@ -231,6 +232,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
+            "conditionsOfAccess": {"type": "text"},
             "contentUrl": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
