@@ -31,6 +31,8 @@ class Immport2OutbreakDatasetPipeline:
             item['author'] = author
         if cited_by := item.pop('citations', None):
             item['citedBy'] = cited_by
+        if identifier := item.pop('identifiers', None):
+            item['identifier'] = identifier
         if date := item.pop('curationDate', None):
             date = datetime.datetime.strptime(date, "%m/%d/%Y")  # mm/dd/YYYY is my guess
             if distribution := item.pop('distribution', None):
@@ -45,6 +47,7 @@ class Immport2OutbreakDatasetPipeline:
                 pass
             if item.get('includedInDataCatalog'):
                 item['includedInDataCatalog']['versionDate'] = date
+                item['includedInDataCatalog']['name'] = "ImmPort"
             if 'date' not in item:
                 item['date'] = date
         return item

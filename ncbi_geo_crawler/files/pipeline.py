@@ -37,7 +37,7 @@ class GeoItemProcessorPipeline:
             },
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "NCBI GEO from Metadataplus",
+                "name": "NCBI GEO",
                 "url": "https://www.ncbi.nlm.nih.gov/geo/",
                 'versionDate': datetime.date.today().isoformat()
             }
