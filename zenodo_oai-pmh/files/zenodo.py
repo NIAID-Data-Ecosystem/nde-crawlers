@@ -24,10 +24,10 @@ def parse():
                 'other': 'CreativeWork', 'outputmanagementplan': 'CreativeWork', 'patent': 'CreativeWork', 'photo': 'Photograph',
                 'physicalobject': 'Thing', 'plot': 'ImageObject', 'poster': 'Poster', 'preprint': 'ScholarlyArticle',
                 'presentation': 'PresentationDigitalDocument', 'projectdeliverable': 'CreativeWork',
-                'proposal': 'CreativeWork', 'publication': 'ScholarlyArticle', 'report': 'Report', 'section': 'CreativeWork',
-                'software': 'ComputationalTool', 'softwaredocumentation': 'TechArticle',
-                'taxonomictreatment': 'ScholarlyArticle', 'technicalnote': 'TechArticle', 'thesis': 'ScholarlyArticle',
-                'video': 'VideoObject', 'workingpaper': 'ScholarlyArticle'}
+                'projectmilestone': 'CreativeWork', 'proposal': 'CreativeWork', 'publication': 'ScholarlyArticle', 
+                'report': 'Report', 'section': 'CreativeWork', 'software': 'ComputationalTool', 
+                'softwaredocumentation': 'TechArticle', 'taxonomictreatment': 'ScholarlyArticle', 'technicalnote': 'TechArticle', 
+                'thesis': 'ScholarlyArticle', 'video': 'VideoObject', 'workingpaper': 'ScholarlyArticle'}
     # dictionary log the types that cannot be converted
     missing_types = {}
 
@@ -179,6 +179,7 @@ def parse():
             yield output
 
         except StopIteration:
+            logger.info("Finished Parsing. Total Records: %s", count)
             # if StopIteration is raised, break from loop
             break
         
