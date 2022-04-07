@@ -10,7 +10,7 @@ logger = logging.getLogger('nde-logger')
 
 
 def parse():
-    # dictionary to convert metadata property to schema property
+    # schema
     # https://docs.google.com/spreadsheets/d/1XlpvoeSWSiqfw1pPAHHFTjr9Wuowj3TA-eCsyGEj0ng/edit#gid=0
 
     url = "https://accessclinicaldata.niaid.nih.gov/guppy/graphql"
@@ -21,7 +21,11 @@ def parse():
     }"""
 
     r = requests.post(url, json={'query': query})
+
+    # parse json string and convert to dictionary
     json_obj = json.loads(r.text)
+
+    # grab list of trials from dictionary
     trials = json_obj['data']['clinical_trials']
 
     count = 0
@@ -37,18 +41,15 @@ def parse():
         trial['datePublished'] = trial.pop('data_availability_date')
         trial['dateModified'] = trial.pop('most_recent_update')
 
-        if trial['dateModified'] == None:
-            trial['dateModified'] = "null"
-
         trial['additionalType'] = trial.pop('data_available')
         trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
         trial['nctid'] = trial.pop('nct_number')
         trial['infectiousDisease'] = trial.pop('condition')
         trial['mainEntityOfPage'] = trial.pop('clinical_trial_website')
+
+        # TODO make citiation an object using helper function
         trial['citation'] = trial.pop('publications')
 
-        if trial['data_available_for_request'] == None:
-            trial['data_available_for_request'] = "null"
         if trial['data_available_for_request'] == 'true':
             trial['data_available_for_request'] = "restricted access"
         if trial['data_available_for_request'] == 'false':
@@ -56,11 +57,13 @@ def parse():
 
         trial['conditionsOfAccess'] = trial.pop('data_available_for_request')
 
+        # de-duplication of identifier
         if trial['identifier'] != trial['nctid']:
             trial['identifier'] = [trial['identifier'], trial['nctid']]
         else:
             trial['identifier'] = [trial['nctid']]
 
+        # unique _id appending identifier
         trial['_id'] = "accessclinicaldata_" + trial['identifier'][0]
         trial['includedInDataCatalog'] = {
             "name": "AccessClinicalData@NIAID"
@@ -73,4 +76,4 @@ def parse():
 
 
 for i in parse():
-    pprint(i)
+    print(i)
