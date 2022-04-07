@@ -14,7 +14,7 @@ logger = logging.getLogger('nde-logger')
 
 
 def parse():
-    # dictionary to convert general type to type
+    # dictionary to convert general type to @type
     # https://docs.google.com/spreadsheets/d/1DOwMjvFL3CGPkdoaFCveKNb_pPVpboEgUjRTT_3eAW0/edit#gid=0
     gen_type = {'annotationcollection': 'Collection', 'article': 'ScholarlyArticle', 'audiovisual': 'MediaObject',
                 'book': 'Book', 'bookchapter': 'Chapter', 'collection': 'Collection', 'conferencepaper': 'ScholarlyArticle',
@@ -143,8 +143,8 @@ def parse():
             # use xml to find the license and conditionOfAccess
             rights = root.findall(".//{http://datacite.org/schema/kernel-3}rights")
             for right in rights:
-                if ("open access" or "closed access") in right.text.lower():
-                    output['conditionsOfAccess'] = right.text
+                if "access" in right.text.lower():
+                    output['conditionsOfAccess'] = right.text.split(' ', 1)[0]
                 else:
                     output['license'] = right.get('rightsURI')
 
