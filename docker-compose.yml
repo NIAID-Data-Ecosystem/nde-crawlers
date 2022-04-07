@@ -20,6 +20,15 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  niaid-crawler:
+    build:
+      context: niaid_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   omicsdi_crawler:
     build:
       context: omicsdi_crawler
