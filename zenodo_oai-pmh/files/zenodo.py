@@ -14,7 +14,7 @@ logger = logging.getLogger('nde-logger')
 
 
 def parse():
-    # dictionary to convert general type to type
+    # dictionary to convert general type to @type
     # https://docs.google.com/spreadsheets/d/1DOwMjvFL3CGPkdoaFCveKNb_pPVpboEgUjRTT_3eAW0/edit#gid=0
     gen_type = {'annotationcollection': 'Collection', 'article': 'ScholarlyArticle', 'audiovisual': 'MediaObject',
                 'book': 'Book', 'bookchapter': 'Chapter', 'collection': 'Collection', 'conferencepaper': 'ScholarlyArticle',
@@ -24,10 +24,10 @@ def parse():
                 'other': 'CreativeWork', 'outputmanagementplan': 'CreativeWork', 'patent': 'CreativeWork', 'photo': 'Photograph',
                 'physicalobject': 'Thing', 'plot': 'ImageObject', 'poster': 'Poster', 'preprint': 'ScholarlyArticle',
                 'presentation': 'PresentationDigitalDocument', 'projectdeliverable': 'CreativeWork',
-                'proposal': 'CreativeWork', 'publication': 'ScholarlyArticle', 'report': 'Report', 'section': 'CreativeWork',
-                'software': 'ComputationalTool', 'softwaredocumentation': 'TechArticle',
-                'taxonomictreatment': 'ScholarlyArticle', 'technicalnote': 'TechArticle', 'thesis': 'ScholarlyArticle',
-                'video': 'VideoObject', 'workingpaper': 'ScholarlyArticle'}
+                'projectmilestone': 'CreativeWork', 'proposal': 'CreativeWork', 'publication': 'ScholarlyArticle', 
+                'report': 'Report', 'section': 'CreativeWork', 'software': 'ComputationalTool', 
+                'softwaredocumentation': 'TechArticle', 'taxonomictreatment': 'ScholarlyArticle', 'technicalnote': 'TechArticle', 
+                'thesis': 'ScholarlyArticle', 'video': 'VideoObject', 'workingpaper': 'ScholarlyArticle'}
     # dictionary log the types that cannot be converted
     missing_types = {}
 
@@ -68,7 +68,6 @@ def parse():
                 '_id': 'ZENODO_' + identifier,
                 'name': record.metadata.get('title')[0],
                 'author': [],
-                'description': record.metadata.get('description')[0],
                 'identifier': "zenodo." + identifier,
                 'dateModified': datetime.datetime.fromisoformat(
                     record.header.datestamp[:-1]).astimezone(datetime.timezone.utc)
@@ -76,8 +75,11 @@ def parse():
                 'url': "https://zenodo.org/record/" + identifier_split[-1],
             }
 
-            if date_published := record.metadata.get('date')[0]:
-                output['datePublished'] = date_published
+            if description := record.metadata.get('description'):
+                output['description'] = description[0]
+
+            if date_published := record.metadata.get('date'):
+                output['datePublished'] = date_published[0]
 
             if language := record.metadata.get('language'):
                 output['inLanguage'] = {'name': language[0]}
@@ -141,8 +143,8 @@ def parse():
             # use xml to find the license and conditionOfAccess
             rights = root.findall(".//{http://datacite.org/schema/kernel-3}rights")
             for right in rights:
-                if ("open access" or "closed access") in right.text.lower():
-                    output['conditionsOfAccess'] = right.text
+                if "access" in right.text.lower():
+                    output['conditionsOfAccess'] = right.text.split(' ', 1)[0]
                 else:
                     output['license'] = right.get('rightsURI')
 
@@ -177,10 +179,11 @@ def parse():
             yield output
 
         except StopIteration:
+            logger.info("Finished Parsing. Total Records: %s", count)
             # if StopIteration is raised, break from loop
             break
-        finally:
-            # output the missing transformations for @type
-            if len(missing_types.keys()) > 0:
-                logger.warning("Missing type transformation: {}".format(str(missing_types.keys())))
+        
+    # output the missing transformations for @type
+    if len(missing_types.keys()) > 0:
+        logger.warning("Missing type transformation: {}".format(str(missing_types.keys())))
 

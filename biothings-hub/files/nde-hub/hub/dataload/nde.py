@@ -8,6 +8,7 @@ from biothings.hub.dataload.dumper import BaseDumper
 from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
 
+from utils.date import add_date
 from config import DATA_ARCHIVE_ROOT, CRAWLER_OUTPUT_DATA_ROOT
 
 
@@ -138,6 +139,8 @@ class NDESourceUploader(BaseSourceUploader):
         with open(os.path.join(data_folder, 'data.ndjson'), 'rb') as f:
             for line in f:
                 doc = orjson.loads(line)
+                #add date transformation here and have the most recent date of all of the dates
+                doc = add_date(doc)
                 yield doc
 
     @classmethod

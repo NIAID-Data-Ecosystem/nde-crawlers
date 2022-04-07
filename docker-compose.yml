@@ -13,7 +13,7 @@ services:
       - data:/data
   zenodo-crawler:
     build:
-      context: zenodo_crawler
+      context: zenodo_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
@@ -76,6 +76,7 @@ services:
       # ports are mapped to 19522 and 19580 because of changes for production environment
       - "127.0.0.1:7022:19522"
       - "127.0.0.1:7080:19580"
+      - "127.0.0.1:7081:19581"
   hub-webapp:
     build:
       context: biothings-webapp
