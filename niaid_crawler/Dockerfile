@@ -64,4 +64,8 @@ ENV PYTHONPATH="."
 ENV SCRAPY_SETTINGS_MODULE="settings"
 VOLUME [ "/data" ]
 STOPSIGNAL SIGINT
+
+# is this only for development
+RUN chmod 755 /docker-entrypoint.sh
+
 ENTRYPOINT ["/docker-entrypoint.sh"]
