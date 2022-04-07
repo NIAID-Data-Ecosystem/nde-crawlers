@@ -1,5 +1,6 @@
 import datetime
 import os
+import traceback
 import platform
 import logging
 import orjson
@@ -46,7 +47,8 @@ except Exception as e:
     )
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-    logger.error(e)
+    
+    logger.error(traceback.format_exc())
 
 
 if is_parsed:

@@ -1,12 +1,23 @@
+# Helper file to batch call pmids to get citations and funding
+# Helpful links to documentation of Biopython Package for writing this file
+# https://biopython.org/DIST/docs/tutorial/Tutorial.html#sec162
+# https://biopython.org/docs/1.76/api/Bio.Entrez.html
+# https://www.nlm.nih.gov/bsd/mms/medlineelements.html
+# https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
+import os
+import orjson
+import yaml
 import time
 
+from .date import add_date
 from Bio import Entrez
 from Bio import Medline
 from datetime import datetime
 from typing import Optional, List, Iterable, Dict
+from itertools import islice
+from config import GEO_API_KEY, GEO_EMAIL
 
 import logging
-
 logger = logging.getLogger('nde-logger')
 
 def get_pub_date(date: str):
@@ -141,3 +152,70 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
             funding = []
 
     return ct_fd
+
+def load_pmid_ctfd(data_folder):
+    """ Takes 1000 documents at a time and batch queries all of the pmids in the documents to improve runtime.
+        Loads the citation and funding into the documents along with uploading the date field.
+          Returns: A generator with the completed documents
+    """
+
+    # a temporary solution to make bigger batch api call instead of multiple smaller calls in crawler to improve runtime
+    # TODO: figure out how to make a batch api call in crawler perferrably
+
+    api_key = GEO_API_KEY
+    email = GEO_EMAIL
+    
+    # if no access to config file comment out above and enter your own email
+    # email = myemail@gmail.com
+
+    with open(os.path.join(data_folder, 'data.ndjson'), 'rb') as f:
+        while True:
+            # pmid list for batch query
+            pmid_list = []
+            # docs to yield for each batch query
+            doc_list = []
+
+            # to make batch api query take the next 1000 docs and collect all the pmids
+            next_n_lines = list(islice(f, 1000))
+            if not next_n_lines:
+                break
+            for line in next_n_lines:
+                doc = orjson.loads(line)
+                doc_list.append(doc)
+                if pmids := doc.get('pmids'):
+                    pmid_list += [pmid.strip() for pmid in pmids.split(',')]
+
+            # batch request
+            eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
+            # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
+            if api_key:
+                time.sleep(0.1)
+            else:
+                time.sleep(0.35)
+
+            # add in the citation and funding to each doc in doc_list and yield
+            for rec in doc_list:
+                if pmids := rec.pop('pmids', None):
+                    pmids = [pmid.strip() for pmid in pmids.split(',')]
+                    # fixes issue where pmid numbers under 10 is read as 04 instead of 4
+                    pmids = [ele.lstrip('0') for ele in pmids]
+                    for pmid in pmids:
+                        if not eutils_info.get(pmid):
+                            logger.info('There is an issue with this pmid. PMID: %s, rec_id: %s', pmid, rec['_id'])
+                        # this fixes the error where there is no pmid
+                        # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
+                        if eutils_info.get(pmid):
+                            if citation := eutils_info[pmid].get('citation'):
+                                if rec.get('citation'):
+                                    rec['citation'].append(citation)
+                                else:
+                                    rec['citation'] = [citation]
+                            if funding := eutils_info[pmid].get('funding'):
+                                if rec.get('funding'):
+                                    rec['funding'] += funding
+                                else:
+                                    rec['funding'] = funding
+                # add the date tranformation before yielding
+                rec = add_date(rec)
+                yield rec
+
