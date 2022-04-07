@@ -1,4 +1,5 @@
 import json
+from typing import final
 import requests
 import logging
 
@@ -32,9 +33,6 @@ def parse():
 
     for trial in trials:
 
-        count += 1
-        logger.info("Parsed %s records", count)
-
         trial['name'] = trial.pop('title')
         trial['identifier'] = trial.pop('cmc_unique_id')
         trial['description'] = trial.pop('brief_summary')
@@ -55,7 +53,8 @@ def parse():
         if trial['data_available_for_request'] == 'false':
             trial['data_available_for_request'] = "closed access"
 
-        trial['conditionsOfAccess'] = trial.pop('data_available_for_request')
+        trial['conditionsOfAccess'] = trial.pop(
+            'data_available_for_request')
 
         # de-duplication of identifier
         if trial['identifier'] != trial['nctid']:
@@ -74,6 +73,9 @@ def parse():
 
         yield trial
 
+        count += 1
+        logger.info("Parsed %s records", count)
 
-for i in parse():
-    print(i)
+
+# for i in parse():
+#     print(i)
