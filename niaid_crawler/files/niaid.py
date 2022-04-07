@@ -24,7 +24,13 @@ def parse():
     json_obj = json.loads(r.text)
     trials = json_obj['data']['clinical_trials']
 
+    count = 0
+
     for trial in trials:
+
+        count += 1
+        logger.info("Parsed %s records", count)
+
         trial['name'] = trial.pop('title')
         trial['identifier'] = trial.pop('cmc_unique_id')
         trial['description'] = trial.pop('brief_summary')
@@ -62,8 +68,9 @@ def parse():
         trial['@type'] = "Dataset"
         trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + \
             trial['identifier'][0]
-    pprint(trials)
-    # return trial
+
+        yield trial
 
 
-parse()
+for i in parse():
+    pprint(i)
