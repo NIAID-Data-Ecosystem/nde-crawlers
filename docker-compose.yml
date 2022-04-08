@@ -42,7 +42,7 @@ services:
     build:
       context: ncbi_geo_crawler
       dockerfile: Dockerfile
-    # uncomment to run development crontab
+      # uncomment to run development crontab
       # args:
       #   CRONTAB: dev-crontab
     volumes:
