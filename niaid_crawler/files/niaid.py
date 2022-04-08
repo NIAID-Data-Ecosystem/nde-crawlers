@@ -1,4 +1,5 @@
 import json
+from turtle import pu
 from typing import final
 import requests
 import logging
@@ -32,50 +33,61 @@ def parse():
     count = 0
 
     for trial in trials:
+        try:
+            trial['name'] = trial.pop('title')
+            trial['identifier'] = trial.pop('cmc_unique_id')
+            trial['description'] = trial.pop('brief_summary')
+            trial['datePublished'] = trial.pop('data_availability_date')
+            trial['dateModified'] = trial.pop('most_recent_update')
 
-        trial['name'] = trial.pop('title')
-        trial['identifier'] = trial.pop('cmc_unique_id')
-        trial['description'] = trial.pop('brief_summary')
-        trial['datePublished'] = trial.pop('data_availability_date')
-        trial['dateModified'] = trial.pop('most_recent_update')
+            trial['additionalType'] = trial.pop('data_available')
+            trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
+            trial['nctid'] = trial.pop('nct_number')
+            trial['infectiousDisease'] = trial.pop('condition')
+            trial['mainEntityOfPage'] = trial.pop('clinical_trial_website')
 
-        trial['additionalType'] = trial.pop('data_available')
-        trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
-        trial['nctid'] = trial.pop('nct_number')
-        trial['infectiousDisease'] = trial.pop('condition')
-        trial['mainEntityOfPage'] = trial.pop('clinical_trial_website')
+            # TODO make citiation an object using helper function
+            pubmedURL = trial.pop('publications')
+            if pubmedURL is not None:
+                if 'pubmed' in pubmedURL:
+                    trial['pmids'] = pubmedURL.split('/')[-2]
+                else:
+                    trial['pmids'] = 'None'
+            else:
+                trial['pmids'] = None
 
-        # TODO make citiation an object using helper function
-        trial['citation'] = trial.pop('publications')
+            if trial['data_available_for_request'] == 'true':
+                trial['data_available_for_request'] = "restricted access"
+            if trial['data_available_for_request'] == 'false':
+                trial['data_available_for_request'] = "closed access"
 
-        if trial['data_available_for_request'] == 'true':
-            trial['data_available_for_request'] = "restricted access"
-        if trial['data_available_for_request'] == 'false':
-            trial['data_available_for_request'] = "closed access"
+            trial['conditionsOfAccess'] = trial.pop(
+                'data_available_for_request')
 
-        trial['conditionsOfAccess'] = trial.pop(
-            'data_available_for_request')
+            # de-duplication of identifier
+            if trial['identifier'] != trial['nctid']:
+                trial['identifier'] = [trial['identifier'], trial['nctid']]
+            else:
+                trial['identifier'] = [trial['nctid']]
 
-        # de-duplication of identifier
-        if trial['identifier'] != trial['nctid']:
-            trial['identifier'] = [trial['identifier'], trial['nctid']]
-        else:
-            trial['identifier'] = [trial['nctid']]
+            # unique _id appending identifier
+            trial['_id'] = "accessclinicaldata_" + trial['identifier'][0]
+            trial['includedInDataCatalog'] = {
+                "name": "AccessClinicalData@NIAID"
+            }
+            trial['@type'] = "Dataset"
+            trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + \
+                trial['identifier'][0]
 
-        # unique _id appending identifier
-        trial['_id'] = "accessclinicaldata_" + trial['identifier'][0]
-        trial['includedInDataCatalog'] = {
-            "name": "AccessClinicalData@NIAID"
-        }
-        trial['@type'] = "Dataset"
-        trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + \
-            trial['identifier'][0]
+            yield trial
 
-        yield trial
+            count += 1
+            logger.info("Parsed %s records", count)
+        except StopIteration:
+            logger.info("Finished Parsing. Total Records: %s", count)
+            # if StopIteration is raised, break from loop
+            break
 
-        count += 1
-        logger.info("Parsed %s records", count)
-
-
-# for i in parse():
-#     print(i)
+# parse()
+for i in parse():
+    pprint(i)
