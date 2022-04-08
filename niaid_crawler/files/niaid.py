@@ -3,6 +3,7 @@ from turtle import pu
 from typing import final
 import requests
 import logging
+import validators
 
 from pprint import pprint
 
@@ -46,15 +47,18 @@ def parse():
             trial['infectiousDisease'] = trial.pop('condition')
             trial['mainEntityOfPage'] = trial.pop('clinical_trial_website')
 
-            # TODO make citiation an object using helper function
-            pubmedURL = trial.pop('publications')
-            if pubmedURL is not None:
-                if 'pubmed' in pubmedURL:
-                    trial['pmids'] = pubmedURL.split('/')[-2]
+            # check if url is valid then take pubmed id
+            # TODO use doi id to get pubmed id
+            citation_URL = trial.pop('publications')
+            if citation_URL is not None and validators.url(citation_URL):
+                if 'pubmed' in citation_URL:
+                    trial['pmids'] = citation_URL.split('/')[-2]
+                elif 'doi' in citation_URL:
+                    trial['doi'] = citation_URL.split('/')[-2] + '/' + citation_URL.split('/')[-1]
                 else:
-                    trial['pmids'] = 'None'
+                    trial['citation'] = [{'url':citation_URL}]
             else:
-                trial['pmids'] = None
+                trial['citation'] = None
 
             if trial['data_available_for_request'] == 'true':
                 trial['data_available_for_request'] = "restricted access"
