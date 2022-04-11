@@ -1,11 +1,9 @@
 import json
-from turtle import pu
-from typing import final
 import requests
 import logging
 import validators
 
-from pprint import pprint
+# from pprint import pprint
 
 
 logging.basicConfig(level=logging.INFO)
@@ -97,5 +95,5 @@ def parse():
             break
 
 # parse()
-for i in parse():
-    pprint(i)
+# for i in parse():
+#     pprint(i)
