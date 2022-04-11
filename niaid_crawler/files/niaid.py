@@ -51,11 +51,14 @@ def parse():
             if citation_URL is not None and validators.url(citation_URL):
                 if 'pubmed' in citation_URL:
                     trial['pmids'] = citation_URL.split('/')[-2]
-                # TODO use doi id to get pubmed id
-                # elif 'doi' in citation_URL:
-                #     trial['doi'] = citation_URL.split('/')[-2] + '/' + citation_URL.split('/')[-1]
+                # To convert doi id to pubmed id, use requests library to search doi id on pubmed search engine, catch redirect and take the pubmed id from url
                 elif 'doi' in citation_URL:
-                    trial['pmids'] = '33306283'
+                    doi_id = citation_URL.split('/')[-1]
+                    r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
+                    if 'pubmed' in r.url:
+                        trial['pmids'] = r.url.split('/')[-2]
+                    else:
+                        trial['citation'] = None
                 else:
                     trial['citation'] = [{'url':citation_URL}]
             else:
