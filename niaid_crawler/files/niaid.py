@@ -65,9 +65,9 @@ def parse():
                 trial['citation'] = None
 
             if trial['data_available_for_request'] == 'true':
-                trial['data_available_for_request'] = "restricted access"
+                trial['data_available_for_request'] = "Restricted"
             if trial['data_available_for_request'] == 'false':
-                trial['data_available_for_request'] = "closed access"
+                trial['data_available_for_request'] = "Closed"
 
             trial['conditionsOfAccess'] = trial.pop(
                 'data_available_for_request')

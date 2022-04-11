@@ -55,7 +55,7 @@ ADD files .
 # I really don't want to bother with reinventing the wheel
 USER root
 # make arg to decide whether to use dev-crontab or prod-crontab, defaults as prod (--build-arg CRONTAB=dev-crontab)
-ARG CRONTAB=dev-crontab
+ARG CRONTAB=prod-crontab
 # move files
 RUN mv docker-entrypoint.sh / && \
     mv ${CRONTAB} /etc/crontab
@@ -64,8 +64,4 @@ ENV PYTHONPATH="."
 ENV SCRAPY_SETTINGS_MODULE="settings"
 VOLUME [ "/data" ]
 STOPSIGNAL SIGINT
-
-# is this only for development
-RUN chmod 755 /docker-entrypoint.sh
-
 ENTRYPOINT ["/docker-entrypoint.sh"]
