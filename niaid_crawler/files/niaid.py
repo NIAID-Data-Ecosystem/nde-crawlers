@@ -40,7 +40,6 @@ def parse():
             trial['description'] = trial.pop('brief_summary')
             trial['datePublished'] = trial.pop('data_availability_date')
             trial['dateModified'] = trial.pop('most_recent_update')
-
             trial['additionalType'] = trial.pop('data_available')
             trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
             trial['nctid'] = trial.pop('nct_number')
@@ -48,13 +47,15 @@ def parse():
             trial['mainEntityOfPage'] = trial.pop('clinical_trial_website')
 
             # check if url is valid then take pubmed id
-            # TODO use doi id to get pubmed id
             citation_URL = trial.pop('publications')
             if citation_URL is not None and validators.url(citation_URL):
                 if 'pubmed' in citation_URL:
                     trial['pmids'] = citation_URL.split('/')[-2]
+                # TODO use doi id to get pubmed id
+                # elif 'doi' in citation_URL:
+                #     trial['doi'] = citation_URL.split('/')[-2] + '/' + citation_URL.split('/')[-1]
                 elif 'doi' in citation_URL:
-                    trial['doi'] = citation_URL.split('/')[-2] + '/' + citation_URL.split('/')[-1]
+                    trial['pmids'] = '33306283'
                 else:
                     trial['citation'] = [{'url':citation_URL}]
             else:
