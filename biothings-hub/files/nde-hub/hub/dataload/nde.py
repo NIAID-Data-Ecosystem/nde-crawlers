@@ -198,6 +198,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "text", "copy_to": ["all"]},
                     "role": {"type": "keyword"},
                     "title": {"type": "text"},
+                    "url": {"type": "keyword"},
                 }
             },
             "citation": {
@@ -206,15 +207,22 @@ class NDESourceUploader(BaseSourceUploader):
                     "author": {
                         "properties": {
                             "@type": {"type": "text"},
-                            "name": {"type": "text", "copy_to": ["all"]}
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName" : {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
                         }
                     },
                     "datePublished": {"type": "date"},
+                    "doi": {"type": "keyword", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "issueNumber": {"type": "text"},
                     "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "journalNameAbbrev": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
+                    "pagination": {"type": "text"},
                     "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "keyword"},
+                    "volumeNumber": {"type": "text"},
                 }
             },
             "citedBy": {
@@ -328,8 +336,10 @@ class NDESourceUploader(BaseSourceUploader):
                     "description": {"type": "text", "copy_to": ["all"]},
                     "funder": {
                         "properties": {
+                            "alternateName": {"type": "keyword"},
                             "class": {"type": "keyword"},
                             "name": {"type": "keyword", "copy_to": ["all"]},
+                            "parentOrganization": {"type": "keyword"},
                             "role": {"type": "keyword"},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
