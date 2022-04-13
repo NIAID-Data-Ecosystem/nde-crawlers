@@ -336,10 +336,10 @@ class NDESourceUploader(BaseSourceUploader):
                     "description": {"type": "text", "copy_to": ["all"]},
                     "funder": {
                         "properties": {
-                            "alternateName": {"type": "keyword"},
+                            "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
                             "name": {"type": "keyword", "copy_to": ["all"]},
-                            "parentOrganization": {"type": "keyword"},
+                            "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                             "role": {"type": "keyword"},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
@@ -398,14 +398,16 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "infectiousAgent": {
-                "type": "keyword",
-                "normalizer": "keyword_lowercase_normalizer",
-                "copy_to": ["all"],
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
             },
             "infectiousDisease": {
-                "type": "keyword",
-                "normalizer": "keyword_lowercase_normalizer",
-                "copy_to": ["all"],
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
             },
             "instrument": {"type": "text", "copy_to": ["all"]},
             "interventionText": {"type": "text", "copy_to": ["all"]},
@@ -450,7 +452,12 @@ class NDESourceUploader(BaseSourceUploader):
             "license": {"type": "text"},
             "material": {"type": "text", "copy_to": ["all"]},
             "measurementParameter": {"properties": {"resolution": {"type": "keyword"}}},
-            "measurementTechnique": {"type": "keyword", "copy_to": ["all"]},
+            "measurementTechnique": {                
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "name": {"type": "keyword", "copy_to": ["all"]},
             "outcome": {
                 "properties": {
@@ -506,7 +513,12 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
-            "species": {"type": "keyword", "copy_to": ["all"]},
+            "species": {
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "sponsor": {
                 "properties": {
                     "@type": {"type": "keyword"},

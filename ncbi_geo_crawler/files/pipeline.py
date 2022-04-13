@@ -65,9 +65,9 @@ class GeoItemProcessorPipeline:
         if name := item.pop('Title', None):
             output['name'] = name
         if species := item.pop('Organism', None):
-            output['species'] = species
+            output['species'] = {'name': species}
         if measurement_technique := item.pop('Experiment type', None):
-            output['measurementTechnique'] = measurement_technique
+            output['measurementTechnique'] = {'name': measurement_technique}
         if description := item.pop('Summary', None):
             output['description'] = description
         if date_published := item.pop('Submission date', None):
