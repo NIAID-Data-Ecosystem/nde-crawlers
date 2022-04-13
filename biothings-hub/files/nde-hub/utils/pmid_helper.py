@@ -21,7 +21,7 @@ import logging
 logger = logging.getLogger('nde-logger')
 
 def get_pub_date(date: str):
-    """helper method to solve the problem transforming dates such as "2000 Spring" into isoformat dates
+    """helper method to solve the problem transforming dates such as "2000 Spring" into date().isoformat dates
 
         https://www.nlm.nih.gov/bsd/mms/medlineelements.html#dp
         Returns:
@@ -46,23 +46,23 @@ def get_pub_date(date: str):
     date_len = len(s_date)
     # if length is 1 can either be year or year-year
     if date_len == 1:
-        return datetime.strptime(s_date[0].split('-')[0], '%Y').isoformat()
+        return datetime.strptime(s_date[0].split('-')[0], '%Y').date().isoformat()
     # if length is 2 can either be year season or year month or year month-month
     elif date_len == 2:
         if s_date[1][:3] in months:
-            return datetime.strptime(s_date[0] + ' ' + s_date[1][:3], '%Y %b').isoformat()
+            return datetime.strptime(s_date[0] + ' ' + s_date[1][:3], '%Y %b').date().isoformat()
         elif season := seasons.get(s_date[1]):
-            return datetime.strptime(s_date[0] + season, '%Y %b %d').isoformat()
+            return datetime.strptime(s_date[0] + season, '%Y %b %d').date().isoformat()
         else:
             logger.warning("Need to update isoformat transformation: %s", date)
             return None
     # if length is 3 should be year month day or year month day-day
     elif date_len == 3:
-        return datetime.strptime(s_date[0] + ' ' + s_date[1] + ' ' + s_date[2].split('-')[0], '%Y %b %d').isoformat()
+        return datetime.strptime(s_date[0] + ' ' + s_date[1] + ' ' + s_date[2].split('-')[0], '%Y %b %d').date().isoformat()
     # exception case there are quite a few entries with this case "2020 Jan - Feb"
     elif date_len == 4:
         if s_date[1] in months and s_date[3] in months and s_date[2] == "-":
-            return datetime.strptime(s_date[0] + ' ' + s_date[1], '%Y %b').isoformat()
+            return datetime.strptime(s_date[0] + ' ' + s_date[1], '%Y %b').date().isoformat()
         else:
             logger.warning("Need to update isoformat transformation %s", date)
     else:
