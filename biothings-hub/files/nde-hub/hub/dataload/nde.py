@@ -442,6 +442,7 @@ class NDESourceUploader(BaseSourceUploader):
             "measurementParameter": {"properties": {"resolution": {"type": "keyword"}}},
             "measurementTechnique": {"type": "keyword", "copy_to": ["all"]},
             "name": {"type": "keyword", "copy_to": ["all"]},
+            "nctid": {"type": "keyword", "copy_to": ["all"]},
             "outcome": {
                 "properties": {
                     "@type": {"type": "keyword"},
