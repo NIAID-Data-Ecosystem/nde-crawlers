@@ -35,6 +35,7 @@ def parse():
         trial['identifier'] = trial.pop('cmc_unique_id')
         trial['description'] = trial.pop('brief_summary')
 
+        # convert date to iso format
         trial['datePublished'] = trial.pop('data_availability_date')
         if trial['datePublished'] == "Coming Soon":
             trial['datePublished'] = None
@@ -42,6 +43,7 @@ def parse():
             iso_date = datetime.strptime(trial['datePublished'], '%B %Y')
             trial['datePublished'] = iso_date.strftime('%Y-%m')
 
+        # convert date to iso format
         trial['dateModified'] = trial.pop('most_recent_update')
         if trial['dateModified'] is not None:
            iso_date = datetime.strptime(trial['dateModified'], '%B %Y')
