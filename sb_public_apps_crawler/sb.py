@@ -41,22 +41,43 @@ def parse():
             output['description'] = description
         if doc := data.get('doc'):
             output['description'] = doc
+
+        # TODO value for input should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
         if inputs := data.get('inputs'):
             output['bioschemas:input'] = inputs
+
+        # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
         if outputs := data.get('outputs'):
             output['bioschemas:input'] = outputs
-        if steps := data.get('steps'):
-            output['bioschemas:hasPart'] = steps
+
+        # commenting out for readablility
+        # if steps := data.get('steps'):
+        #     output['bioschemas:hasPart'] = steps
+
         if requirements := data.get('requirements'):
-            output['schema:softwareRequirements'] = requirements
+            result_list = []
+            for obj in requirements:
+                result_list.append(obj['class'])
+            output['schema:softwareRequirements'] = result_list
+
         if image_url := data.get('sbg:image_url'):
             output['thumbnailUrl'] = image_url
+
+        # TODO check applicationSuite exists, append version?
         if toolkit := data.get('sbg:toolkit'):
-            output['applicationSuite'] = toolkit
+            output['applicationSuite'] = toolkit + \
+                'version:' + data.get('sbg:toolkitVersion')
+
         if license := data.get('license'):
             output['license'] = license
+
         if links := data.get('sbg:links'):
-            output['codeRepository'] = links
+            github_links = []
+            for link_obj in links:
+                if 'https://github.com' in link_obj['id']:
+                    github_links.append(link_obj['id'])
+            output['codeRepository'] = github_links
+
         if categories := data.get('sbg:categories'):
             output['applicationSubCategory'] = categories
         if revisions_info := data.get('sbg:revisionsInfo'):
@@ -76,7 +97,7 @@ def parse():
             output['sdPublisher'] = publisher
         if workflow_language := data.get('sbg:workflowLanguage'):
             output['programmingLanguage'] = workflow_language
-            
+
         yield output
 
 
