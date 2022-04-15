@@ -38,6 +38,15 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  dde-crawler:
+    build:
+      context: dde_niaid
+      dockerfile: Dockerfile
+    # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   mongodb:
     image: mongo:4.4
     ports:
@@ -52,8 +61,8 @@ services:
     build:
       context: biothings-hub
       dockerfile: Dockerfile
-      args:
-        PYTHON_VERSION: 3.8
+      # args:
+      #   PYTHON_VERSION: 3.8
     depends_on:
       - "mongodb"
       - "elasticsearch"
