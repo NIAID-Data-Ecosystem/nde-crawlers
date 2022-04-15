@@ -198,23 +198,31 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "text", "copy_to": ["all"]},
                     "role": {"type": "keyword"},
                     "title": {"type": "text"},
+                    "url": {"type": "keyword"},
                 }
             },
             "citation": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "name": {"type": "text", "copy_to": ["all"]},
-                    "pmid": {"type": "text", "copy_to": ["all"]},
                     "author": {
                         "properties": {
                             "@type": {"type": "text"},
-                            "name": {"type": "text", "copy_to": ["all"]}
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName" : {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
                         }
                     },
-                    "journalName": {"type": "keyword", "copy_to": ["all"]},
-                    "identifier": {"type": "keyword", "copy_to": ["all"]},
-                    "url": {"type": "keyword"},
                     "datePublished": {"type": "date"},
+                    "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "issueNumber": {"type": "text"},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "journalNameAbbrev": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "pagination": {"type": "text"},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                    "volumeNumber": {"type": "text"},
                 }
             },
             "citedBy": {
@@ -328,8 +336,10 @@ class NDESourceUploader(BaseSourceUploader):
                     "description": {"type": "text", "copy_to": ["all"]},
                     "funder": {
                         "properties": {
+                            "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
                             "name": {"type": "keyword", "copy_to": ["all"]},
+                            "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                             "role": {"type": "keyword"},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
@@ -388,14 +398,16 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "infectiousAgent": {
-                "type": "keyword",
-                "normalizer": "keyword_lowercase_normalizer",
-                "copy_to": ["all"],
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
             },
             "infectiousDisease": {
-                "type": "keyword",
-                "normalizer": "keyword_lowercase_normalizer",
-                "copy_to": ["all"],
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
             },
             "instrument": {"type": "text", "copy_to": ["all"]},
             "interventionText": {"type": "text", "copy_to": ["all"]},
@@ -440,7 +452,12 @@ class NDESourceUploader(BaseSourceUploader):
             "license": {"type": "text"},
             "material": {"type": "text", "copy_to": ["all"]},
             "measurementParameter": {"properties": {"resolution": {"type": "keyword"}}},
-            "measurementTechnique": {"type": "keyword", "copy_to": ["all"]},
+            "measurementTechnique": {                
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "name": {"type": "keyword", "copy_to": ["all"]},
             "nctid": {"type": "keyword", "copy_to": ["all"]},
             "outcome": {
@@ -497,7 +514,12 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
-            "species": {"type": "keyword", "copy_to": ["all"]},
+            "species": {
+                "properties": {
+                     "name": {"type": "keyword", "copy_to": ["all"]},
+                     "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "sponsor": {
                 "properties": {
                     "@type": {"type": "keyword"},

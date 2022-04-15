@@ -33,6 +33,10 @@ class Immport2OutbreakDatasetPipeline:
             item['citedBy'] = cited_by
         if identifier := item.pop('identifiers', None):
             item['identifier'] = identifier
+        if species := item.pop('species', None):
+            item['species'] = {'name': species}
+        if measurement_technique := item.pop('measurementTechnique', None):
+            item['measurementTechnique'] = {'name': measurement_technique}
         if date := item.pop('curationDate', None):
             date = datetime.datetime.strptime(date, "%m/%d/%Y")  # mm/dd/YYYY is my guess
             if distribution := item.pop('distribution', None):
