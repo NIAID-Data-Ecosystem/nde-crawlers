@@ -134,7 +134,10 @@ def parse():
                 if name is not None:
                     author['name'] = name.text
                 if affiliation is not None:
-                    author['affiliation'] = {'name': affiliation.text}
+                    # elasticsearch cannot index strings greater than 32766. Someone mistakenly put a WHOLE ARTICLE into the affiliation
+                    # https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:4675716&metadataPrefix=oai_datacite
+                    if len(affiliation.text) < 30000:
+                        author['affiliation'] = {'name': affiliation.text}
                 if orcid_id is not None:
                     author['identifier'] = orcid_id.get('schemeURI') + orcid_id.text
                 if author:
