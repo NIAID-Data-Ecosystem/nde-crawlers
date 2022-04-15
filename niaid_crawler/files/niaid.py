@@ -111,5 +111,4 @@ def parse():
         logger.info("Parsed %s records", count)
 
     logger.info("Finished Parsing. Total Records: %s", count)
-    if count == 10000:
-        logger.warning("Records has reached 10000, check API if records exceed 10000.")
+    assert count < 10000, "Records has reached 10000, check API if records exceed 10000."
