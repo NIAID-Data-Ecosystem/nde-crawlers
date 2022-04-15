@@ -41,13 +41,13 @@ def parse():
             trial['datePublished'] = None
         if trial['datePublished'] is not None:
             iso_date = datetime.strptime(trial['datePublished'], '%B %Y')
-            trial['datePublished'] = iso_date.strftime('%Y-%m')
+            trial['datePublished'] = iso_date.strftime('%Y-%m-%d')
 
         # convert date to iso format
         trial['dateModified'] = trial.pop('most_recent_update')
         if trial['dateModified'] is not None:
            iso_date = datetime.strptime(trial['dateModified'], '%B %Y')
-           trial['dateModified'] = iso_date.strftime('%Y-%m')
+           trial['dateModified'] = iso_date.strftime('%Y-%m-%d')
 
         trial['additionalType'] = trial.pop('data_available')
         trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
@@ -59,13 +59,13 @@ def parse():
         citation_URL = trial.pop('publications')
         if citation_URL is not None and validators.url(citation_URL):
             if 'pubmed' in citation_URL:
-                trial['pmid'] = citation_URL.split('/')[-2]
+                trial['pmids'] = citation_URL.split('/')[-2]
             # To convert doi id to pubmed id, use requests library to search doi id on pubmed search engine, catch redirect and take the pubmed id from url
             elif 'doi' in citation_URL:
                 doi_id = citation_URL.split('/')[-1]
                 r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
                 if 'pubmed' in r.url:
-                    trial['pmid'] = r.url.split('/')[-2]
+                    trial['pmids'] = r.url.split('/')[-2]
                 else:
                     trial['citation'] = None
             else:
@@ -96,7 +96,10 @@ def parse():
         trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + \
             trial['identifier'][0]
 
+        # getting rid of None values
         result = {k: v for k, v in trial.items() if v is not None}
+
+        # list properties that weren't in trial
         missing_properties = {k: v for k, v in trial.items() if v == None}
 
         yield result
