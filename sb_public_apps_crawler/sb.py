@@ -36,6 +36,8 @@ def parse():
             output['version'] = cwl_version
         if label := data.get('label'):
             output['name'] = label
+
+        # metadata has either doc or description, make sure we get both
         if description := data.get('description'):
             output['description'] = description
         if doc := data.get('doc'):
@@ -46,26 +48,67 @@ def parse():
             result_input_list = []
             for input_object in input_object_list:
                 result_input_object = {}
-                if input_id := input_object.get('id'):
-                    result_input_object['identifier'] = input_id
                 if name := input_object.get('label'):
                     result_input_object['name'] = name
-                if description := input_object.get('description'):
-                    result_input_object['description'] = description
-                if doc := input_object.get('doc'):
-                    result_input_object['description'] = doc
-                required = input_object.get('required')
-                if required is not None:
-                    result_input_object['valueRequired'] = required
-                # if file_type := input_object.get('sbg:fileTypes'):
-                #     result_input_object['encodingFormat'] = file_type
-                result_input_list.append(result_input_object)
+                if file_type := input_object.get('sbg:fileTypes'):
+                    file_type = file_type.lower()
+                    if 'txt' in file_type:
+                        result_input_object['encodingFormat'] = 'text/plain'
+                    elif 'fastq' in file_type:
+                        result_input_object['encodingFormat'] = 'text/fastq'
+                    elif 'fasta' in file_type:
+                        result_input_object['encodingFormat'] = 'application/x-fasta'
+                    elif 'tar' in file_type:
+                        result_input_object['encodingFormat'] = 'application/x-tar'
+                    elif 'gtf' in file_type:
+                        result_input_object['encodingFormat'] = 'application/x-gtf'
+                    elif 'html' in file_type:
+                        result_input_object['encodingFormat'] = 'text/html'
+                    elif 'sam' in file_type:
+                        result_input_object['encodingFormat'] = 'application/x-sam'
+                    elif 'bam' in file_type:
+                        result_input_object['encodingFormat'] = 'application/x-bam'
+                    elif 'zip' in file_type:
+                        result_input_object['encodingFormat'] = 'application/zip'
+                    elif 'vcf' in file_type:
+                        result_input_object['encodingFormat'] = 'application/x-vcf'
+                if len(result_input_object):
+                    result_input_list.append(result_input_object)
             output['input'] = result_input_list
             output['original_input'] = input_object_list
 
             # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
-        if outputs := data.get('outputs'):
-            output['bioschemas:outputs'] = outputs
+        if output_object_list := data.get('outputs'):
+            result_output_list = []
+            for output_object in output_object_list:
+                result_output_object = {}
+                if name := output_object.get('label'):
+                    result_output_object['name'] = name
+                if file_type := output_object.get('sbg:fileTypes'):
+                    file_type = file_type.lower()
+                    if 'txt' in file_type:
+                        result_output_object['encodingFormat'] = 'text/plain'
+                    elif 'fastq' in file_type:
+                        result_output_object['encodingFormat'] = 'text/fastq'
+                    elif 'fasta' in file_type:
+                        result_input_object['encodingFormat'] = 'application/x-fasta'
+                    elif 'tar' in file_type:
+                        result_output_object['encodingFormat'] = 'application/x-tar'
+                    elif 'gtf' in file_type:
+                        result_output_object['encodingFormat'] = 'application/x-gtf'
+                    elif 'html' in file_type:
+                        result_output_object['encodingFormat'] = 'text/html'
+                    elif 'sam' in file_type:
+                        result_output_object['encodingFormat'] = 'application/x-sam'
+                    elif 'bam' in file_type:
+                        result_output_object['encodingFormat'] = 'application/x-bam'
+                    elif 'zip' in file_type:
+                        result_output_object['encodingFormat'] = 'application/zip'
+                    elif 'vcf' in file_type:
+                        result_output_object['encodingFormat'] = 'application/x-vcf'
+                result_output_list.append(result_output_object)
+
+            output['output'] = result_output_list
 
         # commenting out for readablility
         # if steps := data.get('steps'):
