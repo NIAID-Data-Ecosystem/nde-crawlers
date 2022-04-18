@@ -72,6 +72,10 @@ def parse():
                         result_input_object['encodingFormat'] = 'application/zip'
                     elif 'vcf' in file_type:
                         result_input_object['encodingFormat'] = 'application/x-vcf'
+                    elif 'bed' in file_type:
+                        result_output_object['encodingFormat'] = 'text/x-bed'
+                    elif 'hdf5' in file_type:
+                        result_output_object['encodingFormat'] = 'application/x-hdf5'
                 if len(result_input_object):
                     result_input_list.append(result_input_object)
             output['input'] = result_input_list
@@ -106,6 +110,11 @@ def parse():
                         result_output_object['encodingFormat'] = 'application/zip'
                     elif 'vcf' in file_type:
                         result_output_object['encodingFormat'] = 'application/x-vcf'
+                    elif 'bed' in file_type:
+                        result_output_object['encodingFormat'] = 'text/x-bed'
+                    elif 'hdf5' in file_type:
+                        result_output_object['encodingFormat'] = 'application/x-hdf5'
+
                 result_output_list.append(result_output_object)
 
             output['output'] = result_output_list
