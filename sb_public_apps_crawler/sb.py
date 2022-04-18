@@ -59,9 +59,8 @@ def parse():
 
                 if file_types := input_object.get('sbg:fileTypes'):
                     # incase of just one file_type, make an array so we don't iterate through the string, make lower case for mime_type dictionary keys
-                    file_types = [file_types.lower()]
-                    if ',' in file_types[0]:
-                        file_types = file_types[0].split(', ')
+                    file_types = file_types.lower()
+                    file_types = file_types.split(', ')
                 # using dictionary mime_type defined above, find correct value transformations by iterating through keys
                     for file_type in file_types:
                         if file_type in mime_type.keys():
@@ -129,7 +128,8 @@ def parse():
             output['applicationSubCategory'] = categories
         if revisions_info := data.get('sbg:revisionsInfo'):
             output['softwareVersion'] = revisions_info
-        # if project_name := data.get('sbg:projectName'):
+        if project_name := data.get('sbg:projectName'):
+            output['project'] = project_name
         if tool_author := data.get('sbg:toolAuthor'):
             output['creator'] = tool_author
         if app_version := data.get('appVersion'):
@@ -139,7 +139,7 @@ def parse():
         if created_on := data.get('sbg:createdOn'):
             output['dateCreated'] = created_on
         if contributors := data.get('sbg:contributors'):
-            output['contributor'] = contributors
+            output['contributor'] = contributors.split(', ')
         if publisher := data.get('sbg:publisher'):
             output['sdPublisher'] = publisher
         if workflow_language := data.get('sbg:workflowLanguage'):
