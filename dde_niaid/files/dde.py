@@ -59,8 +59,15 @@ def parse():
             }
 
             # rename our id value and creator to author
-            if author := hit.pop('creator', None):
-                hit['author'] = author
+            if authors := hit.pop('creator', None):
+                if type(authors) is list:
+                    for author in authors:
+                        if affiliation := author.get('affiliation'):
+                            author['affiliation'] = {'name': affiliation}
+                else: 
+                    if affiliation := authors.get('affiliation'):
+                        authors['affiliation'] = {'name': affiliation}
+                hit['author'] = authors
             hit['_id'] = "DDE_" + hit['_id']
 
             # adjust date values
@@ -109,6 +116,7 @@ def parse():
             # remove unnecessary values
             hit.pop('_meta', None)
             hit.pop('_score', None)
+            hit.pop('@context', None)
 
             yield hit
 
