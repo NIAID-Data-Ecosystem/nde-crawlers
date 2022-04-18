@@ -43,22 +43,29 @@ def parse():
 
         # TODO value for input should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
         if input_object_list := data.get('inputs'):
-            result_input_object = {}
             result_input_list = []
             for input_object in input_object_list:
+                result_input_object = {}
                 if input_id := input_object.get('id'):
                     result_input_object['identifier'] = input_id
                 if name := input_object.get('label'):
                     result_input_object['name'] = name
                 if description := input_object.get('description'):
                     result_input_object['description'] = description
-                if required := input_object.get('required'):
+                if doc := input_object.get('doc'):
+                    result_input_object['description'] = doc
+                required = input_object.get('required')
+                if required is not None:
                     result_input_object['valueRequired'] = required
-                if file_type := input_object.get('sbg:fileTypes'):
-                    result_input_object['encodingFormat'] = file_type
-                # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
-        if outputs := data.get('outputs'):
-            output['bioschemas:input'] = outputs
+                # if file_type := input_object.get('sbg:fileTypes'):
+                #     result_input_object['encodingFormat'] = file_type
+                result_input_list.append(result_input_object)
+            output['input'] = result_input_list
+            output['original_input'] = input_object_list
+
+            # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
+        if outputs := data.get('output'):
+            output['bioschemas:outputs'] = outputs
 
         # commenting out for readablility
         # if steps := data.get('steps'):
