@@ -6,7 +6,7 @@ import requests
 def parse():
 
     mime_type = {
-        "txt": "text/plain", "fastq": "text/fastq", "fasta": "application/x-fasta", "tar": "application/x-tar", "tar.gz": "application/x-tar", "gtf": "application/x-gtf", "html": "text/html", "sam": "application/x-sam", "bam": "application/x-bam", "zip": "application/zip", "vcf": "application/x-vcf", "vcf.gz": "application/x-vcf", "bed": "text/x-bed", "hdf5": "application/x-hdf5"
+        "txt": "text/plain", "fastq": "text/fastq", "fastq.gz": "text/fastq", "fasta": "application/x-fasta", "fasta.gz": "application/x-fasta", "tar": "application/x-tar", "tar.gz": "application/x-tar", "gtf": "application/x-gtf", "gtf.gz": "application/x-gtf", "html": "text/html", "sam": "application/x-sam", "bam": "application/x-bam", "zip": "application/zip", "vcf": "application/x-vcf", "vcf.gz": "application/x-vcf", "bed": "text/x-bed", "bed.gz": "text/x-bed", "hdf5": "application/x-hdf5"
     }
 
     url = "https://igor.sbgenomics.com/ns/amigo/api/v1/apps/explore?limit=20&offset=0&order_by=label"
@@ -53,9 +53,9 @@ def parse():
             result_input_list = []
             for input_object in input_object_list:
                 # transform to a new object we create here
-                result_input_object = {}
+                formal_parameter_object = {}
                 if name := input_object.get('label'):
-                    result_input_object['name'] = name
+                    formal_parameter_object['name'] = name
 
                 if file_types := input_object.get('sbg:fileTypes'):
                     # incase of just one file_type, make an array so we don't iterate through the string, make lower case for mime_type dictionary keys
@@ -65,16 +65,18 @@ def parse():
                 # using dictionary mime_type defined above, find correct value transformations by iterating through keys
                     for file_type in file_types:
                         if file_type in mime_type.keys():
-                            result_input_object['encodingFormat'] = mime_type[file_type]
+                            formal_parameter_object['encodingFormat'] = mime_type[file_type]
 
-                if len(result_input_object):
-                    result_input_list.append(result_input_object)
+                if len(formal_parameter_object):
+                    result_input_list.append(formal_parameter_object)
 
             if len(result_input_list):
                 output['input'] = result_input_list
+            # to compare transformed input
             # output['original_input'] = input_object_list
 
             # value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
+            # reference the input method above, same workflow
         if output_object_list := data.get('outputs'):
             result_output_list = []
             for output_object in output_object_list:
@@ -103,7 +105,7 @@ def parse():
             result_list = []
             for obj in requirements:
                 result_list.append(obj['class'])
-            output['schema:softwareRequirements'] = result_list
+            output['softwareRequirements'] = result_list
 
         if image_url := data.get('sbg:image_url'):
             output['thumbnailUrl'] = image_url
