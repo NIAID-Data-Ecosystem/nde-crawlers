@@ -5,6 +5,10 @@ import requests
 
 def parse():
 
+    mime_type = {
+        "txt": "text/plain", "fastq": "text/fastq", "fasta": "application/x-fasta", "tar": "application/x-tar", "tar.gz": "application/x-tar", "gtf": "application/x-gtf", "html": "text/html", "sam": "application/x-sam", "bam": "application/x-bam", "zip": "application/zip", "vcf": "application/x-vcf", "vcf.gz": "application/x-vcf", "bed": "text/x-bed", "hdf5": "application/x-hdf5"
+    }
+
     url = "https://igor.sbgenomics.com/ns/amigo/api/v1/apps/explore?limit=20&offset=0&order_by=label"
     all_apps = requests.get(url)
     json_obj = json.loads(all_apps.text)
@@ -50,32 +54,14 @@ def parse():
                 result_input_object = {}
                 if name := input_object.get('label'):
                     result_input_object['name'] = name
-                if file_type := input_object.get('sbg:fileTypes'):
-                    file_type = file_type.lower()
-                    if 'txt' in file_type:
-                        result_input_object['encodingFormat'] = 'text/plain'
-                    elif 'fastq' in file_type:
-                        result_input_object['encodingFormat'] = 'text/fastq'
-                    elif 'fasta' in file_type:
-                        result_input_object['encodingFormat'] = 'application/x-fasta'
-                    elif 'tar' in file_type:
-                        result_input_object['encodingFormat'] = 'application/x-tar'
-                    elif 'gtf' in file_type:
-                        result_input_object['encodingFormat'] = 'application/x-gtf'
-                    elif 'html' in file_type:
-                        result_input_object['encodingFormat'] = 'text/html'
-                    elif 'sam' in file_type:
-                        result_input_object['encodingFormat'] = 'application/x-sam'
-                    elif 'bam' in file_type:
-                        result_input_object['encodingFormat'] = 'application/x-bam'
-                    elif 'zip' in file_type:
-                        result_input_object['encodingFormat'] = 'application/zip'
-                    elif 'vcf' in file_type:
-                        result_input_object['encodingFormat'] = 'application/x-vcf'
-                    elif 'bed' in file_type:
-                        result_output_object['encodingFormat'] = 'text/x-bed'
-                    elif 'hdf5' in file_type:
-                        result_output_object['encodingFormat'] = 'application/x-hdf5'
+                if file_types := input_object.get('sbg:fileTypes'):
+                    file_types = [file_types.lower()]
+                    if ',' in file_types[0]:
+                        file_types = file_types[0].split(', ')
+                    for file_type in file_types:
+                        if file_type in mime_type.keys():
+                            result_input_object['encodingFormat'] = mime_type[file_type]
+
                 if len(result_input_object):
                     result_input_list.append(result_input_object)
 
@@ -90,35 +76,16 @@ def parse():
                 result_output_object = {}
                 if name := output_object.get('label'):
                     result_output_object['name'] = name
-                if file_type := output_object.get('sbg:fileTypes'):
-                    file_type = file_type.lower()
-                    if 'txt' in file_type:
-                        result_output_object['encodingFormat'] = 'text/plain'
-                    elif 'fastq' in file_type:
-                        result_output_object['encodingFormat'] = 'text/fastq'
-                    elif 'fasta' in file_type:
-                        result_input_object['encodingFormat'] = 'application/x-fasta'
-                    elif 'tar' in file_type:
-                        result_output_object['encodingFormat'] = 'application/x-tar'
-                    elif 'gtf' in file_type:
-                        result_output_object['encodingFormat'] = 'application/x-gtf'
-                    elif 'html' in file_type:
-                        result_output_object['encodingFormat'] = 'text/html'
-                    elif 'sam' in file_type:
-                        result_output_object['encodingFormat'] = 'application/x-sam'
-                    elif 'bam' in file_type:
-                        result_output_object['encodingFormat'] = 'application/x-bam'
-                    elif 'zip' in file_type:
-                        result_output_object['encodingFormat'] = 'application/zip'
-                    elif 'vcf' in file_type:
-                        result_output_object['encodingFormat'] = 'application/x-vcf'
-                    elif 'bed' in file_type:
-                        result_output_object['encodingFormat'] = 'text/x-bed'
-                    elif 'hdf5' in file_type:
-                        result_output_object['encodingFormat'] = 'application/x-hdf5'
+                if file_types := output_object.get('sbg:fileTypes'):
+                    file_types = [file_types.lower()]
+                    if ',' in file_types[0]:
+                        file_types = file_types[0].split(', ')
+                    for file_type in file_types:
+                        if file_type in mime_type.keys():
+                            result_output_object['encodingFormat'] = mime_type[file_type]
 
                 if len(result_output_object):
-                    result_input_list.append(result_output_object)
+                    result_output_list.append(result_output_object)
 
             if len(result_output_list):
                 output['output'] = result_output_list
