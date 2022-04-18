@@ -78,8 +78,10 @@ def parse():
                         result_output_object['encodingFormat'] = 'application/x-hdf5'
                 if len(result_input_object):
                     result_input_list.append(result_input_object)
-            output['input'] = result_input_list
-            output['original_input'] = input_object_list
+
+            if len(result_input_list):
+                output['input'] = result_input_list
+            # output['original_input'] = input_object_list
 
             # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
         if output_object_list := data.get('outputs'):
@@ -115,9 +117,11 @@ def parse():
                     elif 'hdf5' in file_type:
                         result_output_object['encodingFormat'] = 'application/x-hdf5'
 
-                result_output_list.append(result_output_object)
+                if len(result_output_object):
+                    result_input_list.append(result_output_object)
 
-            output['output'] = result_output_list
+            if len(result_output_list):
+                output['output'] = result_output_list
 
         # commenting out for readablility
         # if steps := data.get('steps'):
