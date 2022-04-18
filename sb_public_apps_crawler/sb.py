@@ -47,17 +47,22 @@ def parse():
         if doc := data.get('doc'):
             output['description'] = doc
 
-        # TODO value for input should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
+        # value for input should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
+        # initial metadata is a list of objects
         if input_object_list := data.get('inputs'):
             result_input_list = []
             for input_object in input_object_list:
+                # transform to a new object we create here
                 result_input_object = {}
                 if name := input_object.get('label'):
                     result_input_object['name'] = name
+
                 if file_types := input_object.get('sbg:fileTypes'):
+                    # incase of just one file_type, make an array so we don't iterate through the string, make lower case for mime_type dictionary keys
                     file_types = [file_types.lower()]
                     if ',' in file_types[0]:
                         file_types = file_types[0].split(', ')
+                # using dictionary mime_type defined above, find correct value transformations by iterating through keys
                     for file_type in file_types:
                         if file_type in mime_type.keys():
                             result_input_object['encodingFormat'] = mime_type[file_type]
@@ -69,7 +74,7 @@ def parse():
                 output['input'] = result_input_list
             # output['original_input'] = input_object_list
 
-            # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
+            # value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
         if output_object_list := data.get('outputs'):
             result_output_list = []
             for output_object in output_object_list:
