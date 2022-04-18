@@ -2,11 +2,10 @@ import json
 from pprint import pprint
 import requests
 
-url = "https://igor.sbgenomics.com/ns/amigo/api/v1/apps/explore?limit=20&offset=0&order_by=label"
-
 
 def parse():
 
+    url = "https://igor.sbgenomics.com/ns/amigo/api/v1/apps/explore?limit=20&offset=0&order_by=label"
     all_apps = requests.get(url)
     json_obj = json.loads(all_apps.text)
     obj_list = json_obj['data']
@@ -43,10 +42,21 @@ def parse():
             output['description'] = doc
 
         # TODO value for input should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
-        if inputs := data.get('inputs'):
-            output['bioschemas:input'] = inputs
-
-        # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
+        if input_object_list := data.get('inputs'):
+            result_input_object = {}
+            result_input_list = []
+            for input_object in input_object_list:
+                if input_id := input_object.get('id'):
+                    result_input_object['identifier'] = input_id
+                if name := input_object.get('label'):
+                    result_input_object['name'] = name
+                if description := input_object.get('description'):
+                    result_input_object['description'] = description
+                if required := input_object.get('required'):
+                    result_input_object['valueRequired'] = required
+                if file_type := input_object.get('sbg:fileTypes'):
+                    result_input_object['encodingFormat'] = file_type
+                # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
         if outputs := data.get('outputs'):
             output['bioschemas:input'] = outputs
 
