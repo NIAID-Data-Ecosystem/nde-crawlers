@@ -64,7 +64,7 @@ def parse():
             output['original_input'] = input_object_list
 
             # TODO value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
-        if outputs := data.get('output'):
+        if outputs := data.get('outputs'):
             output['bioschemas:outputs'] = outputs
 
         # commenting out for readablility
