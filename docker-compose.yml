@@ -2,22 +2,22 @@ version: '3'
 
 services:
   # when updating changes to code: "docker-compose up --detach --build immport-crawler"
-  immport-crawler:
-    build:
-      context: immport_crawler
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
+  # immport-crawler:
+  #   build:
+  #     context: immport_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
   zenodo-crawler:
     build:
       context: zenodo_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   niaid-crawler:
@@ -25,8 +25,8 @@ services:
       context: niaid_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   omicsdi_crawler:
@@ -34,8 +34,8 @@ services:
       context: omicsdi_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   ncbi-geo-crawler:
@@ -43,17 +43,17 @@ services:
       context: ncbi_geo_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   dde-crawler:
     build:
       context: dde_niaid
       dockerfile: Dockerfile
-    # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      # uncomment to run development crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   mongodb:
@@ -92,10 +92,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8080:80"
+
 volumes:
   data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/nde/data
+    #     driver: local
+    #     driver_opts:
+    #       type: none
+    #       o: bind
+    #       device: /opt/nde/data
