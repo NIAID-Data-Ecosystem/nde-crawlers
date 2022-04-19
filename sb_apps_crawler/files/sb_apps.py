@@ -1,6 +1,10 @@
+import logging
 import json
-from pprint import pprint
 import requests
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('nde-logger')
 
 
 def parse():
@@ -12,7 +16,7 @@ def parse():
     offset = 0
     limit = 200
 
-    # get each app's individual id to query later
+    # get each app's individual id to query later (not enough metadata on first pass)
     public_ids = []
     while True:
         data_count = 0
@@ -24,7 +28,7 @@ def parse():
             public_ids.append(obj['public_id'])
             data_count += 1
 
-        # condition to check if we've gotten all metadata
+        # condition to check if we've reached the end of the metadata
         if data_count != limit:
             break
 
@@ -32,18 +36,23 @@ def parse():
 
     # using the id for the app, query the individual app page
     all_app_meta_data = []
+    counter = 0
     for id in public_ids:
         app_meta_data = requests.get(
             "https://igor.sbgenomics.com/ns/brood/v1/raw/" + id)
         app_json = json.loads(app_meta_data.text)
         all_app_meta_data.append(app_json)
+        counter += 1
+        if counter % 100 == 0:
+            logger.info('Retrieved %s Individual Apps', counter)
 
+    record_count = 0
     for data in all_app_meta_data:
         identifier = data.get('sbg:id')
         output = {
             "_id": "SB_Public_Apps_" + identifier,
             "includedInDataCatalog": {"name": "PublicApps@SevenBridges"},
-            "@type": "Dataset",
+            "@type": "ComputationalTool",
             "url": "https://igor.sbgenomics.com/public/apps/" + identifier
         }
         if app_class := data.get('class'):
@@ -148,11 +157,16 @@ def parse():
 
         yield output
 
+        record_count += 1
+        if record_count % 100 == 0:
+            logger.info("Parsed %s records", record_count)
+
+    logger.info("Finished Parsing. Total Records: %s", record_count)
+
 
 # to test
-json_list = []
-for i in parse():
-    json_list.append(i)
-
-    # with open('json_data.json', 'w') as outfile:
-    #     json.dump(json_list, outfile)
+# json_list = []
+# for i in parse():
+#     json_list.append(i)
+#     with open('json_data.json', 'w') as outfile:
+#         json.dump(json_list, outfile)
