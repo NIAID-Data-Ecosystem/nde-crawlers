@@ -36,8 +36,6 @@ def parse():
         }
         if app_class := data.get('class'):
             output['applicationCategory'] = app_class
-        if cwl_version := data.get('cwlVersion'):
-            output['version'] = cwl_version
         if label := data.get('label'):
             output['name'] = label
 
@@ -65,14 +63,12 @@ def parse():
                     for file_type in file_types:
                         if file_type in mime_type.keys():
                             formal_parameter_object['encodingFormat'] = mime_type[file_type]
-
+                # no empty objects
                 if len(formal_parameter_object):
                     result_input_list.append(formal_parameter_object)
-
+            # no empty lists
             if len(result_input_list):
                 output['input'] = result_input_list
-            # to compare transformed input
-            # output['original_input'] = input_object_list
 
             # value for output should be list of FormalParameter objects https://bioschemas.org/types/FormalParameter/1.0-RELEASE
             # reference the input method above, same workflow
@@ -96,10 +92,6 @@ def parse():
             if len(result_output_list):
                 output['output'] = result_output_list
 
-        # commenting out for readablility
-        # if steps := data.get('steps'):
-        #     output['bioschemas:hasPart'] = steps
-
         if requirements := data.get('requirements'):
             result_list = []
             for obj in requirements:
@@ -109,10 +101,9 @@ def parse():
         if image_url := data.get('sbg:image_url'):
             output['thumbnailUrl'] = image_url
 
-        # TODO check applicationSuite exists, append version?
-        if toolkit := data.get('sbg:toolkit'):
-            output['applicationSuite'] = toolkit + \
-                'version:' + data.get('sbg:toolkitVersion')
+        if version := data.get('sbg:revisionNotes'):
+            if version.startswith('v'):
+                output['version'] = version
 
         if license := data.get('license'):
             output['license'] = license
@@ -126,20 +117,18 @@ def parse():
 
         if categories := data.get('sbg:categories'):
             output['applicationSubCategory'] = categories
-        if revisions_info := data.get('sbg:revisionsInfo'):
-            output['softwareVersion'] = revisions_info
         if project_name := data.get('sbg:projectName'):
             output['project'] = project_name
         if tool_author := data.get('sbg:toolAuthor'):
             output['creator'] = tool_author
-        if app_version := data.get('appVersion'):
-            output['version'] = app_version
+        if app_version := data.get('sbg:appVersion'):
+            output['softwareVersion'] = app_version
         if modified_on := data.get('sbg:modifiedOn'):
             output['dateModified'] = modified_on
         if created_on := data.get('sbg:createdOn'):
             output['dateCreated'] = created_on
         if contributors := data.get('sbg:contributors'):
-            output['contributor'] = contributors.split(', ')
+            output['contributor'] = contributors
         if publisher := data.get('sbg:publisher'):
             output['sdPublisher'] = publisher
         if workflow_language := data.get('sbg:workflowLanguage'):
