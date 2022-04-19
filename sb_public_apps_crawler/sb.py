@@ -9,13 +9,23 @@ def parse():
         "txt": "text/plain", "fastq": "text/fastq", "fastq.gz": "text/fastq", "fasta": "application/x-fasta", "fasta.gz": "application/x-fasta", "tar": "application/x-tar", "tar.gz": "application/x-tar", "gtf": "application/x-gtf", "gtf.gz": "application/x-gtf", "html": "text/html", "sam": "application/x-sam", "bam": "application/x-bam", "zip": "application/zip", "vcf": "application/x-vcf", "vcf.gz": "application/x-vcf", "bed": "text/x-bed", "bed.gz": "text/x-bed", "hdf5": "application/x-hdf5"
     }
 
-    url = "https://igor.sbgenomics.com/ns/amigo/api/v1/apps/explore?limit=20&offset=0&order_by=label"
-    all_apps = requests.get(url)
-    json_obj = json.loads(all_apps.text)
-    obj_list = json_obj['data']
+    offset = 0
+    limit = 200
     public_ids = []
-    for obj in obj_list:
-        public_ids.append(obj['public_id'])
+    while True:
+        data_count = 0
+        url = f"https://igor.sbgenomics.com/ns/amigo/api/v1/apps/explore?limit={limit}&offset={offset}&order_by=label"
+        all_apps = requests.get(url)
+        json_obj = json.loads(all_apps.text)
+        obj_list = json_obj['data']
+        for obj in obj_list:
+            public_ids.append(obj['public_id'])
+            data_count += 1
+
+        if data_count != limit:
+            break
+
+        offset += 200
 
     all_app_meta_data = []
     for id in public_ids:
@@ -23,8 +33,6 @@ def parse():
             "https://igor.sbgenomics.com/ns/brood/v1/raw/" + id)
         app_json = json.loads(app_meta_data.text)
         all_app_meta_data.append(app_json)
-
-    # if no description use doc
 
     for data in all_app_meta_data:
         identifier = data.get('sbg:id')
@@ -137,9 +145,10 @@ def parse():
         yield output
 
 
+# to test
 json_list = []
 for i in parse():
     json_list.append(i)
 
-with open('json_data.json', 'w') as outfile:
-    json.dump(json_list, outfile)
+    # with open('json_data.json', 'w') as outfile:
+    #     json.dump(json_list, outfile)
