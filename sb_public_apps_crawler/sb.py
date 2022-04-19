@@ -8,9 +8,11 @@ def parse():
     mime_type = {
         "txt": "text/plain", "fastq": "text/fastq", "fastq.gz": "text/fastq", "fasta": "application/x-fasta", "fasta.gz": "application/x-fasta", "tar": "application/x-tar", "tar.gz": "application/x-tar", "gtf": "application/x-gtf", "gtf.gz": "application/x-gtf", "html": "text/html", "sam": "application/x-sam", "bam": "application/x-bam", "zip": "application/zip", "vcf": "application/x-vcf", "vcf.gz": "application/x-vcf", "bed": "text/x-bed", "bed.gz": "text/x-bed", "hdf5": "application/x-hdf5"
     }
-
+    # pagination using offset and limit
     offset = 0
     limit = 200
+
+    # get each app's individual id to query later
     public_ids = []
     while True:
         data_count = 0
@@ -22,11 +24,13 @@ def parse():
             public_ids.append(obj['public_id'])
             data_count += 1
 
+        # condition to check if we've gotten all metadata
         if data_count != limit:
             break
 
         offset += 200
 
+    # using the id for the app, query the individual app page
     all_app_meta_data = []
     for id in public_ids:
         app_meta_data = requests.get(
