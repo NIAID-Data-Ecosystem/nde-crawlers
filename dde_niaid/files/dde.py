@@ -59,8 +59,15 @@ def parse():
             }
 
             # rename our id value and creator to author
-            if author := hit.pop('creator', None):
-                hit['author'] = author
+            if authors := hit.pop('creator', None):
+                if type(authors) is list:
+                    for author in authors:
+                        if affiliation := author.get('affiliation'):
+                            author['affiliation'] = {'name': affiliation}
+                else: 
+                    if affiliation := authors.get('affiliation'):
+                        authors['affiliation'] = {'name': affiliation}
+                hit['author'] = authors
             hit['_id'] = "DDE_" + hit['_id']
 
             # adjust date values
@@ -71,7 +78,10 @@ def parse():
             # adjust @type value to fit our schema
             if nde_type := hit.pop('@type', None):
                 nde_type = nde_type.split(":")[-1]
-                hit['@type'] = nde_type
+                if "Dataset" in nde_type:
+                    hit['@type'] = "Dataset"
+                else:
+                    hit['@type'] = nde_type
 
             # query the ols to get measurementTechnique, infectiousAgent, infectiousDisease, and species
             if mts := hit.pop('measurementTechnique', None):
@@ -109,6 +119,7 @@ def parse():
             # remove unnecessary values
             hit.pop('_meta', None)
             hit.pop('_score', None)
+            hit.pop('@context', None)
 
             yield hit
 
