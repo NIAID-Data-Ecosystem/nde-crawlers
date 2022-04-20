@@ -2,6 +2,7 @@ import datetime
 import inspect
 import os
 import shutil
+import time
 
 import orjson
 from biothings.hub.dataload.dumper import BaseDumper
@@ -48,6 +49,10 @@ class NDEFileSystemDumper(BaseDumper):
         data_filename = os.path.join(
             os.path.dirname(release_filename), 'data.ndjson'
         )
+        # cat file and delay 5 seconds to sync release.txt issue with mnt from su07
+        os.system("cat " + release_filename)
+        time.sleep(5)
+        
         # read crawled release string
         with open(release_filename, 'r') as fh:
             next_release = fh.readline(63)

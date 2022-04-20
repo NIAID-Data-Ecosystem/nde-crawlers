@@ -52,7 +52,7 @@ def parse():
         trial['additionalType'] = trial.pop('data_available')
         trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
         trial['nctid'] = trial.pop('nct_number')
-        trial['infectiousDisease'] = trial.pop('condition')
+        trial['infectiousDisease'] = {'name': trial.pop('condition')}
         trial['mainEntityOfPage'] = trial.pop('clinical_trial_website')
 
         # check if url is valid then take pubmed id
@@ -111,5 +111,4 @@ def parse():
         logger.info("Parsed %s records", count)
 
     logger.info("Finished Parsing. Total Records: %s", count)
-    if count == 10000:
-        logger.warning("Records has reached 10000, check API if records exceed 10000.")
+    assert count < 10000, "Records has reached 10000, check API if records exceed 10000."
