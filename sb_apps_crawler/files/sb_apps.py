@@ -163,11 +163,3 @@ def parse():
             logger.info("Parsed %s records", record_count)
 
     logger.info("Finished Parsing. Total Records: %s", record_count)
-
-
-# to test
-# json_list = []
-# for i in parse():
-#     json_list.append(i)
-#     with open('json_data.json', 'w') as outfile:
-#         json.dump(json_list, outfile)
