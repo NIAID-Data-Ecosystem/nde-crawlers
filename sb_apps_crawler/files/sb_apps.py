@@ -37,6 +37,7 @@ def parse():
     # using the id for the app, query the individual app page
     all_app_meta_data = []
     counter = 0
+    logger.info('Started Individual App Calls')
     for id in public_ids:
         app_meta_data = requests.get(
             "https://igor.sbgenomics.com/ns/brood/v1/raw/" + id)
@@ -45,7 +46,7 @@ def parse():
         counter += 1
         if counter % 100 == 0:
             logger.info('Retrieved %s Individual Apps', counter)
-
+    logger.info('Now Parsing Metadata')
     record_count = 0
     for data in all_app_meta_data:
         identifier = data.get('sbg:id')
