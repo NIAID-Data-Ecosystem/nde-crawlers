@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import json
 import requests
@@ -123,9 +124,16 @@ def parse():
         if image_url := data.get('sbg:image_url'):
             output['thumbnailUrl'] = image_url
 
-        if version := data.get('sbg:revisionNotes'):
-            if version.startswith('v'):
-                output['version'] = version
+            # 'v1.0.2'
+
+        # if version := data.get('sbg:revisionNotes'):
+        #     if version.startswith('v'):
+        #         output['version'] = int(''.join(version[1:].split('.')))
+
+        # if version := data.get('sbg:revisionNotes'):
+            # if version.startswith('v'):
+        # output['version'] = "1"
+        # str(version[1:])
 
         if license := data.get('license'):
             output['license'] = license
@@ -141,16 +149,26 @@ def parse():
             output['applicationSubCategory'] = categories
         if project_name := data.get('sbg:projectName'):
             output['project'] = project_name
-        if tool_author := data.get('sbg:toolAuthor'):
-            output['creator'] = tool_author
+        if creators := data.get('sbg:toolAuthor'):
+            creators = creators.split(', ')
+            creator_list = []
+            for creator in creators:
+                creator_list.append({"name": creator})
+            output['creator'] = creator_list
         if app_version := data.get('sbg:appVersion'):
             output['softwareVersion'] = app_version
         if modified_on := data.get('sbg:modifiedOn'):
-            output['dateModified'] = modified_on
+            output['dateModified'] = datetime.utcfromtimestamp(
+                modified_on).strftime('%Y-%m-%d')
         if created_on := data.get('sbg:createdOn'):
-            output['dateCreated'] = created_on
+            output['dateCreated'] = datetime.utcfromtimestamp(
+                created_on).strftime('%Y-%m-%d')
         if contributors := data.get('sbg:contributors'):
-            output['contributor'] = contributors
+            contributor_list = []
+            for contributor in contributors:
+                contributor_list.append({"name": contributor})
+            output['contributor'] = contributor_list
+
         if publisher := data.get('sbg:publisher'):
             output['sdPublisher'] = publisher
         if workflow_language := data.get('sbg:workflowLanguage'):
