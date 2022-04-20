@@ -56,6 +56,15 @@ services:
         CRONTAB: dev-crontab
     volumes:
       - data:/data
+  sb-apps-crawler:
+    build:
+      context: sb_apps_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      args:
+        CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   mongodb:
     image: mongo:4.4
     ports:
