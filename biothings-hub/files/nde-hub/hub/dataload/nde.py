@@ -52,7 +52,7 @@ class NDEFileSystemDumper(BaseDumper):
         # cat file and delay 5 seconds to sync release.txt issue with mnt from su07
         os.system("cat " + release_filename)
         time.sleep(5)
-        
+
         # read crawled release string
         with open(release_filename, 'r') as fh:
             next_release = fh.readline(63)
@@ -74,7 +74,8 @@ class NDEFileSystemDumper(BaseDumper):
                 self.to_dump = []
                 return
             elif ex_rl_dt > nxt_rl_dt:
-                raise RuntimeError("Crawled release is older than dumped release")
+                raise RuntimeError(
+                    "Crawled release is older than dumped release")
             elif ex_rl_dt < nxt_rl_dt:
                 pass
             else:
@@ -102,7 +103,8 @@ class NDEFileSystemDumper(BaseDumper):
         """
         If there is a simple method to check whether remote is better
         """
-        raise RuntimeError("remote_is_better is not available in NDEFileSystemDumper")
+        raise RuntimeError(
+            "remote_is_better is not available in NDEFileSystemDumper")
 
     def download(self, remotefile, localfile):
         """
@@ -144,7 +146,7 @@ class NDESourceUploader(BaseSourceUploader):
         with open(os.path.join(data_folder, 'data.ndjson'), 'rb') as f:
             for line in f:
                 doc = orjson.loads(line)
-                #add date transformation here and have the most recent date of all of the dates
+                # add date transformation here and have the most recent date of all of the dates
                 doc = add_date(doc)
                 yield doc
 
@@ -175,6 +177,9 @@ class NDESourceUploader(BaseSourceUploader):
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
+            "applicationCategory": {"type": "keyword", "copy_to": ["all"]},
+            "applicationSubCategory": {"type": "keyword", "copy_to": ["all"]},
+            "applicationSuite": {"type": "keyword", "copy_to": ["all"]},
             "armGroup": {
                 "properties": {
                     "@type": {"type": "keyword"},
@@ -213,7 +218,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "properties": {
                             "@type": {"type": "text"},
                             "familyName": {"type": "text", "copy_to": ["all"]},
-                            "givenName" : {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
                             "name": {"type": "text", "copy_to": ["all"]},
                         }
                     },
@@ -377,6 +382,13 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
+            "input": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "encodingFormat": {"type": "text", "copy_to": ["all"]},
+                },
+            },
             "includedInDataCatalog": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -404,14 +416,14 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "infectiousAgent": {
                 "properties": {
-                     "name": {"type": "keyword", "copy_to": ["all"]},
-                     "url": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "infectiousDisease": {
                 "properties": {
-                     "name": {"type": "keyword", "copy_to": ["all"]},
-                     "url": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "instrument": {"type": "text", "copy_to": ["all"]},
@@ -457,10 +469,10 @@ class NDESourceUploader(BaseSourceUploader):
             "license": {"type": "text"},
             "material": {"type": "text", "copy_to": ["all"]},
             "measurementParameter": {"properties": {"resolution": {"type": "keyword"}}},
-            "measurementTechnique": {                
+            "measurementTechnique": {
                 "properties": {
-                     "name": {"type": "keyword", "copy_to": ["all"]},
-                     "url": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -472,6 +484,13 @@ class NDESourceUploader(BaseSourceUploader):
                     "outcomeTimeFrame": {"type": "text", "copy_to": ["all"]},
                     "outcomeType": {"type": "keyword", "copy_to": ["all"]},
                 }
+            },
+            "output": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "encodingFormat": {"type": "text", "copy_to": ["all"]},
+                },
             },
             "pmid": {"type": "integer", "copy_to": ["all"]},
             "protocolCategory": {"type": "keyword", "copy_to": ["all"]},
@@ -495,6 +514,9 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
+            "sdPublisher": {"type": "keyword", "copy_to": ["all"]},
+            "softwareRequirements": {"type": "text", "copy_to": ["all"]},
+            "softwareVersion": {"type": "text", "copy_to": ["all"]},
             "spatial": {
                 "properties": {
                     "@type": {
@@ -521,8 +543,8 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "species": {
                 "properties": {
-                     "name": {"type": "keyword", "copy_to": ["all"]},
-                     "url": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "sponsor": {
