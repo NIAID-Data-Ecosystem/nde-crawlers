@@ -173,6 +173,8 @@ def parse():
             output['sdPublisher'] = publisher
         if workflow_language := data.get('sbg:workflowLanguage'):
             output['programmingLanguage'] = workflow_language
+        if toolkit := data.get('sbg:toolkit'):
+            output['applicationSuite'] = toolkit
 
         yield output
 
