@@ -177,9 +177,9 @@ class NDESourceUploader(BaseSourceUploader):
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
-            "applicationCategory": {"type": "keyword", "copy_to": ["all"]},
+            "applicationCategory": {"type": "text", "copy_to": ["all"]},
             "applicationSubCategory": {"type": "keyword", "copy_to": ["all"]},
-            "applicationSuite": {"type": "keyword", "copy_to": ["all"]},
+            "applicationSuite": {"type": "text", "copy_to": ["all"]},
             "armGroup": {
                 "properties": {
                     "@type": {"type": "keyword"},
@@ -384,7 +384,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "input": {
                 "properties": {
-                    "@type": {"type": "text"},
+                    "@type": {"type": "keyword"},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
@@ -487,7 +487,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "output": {
                 "properties": {
-                    "@type": {"type": "text"},
+                    "@type": {"type": "keyword"},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
@@ -514,7 +514,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "sdPublisher": {"type": "keyword", "copy_to": ["all"]},
+            "sdPublisher": {"type": "text", "copy_to": ["all"]},
             "softwareRequirements": {"type": "text", "copy_to": ["all"]},
             "softwareVersion": {"type": "text", "copy_to": ["all"]},
             "spatial": {
