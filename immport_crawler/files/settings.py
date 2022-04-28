@@ -11,6 +11,4 @@ SELENIUM_DRIVER_NAME = 'chrome'
 SELENIUM_DRIVER_EXECUTABLE_PATH = which('chromedriver')
 SELENIUM_DRIVER_ARGUMENTS=['--headless', '--no-sandbox']
 SELENIUM_BROWSER_EXECUTABLE_PATH = which('google-chrome')
-HTTPCACHE_ENABLED = True
-HTTPCACHE_DIR = '/cache'
 
