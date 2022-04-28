@@ -80,7 +80,6 @@ ARG CRONTAB=prod-crontab
 RUN mv docker-entrypoint.sh / && \
     mv ${CRONTAB} /etc/crontab
 RUN mkdir -p /data/immport_crawled && chown -R biothings:biothings /data
-RUN mkdir /cache && chown -R biothings:biothings /cache
 ENV PYTHONPATH="."
 ENV SCRAPY_SETTINGS_MODULE="settings"
 VOLUME [ "/data" ]
