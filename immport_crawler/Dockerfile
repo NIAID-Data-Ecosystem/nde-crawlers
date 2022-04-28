@@ -84,6 +84,5 @@ RUN mkdir /cache && chown -R biothings:biothings /cache
 ENV PYTHONPATH="."
 ENV SCRAPY_SETTINGS_MODULE="settings"
 VOLUME [ "/data" ]
-VOLUME ["/cache"]
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/docker-entrypoint.sh"]
