@@ -55,29 +55,29 @@ class NCBIGeoSpider(scrapy.Spider):
     # THIS USED FOR TESTING/DEBUGGING
     # for small tests can use (start, end) = (1,20)
     # this should be the most recent assession (GSE) link: https://www.ncbi.nlm.nih.gov/geo/browse/?view=series&display=1&zsort=acc
-    # def start_requests(self):
-    #     start = 1
-    #     end = 200
-    #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
-    #     for acc_id in range(start, end + 1):
-    #         yield scrapy.Request(url=prefix + str(acc_id))
-    
     def start_requests(self):
-        # there may be a connection error sometimes. Retry up to 5 times if there is one.
-        tries = 6
-        for attempt in range(tries):
-            try:
-                ids = self.get_ids()
-            except EOFError as e:
-                if attempt < (tries - 1):
-                    continue
-                else:
-                    raise e
-            else:
-                break
-        prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
-        for acc_id in ids:
+        start = 1
+        end = 200
+        prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
+        for acc_id in range(start, end + 1):
             yield scrapy.Request(url=prefix + str(acc_id))
+    
+    # def start_requests(self):
+    #     # there may be a connection error sometimes. Retry up to 5 times if there is one.
+    #     tries = 6
+    #     for attempt in range(tries):
+    #         try:
+    #             ids = self.get_ids()
+    #         except EOFError as e:
+    #             if attempt < (tries - 1):
+    #                 continue
+    #             else:
+    #                 raise e
+    #         else:
+    #             break
+    #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
+    #     for acc_id in ids:
+    #         yield scrapy.Request(url=prefix + str(acc_id))
         
 
     def parse(self, response):
@@ -103,7 +103,7 @@ class NCBIGeoSpider(scrapy.Spider):
                     else:
                         key = node.xpath('./td[1]/text()').get()
                         data[key] = node.xpath('string(./td[2])').get().strip().replace('\xa0', ' ')
-
+        self.logger.info("Check if cached: " + " ".join(response.flags))
         yield data if data else None
 
 
