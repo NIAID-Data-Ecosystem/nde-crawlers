@@ -57,7 +57,7 @@ class NCBIGeoSpider(scrapy.Spider):
     # this should be the most recent assession (GSE) link: https://www.ncbi.nlm.nih.gov/geo/browse/?view=series&display=1&zsort=acc
     # def start_requests(self):
     #     start = 1
-    #     end = 2000
+    #     end = 200
     #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
     #     for acc_id in range(start, end + 1):
     #         yield scrapy.Request(url=prefix + str(acc_id))
