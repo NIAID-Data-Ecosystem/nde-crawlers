@@ -30,6 +30,6 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
 HTTPCACHE_ENABLED = True
 HTTPCACHE_EXPIRATION_SECS = 0
-HTTPCACHE_DIR = '/home/jalin/cache'
+HTTPCACHE_DIR = '/cache'
 # https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#rfc2616-policy
 # HTTPCACHE_POLICY = 'scrapy.extensions.httpcache.RFC2616Policy'
