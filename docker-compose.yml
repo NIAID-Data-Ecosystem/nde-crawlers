@@ -1,7 +1,16 @@
 version: '3'
 
 services:
-  # when updating changes to code: "docker-compose up --detach --build immport-crawler"
+  # when updating changes to code: "docker-compose up --detach --build dde-crawler"
+  dde-crawler:
+    build:
+      context: dde_niaid
+      dockerfile: Dockerfile
+    # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   immport-crawler:
     build:
       context: immport_crawler
@@ -11,34 +20,6 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
-  zenodo-crawler:
-    build:
-      context: zenodo_oai-pmh
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-  niaid-crawler:
-    build:
-      context: niaid_crawler
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-  omicsdi_crawler:
-    build:
-      context: omicsdi_crawler
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-      - cache:/cache
   ncbi-geo-crawler:
     build:
       context: ncbi_geo_crawler
@@ -49,11 +30,39 @@ services:
     volumes:
       - data:/data
       - cache:/cache
-  dde-crawler:
+  niaid-crawler:
     build:
-      context: dde_niaid
+      context: niaid_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+  omicsdi-crawler:
+    build:
+      context: omicsdi_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
+  sb-apps-crawler:
+    build:
+      context: sb_apps_crawler
       dockerfile: Dockerfile
     # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+  zenodo-crawler:
+    build:
+      context: zenodo_oai-pmh
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
       # args:
       #   CRONTAB: dev-crontab
     volumes:
