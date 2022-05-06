@@ -10,6 +10,8 @@
 # |  |  |  |  |
 # *  *  *  *  * user-name command to be executed
 #               we have to use root in order to write to stdout and stderr
-0 0 1,15 * * root /home/biothings/run-spider.sh
-@reboot root /home/biothings/run-spider.sh
+#               parameter is the spider name
+0 0 1,15 * * root /home/biothings/run-spider.sh omicsdi
+0 0 30 1,4,7,10 * root /home/biothings/delete-spider.sh omicsdi
+@reboot root /home/biothings/run-spider.sh omicsdi
 # remember the newline at the end
