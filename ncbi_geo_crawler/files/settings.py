@@ -25,10 +25,11 @@ ROBOTSTXT_OBEY = False
 AUTOTHROTTLE_ENABLED = True
 AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 
+
 # Enable and configure HTTP caching (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
-# HTTPCACHE_ENABLED = True
-# HTTPCACHE_EXPIRATION_SECS = 0
-# HTTPCACHE_DIR = '/Users/jalin/cache'
+HTTPCACHE_ENABLED = True
+HTTPCACHE_EXPIRATION_SECS = 0
+HTTPCACHE_DIR = '/cache'
 # https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#rfc2616-policy
 # HTTPCACHE_POLICY = 'scrapy.extensions.httpcache.RFC2616Policy'
