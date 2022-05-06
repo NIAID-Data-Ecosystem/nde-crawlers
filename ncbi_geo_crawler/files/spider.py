@@ -103,7 +103,9 @@ class NCBIGeoSpider(scrapy.Spider):
                     else:
                         key = node.xpath('./td[1]/text()').get()
                         data[key] = node.xpath('string(./td[2])').get().strip().replace('\xa0', ' ')
-        self.logger.info("Check if cached: " + " ".join(response.flags))
+
+        # self.logger.info("Check if cached: " + " ".join(response.flags))
+        
         yield data if data else None
 
 
