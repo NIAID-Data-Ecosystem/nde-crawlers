@@ -52,7 +52,7 @@ def parse():
     for data in all_app_meta_data:
         identifier = data.get('sbg:id')
         output = {
-            "_id": "SB_Public_Apps_" + identifier,
+            "_id": "SB_Public_Apps_" + identifier.split('/')[2],
             "includedInDataCatalog": {"name": "PublicApps@SevenBridges"},
             "@type": "ComputationalTool",
             "url": "https://igor.sbgenomics.com/public/apps/" + identifier
