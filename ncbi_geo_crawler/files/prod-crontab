@@ -12,6 +12,6 @@
 #               we have to use root in order to write to stdout and stderr
 #               parameter is the spider name
 0 0 * * 1 root /home/biothings/run-spider.sh -s ncbi_geo
-0 0 30 1,4,7,10 * root /home/biothings/delete-spider.sh ncbi_geo
+0 0 30 1,4,7,10 * root /home/biothings/delete-cache.sh ncbi_geo
 @reboot root /home/biothings/run-spider.sh -s ncbi_geo
 # remember the newline at the end
