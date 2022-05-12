@@ -2,34 +2,34 @@ version: '3'
 
 services:
   # when updating changes to code: "docker-compose up --detach --build dde-crawler"
-  dde-crawler:
-    build:
-      context: dde_niaid
-      dockerfile: Dockerfile
-    # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-  immport-crawler:
-    build:
-      context: immport_crawler
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-  ncbi-geo-crawler:
-    build:
-      context: ncbi_geo_crawler
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-      - cache:/cache
+  # dde-crawler:
+  #   build:
+  #     context: dde_niaid
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
+  # immport-crawler:
+  #   build:
+  #     context: immport_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
+  # ncbi-geo-crawler:
+  #   build:
+  #     context: ncbi_geo_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
+  #     - cache:/cache
   niaid-crawler:
     build:
       context: niaid_crawler
@@ -39,34 +39,34 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
-  omicsdi-crawler:
-    build:
-      context: omicsdi_crawler
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-      - cache:/cache
-  sb-apps-crawler:
-    build:
-      context: sb_apps_crawler
-      dockerfile: Dockerfile
-    # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-  zenodo-crawler:
-    build:
-      context: zenodo_oai-pmh
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
+  # omicsdi-crawler:
+  #   build:
+  #     context: omicsdi_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
+  #     - cache:/cache
+  # sb-apps-crawler:
+  #   build:
+  #     context: sb_apps_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
+  # zenodo-crawler:
+  #   build:
+  #     context: zenodo_oai-pmh
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
   mongodb:
     image: mongo:4.4
     ports:
@@ -105,15 +105,15 @@ services:
     ports:
       - "127.0.0.1:8080:80"
 volumes:
-  data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/nde/data
+  data: #   driver: local
+
+  #   driver_opts:
+  #     type: none
+  #     o: bind
+  #     device: /opt/nde/data
   cache:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/nde/cache
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /opt/nde/cache
