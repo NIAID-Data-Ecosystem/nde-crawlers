@@ -1,6 +1,8 @@
+import json
 import time
 import logging
 from datetime import datetime
+import xmltodict
 
 from sickle import Sickle
 from pprint import pprint
@@ -17,9 +19,8 @@ sickle = Sickle('https://api.figshare.com/v2/oai', max_retries=3)
 records = sickle.ListRecords(
     metadataPrefix='uketd_dc', ignore_deleted=True)
 # record = sickle.GetRecord(
-#     identifier='oai:figshare.com:article/139141', metadataPrefix='uketd_dc')
-# pprint(record.metadata)
-
+#     identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
+# pprint(xmltodict.parse(record))
 count = 0
 while True:
     try:
@@ -49,20 +50,55 @@ while True:
             output['author'] = creator_list
         if subject := metadata.get('subject'):
             output['keywords'] = subject
+
         if description := metadata.get('description'):
             output['description'] = description[0]
+        if description == None:
+            if abstract := metadata.get('abstract'):
+                output['description'] = abstract
+
+        # is this dateModified?
         if date := metadata.get('date'):
             output['dateModified'] = datetime.strptime(
                 date[0], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
+
+        # sdPublsher = publisher > instituion/department > figshare
         if publisher := metadata.get('publisher'):
             output['sdPublisher'] = publisher[0]
+        if publisher == None:
+            institution = metadata.get('institution')
+            department = metadata.get('department')
+            if institution and department:
+                if (institution == None or department == None) and not (institution == None and department == None):
+                    print(institution, department, title, output)
+                if institution[0] != department[0]:
+                    output['sdPublisher'] = institution[0] + \
+                        '/' + department[0]
+                else:
+                    output['sdPublisher'] = institution[0]
+            else:
+                output['sdPublisher'] = 'figshare'
+
         if type := metadata.get('type'):
-            output['@type'] = type[0]
+            if len(type) > 1:
+                if type[0] == type[1]:
+                    output['@type'] = type[0]
+                else:
+                    output['@type'] = 'Collection'
+                    output['hasPart'] = type
+            else:
+                print(type)
+                output['@type'] = 'Collection'
+                output['hasPart'] = type
+
         if identifier := metadata.get('identifier'):
-            output['identifier'] = identifier[0]
-        if distribution := metadata.get('identifier'):
-            if len(distribution) > 1:
-                output['distribution'] = {'url': distribution[1]}
+            for el in identifier:
+                if 'ndownloader' in el:
+                    output['distribution'] = {'url': el}
+                elif '10.' in el:
+                    output['identifier'] = el
+                    output['doi'] = el
+
         if language := metadata.get('language'):
             output['language'] = language[0]
         if relation := metadata.get('relation'):
@@ -75,9 +111,16 @@ while True:
         if issued := metadata.get('issued'):
             output['datePublished'] = issued[0]
         if sponsor := metadata.get('sponsor'):
-            output['funding'] = {'funder': {'name': sponsor[0]}}
-        if grantnumber := metadata.get('grantnumber'):
-            output['funding'] = {'funder': {'identifier': grantnumber[0]}}
+            grantnumber = metadata.get('grantnumber')
+            if grantnumber:
+                output['funding'] = {'funder': {
+                    'name': sponsor[0], 'identifier': grantnumber[0]}}
+            else:
+                output['funding'] = {'funder': {'name': sponsor[0]}}
+
+        if count % 1000 == 0:
+            with open("sample.json", "w") as sample_json:
+                json.dump(output, sample_json)
     except StopIteration:
         logger.info("Finished Parsing. Total Records: %s", count)
         # if StopIteration is raised, break from loop
