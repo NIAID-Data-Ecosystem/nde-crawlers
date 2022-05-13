@@ -14,13 +14,15 @@ logger = logging.getLogger('nde-logger')
 properties = ["title", "creator", "subject", "description", "date", "publisher", "type", "identifier", "language", "relation",
               "rights", "license", "abstract", "isReferencedBy", "issued", "institution", "department", "sponsor", "grantnumber", "authoridentifier", "embargodate", "qualificationname", "qualificationlevel", "advisor"]
 missing = []
+covid_keywords = ['covid-19', '2019-ncov', 'coronavirus', 'sars-cov-2', '2019ncov',
+                  'covid19', 'corona virus', 'sarscov2', 'covid2019', 'covid_19', 'sars-cov2', 'covid 19']
+
 # connect to the website
 sickle = Sickle('https://api.figshare.com/v2/oai', max_retries=3)
 records = sickle.ListRecords(
     metadataPrefix='uketd_dc', ignore_deleted=True)
-# record = sickle.GetRecord(
-#     identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
-# pprint(xmltodict.parse(record))
+record = sickle.GetRecord(
+    identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
 count = 0
 while True:
     try:
@@ -43,12 +45,19 @@ while True:
         }
         if title := metadata.get('title'):
             output['name'] = title[0]
+
         if creators := metadata.get('creator'):
             creator_list = []
             for creator in creators:
                 creator_list.append({"name": creator})
             output['author'] = creator_list
+
         if subject := metadata.get('subject'):
+            for keyword in subject:
+                if keyword.lower() in covid_keywords:
+                    output['outbreakapi'] = True
+                else:
+                    output['outbreakapi'] = False
             output['keywords'] = subject
 
         if description := metadata.get('description'):
@@ -87,17 +96,22 @@ while True:
                     output['@type'] = 'Collection'
                     output['hasPart'] = type
             else:
-                print(type)
                 output['@type'] = 'Collection'
                 output['hasPart'] = type
 
         if identifier := metadata.get('identifier'):
             for el in identifier:
-                if 'ndownloader' in el:
-                    output['distribution'] = {'url': el}
-                elif '10.' in el:
-                    output['identifier'] = el
-                    output['doi'] = el
+                # [None, 'https://ndownloader.figshare.com/files/35101450']
+                if el is not None:
+                    if 'ndownloader' in el:
+                        output['distribution'] = {'url': el}
+                    elif '10.' in el:
+                        output['identifier'] = el
+                        output['doi'] = el
+        if identifier == None:
+            if reference := metadata.get('isReferencedBy'):
+                output['identifier'] = reference[0]
+                output['doi'] = reference[0]
 
         if language := metadata.get('language'):
             output['language'] = language[0]
@@ -106,8 +120,6 @@ while True:
             output['_id'] = 'Figshare_' + relation[0].split('/')[-1]
         if license := metadata.get('license'):
             output['license'] = license[0]
-        # if reference := metadata.get('isReferencedBy'):
-        #     output['url'] = reference[0]
         if issued := metadata.get('issued'):
             output['datePublished'] = issued[0]
         if sponsor := metadata.get('sponsor'):

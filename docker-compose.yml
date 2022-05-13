@@ -30,9 +30,9 @@ services:
   #   volumes:
   #     - data:/data
   #     - cache:/cache
-  niaid-crawler:
+  access_clinical_data-crawler:
     build:
-      context: niaid_crawler
+      context: access_clinical_data_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
