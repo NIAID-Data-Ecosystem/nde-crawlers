@@ -1,4 +1,3 @@
-# dev environment crontab so crawler does not start when rebooted
 # Most Likely python:* images use Debian therefore the cron software
 # is a heavily modified Vixie Cron
 # We use this to automate stuff
@@ -11,5 +10,6 @@
 # |  |  |  |  |
 # *  *  *  *  * user-name command to be executed
 #               we have to use root in order to write to stdout and stderr
-0 0 1 1 * root /home/biothings/run-niaid.sh
+0 0 * * * root /home/biothings/run-access_clinical_data.sh
+@reboot root /home/biothings/run-access_clinical_data.sh
 # remember the newline at the end
