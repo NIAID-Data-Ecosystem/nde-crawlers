@@ -8,9 +8,12 @@ from sickle import Sickle
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
+# during testing used this list to check if any properties were NOT in the list, if not then print the property
 properties = ["title", "creator", "subject", "description", "date", "publisher", "type", "identifier", "language", "relation",
               "rights", "license", "abstract", "isReferencedBy", "issued", "institution", "department", "sponsor", "grantnumber", "authoridentifier", "embargodate", "qualificationname", "qualificationlevel", "advisor"]
+# used to add missing properties and print later
 missing = []
+# known covid categories according to docs https://covid19.figshare.com/f/faqs to siphon off later
 covid_keywords = ['covid-19', '2019-ncov', 'coronavirus', 'sars-cov-2', '2019ncov',
                   'covid19', 'corona virus', 'sarscov2', 'covid2019', 'covid_19', 'sars-cov2', 'covid 19']
 
@@ -20,21 +23,29 @@ def parse():
     sickle = Sickle('https://api.figshare.com/v2/oai', max_retries=3)
     records = sickle.ListRecords(
         metadataPrefix='uketd_dc', ignore_deleted=True)
-    record = sickle.GetRecord(
-        identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
+
+    # used to test single record
+    # record = sickle.GetRecord(
+    #     identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
+
     count = 0
     while True:
         try:
             # get the next item
             record = records.next()
             metadata = record.metadata
+
+            # testing for missing properties
             for key in metadata:
                 if key not in properties:
                     missing.append(key)
+
             count += 1
             if count % 10 == 0:
+                # figshare requires us to parse 10 records a second for the oai-pmh
                 time.sleep(1)
                 logger.info("Parsed %s records", count)
+                # logging missing properties
                 if len(missing):
                     logger.info(f'Missing {missing}')
 
@@ -51,6 +62,7 @@ def parse():
                     creator_list.append({"name": creator})
                 output['author'] = creator_list
 
+            # checking if covid related article for outbreak api
             if subject := metadata.get('subject'):
                 for keyword in subject:
                     if keyword.lower() in covid_keywords:
@@ -65,7 +77,6 @@ def parse():
                 if abstract := metadata.get('abstract'):
                     output['description'] = abstract
 
-            # is this dateModified?
             if date := metadata.get('date'):
                 output['dateModified'] = datetime.strptime(
                     date[0], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
@@ -130,7 +141,11 @@ def parse():
             # if count % 1000 == 0:
             #     with open("sample.json", "w") as sample_json:
             #         json.dump(output, sample_json)
+            if count % 50000 == 0:
+                logger.info("Finished Parsing. Total Records: %s", count)
+                break
             yield output
+
         except StopIteration:
             logger.info("Finished Parsing. Total Records: %s", count)
             # if StopIteration is raised, break from loop
