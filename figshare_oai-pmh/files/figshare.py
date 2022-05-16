@@ -13,9 +13,11 @@ properties = ["title", "creator", "subject", "description", "date", "publisher",
               "rights", "license", "abstract", "isReferencedBy", "issued", "institution", "department", "sponsor", "grantnumber", "authoridentifier", "embargodate", "qualificationname", "qualificationlevel", "advisor"]
 # used to add missing properties and print later
 missing = []
+
+# TODO
 # known covid categories according to docs https://covid19.figshare.com/f/faqs to siphon off later
-covid_keywords = ['covid-19', '2019-ncov', 'coronavirus', 'sars-cov-2', '2019ncov',
-                  'covid19', 'corona virus', 'sarscov2', 'covid2019', 'covid_19', 'sars-cov2', 'covid 19']
+# covid_keywords = ['covid-19', '2019-ncov', 'coronavirus', 'sars-cov-2', '2019ncov',
+#                   'covid19', 'corona virus', 'sarscov2', 'covid2019', 'covid_19', 'sars-cov2', 'covid 19']
 
 
 def parse():
@@ -62,14 +64,15 @@ def parse():
                     creator_list.append({"name": creator})
                 output['author'] = creator_list
 
+            # TODO
             # checking if covid related article for outbreak api
-            if subject := metadata.get('subject'):
-                for keyword in subject:
-                    if keyword.lower() in covid_keywords:
-                        output['outbreakapi'] = True
-                    else:
-                        output['outbreakapi'] = False
-                output['keywords'] = subject
+            # if subject := metadata.get('subject'):
+            #     for keyword in subject:
+            #         if keyword.lower() in covid_keywords:
+            #             output['outbreakapi'] = True
+            #         else:
+            #             output['outbreakapi'] = False
+            #     output['keywords'] = subject
 
             if description := metadata.get('description'):
                 output['description'] = description[0]
@@ -141,7 +144,7 @@ def parse():
             # if count % 1000 == 0:
             #     with open("sample.json", "w") as sample_json:
             #         json.dump(output, sample_json)
-            if count % 50000 == 0:
+            if count % 15000 == 0:
                 logger.info("Finished Parsing. Total Records: %s", count)
                 break
             yield output
