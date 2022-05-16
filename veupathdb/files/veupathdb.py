@@ -16,7 +16,7 @@ def record_generator():
     _record_dict = request.json()
 
     # paginate through records
-    for _record_dict in list(_record_dict['records'])[:3]:
+    for _record_dict in list(_record_dict['records'])[:25]:
 
         # add the 
         _record_dict.update({
@@ -108,10 +108,17 @@ def record_generator():
         
 
         # **** table.GeneTypeCounts ****
+        values = [hit['gene_count'] for hit in _record_dict['tables']['GeneTypeCounts']]
+        refs =[hit['gene_type'] for hit in _record_dict['tables']['GeneTypeCounts']]
+        if not values:_value = None
+        else:_value = values[0]
+        if not refs: _ref = None
+        else: _ref = refs[0]
+
         _record_dict['variableMeasured'] = {
             '@type': "PropertyValue",
-            'value': [hit['gene_count'] for hit in _record_dict['tables']['GeneTypeCounts']], 
-            'valueReference': [hit['gene_type'] for hit in _record_dict['tables']['GeneTypeCounts']]
+            'value': _value , 
+            'valueReference': _ref
             }
         _record_dict.pop('tables')
 
@@ -119,6 +126,6 @@ def record_generator():
 
 rec_gen = record_generator()
 for rec in rec_gen:
-    print("--")
-    #print("\n-----\n[INFO] record: \n")
-    #print(json.dumps(rec, indent=4))
+    print("\n-----\n\n[INFO] record: \n")
+    print(json.dumps(rec, indent=4))
+    print("\n-----\n")
