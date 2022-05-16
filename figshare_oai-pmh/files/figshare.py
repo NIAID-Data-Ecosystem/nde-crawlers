@@ -2,10 +2,7 @@ import json
 import time
 import logging
 from datetime import datetime
-import xmltodict
-
 from sickle import Sickle
-from pprint import pprint
 
 
 logging.basicConfig(level=logging.INFO)
@@ -78,8 +75,6 @@ while True:
             institution = metadata.get('institution')
             department = metadata.get('department')
             if institution and department:
-                if (institution == None or department == None) and not (institution == None and department == None):
-                    print(institution, department, title, output)
                 if institution[0] != department[0]:
                     output['sdPublisher'] = institution[0] + \
                         '/' + department[0]
