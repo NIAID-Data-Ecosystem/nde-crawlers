@@ -3,7 +3,7 @@ from utils.pmid_helper import load_pmid_ctfd
 
 
 class AccessClinicalDataUploader(NDESourceUploader):
-    name = "access_clinical_data"
+    name = "acd_niaid"
 
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
