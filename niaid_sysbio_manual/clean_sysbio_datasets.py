@@ -49,6 +49,10 @@ def nestDistribution(row):
     else:
         raise Exception(f"mismatch between files / dateModified at row {row}")
 
+def nestPublisher(database):
+    if((database == database) & (database is not None)):
+        return({"name": database})
+
 def nestFunding(row):
     ids = str2list(row["funding.identifier"])
     funders = str2list(row["funder.name"])
@@ -168,7 +172,7 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-Datasets"):
     output_cols = ["@type", "identifier", "doi", "name", "description", "measurementTechnique", "creator", "sdPublisher", "distribution", "funding", "citation", "license", "species", "infectiousAgent", "healthCondition", "spatialCoverage", "temporalCoverage"]
 
     # rename any properties, if needed
-    df.rename(columns = {"type": "@type", "database":"sdPublisher", "dataset.doi": "doi"}, inplace=True)
+    df.rename(columns = {"type": "@type", "dataset.doi": "doi"}, inplace=True)
 
     # Split strings into arrays, as needed
     df["measurementTechnique"] = df.measurementTechnique.apply(str2list)
@@ -178,6 +182,7 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-Datasets"):
     df["spatialCoverage"] = df.spatialCoverage.apply(str2list)
 
     # nest related properties into a single object, from the flat columns
+    df["sdPublisher"] = df.database.apply(nestPublisher)
     df["creator"] = df.apply(nestAuthor, axis = 1)
     df["distribution"] = df.apply(nestDistribution, axis = 1)
     df["funding"] = df.apply(nestFunding, axis = 1)
@@ -195,4 +200,5 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-Datasets"):
 
     df.loc[:, output_cols].to_json(output, orient = "records")
 
+# schemaizeMetadata(df.sample(10))
 schemaizeMetadata(df)
