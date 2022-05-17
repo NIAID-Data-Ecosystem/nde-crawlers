@@ -129,6 +129,10 @@ def getCitation(pmid, isPMID = True):
                     citation['pmcid'] = citation_raw['PMCID']
                 except:
                     pass
+                try:
+                    citation['doi'] = citation_raw['DOI']
+                except:
+                    pass
                 citation["identifier"] = citation_raw['id']
                 citation["issn"] = citation_raw['ISSN']
 
