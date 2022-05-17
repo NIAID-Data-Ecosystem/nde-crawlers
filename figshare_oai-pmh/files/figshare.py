@@ -45,7 +45,7 @@ def parse():
             count += 1
             if count % 10 == 0:
                 # figshare requires us to parse 10 records a second for the oai-pmh
-                time.sleep(1)
+                # time.sleep(1)
                 logger.info("Parsed %s records", count)
                 # logging missing properties
                 if len(missing):
@@ -86,7 +86,7 @@ def parse():
 
             # sdPublsher = publisher > instituion/department > figshare
             if publisher := metadata.get('publisher'):
-                output['sdPublisher'] = publisher[0]
+                output['sdPublisher'] = {'name': publisher[0]}
             if publisher == None:
                 institution = metadata.get('institution')
                 department = metadata.get('department')
@@ -105,10 +105,10 @@ def parse():
                         output['@type'] = type[0]
                     else:
                         output['@type'] = 'Collection'
-                        output['hasPart'] = type
+                        output['hasPart'] = {'@type': type}
                 else:
                     output['@type'] = 'Collection'
-                    output['hasPart'] = type
+                    output['hasPart'] = {'@type': type[0]}
 
             if identifier := metadata.get('identifier'):
                 for el in identifier:
@@ -141,12 +141,6 @@ def parse():
                 else:
                     output['funding'] = {'funder': {'name': sponsor[0]}}
 
-            # if count % 1000 == 0:
-            #     with open("sample.json", "w") as sample_json:
-            #         json.dump(output, sample_json)
-            if count % 15000 == 0:
-                logger.info("Finished Parsing. Total Records: %s", count)
-                break
             yield output
 
         except StopIteration:
