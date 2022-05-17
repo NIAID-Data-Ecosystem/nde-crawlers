@@ -1,5 +1,5 @@
-FROM node:17 AS build-webapp
-# 14
+FROM node:14 AS build-webapp
+
 ARG WEBAPP_GIT=https://github.com/biothings/biothings_studio.git
 ARG WEBAPP_VERSION=master
 
