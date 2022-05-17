@@ -9,8 +9,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
 # during testing used this list to check if any properties were NOT in the list, if not then print the property
-properties = ["title", "creator", "subject", "description", "date", "publisher", "type", "identifier", "language", "relation",
-              "rights", "license", "abstract", "isReferencedBy", "issued", "institution", "department", "sponsor", "grantnumber", "authoridentifier", "embargodate", "qualificationname", "qualificationlevel", "advisor"]
+# properties = ["title", "creator", "subject", "description", "date", "publisher", "type", "identifier", "language", "relation",
+#               "rights", "license", "abstract", "isReferencedBy", "issued", "institution", "department", "sponsor", "grantnumber", "authoridentifier", "embargodate", "qualificationname", "qualificationlevel", "advisor"]
 # used to add missing properties and print later
 missing = []
 
@@ -22,6 +22,7 @@ missing = []
 
 def parse():
     # connect to the website
+    logger.info("Parsing records")
     sickle = Sickle('https://api.figshare.com/v2/oai', max_retries=3)
     records = sickle.ListRecords(
         metadataPrefix='uketd_dc', ignore_deleted=True)
@@ -38,22 +39,22 @@ def parse():
             metadata = record.metadata
 
             # testing for missing properties
-            for key in metadata:
-                if key not in properties:
-                    missing.append(key)
+            # for key in metadata:
+            #     if key not in properties:
+            #         missing.append(key)
 
             count += 1
             if count % 10 == 0:
                 # figshare requires us to parse 10 records a second for the oai-pmh
-                # time.sleep(1)
+                time.sleep(1)
+            if count % 1000 == 0:
                 logger.info("Parsed %s records", count)
                 # logging missing properties
-                if len(missing):
-                    logger.info(f'Missing {missing}')
+                # if len(missing):
+                #     logger.info(f'Missing {missing}')
 
             output = {
-                "includedInDataCatalog": {"name": "Figshare"},
-                'versionDate': datetime.today().isoformat()
+                "includedInDataCatalog": {"name": "Figshare", 'versionDate': datetime.today().isoformat(), 'url': "https://figshare.com"},
             }
             if title := metadata.get('title'):
                 output['name'] = title[0]
@@ -66,13 +67,13 @@ def parse():
 
             # TODO
             # checking if covid related article for outbreak api
-            # if subject := metadata.get('subject'):
-            #     for keyword in subject:
-            #         if keyword.lower() in covid_keywords:
-            #             output['outbreakapi'] = True
-            #         else:
-            #             output['outbreakapi'] = False
-            #     output['keywords'] = subject
+                #     for keyword in subject:
+                #         if keyword.lower() in covid_keywords:
+                #             output['outbreakapi'] = True
+                #         else:
+                #             output['outbreakapi'] = False
+            if subject := metadata.get('subject'):
+                output['keywords'] = subject
 
             if description := metadata.get('description'):
                 output['description'] = description[0]
@@ -102,7 +103,10 @@ def parse():
             if type := metadata.get('type'):
                 if len(type) > 1:
                     if type[0] == type[1]:
-                        output['@type'] = type[0]
+                        if type[0] == 'Software':
+                            output['@type'] = 'ComputationalTool'
+                        else:
+                            output['@type'] = type[0]
                     else:
                         output['@type'] = 'Collection'
                         output['hasPart'] = {'@type': type}
@@ -117,11 +121,9 @@ def parse():
                         if 'ndownloader' in el:
                             output['distribution'] = {'url': el}
                         elif '10.' in el:
-                            output['identifier'] = el
                             output['doi'] = el
             if identifier == None:
                 if reference := metadata.get('isReferencedBy'):
-                    output['identifier'] = reference[0]
                     output['doi'] = reference[0]
 
             if language := metadata.get('language'):
@@ -129,6 +131,7 @@ def parse():
             if relation := metadata.get('relation'):
                 output['url'] = relation[0]
                 output['_id'] = 'Figshare_' + relation[0].split('/')[-1]
+                output['identifier'] = relation[0].split('/')[-1]
             if license := metadata.get('license'):
                 output['license'] = license[0]
             if issued := metadata.get('issued'):
