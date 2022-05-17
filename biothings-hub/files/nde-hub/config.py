@@ -1,3 +1,5 @@
+# We can remove this line below after switched to biothings 0.11.x branch
+# and remove the config_hub.py file completely
 from config_hub import *
 from biothings.utils.loggers import setup_default_log
 import os
@@ -89,7 +91,7 @@ HUB_API_PORT = 19580
 READONLY_HUB_API_PORT = 19581
 
 # Hub name/icon url/version, for display purpose
-HUB_NAME = "Studio for NDE"
+HUB_NAME = "NDE Data Hub"
 HUB_ICON = "https://biothings.io/static/img/sdk-icon.svg"
 HUB_VERSION = "master"
 
