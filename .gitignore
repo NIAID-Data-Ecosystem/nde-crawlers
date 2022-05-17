@@ -143,3 +143,5 @@ config.yml
 
 # macos settings
 .DS_Store
+*.ipynb
+*.json
