@@ -12,7 +12,7 @@ logger = logging.getLogger('nde-logger')
 # properties = ["title", "creator", "subject", "description", "date", "publisher", "type", "identifier", "language", "relation",
 #               "rights", "license", "abstract", "isReferencedBy", "issued", "institution", "department", "sponsor", "grantnumber", "authoridentifier", "embargodate", "qualificationname", "qualificationlevel", "advisor"]
 # used to add missing properties and print later
-missing = []
+# missing = []
 
 # TODO
 # known covid categories according to docs https://covid19.figshare.com/f/faqs to siphon off later
