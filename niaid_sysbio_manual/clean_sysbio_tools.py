@@ -174,7 +174,12 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-ComputationalTools"):
     # Check that identifiers are unique
     dupes = df[df.duplicated(["identifier"]) > 0]
     if len(dupes)> 0:
-        print(list(dupes.identifier))
+        print(f"duplicate ids: {set(dupes.identifier)}")
+        # raise Exception(f"{len(dupes)} duplicate identifiers found:")
+
+    dupe_urls = df[df.duplicated(["url"]) > 0]
+    if len(dupe_urls)> 0:
+        print(f"duplicate urls: {set(dupe_urls.url)}")
         # raise Exception(f"{len(dupes)} duplicate identifiers found:")
 
     df.loc[:, output_cols].to_json(output, orient = "records")
