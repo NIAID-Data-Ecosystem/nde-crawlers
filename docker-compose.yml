@@ -2,11 +2,29 @@ version: '3'
 
 services:
   # when updating changes to code: "docker-compose up --detach --build dde-crawler"
+  acd_niaid-crawler:
+    build:
+      context: acd_niaid
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   dde-crawler:
     build:
       context: dde_niaid
       dockerfile: Dockerfile
-    # uncomment to run development crontab
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+  figshare-crawler:
+    build:
+      context: figshare_oai-pmh
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
       # args:
       #   CRONTAB: dev-crontab
     volumes:
@@ -30,15 +48,6 @@ services:
     volumes:
       - data:/data
       - cache:/cache
-  niaid-crawler:
-    build:
-      context: niaid
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
   omicsdi-crawler:
     build:
       context: omicsdi_crawler
@@ -53,7 +62,7 @@ services:
     build:
       context: sb_apps
       dockerfile: Dockerfile
-    # uncomment to run development crontab
+      # uncomment to run development crontab
       # args:
       #   CRONTAB: dev-crontab
     volumes:
