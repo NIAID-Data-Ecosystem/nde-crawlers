@@ -170,7 +170,7 @@ def parse():
             output['contributor'] = contributor_list
 
         if publisher := data.get('sbg:publisher'):
-            output['sdPublisher'] = publisher
+            output['sdPublisher'] = {'name': publisher}
         if workflow_language := data.get('sbg:workflowLanguage'):
             output['programmingLanguage'] = workflow_language
         if toolkit := data.get('sbg:toolkit'):

@@ -2,8 +2,8 @@ from hub.dataload.nde import NDESourceUploader
 from utils.pmid_helper import load_pmid_ctfd
 
 
-class NiaidUploader(NDESourceUploader):
-    name = "niaid"
+class AccessClinicalDataUploader(NDESourceUploader):
+    name = "acd_niaid"
 
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
