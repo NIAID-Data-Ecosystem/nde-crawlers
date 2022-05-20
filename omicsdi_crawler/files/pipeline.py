@@ -34,12 +34,26 @@ class OmicsdiItemProcessorPipeline:
             }
         }
 
+        # collect pmids
+        if pmids := item.pop('pmids', None):
+            for i in range(len(pmids)):
+                pmids[i] = pmids[i].split(': ', 1)[-1]
+            output['pmids'] = ','.join(pmids)
+
+
         # put publisher into journalName since there is no journalName
         # based on https://discovery.biothings.io/view/outbreak/Publication
         if citation := item.pop('citation', None):
+            sd_publisher = {}
             if publisher := citation.pop('publisher', None):
-                citation['journalName'] = publisher['name']
-            output['citation'] = citation
+                if name := publisher.pop('name', None):
+                    sd_publisher['name'] = publisher
+                if ty := publisher.pop('@type', None):
+                    sd_publisher['@type'] = ty
+            if url := citation.pop('url', None):
+                sd_publisher['url'] = url
+            output['sdPublisher'] = sd_publisher
+
 
         # remove items from dictionary
         if author := item.pop('creator', None):

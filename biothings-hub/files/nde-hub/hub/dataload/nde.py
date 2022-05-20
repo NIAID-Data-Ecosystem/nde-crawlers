@@ -514,7 +514,14 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "sdPublisher": {"type": "text", "copy_to": ["all"]},
+            "sdPublisher": {
+                "properties": {
+                    "@type": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "text", "copy_to": ["all"]}
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                }
+            },
             "softwareRequirements": {"type": "text", "copy_to": ["all"]},
             "softwareVersion": {"type": "text", "copy_to": ["all"]},
             "spatial": {

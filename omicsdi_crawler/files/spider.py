@@ -28,4 +28,5 @@ class OmicsdiSpider(SitemapSpider):
         for jsld in jslds:
             out = jsld['mainEntity']
             out['_id'] = response.url
+            out['pmids'] = response.xpath("//*[@id='pubId']/text()").extract()
             yield out
