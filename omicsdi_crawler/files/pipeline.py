@@ -47,7 +47,7 @@ class OmicsdiItemProcessorPipeline:
             sd_publisher = {}
             if publisher := citation.pop('publisher', None):
                 if name := publisher.pop('name', None):
-                    sd_publisher['name'] = publisher
+                    sd_publisher['name'] = name
                 if ty := publisher.pop('@type', None):
                     sd_publisher['@type'] = ty
             if url := citation.pop('url', None):
