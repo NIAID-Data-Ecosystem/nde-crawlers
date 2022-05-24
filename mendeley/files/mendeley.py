@@ -42,20 +42,22 @@ def parse():
     metadata_count = 0
     counter = 0
     while True:
-        count += 1
+        try:
+            count += 1
 
-        if count % 1000 == 0:
-            logger.info(f"Retrieved {count} ids")
+            if count % 1000 == 0:
+                logger.info(f"Retrieved {count} ids")
 
-        record = records.next()
-        metadata = record.metadata
+            record = records.next()
+            metadata = record.metadata
 
-        if relation := metadata.get('relation'):
-            urls.append('https://data.mendeley.com/api/datasets-v2/datasets/' +
-                        relation[0].split('/')[-1])
+            if relation := metadata.get('relation'):
+                urls.append('https://data.mendeley.com/api/datasets-v2/datasets/' +
+                            relation[0].split('/')[-1])
 
-        if count % 10000 == 0:
-            logger.info(f"Finished. Retrieved {count} ids.")
+        except StopIteration:
+            logger.info("Finished Parsing. Total Records: %s", count)
+            # if StopIteration is raised, break from loop
             break
 
     logger.info(f"Retrieving Metadata Sources")
