@@ -1,9 +1,7 @@
 import json
-from pprint import pprint
 import time
 import logging
 from datetime import datetime
-from pytest import console_main
 import requests
 from sickle import Sickle
 from concurrent.futures import ThreadPoolExecutor
