@@ -38,6 +38,16 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  mendeley-crawler:
+    build:
+      context: mendeley_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
   ncbi-geo-crawler:
     build:
       context: ncbi_geo_crawler
