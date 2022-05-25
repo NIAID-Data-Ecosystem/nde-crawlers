@@ -56,7 +56,7 @@ def parse():
                             relation[0].split('/')[-1])
 
         except StopIteration:
-            logger.info("Finished Parsing. Total Records: %s", count)
+            logger.info("Finished Retrieving ids. Total ids: %s", count)
             # if StopIteration is raised, break from loop
             break
 
@@ -64,6 +64,9 @@ def parse():
 
     with ThreadPoolExecutor(max_workers=10) as pool:
         response_list = list(pool.map(get_url, urls))
+
+    logger.info(
+        "Finished Retrieving Metadata Sources. Total Metadata Sources: %s", url_count)
 
     logger.info(f"Parsing records")
     for response in response_list:
