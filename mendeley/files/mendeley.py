@@ -40,7 +40,6 @@ def parse():
     urls = []
     count = 0
     metadata_count = 0
-    counter = 0
     while True:
         try:
             count += 1
@@ -79,9 +78,11 @@ def parse():
                       {"name": "Mendeley",
                        'versionDate': datetime.today().isoformat(),
                        'url': "https://data.mendeley.com/"},
+                      "@type": "Dataset"
                       }
             if id := metadata.get('id'):
                 output['identifier'] = id
+                output['_id'] = 'Mendeley_' + id
             if doi := metadata.get('doi'):
                 output['doi'] = doi['id']
             if name := metadata.get('name'):
@@ -174,8 +175,3 @@ def parse():
                 output['sdPublisher'] = {"name": repository['name']}
 
             yield output
-        else:
-            counter += 1
-    print(counter)
-    end = time.time()
-    print(end - start)
