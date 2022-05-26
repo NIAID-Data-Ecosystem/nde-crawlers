@@ -25,8 +25,8 @@ for id in assay_ids:
     else:
         count += 1
         metadata = json.loads(response.text)
-        if metadata[0]['bibliography']:
-            print(metadata)
+        if metadata[0]['detection_reagents']:
+            print(metadata[0]['detection_reagents'])
     if count % 50 == 0:
         print(count)
 print(bad_ids)
