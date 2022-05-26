@@ -29,7 +29,6 @@ def get_url(url):
 
 
 def parse():
-    start = time.time()
 
     sickle = Sickle('https://data.mendeley.com/oai', max_retries=3)
     records = sickle.ListRecords(
@@ -53,6 +52,9 @@ def parse():
             if relation := metadata.get('relation'):
                 urls.append('https://data.mendeley.com/api/datasets-v2/datasets/' +
                             relation[0].split('/')[-1])
+
+            if count % 5000 == 0:
+                break
 
         except StopIteration:
             logger.info("Finished Retrieving ids. Total ids: %s", count)
@@ -89,8 +91,6 @@ def parse():
                 output['name'] = name
             if description := metadata.get('description'):
                 output['description'] = description
-            if version := metadata.get('version'):
-                output['version'] = version
             if contributors := metadata.get('contributors'):
                 authors = []
                 for contributor in contributors:
@@ -114,7 +114,8 @@ def parse():
                         if size := content_details.get('size'):
                             distribution_obj['contentSize'] = size
                         if created_date := content_details.get('created_date'):
-                            distribution_obj['dateModified'] = created_date
+                            distribution_obj['dateModified'] = datetime.strptime(
+                                created_date, '%Y-%m-%dT%H:%M:%S.%f%z').strftime('%Y-%m-%d')
                         if download_url := content_details.get('download_url'):
                             distribution_obj['contentUrl'] = download_url
                     if metrics := content_details.get('metrics'):
@@ -155,7 +156,8 @@ def parse():
                 output['keywords'] = category_list
 
             if publish_date := metadata.get('publish_date'):
-                output['datePublished'] = publish_date
+                output['datePublished'] = datetime.strptime(
+                    publish_date, '%Y-%m-%dT%H:%M:%S.%f%z').strftime('%Y-%m-%d')
 
             if related_links := metadata.get('related_links'):
                 citation_obj = {}
@@ -167,7 +169,8 @@ def parse():
                 output['citation'] = citation_obj
 
             if modified_on := metadata.get('modified_on'):
-                output['dateModified'] = modified_on
+                output['dateModified'] = datetime.strptime(
+                    modified_on, '%Y-%m-%dT%H:%M:%S.%f%z').strftime('%Y-%m-%d')
 
             if links := metadata.get('links'):
                 output['url'] = links['view']
