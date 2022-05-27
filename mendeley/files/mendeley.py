@@ -19,6 +19,8 @@ logger = logging.getLogger('nde-logger')
 
 url_count = 0
 
+# Function that returns a response using requests, used in ThreadPoolExecutor later on
+
 
 def get_url(url):
     global url_count
@@ -39,6 +41,7 @@ def parse():
     urls = []
     count = 0
     metadata_count = 0
+    # Our first step is to grab all the individual dataset ids using the OAI-PMH and save them to a list
     while True:
         try:
             count += 1
@@ -53,9 +56,6 @@ def parse():
                 urls.append('https://data.mendeley.com/api/datasets-v2/datasets/' +
                             relation[0].split('/')[-1])
 
-            if count % 5000 == 0:
-                break
-
         except StopIteration:
             logger.info("Finished Retrieving ids. Total ids: %s", count)
             # if StopIteration is raised, break from loop
@@ -63,6 +63,7 @@ def parse():
 
     logger.info(f"Retrieving Metadata Sources")
 
+    # After we have the ids we use the function declared above and map the list of ids we've obtained from the OAI-PMH and ping their api for metadata.
     with ThreadPoolExecutor(max_workers=10) as pool:
         response_list = list(pool.map(get_url, urls))
 
@@ -70,6 +71,8 @@ def parse():
         "Finished Retrieving Metadata Sources. Total Metadata Sources: %s", url_count)
 
     logger.info(f"Parsing records")
+
+    # Finally we handle the transformations after retrieivng all the metadata.
     for response in response_list:
         if response.status_code == 200:
             metadata_count += 1
