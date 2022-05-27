@@ -66,6 +66,7 @@ def parse():
     # After we have the ids we use the function declared above and map the list of ids we've obtained from the OAI-PMH and ping their api for metadata.
     with ThreadPoolExecutor(max_workers=10) as pool:
         response_list = list(pool.map(get_url, urls))
+        # TODO RESPONSE_LIST IS WHAT WE WANT TO CACHE
 
     logger.info(
         "Finished Retrieving Metadata Sources. Total Metadata Sources: %s", url_count)
