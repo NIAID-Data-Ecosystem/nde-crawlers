@@ -73,7 +73,7 @@ def parse():
 
     logger.info(f"Parsing records")
 
-    # Finally we handle the transformations after retrieivng all the metadata.
+    # Finally we handle the transformations after retrieving all the metadata.
     for response in response_list:
         if response.status_code == 200:
             metadata_count += 1
