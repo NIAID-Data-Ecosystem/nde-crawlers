@@ -17,10 +17,12 @@ release_string = datetime.datetime.now(
 dirname = os.path.join(
     '/data', 'veupathdb_crawled'
 )
+
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
     dirname, 'release.txt'
 )
+
 # so that updates are as atomic as possible, using rename
 final_data_filename = os.path.join(
     dirname, 'data.ndjson'
@@ -40,6 +42,7 @@ try:
         line = orjson.dumps(record) + b"\n"
         fd.write(line)
     is_parsed = True
+    
 # parser failed
 except Exception as e:
     fd.close()
