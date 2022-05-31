@@ -82,7 +82,7 @@ def parse():
             yield output
 
             count += 1
-            if count % 100 == 0:
+            if count % 25 == 0:
                 logger.info("Parsed %s records", count)
 
         logger.info("Finished Parsing. Total Records: %s", count)
