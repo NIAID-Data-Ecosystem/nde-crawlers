@@ -1,2 +1,2 @@
-from .dumper import AccessClinicalDataDumper
-from .uploader import AccessClinicalDataUploader
+from .dumper import ReframedbDumper
+from .uploader import ReframedbUploader

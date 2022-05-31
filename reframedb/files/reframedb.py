@@ -31,7 +31,11 @@ def parse():
         response = requests.get(individual_assay_url)
         # transform the response
         if response.status_code == 200:
+
             count += 1
+            if count % 25 == 0:
+                logger.info("Parsed %s records", count)
+
             metadata = json.loads(response.text)[0]
             output = {"includedInDataCatalog":
                       {"name": "ReframeDB",
@@ -54,6 +58,9 @@ def parse():
                                             'affiliation': author_names[key]})
                     elif key in authors:
                         authors_list.append({'name': key})
+                    else:
+                        authors_list.append({'name': authors})
+                output['author'] = authors_list
             if summary := metadata.get('summary'):
                 output['description'] = summary
             if purpose := metadata.get('purpose'):
@@ -75,14 +82,10 @@ def parse():
             if indication := metadata.get('indication'):
                 output['healthCondition'] = indication
             if assay_type := metadata.get('assay_type'):
-                output['measurementTechnique'] = assay_type
+                output['measurementTechnique'] = {'name': assay_type}
             if bibliography := metadata.get('bibliography'):
-                output['pmids'] = bibliography
+                output['pmids'] = str(bibliography)
 
             yield output
 
-            count += 1
-            if count % 25 == 0:
-                logger.info("Parsed %s records", count)
-
-        logger.info("Finished Parsing. Total Records: %s", count)
+    logger.info("Finished Parsing. Total Records: %s", count)
