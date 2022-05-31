@@ -55,36 +55,34 @@ def parse():
                 for key in author_names.keys():
                     if key in authors and author_names[key]:
                         authors_list.append({'name': key,
-                                            'affiliation': author_names[key]})
+                                            'affiliation': {'name': author_names[key]}})
                     elif key in authors:
                         authors_list.append({'name': key})
-                    else:
-                        authors_list.append({'name': authors})
                 output['author'] = authors_list
             if summary := metadata.get('summary'):
                 output['description'] = summary
             if purpose := metadata.get('purpose'):
-                output['description'] += "Purpose\n" + purpose
+                output['description'] += "\nPurpose\n" + purpose
             if protocol := metadata.get('protocol'):
-                output['description'] += "Protocol\n" + protocol
+                output['description'] += "\nProtocol\n" + protocol
             if readout := metadata.get('readout'):
-                output['description'] += "Readout\n" + readout
+                output['description'] += "\nReadout\n" + readout
             if detection_method := metadata.get('detection_method'):
-                output['description'] += "Detection Method\n" + \
+                output['description'] += "\nDetection Method\n" + \
                     detection_method
             if detection_reagents := metadata.get('detection_reagents'):
-                output['description'] += "Detection Reagents\n" + \
+                output['description'] += "\nDetection Reagents\n" + \
                     detection_reagents
             if components := metadata.get('components'):
-                output['description'] += "Components\n" + components
+                output['description'] += "\nComponents\n" + components
             if drug_conc := metadata.get('drug_conc'):
-                output['description'] += "Drug Concetration\n" + drug_conc
+                output['description'] += "\nDrug Concetration\n" + drug_conc
             if indication := metadata.get('indication'):
                 output['healthCondition'] = indication
             if assay_type := metadata.get('assay_type'):
                 output['measurementTechnique'] = {'name': assay_type}
             if bibliography := metadata.get('bibliography'):
-                output['pmids'] = str(bibliography)
+                output['pmids'] = str(bibliography).split('.')[0]
 
             yield output
 
