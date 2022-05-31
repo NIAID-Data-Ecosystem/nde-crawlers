@@ -58,6 +58,8 @@ def parse():
                                             'affiliation': {'name': author_names[key]}})
                     elif key in authors:
                         authors_list.append({'name': key})
+                if len(authors_list) == 0:
+                    authors_list.append({'name': authors})
                 output['author'] = authors_list
             if summary := metadata.get('summary'):
                 output['description'] = summary
