@@ -20,6 +20,11 @@ def nestPublisher(database):
     if((database == database) & (database is not None)):
         return({"name": database})
 
+def nestCat(category):
+    if((category == category) & (category is not None)):
+        arr = str2list(category)
+        return([{"name": category} for cat in arr])
+
 def nestFunding(row):
     ids = str2list(row["funding_id"])
     funders = str2list(row["funder_name"])
@@ -158,7 +163,6 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-ComputationalTools"):
     df["infectiousAgent"] = df.infectiousAgent.apply(str2list)
     df["healthCondition"] = df.healthCondition.apply(str2list)
     df["applicationCategory"] = df.applicationCategory.apply(str2list)
-    df["applicationSubCategory"] = df.applicationSubCategory.apply(str2list)
     df["additionalType"] = df.additionalType.apply(str2list)
     df["programmingLanguage"] = df.programmingLanguage.apply(str2list)
 
@@ -166,6 +170,7 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-ComputationalTools"):
     df["sdPublisher"] = df.database.apply(nestPublisher)
     df["creator"] = df.apply(nestAuthor, axis = 1)
     df["funding"] = df.apply(nestFunding, axis = 1)
+    df["applicationSubCategory"] = df.applicationSubCategory.apply(nestCat)
 
     # Pull the publication info
     df["pmid"] = df.pmid.apply(str2list)
