@@ -1,2 +1,2 @@
 requests
-orjson
+orjson==3.6.8 # the newest version 3.6.9 fails with the current version of cargo

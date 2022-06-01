@@ -1,4 +1,4 @@
-cryptography==36.0.2
+cryptography==36.0.2 # newer versions of cryptography does not work for omicsdi site
 scrapy>=2.5.0
 orjson
 extruct
