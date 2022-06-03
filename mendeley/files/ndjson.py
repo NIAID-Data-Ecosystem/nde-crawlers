@@ -4,7 +4,8 @@ import traceback
 import platform
 import logging
 import orjson
-from zenodo import Zenodo
+import mendeley
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
@@ -14,7 +15,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'zenodo_crawled'
+    '/data', 'mendeley_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -34,8 +35,7 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    parser = Zenodo()
-    docs = parser.upload()
+    docs = mendeley.parse()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
@@ -48,9 +48,8 @@ except Exception as e:
     )
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-    
-    logger.error(traceback.format_exc())
 
+    logger.error(traceback.format_exc())
 
 if is_parsed:
     try:
@@ -80,4 +79,3 @@ if is_parsed:
         if errors:
             # re-raise all errors
             raise RuntimeError(errors)
-
