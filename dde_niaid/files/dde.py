@@ -20,7 +20,8 @@ def query_ols(iri):
 
     if pattern.match(iri):
         params = {
-            "iri": iri
+            # isnt the best way but good enough to get http: https://stackoverflow.com/questions/9760588/how-do-you-extract-a-url-from-a-string-using-python
+            "iri": re.search("(?P<url>http?://[^\s]+)", iri).group("url")
         }
 
         request = requests.get(url, params).json()
@@ -33,7 +34,7 @@ def query_ols(iri):
 
 def parse():
     # initial request to find total number of hits
-    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated"
+    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated"
     request = requests.get(url).json()
     # get the number of pages to paginate through
     total = request['total']
@@ -42,7 +43,7 @@ def parse():
 
     # paginate through the requests
     for page in range(pages + 1):
-        url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated&size=1000&from=" \
+        url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated&size=1000&from=" \
               + str(page * 1000)
         request = requests.get(url).json()
         for hit in request['hits']:
