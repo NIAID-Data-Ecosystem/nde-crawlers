@@ -27,6 +27,8 @@ class Zenodo(NDEDatabase):
 
     def new_cache(self):
         """Creates a new tables: metadata and cache. Upserts two entries: date_created, date_updated in metadata table"""
+
+        # Read comments in base class for the first part
         con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
         c = con.cursor()
 
@@ -45,6 +47,8 @@ class Zenodo(NDEDatabase):
         c.execute("""INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
                   """, ('date_created', today))
+        
+        # add date_updated
         c.execute("""INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
                   """, ('date_updated', today))
@@ -61,9 +65,12 @@ class Zenodo(NDEDatabase):
 
     def dump(self):
         """Connects to sickle and stores raw data into the cache table, only runs with cache is expired"""
+
+        # connect to database
         con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
         c = con.cursor()
 
+        # query all records
         records = self.sickle.ListRecords(metadataPrefix='oai_datacite', ignore_deleted=True)
 
         # used to test individual records
@@ -73,6 +80,7 @@ class Zenodo(NDEDatabase):
         # print(type(record.metadata))
         # print(type(record.header))
         # print(vars(record.header))
+
         count = 0
         while True:
             try:
@@ -87,6 +95,7 @@ class Zenodo(NDEDatabase):
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
                        'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
+                # insert doc into cache table _id first column second column doc string
                 c.execute("INSERT INTO cache VALUES(?, ?)", (record.header.identifier, json.dumps(doc)))
                 con.commit()
 
@@ -264,14 +273,18 @@ class Zenodo(NDEDatabase):
 
     def update_cache(self):
         """If cache is not expired get the new records to add to the cache since last_updated"""
+
+        # connect to database
         con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
         c = con.cursor()
 
+        # checks date_updated
         c.execute("SELECT date from metadata WHERE name='date_updated'")
         last_updated = c.fetchall()
         assert len(last_updated) <= 1, "There is more than one last_created."
         last_updated = last_updated[0][0]
 
+        # get all the records since last_updated to add into current cache
         logger.info("Updating cache from %s", last_updated)
         records = self.sickle.ListRecords(**{
                 'metadataPrefix': 'oai_datacite',
@@ -280,6 +293,7 @@ class Zenodo(NDEDatabase):
             }
         )
 
+        # Very similar to dump() with slight differences read dump() first
         count = 0
         while True:
             try:
@@ -294,6 +308,7 @@ class Zenodo(NDEDatabase):
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
                        'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
+                # we upsert here in case there is repeat ids from existing cache
                 c.execute("""INSERT INTO cache VALUES(?, ?)
                                 ON CONFLICT(_id) DO UPDATE SET data=excluded.data
                           """, (record.header.identifier, json.dumps(doc)))
@@ -305,6 +320,7 @@ class Zenodo(NDEDatabase):
                 break
 
         today = datetime.date.today().isoformat()
+        # upsert date_updated to today
         c.execute("""INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
                   """, ('date_updated', today))
