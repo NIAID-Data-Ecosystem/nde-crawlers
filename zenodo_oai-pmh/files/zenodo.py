@@ -310,5 +310,6 @@ class Zenodo(NDEDatabase):
                   """, ('date_updated', today))
 
         logger.info("Cache last_updated on: %s", today)
+        con.commit()
 
         con.close()

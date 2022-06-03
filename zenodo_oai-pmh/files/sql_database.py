@@ -35,8 +35,9 @@ class NDEDatabase:
             today = datetime.date.today()
 
             if today - date_created < self.EXPIRE:
+                con.close()
                 return False
-
+        con.close()
         return True
 
     def new_cache(self):
