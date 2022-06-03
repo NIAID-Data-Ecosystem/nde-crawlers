@@ -4,7 +4,7 @@ import traceback
 import platform
 import logging
 import orjson
-import zenodo
+from zenodo import Zenodo
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
@@ -34,7 +34,8 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    docs = zenodo.parse()
+    parser = Zenodo()
+    docs = parser.upload()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
