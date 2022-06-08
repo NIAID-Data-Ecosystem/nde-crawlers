@@ -15,7 +15,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/Users/nacosta/Documents/niaid_tests/veupathdb', 'veupathdb_crawled'
+    '/data', 'veupathdb_crawled'
 )
 
 os.makedirs(dirname, exist_ok=True)
