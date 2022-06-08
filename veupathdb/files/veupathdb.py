@@ -11,9 +11,9 @@ def record_generator():
     # Request API call that returns a list of all available data records 
     api_command = 'https://veupathdb.org/veupathdb/service/record-types/dataset/searches/AllDatasets/reports/standard?reportConfig={"attributes":["primary_key","organism_prefix","project_id","eupath_release","newcategory","summary","contact","wdk_weight","version","institution","build_number_introduced","pmids_download","release_policy","short_attribution","type","genecount"],"tables":["Publications","Contacts","GenomeHistory","DatasetHistory","Version","References","HyperLinks","GeneTypeCounts","TranscriptTypeCounts"],"attributeFormat":"text"}'
     request = requests.get(api_command)
-    _record_dict = request.json()
+    json_records = request.json()
     # paginate through records
-    for _record_dict in list(_record_dict['records']):
+    for _record_dict in list(json_records['records'])[:20]:
 
         # add custom values to the record
         _record_dict.update({
