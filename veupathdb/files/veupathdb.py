@@ -106,9 +106,3 @@ def record_generator():
         _record_dict.pop('tables')
 
         yield _record_dict
-
-rec_gen = record_generator()
-for rec in rec_gen:
-    ...
-    #print('\n')
-    #print(json.dumps(rec, indent=4))
