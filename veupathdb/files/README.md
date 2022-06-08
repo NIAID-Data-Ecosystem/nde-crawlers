@@ -5,39 +5,55 @@ Extracting data [records](https://veupathdb.org/veupathdb/app/record/dataset/DS_
 <details><summary>Example Record</summary>    
 
 ```  
+
 {
-    "veupathdb_id": "veupathdb_DS_033b09f437",
+    "_id": "veupathdb_DS_022384d18a",
     "@type": "Dataset",
-    "includedInDataCatalog.name": "VEuPathDB",
-    "url": "https://veupathdb.org/veupathdb/app/record/dataset/",
-    "name": "<i>Candida albicans</i> WO-1 Genome Sequence and Annotation",
-    "identifier": "DS_033b09f437",
+    "includedInDataCatalog": {
+        "name": "VEuPathDB"
+    },
+    "url": "https://veupathdb.org/veupathdb/app/record/dataset/DS_022384d18a",
+    "name": "<i>Plasmodium reichenowi</i> G01 Genome Sequence and Annotation",
+    "identifier": "DS_022384d18a",
+    "description": "Genome Sequence and annotation for <i>Plasmodium reichenowi</i> G01",
+    "measurementTechnique": {
+        "name": "genome"
+    },
+    "dateModified": "2017-11-29",
+    "conditionOfAccess": null,
+    "sdPublisher": {
+        "name": "PlasmoDB"
+    },
+    "creditText": "Thomas Dan Otto",
     "author": [
         {
-            "name": "Candida Genome Database (CGD)",
-            "affiliation": "Stanford University"
+            "name": "Matthew Berriman",
+            "affiliation": "Wellcome Sanger Institute, UK"
+        },
+        {
+            "name": "Thomas Dan Otto",
+            "affiliation": "Institute for Infection, Immunity and Inflammation, University of Glasgow"
+        },
+        {
+            "name": "Franck Prugnolle",
+            "affiliation": null
         }
     ],
-    "description": "Genome sequence and annotation for <i>Candida albicans</i> WO-1.",
-    "measurementTechnique": "genome",
-    "dateUpdated": "2013-12-11",
-    "usageInfo": null,
-    "sdPublisher.name": "FungiDB",
-    "creditText": "Candida Genome Database (CGD)",
-    "datePublished": "2013-12-11",
-    "species": [
-        "Candida albicans WO-1"
-    ],
+    "dateUpdated": "2021-03-16",
+    "datePublished": "2017-11-29",
+    "species": {
+        "name": "Plasmodium reichenowi G01"
+    },
     "distribution": [
         {
-            "text": "Candida Genome Database",
-            "url": "http://candidagenome.org/"
+            "text": "Genomes of an entire Plasmodium subgenus reveal paths to virulent human malaria",
+            "url": "https://doi.org/10.1101/095679"
         }
     ],
     "variableMeasured": {
         "@type": "PropertyValue",
-        "value": "6160",
-        "valueReference": "protein coding gene"
+        "identifier": "168",
+        "name": "ncRNA gene"
     }
 }
 ```  

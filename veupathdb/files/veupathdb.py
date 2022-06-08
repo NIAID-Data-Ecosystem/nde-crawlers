@@ -98,11 +98,7 @@ def record_generator():
         _record_dict.pop('tableErrors')
         _record_dict.pop('displayName') 
         _record_dict.pop('id')
-        _record_dict['tables'].pop('Contacts')
         _record_dict.pop('attributes')
-        _record_dict['tables'].pop('GenomeHistory')
-        _record_dict['tables'].pop('Version')
-        _record_dict['tables'].pop('HyperLinks')
         _record_dict.pop('tables')
 
         yield _record_dict
