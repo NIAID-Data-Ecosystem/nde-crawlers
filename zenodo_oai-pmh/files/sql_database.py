@@ -55,13 +55,12 @@ class NDEDatabase:
         return True
 
     def new_cache(self):
-        """Creates a new table metadata in the sqlite db using DBM_NAME. Upserts an entry: date_created"""
+        """Creates a new tables: metadata and cache. Upserts two entries: date_created, date_updated in metadata table"""
 
-        # connect to database
+        # Read comments in base class for the first part
         con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
         c = con.cursor()
 
-        # Creates a new table metadata if it does not exist
         c.execute("""CREATE TABLE IF NOT EXISTS metadata (
                 name text NOT NULL PRIMARY KEY,
                 date text NOT NULL
@@ -70,33 +69,60 @@ class NDEDatabase:
         today = datetime.date.today().isoformat()
 
         # used for testing
-        # today= datetime.date(2022, 4, 10).isoformat()
+        # today = datetime.date(2022, 6, 7).isoformat()
 
         # upserting in sqlite https://www.sqlite.org/lang_UPSERT.html
         # https://stackoverflow.com/questions/62274285/sqlite3-programmingerror-incorrect-number-of-bindings-supplied-the-current-stat
         c.execute("""INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
                   """, ('date_created', today))
-
-        con.commit()
         
-        # delete if cache table exists and add a new cache table
+        # add date_updated
+        c.execute("""INSERT INTO metadata VALUES(?, ?)
+                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
+                  """, ('date_updated', today))
+        con.commit()
+
         c.execute("DROP TABLE IF EXISTS cache")
         c.execute("""CREATE TABLE cache (
                       _id text NOT NULL PRIMARY KEY,
                       data text NOT NULL
                      )""")
         con.commit()
-        
+
         con.close()
+
+    def load_cache(self):
+        """Download the request information"""
+        raise NotImplementedError("Define in subclass")
 
     def update_cache(self):
         """Update cache with new data"""
         pass
 
-    def dump(self):
-        """Download the request information"""
-        raise NotImplementedError("Define in subclass")
+    def dump(self, records):
+        """Stores raw data from a list or generator into the cache table. Each value of the list contains (_id, data)"""
+        
+        # connect to database
+        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        c = con.cursor()
+
+        logger.info("Dumping records...")
+        for rec in records:
+            _id = rec[0]
+            data = rec[1]
+            if not (isinstance(_id, str) and isinstance(data, str)):
+                raise TypeError("_id and data must be a string")
+            # insert doc into cache table _id first column second column data as a json string
+            # we upsert here in case there is repeat ids from existing cache
+            c.execute("""INSERT INTO cache VALUES(?, ?)
+                            ON CONFLICT(_id) DO UPDATE SET data=excluded.data
+                        """, (_id, data))
+            con.commit()
+
+        logger.info("Finished dumping records.")
+
+        con.close()
 
     def parse(self):
         """Parse the request information"""
@@ -106,13 +132,11 @@ class NDEDatabase:
         """Checks if cache is expired or NO_CACHE is True if so make a new cache and dump else update existing cache"""
         if self.is_cache_expired() or self.NO_CACHE:
             self.new_cache()
-            self.dump()
+            records = self.load_cache()
+            self.dump(records)
             return self.parse()
         else:
-            self.update_cache()
+            records = self.update_cache()
+            self.dump(records)
             return self.parse()
-
-
-
-
-
+        

@@ -25,50 +25,11 @@ class Zenodo(NDEDatabase):
     # connect to the website
     sickle = Sickle('https://zenodo.org/oai2d', max_retries=3)
 
-    def new_cache(self):
-        """Creates a new tables: metadata and cache. Upserts two entries: date_created, date_updated in metadata table"""
-
-        # Read comments in base class for the first part
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
-        c = con.cursor()
-
-        c.execute("""CREATE TABLE IF NOT EXISTS metadata (
-                name text NOT NULL PRIMARY KEY,
-                date text NOT NULL
-                )""")
-
-        today = datetime.date.today().isoformat()
-
-        # used for testing
-        # today = datetime.date(2022, 6, 1).isoformat()
-
-        # upserting in sqlite https://www.sqlite.org/lang_UPSERT.html
-        # https://stackoverflow.com/questions/62274285/sqlite3-programmingerror-incorrect-number-of-bindings-supplied-the-current-stat
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
-                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_created', today))
-        
-        # add date_updated
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
-                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_updated', today))
-        con.commit()
-
-        c.execute("DROP TABLE IF EXISTS cache")
-        c.execute("""CREATE TABLE cache (
-                      _id text NOT NULL PRIMARY KEY,
-                      data text NOT NULL
-                     )""")
-        con.commit()
-
-        con.close()
-
-    def dump(self):
-        """Connects to sickle and stores raw data into the cache table, only runs with cache is expired"""
-
-        # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
-        c = con.cursor()
+    def load_cache(self):
+        """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
+        Returns:
+            A tuple (_id, data formatted as a json string)
+        """
 
         # query all records
         records = self.sickle.ListRecords(metadataPrefix='oai_datacite', ignore_deleted=True)
@@ -89,19 +50,16 @@ class Zenodo(NDEDatabase):
                 count += 1
                 if count % 100 == 0:
                     time.sleep(.5)
-                    logger.info("Dumped %s records", count)
+                    logger.info("Loaded %s records", count)
 
                 # in each doc we want record.identifier and record stored
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
                        'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
-                # insert doc into cache table _id first column second column doc string
-                c.execute("INSERT INTO cache VALUES(?, ?)", (record.header.identifier, json.dumps(doc)))
-                con.commit()
+                yield (record.header.identifier, json.dumps(doc))
 
             except StopIteration:
-                logger.info("Finished Dumping. Total Records: %s", count)
-                con.close()
+                logger.info("Finished Loading. Total Records: %s", count)
                 # if StopIteration is raised, break from loop
                 break
 
@@ -308,11 +266,7 @@ class Zenodo(NDEDatabase):
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
                        'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
-                # we upsert here in case there is repeat ids from existing cache
-                c.execute("""INSERT INTO cache VALUES(?, ?)
-                                ON CONFLICT(_id) DO UPDATE SET data=excluded.data
-                          """, (record.header.identifier, json.dumps(doc)))
-                con.commit()
+                yield (record.header.identifier, json.dumps(doc))
 
             except StopIteration:
                 logger.info("Finished updating cache. Total new records: %s", count)
