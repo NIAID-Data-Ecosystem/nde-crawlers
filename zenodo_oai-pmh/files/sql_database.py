@@ -108,9 +108,9 @@ class NDEDatabase:
         c = con.cursor()
 
         logger.info("Dumping records...")
-        for rec in records:
-            _id = rec[0]
-            data = rec[1]
+        for record in records:
+            _id = record[0]
+            data = record[1]
             if not (isinstance(_id, str) and isinstance(data, str)):
                 raise TypeError("_id and data must be a string")
             # insert doc into cache table _id first column second column data as a json string
@@ -124,7 +124,15 @@ class NDEDatabase:
 
         con.close()
 
-    def parse(self):
+    def retreive_cache(self):
+        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        c = con.cursor()
+        c.execute("SELECT * from cache")
+        records = c.fetchall()
+        con.close()
+        return records
+
+    def parse(self, records):
         """Parse the request information"""
         raise NotImplementedError("Define in subclass")
 
@@ -134,9 +142,11 @@ class NDEDatabase:
             self.new_cache()
             records = self.load_cache()
             self.dump(records)
-            return self.parse()
+            records = self.retreive_cache()
+            return self.parse(records)
         else:
             records = self.update_cache()
             self.dump(records)
-            return self.parse()
+            records = self.retreive_cache()
+            return self.parse(records)
         

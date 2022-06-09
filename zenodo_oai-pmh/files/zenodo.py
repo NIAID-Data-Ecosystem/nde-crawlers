@@ -23,7 +23,7 @@ class Zenodo(NDEDatabase):
     EXPIRE = datetime.timedelta(days=90)
 
     # connect to the website
-    sickle = Sickle('https://zenodo.org/oai2d', max_retries=3)
+    sickle = Sickle('https://zenodo.org/oai2d', max_retries=3, default_retry_after=15)
 
     def load_cache(self):
         """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
@@ -63,7 +63,7 @@ class Zenodo(NDEDatabase):
                 # if StopIteration is raised, break from loop
                 break
 
-    def parse(self):
+    def parse(self, records):
         """Transforms/pipeline data to the nde schema before writing the information into the ndson file"""
         # dictionary to convert general type to @type
         # https://docs.google.com/spreadsheets/d/1DOwMjvFL3CGPkdoaFCveKNb_pPVpboEgUjRTT_3eAW0/edit#gid=0
@@ -87,14 +87,10 @@ class Zenodo(NDEDatabase):
         # dictionary log the types that cannot be converted
         missing_types = {}
 
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
-        c = con.cursor()
 
-        c.execute("SELECT * from cache")
-        items = c.fetchall()
-        for item in items:
-            record = json.loads(item[1])
-            identifier = item[0]
+        for record in records:
+            data = json.loads(record[1])
+            identifier = record[0]
 
             # format the identifier for _id, and identifier
             identifier_split = identifier.rsplit(':', 1)
@@ -109,28 +105,28 @@ class Zenodo(NDEDatabase):
                     'versionDate': datetime.date.today().isoformat()
                 },
                 '_id': 'ZENODO_' + identifier,
-                'name': record['metadata'].get('title')[0],
+                'name': data['metadata'].get('title')[0],
                 'author': [],
                 'identifier': "zenodo." + identifier,
                 'dateModified': datetime.datetime.fromisoformat(
-                    record['header']['datestamp'][:-1]).astimezone(datetime.timezone.utc)
+                    data['header']['datestamp'][:-1]).astimezone(datetime.timezone.utc)
                     .date().isoformat(),
                 'url': "https://zenodo.org/record/" + identifier_split[-1],
             }
 
-            if description := record['metadata'].get('description'):
+            if description := data['metadata'].get('description'):
                 output['description'] = description[0]
 
-            if date_published := record['metadata'].get('date'):
+            if date_published := data['metadata'].get('date'):
                 output['datePublished'] = date_published[0]
 
-            if language := record['metadata'].get('language'):
+            if language := data['metadata'].get('language'):
                 output['inLanguage'] = {'name': language[0]}
 
             # zenodo uses different delimiters for keywords. See examples: oai:zenodo.org:1188946, oai:zenodo.org:1204780
             # there may be more delimiters than just '; ' and ', '
             # since zenodo does process the delimiters, for now we will not either example: oai:zenodo.org:1204780
-            if keywords := record['metadata'].get('subject'):
+            if keywords := data['metadata'].get('subject'):
                 output['keywords'] = []
                 for keyword in keywords:
                     # keyword = re.split('; |, ', keyword)
@@ -142,7 +138,7 @@ class Zenodo(NDEDatabase):
             #     print("%s - %s" % (element.tag, element.text))
 
             # use xml to query doi
-            root = ElementTree.fromstring(record['xml'])
+            root = ElementTree.fromstring(data['xml'])
 
             doi = root.find(".//{http://datacite.org/schema/kernel-3}identifier[@identifierType='DOI']")
             if doi is not None:
