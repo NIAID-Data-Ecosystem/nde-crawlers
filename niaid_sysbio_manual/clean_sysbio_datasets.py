@@ -1,15 +1,14 @@
 import pandas as pd
 from datetime import date
 import requests
+from math import ceil
 
 # Import the data from the template file
 sheet_id = "12fm2Qkh39Ben7QS5QtIElVlaYwYY8RUExaFX9EX6iAg"
-sheet_name = "2022-05-05_sysbio_datasets"
+sheet_name = "to_upload"
 url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
 
-df_raw = pd.read_csv(url)
-df = df_raw.loc[df_raw["Checked by RS?"] == "yes", :]
-
+df = pd.read_csv(url)
 
 
 # nest related properties into a single object, from the flat columns
@@ -18,13 +17,13 @@ def nestAuthor(row):
     affiliations = str2list(row["author.affiliation"])
     # interleave the two values together
     if(people is None):
-        raise Exception(f"Missing author name at row {row}")
+        raise Exception(f"Missing author name at row {row.id_str}")
     elif(affiliations is None):
         # No affiliations to report
         return([{"name": person} for person in people])
     elif(len(people) == len(affiliations)):
         # paired name + affiliations
-        return([{"name": pair[0], "dateModified": pair[1]} for pair in zip(people, affiliations)])
+        return([{"name": pair[0], "affiliation": pair[1]} for pair in zip(people, affiliations)])
     elif(len(affiliations) == 1):
         # Assume affiliation applies to all names
         return([{"name": person, "affiliation": affiliations[0]} for person in people])
@@ -37,10 +36,10 @@ def nestDistribution(row):
     dates = str2list(row["dateModified"])
     # interleave the two values together
     if(files is None):
-        print(f"Missing distribution.contentUrl at row {row.identifier}")
+        print(f"Missing distribution.contentUrl at row {row.id_str}")
         # raise Exception(f"Missing distribution.contentUrl at row {row}")
     elif(dates is None):
-        print(f"Missing distribution.dateModified at row {row.identifier}")
+        print(f"Missing distribution.dateModified at row {row.id_str}")
         # raise Exception(f"Missing distribution.dateModified at row {row}")
     elif(len(files) == len(dates)):
         return([{"contentUrl": pair[0], "dateModified": pair[1]} for pair in zip(files, dates)])
@@ -49,9 +48,14 @@ def nestDistribution(row):
     else:
         raise Exception(f"mismatch between files / dateModified at row {row}")
 
-def nestPublisher(database):
+def nestName(database):
     if((database == database) & (database is not None)):
         return({"name": database})
+
+def nestGeo(loc_str):
+    locs = str2list(loc_str)
+    if(locs is not None):
+        return([{"name": loc} for loc in locs])
 
 def nestFunding(row):
     ids = str2list(row["funding.identifier"])
@@ -167,10 +171,10 @@ def getAllCitations(pmids):
 
 
 # Script to transform the flat file to one that complies with the schema and includes objects.
-def schemaizeMetadata(df, output_name = "NIAID-SysBio-Datasets"):
+def schemaizeMetadata(df, output_name = "NIAID-SysBio-Datasets", chunk_size = 100):
     # set output file name
     today = date.today().strftime("%Y-%m-%d")
-    output = f"{today}_{output_name}.json"
+    output = f"{today}_{output_name}"
 
     # define output columns
     output_cols = ["@type", "identifier", "doi", "name", "description", "measurementTechnique", "creator", "sdPublisher", "distribution", "funding", "citation", "license", "species", "infectiousAgent", "healthCondition", "spatialCoverage", "temporalCoverage"]
@@ -179,30 +183,42 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-Datasets"):
     df.rename(columns = {"type": "@type", "dataset.doi": "doi"}, inplace=True)
 
     # Split strings into arrays, as needed
+    # df["identifier"] = df.identifier.apply(str2list)
+    df["id_str"] = df.identifier
+    # df["id_str"] = df.identifier.apply(lambda x: ";".join(x))
     df["measurementTechnique"] = df.measurementTechnique.apply(str2list)
     df["species"] = df.species.apply(str2list)
     df["infectiousAgent"] = df.infectiousAgent.apply(str2list)
     df["healthCondition"] = df.healthCondition.apply(str2list)
-    df["spatialCoverage"] = df.spatialCoverage.apply(str2list)
 
     # nest related properties into a single object, from the flat columns
-    df["sdPublisher"] = df.database.apply(nestPublisher)
+    df["spatialCoverage"] = df.spatialCoverage.apply(nestGeo)
+    df["sdPublisher"] = df.database.apply(nestName)
     df["creator"] = df.apply(nestAuthor, axis = 1)
     df["distribution"] = df.apply(nestDistribution, axis = 1)
     df["funding"] = df.apply(nestFunding, axis = 1)
 
     # Pull the publication info
     df["pmid"] = df["publication.pmid"].apply(str2list)
-    # df["pmid"] = df["publication.pmid"].apply(str2list)
+    print("data loaded; looking up citations now")
+    df["pmid"] = df["publication.pmid"].apply(str2list)
     df["citation"] = df.pmid.apply(getAllCitations)
 
     # Check that identifiers are unique
-    dupes = df[df.duplicated(["identifier"]) > 0]
+    dupes = df[df.duplicated(["id_str"]) > 0]
     if len(dupes)> 0:
-        print(list(dupes.identifier))
-        raise Exception(f"{len(dupes)} duplicate identifiers found:")
+        print(f"\n\n{len(dupes)} duplicate identifiers found:")
+        print(list(dupes.id_str))
+        print("\n")
+        raise Exception(f"Duplicate identifiers found")
 
-    df.loc[:, output_cols].to_json(output, orient = "records")
+    print("\n")
+    print(f"{len(df)} rows exported")
+
+    # Save into 100-record chunks. DDE will only accept 100 at a time.
+    for i in range(ceil(df.shape[0] / chunk_size)):
+        chunk = df.loc[i*chunk_size:(i+1)*chunk_size-1, output_cols]
+        chunk.to_json(f"{output}_{i}.json", orient = "records")
 
 # schemaizeMetadata(df.sample(10))
 schemaizeMetadata(df)
