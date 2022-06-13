@@ -19,11 +19,11 @@ logger = logging.getLogger('nde-logger')
 
 class Zenodo(NDEDatabase):
     # override variables
-    DBM_NAME = "zenodo.db"
+    SQL_DB = "zenodo.db"
     EXPIRE = datetime.timedelta(days=90)
 
     # connect to the website
-    sickle = Sickle('https://zenodo.org/oai2d', max_retries=3, default_retry_after=15)
+    sickle = Sickle('https://zenodo.org/oai2d', max_retries=4, default_retry_after=10)
 
     def load_cache(self):
         """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
@@ -229,7 +229,7 @@ class Zenodo(NDEDatabase):
         """If cache is not expired get the new records to add to the cache since last_updated"""
 
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
 
         # checks date_updated
@@ -247,7 +247,7 @@ class Zenodo(NDEDatabase):
             }
         )
 
-        # Very similar to dump() with slight differences read dump() first
+        # Very similar to load_cache()
         count = 0
         while True:
             try:
