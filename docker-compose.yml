@@ -95,6 +95,7 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+      - cache:/cache
   mongodb:
     image: mongo:4.4
     ports:
