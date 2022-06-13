@@ -12,28 +12,28 @@ class NDEDatabase:
     # how many days before cache expires
     EXPIRE = datetime.timedelta(days=30)
     # name of database
-    DBM_NAME = None
+    SQL_DB = None
     # Never uses cache, defaults as false
     NO_CACHE = False
 
-    def __init__(self, dbm_name=None):
+    def __init__(self, sql_db=None):
         # database name example: zenodo.db
-        self.DBM_NAME = self.DBM_NAME or dbm_name
+        self.SQL_DB = self.SQL_DB or sql_db
         # parses directory name from database name
-        self.DIR_NAME = self.DBM_NAME.split('.')[0]
+        self.DIR_NAME = self.SQL_DB.split('.')[0]
         # puts directory into cache folder
         self.path = os.path.join('/cache/', self.DIR_NAME)
         # make the directory
         os.makedirs(self.path, exist_ok = True)
 
     def is_cache_expired(self):
-        """ Uses the DBM_NAME to connect to a sqlite db to check if the cache is expired in metadata table
+        """ Uses the SQL_DB to connect to a sqlite db to check if the cache is expired in metadata table
             Returns:
                 True: if cache does not exist or is expired, False otherwise
         """
 
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
 
         # SQLite table names are case insensitive, but comparison is case sensitive by default.
@@ -58,7 +58,7 @@ class NDEDatabase:
         """Creates a new tables: metadata and cache. Upserts two entries: date_created, date_updated in metadata table"""
 
         # Read comments in base class for the first part
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
 
         c.execute("""CREATE TABLE IF NOT EXISTS metadata (
@@ -104,7 +104,7 @@ class NDEDatabase:
         """Stores raw data from a list or generator into the cache table. Each value of the list contains (_id, data)"""
         
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
 
         logger.info("Dumping records...")
@@ -125,7 +125,7 @@ class NDEDatabase:
         con.close()
 
     def retreive_cache(self):
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
         c.execute("SELECT * from cache")
         records = c.fetchall()
@@ -139,14 +139,23 @@ class NDEDatabase:
     def upload(self):
         """Checks if cache is expired or NO_CACHE is True if so make a new cache and dump else update existing cache"""
         if self.is_cache_expired() or self.NO_CACHE:
+            # make new cache
             self.new_cache()
+            # api request to get all the data in a generator. Each entry (_id, data) -> (str, str)
             records = self.load_cache()
+            # dumps all records into the cache table of sql database
             self.dump(records)
+            # retreives all the records from the cache table
             records = self.retreive_cache()
+            # pipeline to transform data to put into the ndjson file
             return self.parse(records)
         else:
+            # gets new records
             records = self.update_cache()
+            # dumps all new records into cache table that has existing data
             self.dump(records)
+            # retreives all the records from the cache table
             records = self.retreive_cache()
+            # pipeline to transform data to put into the ndjson file
             return self.parse(records)
         
