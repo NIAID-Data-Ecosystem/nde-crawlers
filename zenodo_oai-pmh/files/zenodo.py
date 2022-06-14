@@ -50,7 +50,7 @@ class Zenodo(NDEDatabase):
                 count += 1
                 if count % 100 == 0:
                     time.sleep(.5)
-                    logger.info("Loaded %s records", count)
+                    logger.info("Loading cache. Loaded %s records", count)
 
                 # in each doc we want record.identifier and record stored
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
@@ -228,15 +228,7 @@ class Zenodo(NDEDatabase):
     def update_cache(self):
         """If cache is not expired get the new records to add to the cache since last_updated"""
 
-        # connect to database
-        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
-        c = con.cursor()
-
-        # checks date_updated
-        c.execute("SELECT date from metadata WHERE name='date_updated'")
-        last_updated = c.fetchall()
-        assert len(last_updated) <= 1, "There is more than one last_created."
-        last_updated = last_updated[0][0]
+        last_updated = self.retreive_last_updated()
 
         # get all the records since last_updated to add into current cache
         logger.info("Updating cache from %s", last_updated)
@@ -269,13 +261,5 @@ class Zenodo(NDEDatabase):
                 # if StopIteration is raised, break from loop
                 break
 
-        today = datetime.date.today().isoformat()
-        # upsert date_updated to today
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
-                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_updated', today))
+        self.insert_last_updated()
 
-        logger.info("Cache last_updated on: %s", today)
-        con.commit()
-
-        con.close()

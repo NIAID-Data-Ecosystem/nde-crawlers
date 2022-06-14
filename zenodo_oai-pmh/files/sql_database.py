@@ -61,6 +61,8 @@ class NDEDatabase:
         con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
 
+        logger.info("Cache does not exist or is expired. Creating new cache.")
+
         c.execute("""CREATE TABLE IF NOT EXISTS metadata (
                 name text NOT NULL PRIMARY KEY,
                 date text NOT NULL
@@ -99,6 +101,40 @@ class NDEDatabase:
     def update_cache(self):
         """Update cache with new data"""
         pass
+
+    def retreive_last_updated(self):
+        """Helper method for update_cache. Gets the date_updated value from metadata table."""
+
+        # connect to database
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        c = con.cursor()
+
+        # checks date_updated
+        c.execute("SELECT date from metadata WHERE name='date_updated'")
+        last_updated = c.fetchall()
+        assert len(last_updated) <= 1, "There is more than one last_updated."
+        last_updated = last_updated[0][0]
+        
+        con.close()
+        
+        return last_updated
+    
+    def insert_last_updated(self):
+        """Helper method for update_cache. Changes the date_updated in the metadata table to today"""
+        # connect to database
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        c = con.cursor()
+
+        today = datetime.date.today().isoformat()
+        # upsert date_updated to today
+        c.execute("""INSERT INTO metadata VALUES(?, ?)
+                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
+                  """, ('date_updated', today))
+
+        logger.info("Cache last_updated on: %s", today)
+        con.commit()
+
+        con.close()
 
     def dump(self, records):
         """Stores raw data from a list or generator into the cache table. Each value of the list contains (_id, data)"""
