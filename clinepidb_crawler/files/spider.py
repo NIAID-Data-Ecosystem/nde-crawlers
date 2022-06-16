@@ -2,7 +2,7 @@ import scrapy
 import requests 
 import xmltodict 
 import logging
-
+import json
 logger = logging.getLogger('nde-logger')
 
 class ClinEpiDBSpider(scrapy.Spider):
@@ -24,11 +24,19 @@ class ClinEpiDBSpider(scrapy.Spider):
     
     def start_requests(self):
         urls = self.get_ids()
-        for url in urls[:3]:
-            yield scrapy.Request(url)
+        test_url = urls[0]
+        self.test_id = test_url.split("/")[-1]
+
+        #for url in urls[:3]:
+        yield scrapy.Request(test_url, callback=self.parse)
 
     def parse(self, response): 
+        filename = "/Users/nacosta/Documents/local_testing/clinepidb/local_test_clinepidb_testing_"+str(self.test_id)
+        #data = json.loads(response.body)
         #body = response.xpath('//li[contains(@class,"main-stack") and contains(a/text(), "Interior")]/div//text()').extract()
-        pass
+        #body = response.xpath('//div[@class="wdk-DataTableCellContent"]').extract()
+        with open(filename, 'wb') as f:
+            f.write(response.body)
+
     
 

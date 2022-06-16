@@ -15,7 +15,7 @@ def record_generator():
     json_records = request.json()
 
     # paginate through records
-    for _record_dict in list(json_records['records']):
+    for _record_dict in list(json_records['records'])[:10]:
         # add custom values to the record
         _record_dict.update({
             '_id': "veupathdb_"+_record_dict['id'][0]['value'],
@@ -35,16 +35,24 @@ def record_generator():
                  _record_dict["pmids"] = pmids_list[0]
             else:
                 _record_dict['pmids'] = ','.join(pmids_list)
-               
         # attributes  
         _record_dict['description'] = _record_dict['attributes'].pop('summary')
         _record_dict['measurementTechnique'] = {'name': _record_dict['attributes'].pop('type')}
-        _record_dict['dateModified'] = _record_dict['attributes'].pop('version')
         _record_dict['sdPublisher'] = {'name': _record_dict['attributes'].pop('project_id')}
         _record_dict['creditText'] = _record_dict['attributes'].pop('short_attribution')  
 
         if _record_dict['attributes']['release_policy']:
             _record_dict['conditionOfAccess'] = _record_dict['attributes'].pop('release_policy')
+
+        
+        if _record_dict['attributes']['version']:
+            try:
+                _date = _record_dict['attributes']['version']
+                #print(_date)
+                date_modified=datetime.strptime(_date, '%Y-%m-%d').isoformat()
+                _record_dict['dateModified'] = date_modified
+            except:
+                ...
 
         # tables.Contacts 
         _record_dict['author']=[{'name': _dict.pop('contact_name'), "affiliation": _dict.pop("affiliation")} for _dict in _record_dict['tables']['Contacts']]
@@ -53,7 +61,7 @@ def record_generator():
         release_dates = [hit['release_date'] for hit in _record_dict['tables']['GenomeHistory']]
         # if multiple dates passed, keep the most recent date
         if release_dates:
-            release_date = sorted(release_dates, key = lambda d: datetime.strptime(d, '%Y-%m-%d'), reverse=True)[0]
+            release_date = sorted(release_dates, key = lambda d: datetime.strptime(d, '%Y-%m-%d').isoformat(), reverse=True)[0]
             _record_dict['dateUpdated'] = release_date
         
         # tables.Version 
@@ -61,7 +69,7 @@ def record_generator():
         # if multiple dates passed, keep the most recent date
         if dates:
             try:
-                recent_date = sorted(dates, key = lambda d: datetime.strptime(d, '%Y-%m-%d'), reverse=True)[0]
+                recent_date = sorted(dates, key = lambda d: datetime.strptime(d, '%Y-%m-%d').isoformat(), reverse=True)[0]
                 _record_dict['datePublished'] = recent_date
             except:
                 pass
