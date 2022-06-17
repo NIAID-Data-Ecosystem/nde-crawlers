@@ -375,7 +375,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "healthCondition": {"type": "text", "copy_to": ["all"]},
+            "healthCondition": {"type": "keyword", "copy_to": ["all"]},
             "identifier": {"type": "text", "copy_to": ["all"]},
             "identifierSource": {"type": "keyword", "copy_to": ["all"]},
             "image": {
