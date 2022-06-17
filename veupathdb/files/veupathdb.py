@@ -15,7 +15,7 @@ def record_generator():
     json_records = request.json()
 
     # paginate through records
-    for _record_dict in list(json_records['records'])[:10]:
+    for _record_dict in json_records['records']:
         # add custom values to the record
         _record_dict.update({
             '_id': "veupathdb_"+_record_dict['id'][0]['value'],
