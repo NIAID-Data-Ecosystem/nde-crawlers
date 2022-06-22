@@ -1,15 +1,12 @@
 import logging
-from platform import release
-import re
 import requests 
-import json
 import datetime
 
 
-#logging.basicConfig(level=logging.INFO)
-#logger = logging.getLogger('nde-logger')
-debug_file='/Users/nacosta/Documents/NIAID-Projects/clinepidb/debugging/bad-dates.log'
-logging.basicConfig(filename=debug_file, level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('nde-logger')
+#debug_file='/Users/nacosta/Documents/NIAID-Projects/clinepidb/debugging/bad-dates.log'
+#logging.basicConfig(filename=debug_file, level=logging.DEBUG)
 
 
 def record_generator():
@@ -57,8 +54,7 @@ def record_generator():
                 date_modified = datetime.datetime.strptime(date_modified, '%Y-%m-%d').date().isoformat()
                 _record_dict['dateModified'] = date_modified
             except:
-                ...
-                #logging.debug("[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"%_date)
+                logging.debug("[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"%_date)
 
         # tables.Contacts 
         _record_dict['author']=[{'name': _dict.pop('contact_name'), "affiliation": _dict.pop("affiliation")} for _dict in _record_dict['tables']['Contacts']]
@@ -84,8 +80,7 @@ def record_generator():
                 date_published = sorted(_iso_list)[0]
                 _record_dict['datePublished'] = date_published
             except:
-                ...
-                #logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%dates)
+                logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%dates)
                 #print("----\n[INFO] BAD dates: ",dates)
             
         
