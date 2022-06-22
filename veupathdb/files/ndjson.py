@@ -18,6 +18,7 @@ dirname = os.path.join(
     '/data', 'veupathdb_crawled'
 )
 
+#save the UTC date and time of at start of crawling, in ISO-8601
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
     dirname, 'release.txt'
