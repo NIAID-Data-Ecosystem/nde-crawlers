@@ -1,13 +1,19 @@
 import logging
+from platform import release
+import re
 import requests 
 import json
-from datetime import datetime
+import datetime
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('nde-logger')
+
+#logging.basicConfig(level=logging.INFO)
+#logger = logging.getLogger('nde-logger')
+debug_file='/Users/nacosta/Documents/NIAID-Projects/clinepidb/debugging/bad-dates.log'
+logging.basicConfig(filename=debug_file, level=logging.DEBUG)
 
 
 def record_generator():
+   
     # API call that returns a list of all available data records 
     api_command = 'https://veupathdb.org/veupathdb/service/record-types/dataset/searches/AllDatasets/reports/standard?reportConfig={"attributes":["primary_key","organism_prefix","project_id","eupath_release","newcategory","summary","contact","wdk_weight","version","institution","build_number_introduced","pmids_download","release_policy","short_attribution","type","genecount"],"tables":["Publications","Contacts","GenomeHistory","DatasetHistory","Version","References","HyperLinks","GeneTypeCounts","TranscriptTypeCounts"],"attributeFormat":"text"}'
     # send and retrieve request call
@@ -47,12 +53,12 @@ def record_generator():
         
         if _record_dict['attributes']['version']:
             try:
-                _date = _record_dict['attributes']['version']
-                #print(_date)
-                date_modified=datetime.strptime(_date, '%Y-%m-%d').isoformat()
+                date_modified = _record_dict['attributes']['version']
+                date_modified = datetime.datetime.strptime(date_modified, '%Y-%m-%d').date().isoformat()
                 _record_dict['dateModified'] = date_modified
             except:
                 ...
+                #logging.debug("[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"%_date)
 
         # tables.Contacts 
         _record_dict['author']=[{'name': _dict.pop('contact_name'), "affiliation": _dict.pop("affiliation")} for _dict in _record_dict['tables']['Contacts']]
@@ -61,18 +67,27 @@ def record_generator():
         release_dates = [hit['release_date'] for hit in _record_dict['tables']['GenomeHistory']]
         # if multiple dates passed, keep the most recent date
         if release_dates:
-            release_date = sorted(release_dates, key = lambda d: datetime.strptime(d, '%Y-%m-%d').isoformat(), reverse=True)[0]
-            _record_dict['dateUpdated'] = release_date
+            try:   
+                iso_list = [datetime.datetime.strptime(d, '%Y-%m-%d').date().isoformat() for d in release_dates]
+                date_updated = sorted(iso_list)[0]
+                _record_dict['dateUpdated'] = date_updated
+            except:
+                ...
+                #logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%dates)
+
         
         # tables.Version 
-        dates = [hit['version'] for hit in _record_dict['tables']['Version']]
-        # if multiple dates passed, keep the most recent date
-        if dates:
+        published_dates = [hit['version'] for hit in _record_dict['tables']['Version']]
+        if published_dates:
             try:
-                recent_date = sorted(dates, key = lambda d: datetime.strptime(d, '%Y-%m-%d').isoformat(), reverse=True)[0]
-                _record_dict['datePublished'] = recent_date
+                _iso_list = [datetime.datetime.strptime(d, '%Y-%m-%d').date().isoformat() for d in published_dates]
+                date_published = sorted(_iso_list)[0]
+                _record_dict['datePublished'] = date_published
             except:
-                pass
+                ...
+                #logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%dates)
+                #print("----\n[INFO] BAD dates: ",dates)
+            
         
         if _record_dict['tables']['Version']:
             _record_dict['species'] = {'name': [hit['organism'] for hit in _record_dict['tables']['Version']]} 
