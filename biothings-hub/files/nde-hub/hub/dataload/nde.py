@@ -375,7 +375,12 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "healthCondition": {"type": "keyword", "copy_to": ["all"]},
+            "healthCondition": {
+                "properties": {
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "identifier": {"type": "text", "copy_to": ["all"]},
             "identifierSource": {"type": "keyword", "copy_to": ["all"]},
             "image": {
@@ -415,12 +420,6 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "infectiousAgent": {
-                "properties": {
-                    "name": {"type": "keyword", "copy_to": ["all"]},
-                    "url": {"type": "text", "copy_to": ["all"]},
-                }
-            },
-            "infectiousDisease": {
                 "properties": {
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
