@@ -193,6 +193,7 @@ def schemaizeMetadata(df, output_name = "NIAID-SysBio-Datasets", chunk_size = 10
 
     # nest related properties into a single object, from the flat columns
     df["spatialCoverage"] = df.spatialCoverage.apply(nestGeo)
+    df["temporalCoverage"] = df.temporalCoverage.apply(nestName)
     df["sdPublisher"] = df.database.apply(nestName)
     df["creator"] = df.apply(nestAuthor, axis = 1)
     df["distribution"] = df.apply(nestDistribution, axis = 1)
