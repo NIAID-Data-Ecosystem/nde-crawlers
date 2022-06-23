@@ -52,7 +52,7 @@ def parse():
         trial['additionalType'] = trial.pop('data_available')
         trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
         trial['nctid'] = trial.pop('nct_number')
-        trial['infectiousDisease'] = {'name': trial.pop('condition')}
+        trial['healthCondition'] = {'name': trial.pop('condition')}
         trial['mainEntityOfPage'] = trial.pop('clinical_trial_website')
 
         # check if url is valid then take pubmed id
