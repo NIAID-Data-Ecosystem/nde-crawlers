@@ -185,13 +185,15 @@ def load_pmid_ctfd(data_folder):
                 if pmids := doc.get('pmids'):
                     pmid_list += [pmid.strip() for pmid in pmids.split(',')]
 
-            # batch request
-            eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
-            # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
-            if api_key:
-                time.sleep(0.1)
-            else:
-                time.sleep(0.35)
+            # check if there are any pmids before requesting
+            if pmid_list:
+                 # batch request
+                eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
+                # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
+                if api_key:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(0.35)
 
             # add in the citation and funding to each doc in doc_list and yield
             for rec in doc_list:

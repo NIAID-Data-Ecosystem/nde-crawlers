@@ -81,7 +81,7 @@ def parse():
             if drug_conc := metadata.get('drug_conc'):
                 output['description'] += "\nDrug Concetration\n" + drug_conc
             if indication := metadata.get('indication'):
-                output['healthCondition'] = indication
+                output['healthCondition'] = {'name': indication}
             if assay_type := metadata.get('assay_type'):
                 output['measurementTechnique'] = {'name': assay_type}
             if bibliography := metadata.get('bibliography'):

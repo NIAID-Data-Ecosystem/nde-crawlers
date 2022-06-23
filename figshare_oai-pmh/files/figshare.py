@@ -23,7 +23,7 @@ logger = logging.getLogger('nde-logger')
 def parse():
     # connect to the website
     logger.info("Parsing records")
-    sickle = Sickle('https://api.figshare.com/v2/oai', max_retries=3)
+    sickle = Sickle('https://api.figshare.com/v2/oai', max_retries=10, default_retry_after=20)
     records = sickle.ListRecords(
         metadataPrefix='uketd_dc', ignore_deleted=True)
 

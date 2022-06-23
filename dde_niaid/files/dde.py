@@ -76,6 +76,12 @@ def parse():
                 hit['dateCreated'] = datetime.datetime.fromisoformat(dates['date_created']).date().isoformat()
                 hit['dateModified'] = datetime.datetime.fromisoformat(dates['last_updated']).date().isoformat()
 
+            # adjust applicationSubCategory to fit our schema
+            if app_subs := hit.pop('applicationSubCategory', None):
+                hit['applicationSubCategory'] = []
+                for app_sub in app_subs:
+                    hit['applicationSubCategory'].append(app_sub.get('name'))
+
             # adjust @type value to fit our schema
             if nde_type := hit.pop('@type', None):
                 nde_type = nde_type.split(":")[-1]
@@ -84,7 +90,7 @@ def parse():
                 else:
                     hit['@type'] = nde_type
 
-            # query the ols to get measurementTechnique, infectiousAgent, infectiousDisease, and species
+            # query the ols to get measurementTechnique, infectiousAgent, healthCondition (infectiousDisease), and species
             if mts := hit.pop('measurementTechnique', None):
                 if type(mts) is list:
                     hit['measurementTechnique'] = []
@@ -103,11 +109,11 @@ def parse():
 
             if ids := hit.pop('infectiousDisease', None):
                 if type(ids) is list:
-                    hit['infectiousDisease'] = []
+                    hit['healthCondition'] = []
                     for i_d in ids:
-                        hit['infectiousDisease'].append(query_ols(i_d))
+                        hit['healthCondition'].append(query_ols(i_d))
                 else:
-                    hit['infectiousDisease'] = query_ols(ids)
+                    hit['healthCondition'] = query_ols(ids)
 
             if species := hit.pop('species', None):
                 if type(species) is list:
