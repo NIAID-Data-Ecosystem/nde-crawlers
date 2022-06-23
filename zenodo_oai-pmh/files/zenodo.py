@@ -19,56 +19,17 @@ logger = logging.getLogger('nde-logger')
 
 class Zenodo(NDEDatabase):
     # override variables
-    DBM_NAME = "zenodo.db"
+    SQL_DB = "zenodo.db"
     EXPIRE = datetime.timedelta(days=90)
 
     # connect to the website
-    sickle = Sickle('https://zenodo.org/oai2d', max_retries=3)
+    sickle = Sickle('https://zenodo.org/oai2d', max_retries=4, default_retry_after=10)
 
-    def new_cache(self):
-        """Creates a new tables: metadata and cache. Upserts two entries: date_created, date_updated in metadata table"""
-
-        # Read comments in base class for the first part
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
-        c = con.cursor()
-
-        c.execute("""CREATE TABLE IF NOT EXISTS metadata (
-                name text NOT NULL PRIMARY KEY,
-                date text NOT NULL
-                )""")
-
-        today = datetime.date.today().isoformat()
-
-        # used for testing
-        # today = datetime.date(2022, 6, 1).isoformat()
-
-        # upserting in sqlite https://www.sqlite.org/lang_UPSERT.html
-        # https://stackoverflow.com/questions/62274285/sqlite3-programmingerror-incorrect-number-of-bindings-supplied-the-current-stat
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
-                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_created', today))
-        
-        # add date_updated
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
-                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_updated', today))
-        con.commit()
-
-        c.execute("DROP TABLE IF EXISTS cache")
-        c.execute("""CREATE TABLE cache (
-                      _id text NOT NULL PRIMARY KEY,
-                      data text NOT NULL
-                     )""")
-        con.commit()
-
-        con.close()
-
-    def dump(self):
-        """Connects to sickle and stores raw data into the cache table, only runs with cache is expired"""
-
-        # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
-        c = con.cursor()
+    def load_cache(self):
+        """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
+        Returns:
+            A tuple (_id, data formatted as a json string)
+        """
 
         # query all records
         records = self.sickle.ListRecords(metadataPrefix='oai_datacite', ignore_deleted=True)
@@ -89,23 +50,20 @@ class Zenodo(NDEDatabase):
                 count += 1
                 if count % 100 == 0:
                     time.sleep(.5)
-                    logger.info("Dumped %s records", count)
+                    logger.info("Loading cache. Loaded %s records", count)
 
                 # in each doc we want record.identifier and record stored
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
                        'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
-                # insert doc into cache table _id first column second column doc string
-                c.execute("INSERT INTO cache VALUES(?, ?)", (record.header.identifier, json.dumps(doc)))
-                con.commit()
+                yield (record.header.identifier, json.dumps(doc))
 
             except StopIteration:
-                logger.info("Finished Dumping. Total Records: %s", count)
-                con.close()
+                logger.info("Finished Loading. Total Records: %s", count)
                 # if StopIteration is raised, break from loop
                 break
 
-    def parse(self):
+    def parse(self, records):
         """Transforms/pipeline data to the nde schema before writing the information into the ndson file"""
         # dictionary to convert general type to @type
         # https://docs.google.com/spreadsheets/d/1DOwMjvFL3CGPkdoaFCveKNb_pPVpboEgUjRTT_3eAW0/edit#gid=0
@@ -129,14 +87,10 @@ class Zenodo(NDEDatabase):
         # dictionary log the types that cannot be converted
         missing_types = {}
 
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
-        c = con.cursor()
 
-        c.execute("SELECT * from cache")
-        items = c.fetchall()
-        for item in items:
-            record = json.loads(item[1])
-            identifier = item[0]
+        for record in records:
+            data = json.loads(record[1])
+            identifier = record[0]
 
             # format the identifier for _id, and identifier
             identifier_split = identifier.rsplit(':', 1)
@@ -151,28 +105,28 @@ class Zenodo(NDEDatabase):
                     'versionDate': datetime.date.today().isoformat()
                 },
                 '_id': 'ZENODO_' + identifier,
-                'name': record['metadata'].get('title')[0],
+                'name': data['metadata'].get('title')[0],
                 'author': [],
                 'identifier': "zenodo." + identifier,
                 'dateModified': datetime.datetime.fromisoformat(
-                    record['header']['datestamp'][:-1]).astimezone(datetime.timezone.utc)
+                    data['header']['datestamp'][:-1]).astimezone(datetime.timezone.utc)
                     .date().isoformat(),
                 'url': "https://zenodo.org/record/" + identifier_split[-1],
             }
 
-            if description := record['metadata'].get('description'):
+            if description := data['metadata'].get('description'):
                 output['description'] = description[0]
 
-            if date_published := record['metadata'].get('date'):
+            if date_published := data['metadata'].get('date'):
                 output['datePublished'] = date_published[0]
 
-            if language := record['metadata'].get('language'):
+            if language := data['metadata'].get('language'):
                 output['inLanguage'] = {'name': language[0]}
 
             # zenodo uses different delimiters for keywords. See examples: oai:zenodo.org:1188946, oai:zenodo.org:1204780
             # there may be more delimiters than just '; ' and ', '
             # since zenodo does process the delimiters, for now we will not either example: oai:zenodo.org:1204780
-            if keywords := record['metadata'].get('subject'):
+            if keywords := data['metadata'].get('subject'):
                 output['keywords'] = []
                 for keyword in keywords:
                     # keyword = re.split('; |, ', keyword)
@@ -184,7 +138,7 @@ class Zenodo(NDEDatabase):
             #     print("%s - %s" % (element.tag, element.text))
 
             # use xml to query doi
-            root = ElementTree.fromstring(record['xml'])
+            root = ElementTree.fromstring(data['xml'])
 
             doi = root.find(".//{http://datacite.org/schema/kernel-3}identifier[@identifierType='DOI']")
             if doi is not None:
@@ -274,15 +228,7 @@ class Zenodo(NDEDatabase):
     def update_cache(self):
         """If cache is not expired get the new records to add to the cache since last_updated"""
 
-        # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
-        c = con.cursor()
-
-        # checks date_updated
-        c.execute("SELECT date from metadata WHERE name='date_updated'")
-        last_updated = c.fetchall()
-        assert len(last_updated) <= 1, "There is more than one last_created."
-        last_updated = last_updated[0][0]
+        last_updated = self.retreive_last_updated()
 
         # get all the records since last_updated to add into current cache
         logger.info("Updating cache from %s", last_updated)
@@ -293,7 +239,7 @@ class Zenodo(NDEDatabase):
             }
         )
 
-        # Very similar to dump() with slight differences read dump() first
+        # Very similar to load_cache()
         count = 0
         while True:
             try:
@@ -308,24 +254,12 @@ class Zenodo(NDEDatabase):
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
                        'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
-                # we upsert here in case there is repeat ids from existing cache
-                c.execute("""INSERT INTO cache VALUES(?, ?)
-                                ON CONFLICT(_id) DO UPDATE SET data=excluded.data
-                          """, (record.header.identifier, json.dumps(doc)))
-                con.commit()
+                yield (record.header.identifier, json.dumps(doc))
 
             except StopIteration:
                 logger.info("Finished updating cache. Total new records: %s", count)
                 # if StopIteration is raised, break from loop
                 break
 
-        today = datetime.date.today().isoformat()
-        # upsert date_updated to today
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
-                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_updated', today))
+        self.insert_last_updated()
 
-        logger.info("Cache last_updated on: %s", today)
-        con.commit()
-
-        con.close()

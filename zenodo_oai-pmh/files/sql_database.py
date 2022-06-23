@@ -12,28 +12,28 @@ class NDEDatabase:
     # how many days before cache expires
     EXPIRE = datetime.timedelta(days=30)
     # name of database
-    DBM_NAME = None
+    SQL_DB = None
     # Never uses cache, defaults as false
     NO_CACHE = False
 
-    def __init__(self, dbm_name=None):
+    def __init__(self, sql_db=None):
         # database name example: zenodo.db
-        self.DBM_NAME = self.DBM_NAME or dbm_name
+        self.SQL_DB = self.SQL_DB or sql_db
         # parses directory name from database name
-        self.DIR_NAME = self.DBM_NAME.split('.')[0]
+        self.DIR_NAME = self.SQL_DB.split('.')[0]
         # puts directory into cache folder
         self.path = os.path.join('/cache/', self.DIR_NAME)
         # make the directory
         os.makedirs(self.path, exist_ok = True)
 
     def is_cache_expired(self):
-        """ Uses the DBM_NAME to connect to a sqlite db to check if the cache is expired in metadata table
+        """ Uses the SQL_DB to connect to a sqlite db to check if the cache is expired in metadata table
             Returns:
                 True: if cache does not exist or is expired, False otherwise
         """
 
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
 
         # SQLite table names are case insensitive, but comparison is case sensitive by default.
@@ -55,13 +55,14 @@ class NDEDatabase:
         return True
 
     def new_cache(self):
-        """Creates a new table metadata in the sqlite db using DBM_NAME. Upserts an entry: date_created"""
+        """Creates a new tables: metadata and cache. Upserts two entries: date_created, date_updated in metadata table"""
 
-        # connect to database
-        con = sqlite3.connect(self.path + '/' + self.DBM_NAME)
+        # Read comments in base class for the first part
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
 
-        # Creates a new table metadata if it does not exist
+        logger.info("Cache does not exist or is expired. Creating new cache.")
+
         c.execute("""CREATE TABLE IF NOT EXISTS metadata (
                 name text NOT NULL PRIMARY KEY,
                 date text NOT NULL
@@ -70,49 +71,127 @@ class NDEDatabase:
         today = datetime.date.today().isoformat()
 
         # used for testing
-        # today= datetime.date(2022, 4, 10).isoformat()
+        # today = datetime.date(2022, 6, 7).isoformat()
 
         # upserting in sqlite https://www.sqlite.org/lang_UPSERT.html
         # https://stackoverflow.com/questions/62274285/sqlite3-programmingerror-incorrect-number-of-bindings-supplied-the-current-stat
         c.execute("""INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
                   """, ('date_created', today))
-
-        con.commit()
         
-        # delete if cache table exists and add a new cache table
+        # add date_updated
+        c.execute("""INSERT INTO metadata VALUES(?, ?)
+                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
+                  """, ('date_updated', today))
+        con.commit()
+
         c.execute("DROP TABLE IF EXISTS cache")
         c.execute("""CREATE TABLE cache (
                       _id text NOT NULL PRIMARY KEY,
                       data text NOT NULL
                      )""")
         con.commit()
-        
+
         con.close()
+
+    def load_cache(self):
+        """Download the request information"""
+        raise NotImplementedError("Define in subclass")
 
     def update_cache(self):
         """Update cache with new data"""
         pass
 
-    def dump(self):
-        """Download the request information"""
-        raise NotImplementedError("Define in subclass")
+    def retreive_last_updated(self):
+        """Helper method for update_cache. Gets the date_updated value from metadata table."""
 
-    def parse(self):
+        # connect to database
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        c = con.cursor()
+
+        # checks date_updated
+        c.execute("SELECT date from metadata WHERE name='date_updated'")
+        last_updated = c.fetchall()
+        assert len(last_updated) <= 1, "There is more than one last_updated."
+        last_updated = last_updated[0][0]
+        
+        con.close()
+        
+        return last_updated
+    
+    def insert_last_updated(self):
+        """Helper method for update_cache. Changes the date_updated in the metadata table to today"""
+        # connect to database
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        c = con.cursor()
+
+        today = datetime.date.today().isoformat()
+        # upsert date_updated to today
+        c.execute("""INSERT INTO metadata VALUES(?, ?)
+                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
+                  """, ('date_updated', today))
+
+        logger.info("Cache last_updated on: %s", today)
+        con.commit()
+
+        con.close()
+
+    def dump(self, records):
+        """Stores raw data from a list or generator into the cache table. Each value of the list contains (_id, data)"""
+        
+        # connect to database
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        c = con.cursor()
+
+        logger.info("Dumping records...")
+        for record in records:
+            _id = record[0]
+            data = record[1]
+            if not (isinstance(_id, str) and isinstance(data, str)):
+                raise TypeError("_id and data must be a string")
+            # insert doc into cache table _id first column second column data as a json string
+            # we upsert here in case there is repeat ids from existing cache
+            c.execute("""INSERT INTO cache VALUES(?, ?)
+                            ON CONFLICT(_id) DO UPDATE SET data=excluded.data
+                        """, (_id, data))
+            con.commit()
+
+        logger.info("Finished dumping records.")
+
+        con.close()
+
+    def retreive_cache(self):
+        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        c = con.cursor()
+        c.execute("SELECT * from cache")
+        records = c.fetchall()
+        con.close()
+        return records
+
+    def parse(self, records):
         """Parse the request information"""
         raise NotImplementedError("Define in subclass")
 
     def upload(self):
         """Checks if cache is expired or NO_CACHE is True if so make a new cache and dump else update existing cache"""
         if self.is_cache_expired() or self.NO_CACHE:
+            # make new cache
             self.new_cache()
-            self.dump()
-            return self.parse()
+            # api request to get all the data in a generator. Each entry (_id, data) -> (str, str)
+            records = self.load_cache()
+            # dumps all records into the cache table of sql database
+            self.dump(records)
+            # retreives all the records from the cache table
+            records = self.retreive_cache()
+            # pipeline to transform data to put into the ndjson file
+            return self.parse(records)
         else:
-            self.update_cache()
-            return self.parse()
-
-
-
-
-
+            # gets new records
+            records = self.update_cache()
+            # dumps all new records into cache table that has existing data
+            self.dump(records)
+            # retreives all the records from the cache table
+            records = self.retreive_cache()
+            # pipeline to transform data to put into the ndjson file
+            return self.parse(records)
+        

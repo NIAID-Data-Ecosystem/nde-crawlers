@@ -86,6 +86,14 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  veupathdb-crawler:
+    build:
+      context: veupathdb
+      dockerfile: Dockerfile
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   zenodo-crawler:
     build:
       context: zenodo_oai-pmh
@@ -95,6 +103,7 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+      - cache:/cache
   mongodb:
     image: mongo:4.4
     ports:
