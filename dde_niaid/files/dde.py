@@ -107,13 +107,23 @@ def parse():
                 else:
                     hit['infectiousAgent'] = query_ols(ias)
 
+            if hcs := hit.pop('healthCondition', None):
+                hit['healthCondition'] = []
+                if type(hcs) is list:
+                    for hc in hcs:
+                        hit['healthCondition'].append(query_ols(hc))
+                else:
+                    hit['healthCondition'].append(query_ols(hcs))
+
+            # infectious disease is deprecated change to healthCondition
             if ids := hit.pop('infectiousDisease', None):
-                if type(ids) is list:
+                if not hit.get('healthCondition'):
                     hit['healthCondition'] = []
+                if type(ids) is list:
                     for i_d in ids:
                         hit['healthCondition'].append(query_ols(i_d))
                 else:
-                    hit['healthCondition'] = query_ols(ids)
+                    hit['healthCondition'].append(query_ols(ids))
 
             if species := hit.pop('species', None):
                 if type(species) is list:
@@ -122,7 +132,7 @@ def parse():
                         hit['species'].append(query_ols(a_species))
                 else:
                     hit['species'] = query_ols(species)
-
+            
             # remove unnecessary values
             hit.pop('_meta', None)
             hit.pop('_score', None)
