@@ -23,7 +23,8 @@ logger = logging.getLogger('nde-logger')
 def parse():
     # connect to the website
     logger.info("Parsing records")
-    sickle = Sickle('https://api.figshare.com/v2/oai', max_retries=10, default_retry_after=20)
+    sickle = Sickle('https://api.figshare.com/v2/oai',
+                    max_retries=10, default_retry_after=20)
     records = sickle.ListRecords(
         metadataPrefix='uketd_dc', ignore_deleted=True)
 
@@ -44,9 +45,9 @@ def parse():
             #         missing.append(key)
 
             count += 1
-            if count % 10 == 0:
-                # figshare requires us to parse 10 records a second for the oai-pmh
-                time.sleep(1)
+            # if count % 10 == 0:
+            # figshare requires us to parse 10 records a second for the oai-pmh
+            # time.sleep(1)
             if count % 1000 == 0:
                 logger.info("Parsed %s records", count)
                 # logging missing properties
@@ -146,6 +147,10 @@ def parse():
 
             yield output
 
+        except StopIteration:
+            logger.info("Finished Parsing. Total Records: %s", count)
+            # if StopIteration is raised, break from loop
+            break
         except StopIteration:
             logger.info("Finished Parsing. Total Records: %s", count)
             # if StopIteration is raised, break from loop

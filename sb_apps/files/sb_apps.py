@@ -55,7 +55,7 @@ def parse():
             "_id": "SB_Public_Apps_" + identifier.split('/')[2],
             "includedInDataCatalog": {"name": "PublicApps@SevenBridges"},
             "@type": "ComputationalTool",
-            "url": "https://igor.sbgenomics.com/public/apps/" + identifier
+            "url": "https://workspace.niaiddata.org/public/apps/admin/sbg-public-data/" + identifier
         }
         if app_class := data.get('class'):
             output['applicationCategory'] = app_class
