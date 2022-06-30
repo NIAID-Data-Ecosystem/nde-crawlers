@@ -61,7 +61,6 @@ RUN mv docker-entrypoint.sh / && \
     mv ${CRONTAB} /etc/crontab
 RUN mkdir -p /data/veupathdb_crawled && chown -R biothings:biothings /data
 ENV PYTHONPATH="."
-#ENV SCRAPY_SETTINGS_MODULE="settings"
 VOLUME [ "/data" ]
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/docker-entrypoint.sh"]

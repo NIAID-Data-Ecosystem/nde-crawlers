@@ -5,8 +5,6 @@ import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
-#debug_file='/Users/nacosta/Documents/NIAID-Projects/clinepidb/debugging/bad-dates.log'
-#logging.basicConfig(filename=debug_file, level=logging.DEBUG)
 
 
 def record_generator():
@@ -16,7 +14,7 @@ def record_generator():
     # send and retrieve request call
     request = requests.get(api_command)
     json_records = request.json()
-
+    logging.info("Staring loop...")
     # paginate through records
     for _record_dict in json_records['records']:
         # add custom values to the record
@@ -54,10 +52,10 @@ def record_generator():
                 date_modified = datetime.datetime.strptime(date_modified, '%Y-%m-%d').date().isoformat()
                 _record_dict['dateModified'] = date_modified
             except:
-                logging.debug("[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"%_date)
+                logging.debug("[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"%_record_dict['attributes']['version'])
 
         # tables.Contacts 
-        _record_dict['author']=[{'name': _dict.pop('contact_name'), "affiliation": _dict.pop("affiliation")} for _dict in _record_dict['tables']['Contacts']]
+        _record_dict['author'] = [{'name': _dict.pop('contact_name'), "affiliation": _dict.pop("affiliation")} for _dict in _record_dict['tables']['Contacts']]
 
         # tables.GenomeHistory
         release_dates = [hit['release_date'] for hit in _record_dict['tables']['GenomeHistory']]
@@ -68,8 +66,7 @@ def record_generator():
                 date_updated = sorted(iso_list)[0]
                 _record_dict['dateUpdated'] = date_updated
             except:
-                ...
-                #logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%dates)
+                logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%release_dates)
 
         
         # tables.Version 
@@ -80,8 +77,7 @@ def record_generator():
                 date_published = sorted(_iso_list)[0]
                 _record_dict['datePublished'] = date_published
             except:
-                logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%dates)
-                #print("----\n[INFO] BAD dates: ",dates)
+                logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s"%published_dates)
             
         
         if _record_dict['tables']['Version']:
