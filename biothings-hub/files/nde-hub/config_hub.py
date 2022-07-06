@@ -340,3 +340,6 @@ CONFIG_READONLY = True
 # don't check used versions, just propagate them when publishing
 # - invisible -#
 SKIP_CHECK_VERSIONS = True
+
+# Specify how many previous release indices we should keep
+RELEASE_KEEP_N_RECENT_INDICES = 1
