@@ -10,14 +10,18 @@ class NDEIndexer(Indexer):
                 "tokenize_on_chars": [
                     "whitespace",
                     "\n",
-                    ","
+                    ",",
+                    "/",
+                    "\\",
+                    "_",
+                    ";"
                 ]
             }
         }
-
+        
         self.es_index_settings["analysis"]["analyzer"]["nde_analyzer"] = {
             "type": "custom",
-            "tokenizer": "char_group_tokenizer",
+            "tokenizer": "char_tokenizer",
             "char_filter": [
                 "html_strip"
             ],

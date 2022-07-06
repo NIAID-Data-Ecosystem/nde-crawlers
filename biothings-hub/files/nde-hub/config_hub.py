@@ -85,10 +85,9 @@ INDEX_CONFIG = {
                     "max_retries": 10,
                 },
             },
-            "index": [{"index": "nde_all", "doc_type": "dataset"}]
         },
         "localhub": {
-            "host": "localhost:9200",
+            "host": os.environ.get('ES_HOST', 'localhost:9200'),
             "indexer": {
                 "args": {
                     "timeout": 300,
@@ -96,7 +95,6 @@ INDEX_CONFIG = {
                     "max_retries": 10,
                 },
             },
-            "index": [{"index": "nde_all", "doc_type": "dataset"}]
         },
     },
 }

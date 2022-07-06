@@ -171,24 +171,25 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
-            "abstract": {"type": "text", "copy_to": ["all"]},
+            "abstract": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "all": {
                 "type": "text",
+                "analyzer": "nde_analyzer",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
-            "applicationCategory": {"type": "text", "copy_to": ["all"]},
+            "applicationCategory": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "applicationSubCategory": {"type": "keyword", "copy_to": ["all"]},
-            "applicationSuite": {"type": "text", "copy_to": ["all"]},
+            "applicationSuite": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "armGroup": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "description": {"type": "text", "copy_to": ["all"]},
+                    "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "intervention": {
                         "properties": {
                             "@type": {"type": "keyword"},
                             "category": {"type": "keyword", "copy_to": ["all"]},
-                            "description": {"type": "text", "copy_to": ["all"]},
+                            "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                             "name": {"type": "keyword", "copy_to": ["all"]},
                         }
                     },
@@ -228,7 +229,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "issueNumber": {"type": "text"},
                     "journalName": {"type": "keyword", "copy_to": ["all"]},
                     "journalNameAbbrev": {"type": "keyword", "copy_to": ["all"]},
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "pagination": {"type": "text"},
                     "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "keyword"},
@@ -238,13 +239,13 @@ class NDESourceUploader(BaseSourceUploader):
             "citedBy": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "abstract": {"type": "text"},
+                    "abstract": {"type": "text", "analyzer": "nde_analyzer"},
                     "citation": {"type": "text"},
                     "datePublished": {"type": "text"},
-                    "description": {"type": "text"},
+                    "description": {"type": "text", "analyzer": "nde_analyzer"},
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text"},
+                    "name": {"type": "text", "analyzer": "nde_analyzer"},
                     "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
@@ -310,7 +311,7 @@ class NDESourceUploader(BaseSourceUploader):
             "dateCreated": {"type": "keyword"},
             "dateModified": {"type": "keyword"},
             "datePublished": {"type": "keyword"},
-            "description": {"type": "text", "copy_to": ["all"]},
+            "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "distribution": {
                 "properties": {
                     "@id": {"type": "keyword"},
@@ -319,7 +320,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "dateCreated": {"type": "keyword"},
                     "dateModified": {"type": "keyword"},
                     "datePublished": {"type": "keyword"},
-                    "description": {"type": "text"},
+                    "description": {"type": "text", "analyzer": "nde_analyzer"},
                     "encodingFormat": {
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
@@ -426,12 +427,12 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "instrument": {"type": "text", "copy_to": ["all"]},
-            "interventionText": {"type": "text", "copy_to": ["all"]},
+            "interventionText": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "interventions": {
                 "properties": {
                     "@type": {"type": "keyword"},
                     "category": {"type": "keyword", "copy_to": ["all"]},
-                    "description": {"type": "text", "copy_to": ["all"]},
+                    "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                 }
             },
@@ -441,10 +442,10 @@ class NDESourceUploader(BaseSourceUploader):
                     "abstract": {"type": "text"},
                     "citation": {"type": "text"},
                     "datePublished": {"type": "text"},
-                    "description": {"type": "text"},
+                    "description": {"type": "text", "analyzer": "nde_analyzer"},
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text"},
+                    "name": {"type": "text", "analyzer": "nde_analyzer"},
                     "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
@@ -487,7 +488,7 @@ class NDESourceUploader(BaseSourceUploader):
             "output": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
             },
@@ -498,13 +499,13 @@ class NDESourceUploader(BaseSourceUploader):
             "relatedTo": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "abstract": {"type": "text"},
+                    "abstract": {"type": "text", "analyzer": "nde_analyzer"},
                     "citation": {"type": "text"},
                     "datePublished": {"type": "text"},
                     "description": {"type": "text"},
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "pmid": {"type": "text"},
                     "url": {"type": "text"},
                 }
@@ -521,7 +522,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
-            "softwareRequirements": {"type": "text", "copy_to": ["all"]},
+            "softwareRequirements": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "softwareVersion": {"type": "text", "copy_to": ["all"]},
             "spatial": {
                 "properties": {
@@ -632,6 +633,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "name": {
                         "type": "text",
+                        "analyzer": "nde_analyzer",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
                     "url": {
