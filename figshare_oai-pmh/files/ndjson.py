@@ -6,7 +6,10 @@ import logging
 import orjson
 import figshare
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
 # set the release string to be ISO date format
