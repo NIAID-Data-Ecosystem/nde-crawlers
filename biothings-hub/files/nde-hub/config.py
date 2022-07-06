@@ -99,23 +99,6 @@ USE_RELOADER = True  # so no need to restart hub when a datasource has changed
 
 MAX_QUEUED_JOBS = 1
 
-INDEX_CONFIG = {
-    "indexer_select": {
-        # default
-    },
-    "env": {
-        "localhub": {
-            "host": os.environ.get('ES_HOST', 'localhost:9200'),
-            "indexer": {
-                "args": {
-                    "timeout": 300,
-                    "retry_on_timeout": True,
-                    "max_retries": 10,
-                },
-            },
-        },
-    },
-}
 
 # cleanup config namespace
 del os, urllib, setup_default_log, mongo_host, mongo_parsed

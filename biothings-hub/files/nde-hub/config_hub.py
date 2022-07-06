@@ -73,10 +73,21 @@ USE_RELOADER = True
 INDEX_CONFIG = {
     "indexer_select": {
         # default
+        None: "hub.dataindex.indexer.NDEIndexer",
     },
     "env": {
+        "prod": {
+            "host": "<PRODSERVER>:9200",
+            "indexer": {
+                "args": {
+                    "timeout": 300,
+                    "retry_on_timeout": True,
+                    "max_retries": 10,
+                },
+            },
+        },
         "localhub": {
-            "host": "localhost:9200",
+            "host": os.environ.get('ES_HOST', 'localhost:9200'),
             "indexer": {
                 "args": {
                     "timeout": 300,
