@@ -4,7 +4,7 @@ import traceback
 import platform
 import logging
 import orjson
-import figshare
+from figshare import Figshare
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
@@ -18,7 +18,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'figshare_crawled'
+    'dylanwelzel/data', 'figshare_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -38,7 +38,8 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    docs = figshare.parse()
+    parser = Figshare()
+    docs = parser.upload()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
