@@ -1,47 +1,166 @@
-from pprint import pprint
-import requests
+import numpy as np
+import time
 import json
-import xmltodict
+import ftplib
+import pandas as pd
+import tarfile
+from pysradb.sraweb import SRAweb
+from pprint import pprint
+from pysradb.sradb import SRAdb
+import sqlite3
 
 
-def get_figshare_data(url):
+# url = ' https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=nucleotide&term=$query&usehistory=y'
+# r = requests.get(url)
+# WITH LOCAL DB
+# conn = sqlite3.connect("SRAmetadb.sqlite")
+# cur = conn.cursor()
+# cur.execute('SELECT study_accession FROM sra')
+# a_list = cur.fetchall()
+# accession_list = []
+# for x in a_list:
+#     if not x[0].isdigit() and not x[0] == 'SAMEAPERIM' and not x[0] == '-':
+#         accession_list.append(x[0])
+#         # print(x[0])
+# db = SRAdb("SRAmetadb.sqlite")
+# # test = db.sra_metadata(accession_list[0:100], detailed=True)
+# count = 0
+# for x in accession_list[0:10000]:
+#     try:
+#         count += 1
+#         db.sra_metadata(x, detailed=True)
+#     except ValueError:
+#         print(x)
 
-    r = requests.get(url)
-    data = xmltodict.parse(r.text)
-    json_data = json.dumps(data)
-    pprint(json_data)
+# WITH WEB
+# db = SRAweb()
+# df = db.sra_metadata(srp="DRR000187", detailed=True,
+#                      expand_sample_attributes=True, sample_attribute=True)
+# df = db.search_sra(search_str='"test"')
+# print(df.to_json())
+# print(df)
+# test = db.sra_metadata(accession_list[0:100], detailed=True)
 
 
-get_figshare_data(
-    'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=sra&id=6678417')
-# use LWP::Simple;
-# $query = 'chimpanzee[orgn]+AND+biomol+mrna[prop]';
+# ftp = ftplib.FTP(
+#     'ftp.ncbi.nlm.nih.gov')
+# ftp.login()
+# ftp.cwd('/sra/reports/Metadata')
+# entries = list(ftp.mlsd())
+# metadata = [entry for entry in entries if 'SRA_Accessions.tab' in entry[0]]
+# metadata.sort(key=lambda entry: entry[1]['modify'], reverse=True)
+# filename = metadata[0][0]
+# with open(filename, "wb") as file:
+#     # use FTP's RETR command to download the file
+#     ftp.retrbinary(f"RETR {filename}", file.write)
+# ftp.quit()
 
-# #assemble the esearch URL
-# $base = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/';
-# $url = $base . "esearch.fcgi?db=nucleotide&term=$query&usehistory=y";
+# file = tarfile.open(filename)
+# file.extract('sample.txt', './Destination_FolderName')
+# file.close()
+# DRR000533
+# DRR000588
 
-# #post the esearch URL
-# $output = get($url);
+db = SRAweb()
+# df = db.sra_metadata('DRR000588', detailed=True)
+# print(df.to_dict())
+print('Reading SRA_Accessions')
+df = pd.read_csv("SRA_Accessions.tab", sep="\t",
+                 usecols=['Study', 'Status'])
+only_live = df[df['Status'] == 'live']
+filtered = only_live[only_live['Study'].str.contains(
+    'DRP|SRP|ERP', regex=True)]
+accession_list = list(set(list(filtered["Study"])))
+print(len(accession_list))
+print('Getting Metadata')
+count = 100
+dict_list = []
+# Multiple at a time
+# df = db.sra_metadata(accession_list[0:100], detailed=True)
+# for i in range(100, len(accession_list), 100):
+#     count += 100
+#     try:
+#         start = time.time()
+#         to_merge = db.sra_metadata(accession_list[i:i+100], detailed=True)
+#         df = pd.concat((df, to_merge), axis=1)
+#         print(f'Time: {time.time() - start}')
+#         print(count)
+#         if count % 100 == 0:
+#             break
+#     except KeyError:
+#         print(accession_list[i:i+100])
+#         continue
 
-# #parse WebEnv, QueryKey and Count (# records retrieved)
-# $web = $1 if ($output =~ /<WebEnv>(\S+)<\/WebEnv>/);
-# $key = $1 if ($output =~ /<QueryKey>(\d+)<\/QueryKey>/);
-# $count = $1 if ($output =~ /<Count>(\d+)<\/Count>/);
+# One at a time
+for x in accession_list:
+    try:
+        start = time.time()
+        df = db.sra_metadata(x, detailed=True)
+        dict_list.append(df.to_dict())
+        print(f'Time: {time.time() - start}')
+        print(count)
+        count += 1
+        print(df.to_dict().keys())
+        break
+    except KeyError:
+        print(x)
+        continue
+with open('output3.txt', 'w') as f:
+    for record in dict_list:
+        f.write(json.dumps(record) + '\n')
 
-# #open output file for writing
-# open(OUT, ">chimp.fna") || die "Can't open file!\n";
 
-# #retrieve data in batches of 500
-# $retmax = 500;
-# for ($retstart = 0; $retstart < $count; $retstart += $retmax) {
-#         $efetch_url = $base ."efetch.fcgi?db=nucleotide&WebEnv=$web";
-#         $efetch_url .= "&query_key=$key&retstart=$retstart";
-#         $efetch_url .= "&retmax=$retmax&rettype=fasta&retmode=text";
-#         $efetch_out = get($efetch_url);
-#         print OUT "$efetch_out";
-# }
-# close OUT;
+# df = df.fillna(np.nan).replace([np.nan], [None])
+# with open('output.txt', 'w') as f:
+#     for row in df.to_dict('records'):
+#         f.write(json.dumps(row) + '\n')
+# df = df.fillna(np.nan).replace([np.nan], [None])
+# df_dict = df.to_dict('records')
+# with open('output2.txt', 'w') as f:
+#     f.write(json.dumps(df_dict) + '\n')
+# print(dict_list)
+# One at a time
+# start = time.time()
+# df = db.sra_metadata(accession_list[0:100], detailed=True)
+# df2 = db.sra_metadata(accession_list[100:200], detailed=True)
+# merged = pd.concat([df, df2])
+# print(f'Time: {time.time() - start}')
+# # dict_list.append(df.to_json(orient='records', lines=True))
+# d = merged.to_dict(orient='records')
+# print(d)
+# print(d[0])
+# with open('sra_metadata.json', 'w') as f:
+#     json.dump(dict_list, f)
+# for x in accession_list:
+#     try:
+#         count += 1
+#         print(count)
+#         if count % 10 == 0:
+#             break
+#     except ValueError:
+#         print(x)
+#         continue
+# print(dict_list)
+# try:
+#     count += 1
+#     db.sra_metadata(x, detailed=True)
+# except ValueError:
+#     print(x)
+print('finished')
+# for accession_id in accession_list:
+#     count += 1
+#     df = db.sra_metadata(srp=accession_id, detailed=True,
+#                          expand_sample_attributes=True, sample_attribute=True)
+#     if count % 10 == 0:
+#         print(count)
+#     # print(df.to_json())
+# print("Parsing Metadata")
+# df = db.sra_metadata(srp=accession_list, detailed=True,
+#                      expand_sample_attributes=True, sample_attribute=True)
 
-url = ' https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=nucleotide&term=$query&usehistory=y'
-r = requests.get(url)
+# df = db.sra_metadata(srp="SRX15798918", detailed=True,
+#                      expand_sample_attributes=True, sample_attribute=True)
+# df = db.sra_metadata(accession_list[0:100], detailed=True)
+# print(df.to_json())
+# print(df.to_json())
+# test = db.sra_metadata(accession_list[0:100], detailed=True)
