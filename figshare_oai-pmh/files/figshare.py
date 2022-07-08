@@ -64,10 +64,6 @@ class Figshare(NDEDatabase):
         #     identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
         count = 0
         for record in records:
-            if count % 10 == 0:
-                print('done')
-                break
-
             data = json.loads(record[1])
             metadata = data['metadata']
 
@@ -196,10 +192,6 @@ class Figshare(NDEDatabase):
         # Very similar to load_cache()
         count = 0
         while True:
-            if count % 10 == 0:
-                print('done')
-                break
-
             try:
                 # get the next item
                 record = records.next()
