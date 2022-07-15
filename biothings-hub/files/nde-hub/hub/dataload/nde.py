@@ -241,7 +241,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "abstract": {"type": "text", "analyzer": "nde_analyzer"},
                     "citation": {"type": "text"},
-                    "datePublished": {"type": "text"},
+                    "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
@@ -308,18 +308,18 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "date": {"type": "date"},
-            "dateCreated": {"type": "keyword"},
-            "dateModified": {"type": "keyword"},
-            "datePublished": {"type": "keyword"},
+            "dateCreated": {"type": "date"},
+            "dateModified": {"type": "date"},
+            "datePublished": {"type": "date"},
             "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "distribution": {
                 "properties": {
                     "@id": {"type": "keyword"},
                     "@type": {"type": "keyword"},
                     "contentUrl": {"type": "text"},
-                    "dateCreated": {"type": "keyword"},
-                    "dateModified": {"type": "keyword"},
-                    "datePublished": {"type": "keyword"},
+                    "dateCreated": {"type": "date"},
+                    "dateModified": {"type": "date"},
+                    "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
                     "encodingFormat": {
                         "type": "text",
@@ -400,7 +400,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "text"},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
-                    "versionDate": {"type": "keyword"},
+                    "versionDate": {"type": "date"},
                 }
             },
             "inComplianceWith": {"type": "text"},
@@ -441,7 +441,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "abstract": {"type": "text"},
                     "citation": {"type": "text"},
-                    "datePublished": {"type": "text"},
+                    "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
@@ -501,7 +501,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "abstract": {"type": "text", "analyzer": "nde_analyzer"},
                     "citation": {"type": "text"},
-                    "datePublished": {"type": "text"},
+                    "datePublished": {"type": "date"},
                     "description": {"type": "text"},
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
@@ -524,7 +524,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "softwareRequirements": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "softwareVersion": {"type": "text", "copy_to": ["all"]},
-            "spatial": {
+            "spatialCoverage": {
                 "properties": {
                     "@type": {
                         "type": "text",
@@ -543,6 +543,10 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "name": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "identifier": {
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
@@ -578,7 +582,7 @@ class NDESourceUploader(BaseSourceUploader):
             "studyEvent": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "studyEventDate": {"type": "text"},
+                    "studyEventDate": {"type": "date"},
                     "studyEventDateType": {"type": "text"},
                     "studyEventType": {"type": "text"},
                 }
@@ -599,11 +603,24 @@ class NDESourceUploader(BaseSourceUploader):
                     "enrollmentCount": {"type": "integer"},
                     "enrollmentType": {"type": "text"},
                     "status": {"type": "keyword", "copy_to": ["all"]},
-                    "statusDate": {"type": "text"},
+                    "statusDate": {"type": "date"},
                     "statusExpanded": {"type": "boolean"},
                     "whyStopped": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "temporalCoverage": {
+                "properties": {
+                    "temporalInterval": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "duration": {"type": "text", "copy_to": ["all"]},
+                            "endDate": {"type": "date"},
+                            "name": {"type": "text"},
+                            "startDate": {"type": "date"},
+                        }
+                    }
+                }
+            }
             "thumbnailUrl": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
