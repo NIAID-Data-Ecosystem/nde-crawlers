@@ -7,7 +7,7 @@ import orjson
 import figshare
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
+    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
     level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
@@ -53,6 +53,8 @@ except Exception as e:
     os.unlink(rl_tmp_filename)
 
     logger.error(traceback.format_exc())
+finally:
+    fd.close()
 
 if is_parsed:
     try:
