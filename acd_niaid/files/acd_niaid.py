@@ -16,7 +16,7 @@ def parse():
     url = "https://accessclinicaldata.niaid.nih.gov/guppy/graphql"
     query = """query ($filter: JSON) {
         clinical_trials (filter: $filter, first: 10000, accessibility: accessible) {
-            title,cmc_unique_id,brief_summary,data_availability_date,most_recent_update,data_available,creator,nct_number,condition,clinical_trial_website,publications,data_available_for_request
+            title,cmc_unique_id,brief_summary,data_availability_date,most_recent_update,data_available,creator,nct_number,condition,clinical_trial_website,publications,data_available_for_request,description
         }
     }"""
 
@@ -33,7 +33,8 @@ def parse():
     for trial in trials:
         trial['name'] = trial.pop('title')
         trial['identifier'] = trial.pop('cmc_unique_id')
-        trial['description'] = trial.pop('brief_summary')
+        trial['description'] = trial.pop('description')
+        trial['abstract'] = trial.pop('brief_summary')
 
         # convert date to iso format
         trial['datePublished'] = trial.pop('data_availability_date')
