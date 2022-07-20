@@ -59,7 +59,7 @@ def parse():
                                   'name': file['file_name'], 'url': file['doc_url']})
         if len(has_part_list):
             trial['hasPart'] = has_part_list
-        trial['license'] = {
+        trial['usageInfo'] = {
             'url': 'https://accessclinicaldata.niaid.nih.gov/dashboard/Public/files/NIAIDDUA2021Accessclinicaldata@NIAID.pdf'}
 
         # convert date to iso format
