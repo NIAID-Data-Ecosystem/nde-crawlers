@@ -56,7 +56,7 @@ def parse():
         has_part_list = []
         for file in test_json['data']['oafile']:
             has_part_list.append({'@type': 'CreativeWork',
-                                  'name': file['file_name'], 'url': file['doc_url']})
+                                  'name': file['file_name'], 'url': file['doc_url'], 'encodingFormat': file['data_format']})
         if len(has_part_list):
             trial['hasPart'] = has_part_list
         trial['usageInfo'] = {
