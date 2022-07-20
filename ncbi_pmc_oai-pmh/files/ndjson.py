@@ -1,15 +1,11 @@
 import datetime
 import os
-import traceback
 import platform
 import logging
 import orjson
 import ncbi_pmc
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
 # set the release string to be ISO date format
@@ -18,7 +14,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'ncbi_pmc_crawled'
+    'dylanwelzel/data', 'ncbi_pmc_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -51,8 +47,10 @@ except Exception as e:
     )
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
+    logger.error(e)
+finally:
+    fd.close()
 
-    logger.error(traceback.format_exc())
 
 if is_parsed:
     try:
