@@ -1,45 +1,62 @@
 from datetime import datetime
-import json
 import unicodedata
-import xmltodict
 from sickle import Sickle
 from lxml import etree
-from pprint import pprint
+from sql_database import NDEDatabase
 import logging
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
 
-def parse():
-    logger.info("Parsing records")
+class NCBI_PMC(NDEDatabase):
+    # override variables
+    SQL_DB = "ncbi_pmc.db"
+    EXPIRE = datetime.timedelta(days=90)
+
     sickle = Sickle('https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi',
                     max_retries=10, default_retry_after=20)
 
-    records = sickle.ListRecords(
-        metadataPrefix='pmc', ignore_deleted=True)
+    def load_cache(self):
+        """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
+        Returns:
+            A tuple (_id, data formatted as a json string)
+        """
 
-    # record = sickle.GetRecord(
-    #     identifier='oai:pubmedcentral.nih.gov:8524328', metadataPrefix='pmc')
-    count = 0
-    while True:
-        try:
-            count += 1
-            record = records.next()
-            xml_string = etree.tostring(record.xml)
-            root = etree.fromstring(xml_string)
-            metadata = record.metadata
-            header = record.header
+        records = self.sickle.ListRecords(
+            metadataPrefix='pmc', ignore_deleted=True)
+        count = 0
+        while True:
+            try:
+                # get the next item
+                record = records.next()
+                count += 1
+                if count % 100 == 0:
+                    logger.info("Loading cache. Loaded %s records", count)
 
-            logger.info(count)
-            if count % 10000 == 0:
-                raise StopIteration
+                # in each doc we want record.identifier and record stored
+                doc = {'header': dict(record.header), 'metadata': record.metadata,
+                       'xml': etree.tostring(record.xml, encoding='unicode')}
+
+                yield (record.header.identifier, json.dumps(doc))
+
+            except StopIteration:
+                logger.info("Finished Loading. Total Records: %s", count)
+                # if StopIteration is raised, break from loop
+                break
+
+    def parse(self, records):
+        for record in records:
+            data = json.loads(record[1])
+            root = etree.fromstring(data['xml'])
+            metadata = data['metadata']
 
             output = {"includedInDataCatalog":
                       {"name": "NCBI PMC",
-                       'versionDate': datetime.today().isoformat(),
+                       'versionDate': datetime.today().strftime('%Y-%m-%d'),
                        'url': "https://www.ncbi.nlm.nih.gov/pmc/"},
-                      'dateModified': datetime.strptime(record.header.datestamp, '%Y-%m-%d').isoformat(),
+                      'dateModified': datetime.strptime(record.header.datestamp, '%Y-%m-%d').strftime('%Y-%m-%d'),
                       "@type": "Dataset"
                       }
 
@@ -57,21 +74,29 @@ def parse():
                 './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}supplementary-material')
             distribuiton_list = []
             for supplemental_data in supplemental_data_arr:
+                distribution_obj = {}
                 caption = supplemental_data.find(
                     '{https://jats.nlm.nih.gov/ns/archiving/1.3/}caption')
                 if caption is not None:
                     file_name = caption.find(
-                        '{https://jats.nlm.nih.gov/ns/archiving/1.3/}p').text
+                        '{https://jats.nlm.nih.gov/ns/archiving/1.3/}title')
                     if file_name is not None:
-                        file_name = unicodedata.normalize('NFKD', file_name)
+                        if file_name.text is not None:
+                            name = unicodedata.normalize(
+                                'NFKD', file_name.text)
+                            distribution_obj['name'] = name
+                    description = caption.find(
+                        '{https://jats.nlm.nih.gov/ns/archiving/1.3/}p')
+                    if description is not None:
+                        distribution_obj['description'] = description.text
                 media = supplemental_data.find(
                     '{https://jats.nlm.nih.gov/ns/archiving/1.3/}media')
                 if media is not None:
                     file_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{output['identifier']}/bin/"+media.get(
                         '{http://www.w3.org/1999/xlink}href')
-                if 'file_name' in locals() and 'file_url' in locals():
-                    distribuiton_list.append(
-                        {'fileName': file_name, 'url': file_url})
+                    distribution_obj['url'] = file_url
+                if bool(distribution_obj):
+                    distribuiton_list.append(distribution_obj)
             if len(distribuiton_list):
                 output['distribution'] = distribuiton_list
 
@@ -113,9 +138,9 @@ def parse():
                     if publisher.tag == '{https://jats.nlm.nih.gov/ns/archiving/1.3/}publisher-name':
                         output['sdPublisher'] = {'name': publisher.text}
 
-            if title := metadata.get('article-title'):
-                if title[0] is not None:
-                    output['name'] = 'Supplementary materials in ' + title[0]
+            # if title := metadata.get('article-title'):
+            #     if title[0] is not None:
+            #         output['name'] = 'Supplementary materials in ' + title[0]
 
             article_meta_sec = root.find(
                 ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-meta")
@@ -125,7 +150,9 @@ def parse():
                     if article_meta.tag == '{https://jats.nlm.nih.gov/ns/archiving/1.3/}title-group':
                         for child in article_meta.getchildren():
                             if child.tag == '{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-title':
-                                output['name'] = child.text
+                                if child.text is not None:
+                                    output['name'] = 'Supplementary materials in ' + \
+                                        '"'+child.text+'"'
 
             pmid = root.find(
                 ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-id[@pub-id-type='pmid']")
@@ -183,12 +210,12 @@ def parse():
                 abstract_text = abstract_sec.findall(
                     './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}p')
                 for title, text in zip(abstract_title, abstract_text):
-                    if title is not None:
+                    if title.text is not None:
                         if description_string == '':
                             description_string = title.text
                         else:
                             description_string += '\n' + title.text
-                    if text is not None:
+                    if text.text is not None:
                         if description_string == '':
                             description_string = text.text
                         else:
@@ -197,10 +224,43 @@ def parse():
                     output['description'] = description_string
 
             if 'distribution' in output:
-                logger.info('distribution')
                 yield output
 
-        except StopIteration:
-            logger.info("Finished Parsing. Total Records: %s", count)
-            # if StopIteration is raised, break from loop
-            break
+    def update_cache(self):
+        """If cache is not expired get the new records to add to the cache since last_updated"""
+
+        last_updated = self.retreive_last_updated()
+
+        # get all the records since last_updated to add into current cache
+        logger.info("Updating cache from %s", last_updated)
+        records = self.sickle.ListRecords(**{
+            'metadataPrefix': 'pmc',
+            'ignore_deleted': True,
+            'from': last_updated
+        }
+        )
+
+        # Very similar to load_cache()
+        count = 0
+        while True:
+            try:
+                # get the next item
+                record = records.next()
+                count += 1
+                if count % 100 == 0:
+                    logger.info(
+                        "Updating cache. %s new updated records", count)
+
+                # in each doc we want record.identifier and record stored
+                doc = {'header': dict(record.header), 'metadata': record.metadata,
+                       'xml': etree.tostring(record.xml, encoding='unicode')}
+
+                yield (record.header.identifier, json.dumps(doc))
+
+            except StopIteration:
+                logger.info(
+                    "Finished updating cache. Total new records: %s", count)
+                # if StopIteration is raised, break from loop
+                break
+
+        self.insert_last_updated()

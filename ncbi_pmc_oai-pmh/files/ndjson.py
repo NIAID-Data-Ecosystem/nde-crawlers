@@ -1,10 +1,10 @@
 import datetime
 import os
+import traceback
 import platform
 import logging
 import orjson
-import ncbi_pmc
-
+from ncbi_pmc import NCBI_PMC
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
@@ -14,7 +14,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    'dylanwelzel/data', 'ncbi_pmc_crawled'
+    '/data', 'ncbi_pmc_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -34,7 +34,8 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    docs = ncbi_pmc.parse()
+    parser = NCBI_PMC()
+    docs = parser.upload()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
@@ -47,7 +48,8 @@ except Exception as e:
     )
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-    logger.error(e)
+
+    logger.error(traceback.format_exc())
 finally:
     fd.close()
 
