@@ -58,6 +58,15 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  ncbi-pmc-crawler:
+    build:
+      context: ncbi_pmc_oai-pmh
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   omicsdi-crawler:
     build:
       context: omicsdi_crawler
