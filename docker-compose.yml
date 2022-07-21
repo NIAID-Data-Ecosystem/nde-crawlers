@@ -99,10 +99,18 @@ services:
     build:
       context: veupathdb
       dockerfile: Dockerfile
+      # uncomment to run development crontab
       # args:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  vivli-crawler:
+    build:
+      context: vivli
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
   zenodo-crawler:
     build:
       context: zenodo_oai-pmh
