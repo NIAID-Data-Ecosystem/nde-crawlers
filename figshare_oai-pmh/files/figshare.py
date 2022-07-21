@@ -4,8 +4,10 @@ import logging
 from datetime import datetime
 from sickle import Sickle
 
-
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
 # during testing used this list to check if any properties were NOT in the list, if not then print the property

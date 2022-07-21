@@ -1,7 +1,7 @@
 import logging
 import requests 
 import datetime
-
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
@@ -14,7 +14,7 @@ def record_generator():
     # send and retrieve request call
     request = requests.get(api_command)
     json_records = request.json()
-    logging.info("Staring loop...")
+    logging.info("[INFO] processing %s records...."%len(json_records['records']))
     # paginate through records
     for _record_dict in json_records['records']:
         # add custom values to the record
@@ -36,6 +36,7 @@ def record_generator():
                  _record_dict["pmids"] = pmids_list[0]
             else:
                 _record_dict['pmids'] = ','.join(pmids_list)
+                
         # attributes  
         _record_dict['description'] = _record_dict['attributes'].pop('summary')
         _record_dict['measurementTechnique'] = {'name': _record_dict['attributes'].pop('type')}
@@ -44,7 +45,6 @@ def record_generator():
 
         if _record_dict['attributes']['release_policy']:
             _record_dict['conditionOfAccess'] = _record_dict['attributes'].pop('release_policy')
-
         
         if _record_dict['attributes']['version']:
             try:
@@ -54,9 +54,8 @@ def record_generator():
             except:
                 logging.debug("[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"%_record_dict['attributes']['version'])
 
-        # tables.Contacts 
-        _record_dict['author'] = [{'name': _dict.pop('contact_name'), "affiliation": _dict.pop("affiliation")} for _dict in _record_dict['tables']['Contacts']]
-
+        # tablexs.Contacts 
+        _record_dict['author'] = [{'name': _dict.pop('contact_name'), "affiliation": {'name': str(_dict.pop("affiliation"))}} for _dict in _record_dict['tables']['Contacts']]
         # tables.GenomeHistory
         release_dates = [hit['release_date'] for hit in _record_dict['tables']['GenomeHistory']]
         # if multiple dates passed, keep the most recent date

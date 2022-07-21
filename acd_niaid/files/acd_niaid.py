@@ -36,6 +36,32 @@ def parse():
         trial['description'] = trial.pop('description')
         trial['abstract'] = trial.pop('brief_summary')
 
+        trial_query = "query ($filter: JSON) {oafile (filter: $filter, first: 10000, accessibility: accessible) {file_name,file_size,data_format,data_type,cmc_unique_id,doc_url}}"
+        trial_variables = """
+        {{
+        "filter": {{
+            "in": {{
+                "cmc_unique_id": [
+                    "{id}"
+                ]
+            }}
+        }}
+    }}
+        """
+        settings = {'id': trial['identifier']}
+
+        test = requests.post(
+            url, json={'query': trial_query, 'variables': trial_variables.format(**settings)})
+        test_json = json.loads(test.text)
+        has_part_list = []
+        for file in test_json['data']['oafile']:
+            has_part_list.append({'@type': 'CreativeWork',
+                                  'name': file['file_name'], 'url': file['doc_url'], 'encodingFormat': file['data_format']})
+        if len(has_part_list):
+            trial['hasPart'] = has_part_list
+        trial['usageInfo'] = {
+            'url': 'https://accessclinicaldata.niaid.nih.gov/dashboard/Public/files/NIAIDDUA2021Accessclinicaldata@NIAID.pdf'}
+
         # convert date to iso format
         trial['datePublished'] = trial.pop('data_availability_date')
         if trial['datePublished'] == "Coming Soon":
@@ -47,8 +73,8 @@ def parse():
         # convert date to iso format
         trial['dateModified'] = trial.pop('most_recent_update')
         if trial['dateModified'] is not None:
-           iso_date = datetime.strptime(trial['dateModified'], '%B %Y')
-           trial['dateModified'] = iso_date.strftime('%Y-%m-%d')
+            iso_date = datetime.strptime(trial['dateModified'], '%B %Y')
+            trial['dateModified'] = iso_date.strftime('%Y-%m-%d')
 
         trial['additionalType'] = trial.pop('data_available')
         trial['funding'] = [{'funder': {'name': trial.pop('creator')}}]
@@ -64,13 +90,14 @@ def parse():
             # To convert doi id to pubmed id, use requests library to search doi id on pubmed search engine, catch redirect and take the pubmed id from url
             elif 'doi' in citation_URL:
                 doi_id = citation_URL.split('/')[-1]
-                r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
+                r = requests.get(
+                    "https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
                 if 'pubmed' in r.url:
                     trial['pmids'] = r.url.split('/')[-2]
                 else:
                     trial['citation'] = None
             else:
-                trial['citation'] = [{'url':citation_URL}]
+                trial['citation'] = [{'url': citation_URL}]
         else:
             trial['citation'] = None
 
@@ -108,7 +135,8 @@ def parse():
         count += 1
 
         if len(missing_properties.keys()) > 0:
-            logger.warning("Missing type transformation: {}".format(str(missing_properties.keys())))
+            logger.warning("Missing type transformation: {}".format(
+                str(missing_properties.keys())))
         logger.info("Parsed %s records", count)
 
     logger.info("Finished Parsing. Total Records: %s", count)
