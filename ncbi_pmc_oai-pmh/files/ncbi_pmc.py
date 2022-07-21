@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 import unicodedata
 from sickle import Sickle
 from lxml import etree
@@ -34,6 +34,8 @@ class NCBI_PMC(NDEDatabase):
                 count += 1
                 if count % 100 == 0:
                     logger.info("Loading cache. Loaded %s records", count)
+                if count % 1000 == 0:
+                    raise StopIteration
 
                 # in each doc we want record.identifier and record stored
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
@@ -51,12 +53,13 @@ class NCBI_PMC(NDEDatabase):
             data = json.loads(record[1])
             root = etree.fromstring(data['xml'])
             metadata = data['metadata']
+            header = data['header']
 
             output = {"includedInDataCatalog":
                       {"name": "NCBI PMC",
-                       'versionDate': datetime.today().strftime('%Y-%m-%d'),
+                       'versionDate': datetime.date.today().strftime('%Y-%m-%d'),
                        'url': "https://www.ncbi.nlm.nih.gov/pmc/"},
-                      'dateModified': datetime.strptime(record.header.datestamp, '%Y-%m-%d').strftime('%Y-%m-%d'),
+                      'dateModified': datetime.datetime.strptime(header['datestamp'], '%Y-%m-%d').strftime('%Y-%m-%d'),
                       "@type": "Dataset"
                       }
 
