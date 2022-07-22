@@ -67,6 +67,7 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+      - cache:/cache
   omicsdi-crawler:
     build:
       context: omicsdi_crawler

@@ -34,8 +34,6 @@ class NCBI_PMC(NDEDatabase):
                 count += 1
                 if count % 100 == 0:
                     logger.info("Loading cache. Loaded %s records", count)
-                if count % 1000 == 0:
-                    raise StopIteration
 
                 # in each doc we want record.identifier and record stored
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
@@ -63,14 +61,25 @@ class NCBI_PMC(NDEDatabase):
                       "@type": "Dataset"
                       }
 
+            citation_dict = {}
             if identifiers := metadata.get('article-id'):
                 for identifier in identifiers:
                     if identifier.startswith('PMC'):
                         output['identifier'] = identifier
                         output['url'] = f'https://www.ncbi.nlm.nih.gov/pmc/articles/{identifier}'
                         output['_id'] = 'NCBI_PMC_' + identifier
-                    # if identifier.startswith('10.'):
-                    #     output['doi'] = identifier
+                    if identifier.startswith('10.'):
+                        citation_dict['doi'] = identifier
+            notes = root.find(
+                './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}notes')
+            if notes is not None:
+                volume = notes.find(
+                    './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}volume')
+                if volume is not None:
+                    citation_dict['volume'] = volume.text
+
+            # if bool(citation_dict):
+            #     output['citation'] = [citation_dict]
 
             # Supplemental Data
             supplemental_data_arr = root.findall(
@@ -103,8 +112,33 @@ class NCBI_PMC(NDEDatabase):
             if len(distribuiton_list):
                 output['distribution'] = distribuiton_list
 
-            # if journal_title := metadata.get('journal-title'):
-            #     output['journalName'] = journal_title[0]
+            if journal_title := metadata.get('journal-title'):
+                citation_dict['journalName'] = journal_title[0]
+
+            pub_date = root.find(
+                './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}pub-date[@pub-type="epub"]')
+            if pub_date is not None:
+                date_string = ''
+                year = pub_date.find(
+                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}year')
+                month = pub_date.find(
+                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}month')
+                day = pub_date.find(
+                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}day')
+                if year is not None:
+                    date_string = year.text
+                if month is not None:
+                    if len(month.text) == 1:
+                        date_string += f'-0{month.text}'
+                    else:
+                        date_string += '-' + month.text
+                if day is not None:
+                    if len(day.text) == 1:
+                        date_string += f'-0{day.text}'
+                    else:
+                        date_string += '-' + day.text
+                if date_string != '':
+                    citation_dict['datePublished'] = date_string
 
             # if issn := metadata.get('issn'):
             #     output['issueNumber'] = issn[0]
@@ -148,6 +182,12 @@ class NCBI_PMC(NDEDatabase):
             article_meta_sec = root.find(
                 ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-meta")
             if article_meta_sec is not None:
+                if 'volume' not in citation_dict:
+                    volume = article_meta_sec.find(
+                        './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}volume')
+                    if volume is not None:
+                        citation_dict['volume'] = volume.text
+
                 article_meta_list = article_meta_sec.getchildren()
                 for article_meta in article_meta_list:
                     if article_meta.tag == '{https://jats.nlm.nih.gov/ns/archiving/1.3/}title-group':
@@ -156,17 +196,24 @@ class NCBI_PMC(NDEDatabase):
                                 if child.text is not None:
                                     output['name'] = 'Supplementary materials in ' + \
                                         '"'+child.text+'"'
+                                    citation_dict['name'] = child.text
 
             pmid = root.find(
                 ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-id[@pub-id-type='pmid']")
             if pmid is not None:
-                output['pmids'] = pmid.text
+                citation_dict['pmid'] = pmid.text
+                citation_dict['identifier'] = 'PMID:' + pmid.text
+                citation_dict['url'] = f'https://pubmed.ncbi.nlm.nih.gov/{pmid.text}'
 
             contrib_list = root.findall(
                 './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}contrib')
             author_list = []
             for contrib in contrib_list:
                 author_dict = {}
+                author_id = contrib.find(
+                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}contrib-id')
+                if author_id is not None:
+                    author_dict['identifier'] = author_id.text
                 surname = contrib.find(
                     './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}surname')
                 if surname is not None:
@@ -176,9 +223,11 @@ class NCBI_PMC(NDEDatabase):
                 if given_name is not None:
                     author_dict['givenName'] = given_name.text
                 if bool(author_dict):
+                    author_dict['@type'] = 'Person'
                     author_list.append(author_dict)
             if len(author_list):
                 output['author'] = author_list
+                citation_dict['author'] = author_list
 
             # Data Availability
             # data_availability_sec = root.find(
@@ -225,6 +274,8 @@ class NCBI_PMC(NDEDatabase):
                             description_string += '\n' + text.text
                 if description_string != '':
                     output['description'] = description_string
+            if bool(citation_dict):
+                output['citation'] = citation_dict
 
             if 'distribution' in output:
                 yield output
