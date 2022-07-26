@@ -6,8 +6,10 @@ from sickle import Sickle
 from sql_database import NDEDatabase
 from xml.etree import ElementTree
 
-
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
 # during testing used this list to check if any properties were NOT in the list, if not then print the property
