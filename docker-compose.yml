@@ -29,6 +29,7 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+      - cache:/cache
   immport-crawler:
     build:
       context: immport_crawler
