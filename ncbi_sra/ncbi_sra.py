@@ -1,3 +1,4 @@
+import requests
 import numpy as np
 import time
 import json
@@ -33,9 +34,10 @@ import sqlite3
 #         print(x)
 
 # WITH WEB
-# db = SRAweb()
-# df = db.sra_metadata(srp="DRR000187", detailed=True,
-#                      expand_sample_attributes=True, sample_attribute=True)
+db = SRAweb()
+df = db.sra_metadata(srp="DRP000003", detailed=True)
+df.to_csv('out.csv', sep='\t', encoding='utf-8')
+
 # df = db.search_sra(search_str='"test"')
 # print(df.to_json())
 # print(df)
@@ -65,16 +67,16 @@ db = SRAweb()
 # df = db.sra_metadata('DRR000588', detailed=True)
 # print(df.to_dict())
 print('Reading SRA_Accessions')
-df = pd.read_csv("SRA_Accessions.tab", sep="\t",
-                 usecols=['Study', 'Status'])
+df = pd.read_csv(r"SRA_Accessions.tab", sep="\t",
+                 usecols=['Accession', 'Type', 'Status', 'Updated', 'Published', 'Experiment', 'Sample', 'BioProject', 'ReplacedBy'])
 only_live = df[df['Status'] == 'live']
-filtered = only_live[only_live['Study'].str.contains(
-    'DRP|SRP|ERP', regex=True)]
-accession_list = list(set(list(filtered["Study"])))
+filtered = only_live[only_live['Type'] == 'STUDY']
+accession_list = filtered[['Accession', 'Type', 'Status', 'Updated', 'Published',
+                           'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
 print(len(accession_list))
 print('Getting Metadata')
 count = 100
-dict_list = []
+
 # Multiple at a time
 # df = db.sra_metadata(accession_list[0:100], detailed=True)
 # for i in range(100, len(accession_list), 100):
@@ -92,22 +94,36 @@ dict_list = []
 #         continue
 
 # One at a time
+dict_list = []
 for x in accession_list:
     try:
         start = time.time()
-        df = db.sra_metadata(x, detailed=True)
-        dict_list.append(df.to_dict())
+        meta_df = db.sra_metadata(x[0], detailed=True)
+        meta_dict = meta_df.to_dict()
+        meta_dict['Accession'] = x[0]
+        drs_url = f'https://locate.be-md.ncbi.nlm.nih.gov/idx/v1/{x[0]}?submitted=true&etl=false'
+        drs_id = requests.get(drs_url)
+        meta_dict['Type'] = x[1]
+        meta_dict['Status'] = x[2]
+        meta_dict['Updated'] = x[3]
+        meta_dict['Published'] = x[4]
+        meta_dict['Experiment'] = x[5]
+        meta_dict['Sample'] = x[6]
+        meta_dict['BioProject'] = x[7]
+        meta_dict['ReplacedBy'] = x[8]
+        dict_list.append(meta_dict)
         print(f'Time: {time.time() - start}')
         print(count)
         count += 1
-        print(df.to_dict().keys())
-        break
+        if count % 103 == 0:
+            break
     except KeyError:
         print(x)
         continue
-with open('output3.txt', 'w') as f:
-    for record in dict_list:
-        f.write(json.dumps(record) + '\n')
+pprint(dict_list)
+# with open('output3.txt', 'w') as f:
+#     for record in dict_list:
+#         f.write(json.dumps(record) + '\n')
 
 
 # df = df.fillna(np.nan).replace([np.nan], [None])
