@@ -35,7 +35,7 @@ import sqlite3
 
 # WITH WEB
 db = SRAweb()
-df = db.sra_metadata(srp="DRP000003", detailed=True)
+df = db.sra_metadata(srp="DRP000196", detailed=True)
 df.to_csv('out.csv', sep='\t', encoding='utf-8')
 
 # df = db.search_sra(search_str='"test"')

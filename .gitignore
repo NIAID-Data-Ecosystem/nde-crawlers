@@ -145,3 +145,5 @@ config.yml
 .DS_Store
 *.ipynb
 *.json
+
+SRA_Accessions.tab
