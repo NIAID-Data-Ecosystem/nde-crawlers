@@ -1,3 +1,4 @@
+import datetime
 import requests
 import numpy as np
 import time
@@ -34,9 +35,9 @@ import sqlite3
 #         print(x)
 
 # WITH WEB
-db = SRAweb()
-df = db.sra_metadata(srp="DRP000196", detailed=True)
-df.to_csv('out.csv', sep='\t', encoding='utf-8')
+# db = SRAweb()
+# df = db.sra_metadata(srp="DRP000196", detailed=True)
+# df.to_csv('out.csv', sep='\t', encoding='utf-8')
 
 # df = db.search_sra(search_str='"test"')
 # print(df.to_json())
@@ -70,7 +71,7 @@ print('Reading SRA_Accessions')
 df = pd.read_csv(r"SRA_Accessions.tab", sep="\t",
                  usecols=['Accession', 'Type', 'Status', 'Updated', 'Published', 'Experiment', 'Sample', 'BioProject', 'ReplacedBy'])
 only_live = df[df['Status'] == 'live']
-filtered = only_live[only_live['Type'] == 'STUDY']
+filtered = only_live[only_live['Type'] == 'STUDY'].replace({'-': None})
 accession_list = filtered[['Accession', 'Type', 'Status', 'Updated', 'Published',
                            'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
 print(len(accession_list))
@@ -94,74 +95,103 @@ count = 100
 #         continue
 
 # One at a time
-dict_list = []
+metadata_list = []
 for x in accession_list:
     try:
         start = time.time()
         meta_df = db.sra_metadata(x[0], detailed=True)
-        meta_dict = meta_df.to_dict()
+        meta_dict = meta_df.replace({'<NA>': None}).to_dict()
         meta_dict['Accession'] = x[0]
         drs_url = f'https://locate.be-md.ncbi.nlm.nih.gov/idx/v1/{x[0]}?submitted=true&etl=false'
-        drs_id = requests.get(drs_url)
+        drs_response = requests.get(drs_url)
+        drs_json = json.loads(drs_response.text)
+        drs_id = drs_json['response'][x[0]]['drs']
+        meta_dict['DRS'] = drs_id
         meta_dict['Type'] = x[1]
-        meta_dict['Status'] = x[2]
         meta_dict['Updated'] = x[3]
         meta_dict['Published'] = x[4]
         meta_dict['Experiment'] = x[5]
         meta_dict['Sample'] = x[6]
         meta_dict['BioProject'] = x[7]
         meta_dict['ReplacedBy'] = x[8]
-        dict_list.append(meta_dict)
+        metadata_list.append(meta_dict)
         print(f'Time: {time.time() - start}')
-        print(count)
         count += 1
-        if count % 103 == 0:
+        if count % 105 == 0:
             break
     except KeyError:
         print(x)
         continue
-pprint(dict_list)
-# with open('output3.txt', 'w') as f:
-#     for record in dict_list:
-#         f.write(json.dumps(record) + '\n')
 
+for metadata in metadata_list:
+    output = {
+        '@context': "https://schema.org/",
+        'includedInDataCatalog': {
+            '@type': 'Dataset',
+            'name': 'NCBI SRA',
+            'url': 'https://www.ncbi.nlm.nih.gov/sra/',
+            'versionDate': datetime.date.today().isoformat()
+        }
+    }
+    # top level
+    if accession := metadata.get('Accession'):
+        output['_id'] = 'NCBI_SRA_' + accession
+    if updated := metadata.get('Updated'):
+        output['dateModified'] = updated
+    if published := metadata.get('Published'):
+        output['datePublished'] = published
+    if recieved := metadata.get('Recieved'):
+        output['dateCreated'] = recieved
+    if visibility := metadata.get('Visibility'):
+        output['conditionsOfAccess'] = visibility
+    if bio_project := metadata.get('BioProject'):
+        output['isBasedOn'] = {
+            'identifier': bio_project
+        }
+    if replaced_by := metadata.get('ReplacedBy'):
+        output['sameAs'] = replaced_by
+    pprint(output)
 
-# df = df.fillna(np.nan).replace([np.nan], [None])
-# with open('output.txt', 'w') as f:
-#     for row in df.to_dict('records'):
-#         f.write(json.dumps(row) + '\n')
-# df = df.fillna(np.nan).replace([np.nan], [None])
-# df_dict = df.to_dict('records')
-# with open('output2.txt', 'w') as f:
-#     f.write(json.dumps(df_dict) + '\n')
-# print(dict_list)
-# One at a time
-# start = time.time()
-# df = db.sra_metadata(accession_list[0:100], detailed=True)
-# df2 = db.sra_metadata(accession_list[100:200], detailed=True)
-# merged = pd.concat([df, df2])
-# print(f'Time: {time.time() - start}')
-# # dict_list.append(df.to_json(orient='records', lines=True))
-# d = merged.to_dict(orient='records')
-# print(d)
-# print(d[0])
-# with open('sra_metadata.json', 'w') as f:
-#     json.dump(dict_list, f)
-# for x in accession_list:
-#     try:
-#         count += 1
-#         print(count)
-#         if count % 10 == 0:
-#             break
-#     except ValueError:
-#         print(x)
-#         continue
-# print(dict_list)
-# try:
-#     count += 1
-#     db.sra_metadata(x, detailed=True)
-# except ValueError:
-#     print(x)
+    # with open('output3.txt', 'w') as f:
+    #     for record in metadata_list:
+    #         f.write(json.dumps(record) + '\n')
+
+    # df = df.fillna(np.nan).replace([np.nan], [None])
+    # with open('output.txt', 'w') as f:
+    #     for row in df.to_dict('records'):
+    #         f.write(json.dumps(row) + '\n')
+    # df = df.fillna(np.nan).replace([np.nan], [None])
+    # df_dict = df.to_dict('records')
+    # with open('output2.txt', 'w') as f:
+    #     f.write(json.dumps(df_dict) + '\n')
+    # print(metadata_list)
+    # One at a time
+    # start = time.time()
+    # df = db.sra_metadata(accession_list[0:100], detailed=True)
+    # df2 = db.sra_metadata(accession_list[100:200], detailed=True)
+    # merged = pd.concat([df, df2])
+    # print(f'Time: {time.time() - start}')
+    # # metadata_list.append(df.to_json(orient='records', lines=True))
+    # d = merged.to_dict(orient='records')
+    # print(d)
+    # print(d[0])
+    # with open('sra_metadata.json', 'w') as f:
+    #     json.dump(metadata_list, f)
+    # for x in accession_list:
+    #     try:
+    #         count += 1
+    #         print(count)
+    #         if count % 10 == 0:
+    #             break
+    #     except ValueError:
+    #         print(x)
+    #         continue
+    # print(metadata_list)
+    # try:
+    #     count += 1
+    #     db.sra_metadata(x, detailed=True)
+    # except ValueError:
+    #     print(x)
 print('finished')
 # for accession_id in accession_list:
 #     count += 1
