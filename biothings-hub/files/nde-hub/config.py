@@ -83,7 +83,7 @@ CONFIG_READONLY = False
 # FIXME: deal with the version issue
 # At least for BIOTHINGS_VERSION, it is trying to use the git repo version
 # which does not seem to make sense
-BIOTHINGS_VERSION = 'master'
+BIOTHINGS_VERSION = '0.11.x'
 
 # SSH port for hub console
 HUB_SSH_PORT = 19522
@@ -93,7 +93,7 @@ READONLY_HUB_API_PORT = 19581
 # Hub name/icon url/version, for display purpose
 HUB_NAME = "NDE Data Hub"
 HUB_ICON = "https://biothings.io/static/img/sdk-icon.svg"
-HUB_VERSION = "master"
+HUB_VERSION = "0.11.x"
 
 USE_RELOADER = True  # so no need to restart hub when a datasource has changed
 
