@@ -36,7 +36,7 @@ import sqlite3
 
 # WITH WEB
 # db = SRAweb()
-# df = db.sra_metadata(srp="DRP000196", detailed=True)
+# df = db.sra_metadata("DRP002325", detailed=True)
 # df.to_csv('out.csv', sep='\t', encoding='utf-8')
 
 # df = db.search_sra(search_str='"test"')
@@ -76,7 +76,7 @@ accession_list = filtered[['Accession', 'Type', 'Status', 'Updated', 'Published'
                            'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
 print(len(accession_list))
 print('Getting Metadata')
-count = 100
+count = 0
 
 # Multiple at a time
 # df = db.sra_metadata(accession_list[0:100], detailed=True)
@@ -106,8 +106,9 @@ for x in accession_list:
         drs_url = f'https://locate.be-md.ncbi.nlm.nih.gov/idx/v1/{x[0]}?submitted=true&etl=false'
         drs_response = requests.get(drs_url)
         drs_json = json.loads(drs_response.text)
-        drs_id = drs_json['response'][x[0]]['drs']
-        meta_dict['DRS'] = drs_id
+        if 'response' in drs_json:
+            drs_id = drs_json['response'][x[0]]['drs']
+            meta_dict['DRS'] = drs_id
         if x[1] != '-':
             meta_dict['Type'] = x[1]
         if x[3] != '-':
@@ -125,13 +126,22 @@ for x in accession_list:
         metadata_list.append(meta_dict)
         print(f'Time: {time.time() - start}')
         count += 1
-        if count % 105 == 0:
+        if count % 1000 == 0:
             break
-    except KeyError:
-        print(x)
+        if count % 100 == 0:
+            print(count)
+    except KeyError as e:
+        print(x[0])
+        print(e)
         continue
 
 for metadata in metadata_list:
+    if test := metadata.get('ena_fastq_ftp'):
+        if test[0]:
+            pprint(metadata)
+    if test2 := metadata.get('ena_fastq_http'):
+        if test2[0]:
+            pprint(metadata)
     output = {
         '@context': "https://schema.org/",
         'includedInDataCatalog': {
@@ -155,12 +165,49 @@ for metadata in metadata_list:
             recieved, '%Y-%m-%dT%H:%M:%SZ').strftime('%Y-%m-%d')
     if visibility := metadata.get('Visibility'):
         output['conditionsOfAccess'] = visibility
-    if bio_project := metadata.get('BioProject'):
-        output['isBasedOn'] = {
-            'identifier': bio_project
-        }
     if replaced_by := metadata.get('ReplacedBy'):
         output['sameAs'] = replaced_by
+    if study_title := metadata.get('study_title'):
+        output['name'] = study_title[0]
+    if study_abstract := metadata.get('study_abstract'):
+        output['description'] = study_abstract[0]
+    if contact_name := metadata.get('contact_name'):
+        output['author'] = {
+            'name': contact_name[0],
+        }
+    # distribution
+    distribution_list = []
+    if sra_urls := metadata.get('sra_url'):
+        for url in sra_urls:
+            distribution_dict = {}
+            distribution_dict['url'] = url
+            if distribution_dict not in distribution_list:
+                distribution_list.append(distribution_dict)
+    if gcp_urls := metadata.get('GCP_url'):
+        for url in gcp_urls:
+            distribution_dict = {}
+            distribution_dict['url'] = url
+            if distribution_dict not in distribution_list:
+                distribution_list.append(distribution_dict)
+    if aws_urls := metadata.get('AWS_url'):
+        for url in aws_urls:
+            distribution_dict = {}
+            distribution_dict['contentUrl'] = url
+            if distribution_dict not in distribution_list:
+                distribution_list.append(distribution_dict)
+    if len(distribution_list):
+        output['distribution'] = distribution_list
+
+    # species
+    species_list = []
+    if organism_taxids := metadata.get('organism_taxid'):
+        if organism_names := metadata.get('organism_name'):
+            for taxid, name in zip(organism_taxids, organism_names):
+                species_dict = {}
+                species_dict['name'] = name
+                species_dict['identifier'] = taxid
+                if species_dict not in species_list:
+                    species_list.append(species_dict)
 
     # isBasedOn
     is_based_on = []
@@ -169,7 +216,11 @@ for metadata in metadata_list:
         for run_accession in run_accessions:
             run_dict = {}
             run_dict['identifier'] = run_accession
+            run_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C47911'
             is_based_on.append(run_dict)
+    # bioproject
+    if bio_project := metadata.get('BioProject'):
+        is_based_on.append({'identifier': bio_project})
 
     # experiments
     if experiment_accessions := metadata.get('experiment_accession'):
@@ -180,7 +231,9 @@ for metadata in metadata_list:
                     experiment_dict['identifier'] = experiment_accession
                     experiment_dict['name'] = experiment_title
                     experiment_dict['description'] = experiment_desc
-                    is_based_on.append(experiment_dict)
+                    experiment_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C42790'
+                    if experiment_dict not in is_based_on:
+                        is_based_on.append(experiment_dict)
     # samples
     if sample_accessions := metadata.get('sample_accession'):
         if sample_title := metadata.get('sample_title'):
@@ -190,7 +243,9 @@ for metadata in metadata_list:
                     sample_dict['identifier'] = sample_accession
                     sample_dict['name'] = sample_title
                     sample_dict['description'] = sample_comment
-                    is_based_on.append(sample_dict)
+                    sample_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C70699'
+                    if sample_dict not in is_based_on:
+                        is_based_on.append(sample_dict)
     # instruments
     if instruments := metadata.get('instrument'):
         if instrument_models := metadata.get('instrument_model'):
@@ -198,9 +253,12 @@ for metadata in metadata_list:
                 for instrument, instrument_model, instrument_model_desc in zip(instruments, instrument_models, instrument_model_descriptions):
                     instrument_dict = {}
                     instrument_dict['name'] = instrument
-                    instrument_dict['identifier'] = instrument_model
+                    if instrument != instrument_model:
+                        instrument_dict['identifier'] = instrument_model
                     instrument_dict['description'] = instrument_model_desc
-                    is_based_on.append(instrument_dict)
+                    instrument_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C16742'
+                    if instrument_dict not in is_based_on:
+                        is_based_on.append(instrument_dict)
     # cells
     if cell_lines := metadata.get('cell line'):
         if cell_strain := metadata.get('strain'):
@@ -211,8 +269,9 @@ for metadata in metadata_list:
                         cell_dict['name'] = cell_line
                         cell_dict['name'] = cell_line_name
                         cell_dict['identifier'] = cell_strain
-                        cell_dict['additionalType'] = cell_type
-                        is_based_on.append(cell_dict)
+                        cell_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C12508'
+                        if cell_dict not in is_based_on:
+                            is_based_on.append(cell_dict)
     # hapmap
     if hapmap_ids := metadata.get('HapMap sample ID'):
         if cell_lines := metadata.get('Cell line'):
@@ -222,11 +281,12 @@ for metadata in metadata_list:
                     hapmap_dict['identifier'] = hapmap_id
                     hapmap_dict['name'] = cell_line
                     hapmap_dict['gender'] = sex
-                    is_based_on.append(hapmap_dict)
+                    if hapmap_dict not in is_based_on:
+                        is_based_on.append(hapmap_dict)
 
     if len(is_based_on):
         output['isBasedOn'] = is_based_on
-    pprint(output)
+    # pprint(output)
 
     # each run
     # pprint(metadata)
