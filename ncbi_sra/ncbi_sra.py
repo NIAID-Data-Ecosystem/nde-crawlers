@@ -10,7 +10,7 @@ from pysradb.sraweb import SRAweb
 from pprint import pprint
 from pysradb.sradb import SRAdb
 import sqlite3
-
+import logging
 
 # url = ' https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=nucleotide&term=$query&usehistory=y'
 # r = requests.get(url)
@@ -43,20 +43,23 @@ import sqlite3
 # print(df.to_json())
 # print(df)
 # test = db.sra_metadata(accession_list[0:100], detailed=True)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('nde-logger')
 
 
-# ftp = ftplib.FTP(
-#     'ftp.ncbi.nlm.nih.gov')
-# ftp.login()
-# ftp.cwd('/sra/reports/Metadata')
-# entries = list(ftp.mlsd())
-# metadata = [entry for entry in entries if 'SRA_Accessions.tab' in entry[0]]
-# metadata.sort(key=lambda entry: entry[1]['modify'], reverse=True)
-# filename = metadata[0][0]
-# with open(filename, "wb") as file:
-#     # use FTP's RETR command to download the file
-#     ftp.retrbinary(f"RETR {filename}", file.write)
-# ftp.quit()
+ftp = ftplib.FTP(
+    'ftp.ncbi.nlm.nih.gov')
+ftp.login()
+ftp.cwd('/sra/reports/Metadata')
+entries = list(ftp.mlsd())
+ftp_accessions = [
+    entry for entry in entries if 'SRA_Accessions.tab' in entry[0]]
+ftp_accessions.sort(key=lambda entry: entry[1]['modify'], reverse=True)
+filename = ftp_accessions[0][0]
+with open(filename, "wb") as file:
+    # use FTP's RETR command to download the file
+    ftp.retrbinary(f"RETR {filename}", file.write)
+ftp.quit()
 
 # file = tarfile.open(filename)
 # file.extract('sample.txt', './Destination_FolderName')
