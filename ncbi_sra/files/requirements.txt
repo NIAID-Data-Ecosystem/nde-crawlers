@@ -1,0 +1,7 @@
+requests
+orjson
+numpy
+json
+ftplib
+pandas
+pysradb
