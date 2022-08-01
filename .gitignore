@@ -147,3 +147,4 @@ config.yml
 *.json
 
 SRA_Accessions.tab
+test.txt
