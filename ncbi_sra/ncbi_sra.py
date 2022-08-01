@@ -200,14 +200,30 @@ for metadata in metadata_list:
 
     # species
     species_list = []
-    if organism_taxids := metadata.get('organism_taxid'):
-        if organism_names := metadata.get('organism_name'):
-            for taxid, name in zip(organism_taxids, organism_names):
-                species_dict = {}
-                species_dict['name'] = name
-                species_dict['identifier'] = taxid
-                if species_dict not in species_list:
-                    species_list.append(species_dict)
+    organism_taxids = metadata.get('organism_taxid')
+    organism_names = metadata.get('organism_name')
+    if organism_taxids and organism_names:
+        for taxid, name in zip(organism_taxids, organism_names):
+            species_dict = {}
+            species_dict['name'] = name
+            species_dict['identifier'] = taxid
+            species_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C45293'
+            if species_dict not in species_list:
+                species_list.append(species_dict)
+    elif organism_taxids:
+        for taxid in organism_taxids:
+            species_dict = {}
+            species_dict['identifier'] = taxid
+            species_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C45293'
+            if species_dict not in species_list:
+                species_list.append(species_dict)
+    elif organism_names:
+        for name in organism_names:
+            species_dict = {}
+            species_dict['name'] = name
+            species_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C45293'
+            if species_dict not in species_list:
+                species_list.append(species_dict)
 
     # isBasedOn
     is_based_on = []
@@ -216,11 +232,12 @@ for metadata in metadata_list:
         for run_accession in run_accessions:
             run_dict = {}
             run_dict['identifier'] = run_accession
-            run_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C47911'
+            run_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C47911'
             is_based_on.append(run_dict)
     # bioproject
     if bio_project := metadata.get('BioProject'):
-        is_based_on.append({'identifier': bio_project})
+        is_based_on.append(
+            {'identifier': bio_project, 'additionalType': 'http://purl.obolibrary.org/obo/NCIT_C175890'})
 
     # experiments
     if experiment_accessions := metadata.get('experiment_accession'):
@@ -231,7 +248,7 @@ for metadata in metadata_list:
                     experiment_dict['identifier'] = experiment_accession
                     experiment_dict['name'] = experiment_title
                     experiment_dict['description'] = experiment_desc
-                    experiment_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C42790'
+                    experiment_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C42790'
                     if experiment_dict not in is_based_on:
                         is_based_on.append(experiment_dict)
     # samples
@@ -243,7 +260,7 @@ for metadata in metadata_list:
                     sample_dict['identifier'] = sample_accession
                     sample_dict['name'] = sample_title
                     sample_dict['description'] = sample_comment
-                    sample_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C70699'
+                    sample_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C70699'
                     if sample_dict not in is_based_on:
                         is_based_on.append(sample_dict)
     # instruments
@@ -256,7 +273,7 @@ for metadata in metadata_list:
                     if instrument != instrument_model:
                         instrument_dict['identifier'] = instrument_model
                     instrument_dict['description'] = instrument_model_desc
-                    instrument_dict['additional_type'] = 'http://purl.obolibrary.org/obo/NCIT_C16742'
+                    instrument_dict['additionalType'] = 'http://purl.obolibrary.org/obo/NCIT_C16742'
                     if instrument_dict not in is_based_on:
                         is_based_on.append(instrument_dict)
     # cells
@@ -286,6 +303,29 @@ for metadata in metadata_list:
 
     if len(is_based_on):
         output['isBasedOn'] = is_based_on
+
+    conditions_of_access = ''
+    if gcp_free_egress := metadata.get('GCP_free_egress'):
+        if conditions_of_access == '':
+            conditions_of_access = gcp_free_egress
+        else:
+            conditions_of_access += f', {gcp_free_egress}'
+    if gcp_access_type := metadata.get('GCP_access_type'):
+        if conditions_of_access == '':
+            conditions_of_access = gcp_access_type
+        else:
+            conditions_of_access += f', {gcp_access_type}'
+    if aws_free_egress := metadata.get('AWS_free_egress'):
+        if conditions_of_access == '':
+            conditions_of_access = aws_free_egress
+        else:
+            conditions_of_access += f', {aws_free_egress}'
+    if aws_access_type := metadata.get('AWS_access_type'):
+        if conditions_of_access == '':
+            conditions_of_access = aws_access_type
+        else:
+            conditions_of_access += f', {aws_access_type}'
+
     # pprint(output)
 
     # each run
