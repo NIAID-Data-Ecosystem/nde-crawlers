@@ -15,7 +15,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'ncbi_sra_crawled'
+    'dylanwelzel/data', 'ncbi_sra_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
