@@ -58,6 +58,16 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  ncbi-sra-crawler:
+    build:
+      context: ncbi_sra_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
   omicsdi-crawler:
     build:
       context: omicsdi_crawler

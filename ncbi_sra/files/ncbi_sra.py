@@ -7,6 +7,7 @@ import json
 import ftplib
 import pandas as pd
 from pysradb.sraweb import SRAweb
+
 import logging
 import os
 
@@ -27,7 +28,7 @@ class NCBI_SRA(NDEDatabase):
 
         logger.info('FTP Download Complete')
 
-        logger.info('Retrieving Studies')
+        logger.info('Retrieving Studies from SRA_Accessions.tab')
         db = SRAweb()
         df = pd.read_csv(r"SRA_Accessions.tab", sep="\t",
                          usecols=['Accession', 'Type', 'Status', 'Updated', 'Published', 'Experiment', 'Sample', 'BioProject', 'ReplacedBy'])
@@ -39,7 +40,7 @@ class NCBI_SRA(NDEDatabase):
         count = 0
 
         # One at a time
-        logger.info('Retrieving Individual Study Metadata')
+        logger.info('Retrieving Individual Study Metadata from API')
         for x in accession_list:
             try:
                 meta_df = db.sra_metadata(x[0], detailed=True)
@@ -68,29 +69,24 @@ class NCBI_SRA(NDEDatabase):
                     if x[8] != '-':
                         meta_dict['ReplacedBy'] = x[8]
                     count += 1
-                    if count % 2500 == 0:
-                        break
                     if count % 100 == 0:
                         logger.info('{} Studies Retrieved'.format(count))
-                    yield json.dumps(meta_dict)
+                    yield (x[0], json.dumps(meta_dict))
             except KeyError as e:
                 continue
+        logger.info('Removing SRA_Accessions.tab')
+        os.remove("SRA_Accessions.tab")
+        logger.info('Removed SRA_Accessions.tab')
 
     def parse(self, studies):
 
         logger.info('Parsing Individual Study Metadata')
         count = 0
         for study in studies:
-            metadata = json.loads(study)
+            metadata = json.loads(study[1])
             count += 1
             if count % 100 == 0:
                 logger.info('{} Studies Parsed'.format(count))
-            if test := metadata.get('ena_fastq_ftp'):
-                if test[0]:
-                    logger.info(metadata)
-            if test2 := metadata.get('ena_fastq_http'):
-                if test2[0]:
-                    logger.info(metadata)
             output = {
                 '@context': "https://schema.org/",
                 'includedInDataCatalog': {
@@ -128,22 +124,25 @@ class NCBI_SRA(NDEDatabase):
             distribution_list = []
             if sra_urls := metadata.get('sra_url'):
                 for url in sra_urls:
-                    distribution_dict = {}
-                    distribution_dict['url'] = url
-                    if distribution_dict not in distribution_list:
-                        distribution_list.append(distribution_dict)
+                    if url is not None:
+                        distribution_dict = {}
+                        distribution_dict['url'] = url
+                        if distribution_dict not in distribution_list:
+                            distribution_list.append(distribution_dict)
             if gcp_urls := metadata.get('GCP_url'):
                 for url in gcp_urls:
-                    distribution_dict = {}
-                    distribution_dict['url'] = url
-                    if distribution_dict not in distribution_list:
-                        distribution_list.append(distribution_dict)
+                    if url is not None:
+                        distribution_dict = {}
+                        distribution_dict['url'] = url
+                        if distribution_dict not in distribution_list:
+                            distribution_list.append(distribution_dict)
             if aws_urls := metadata.get('AWS_url'):
                 for url in aws_urls:
-                    distribution_dict = {}
-                    distribution_dict['contentUrl'] = url
-                    if distribution_dict not in distribution_list:
-                        distribution_list.append(distribution_dict)
+                    if url is not None:
+                        distribution_dict = {}
+                        distribution_dict['contentUrl'] = url
+                        if distribution_dict not in distribution_list:
+                            distribution_list.append(distribution_dict)
             if len(distribution_list):
                 output['distribution'] = distribution_list
 
@@ -186,11 +185,22 @@ class NCBI_SRA(NDEDatabase):
                     run_dict['identifier'] = run_accession
                     run_dict['additionalType'] = {
                         'name': 'Run', 'url': 'http://purl.obolibrary.org/obo/NCIT_C47911'}
-                    is_based_on.append(run_dict)
+                    run_dict_filtered = {
+                        k: v for k, v in run_dict.items() if v is not None}
+
+                    if run_dict_filtered not in is_based_on:
+                        is_based_on.append(run_dict_filtered)
             # bioproject
             if bio_project := metadata.get('BioProject'):
-                is_based_on.append(
-                    {'identifier': bio_project, 'additionalType': {'name': 'BioProject Accession Number', 'url': 'http://purl.obolibrary.org/obo/NCIT_C175890'}})
+                bio_project_dict = {}
+                bio_project_dict['identifier'] = bio_project
+                bio_project_dict['additionalType'] = {
+                    'name': 'BioProject', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
+                bio_project_dict_filtered = {
+                    k: v for k, v in bio_project_dict.items() if v is not None}
+
+                if bio_project_dict_filtered not in is_based_on:
+                    is_based_on.append(bio_project_dict_filtered)
 
             # experiments
             if experiment_accessions := metadata.get('experiment_accession'):
@@ -203,8 +213,11 @@ class NCBI_SRA(NDEDatabase):
                             experiment_dict['description'] = experiment_desc
                             experiment_dict['additionalType'] = {
                                 'name': 'Experiment', 'url': 'http://purl.obolibrary.org/obo/NCIT_C42790'}
-                            if experiment_dict not in is_based_on:
-                                is_based_on.append(experiment_dict)
+                            experiment_dict_filtered = {
+                                k: v for k, v in experiment_dict.items() if v is not None}
+
+                            if experiment_dict_filtered not in is_based_on:
+                                is_based_on.append(experiment_dict_filtered)
             # samples
             if sample_accessions := metadata.get('sample_accession'):
                 if sample_title := metadata.get('sample_title'):
@@ -216,8 +229,11 @@ class NCBI_SRA(NDEDatabase):
                             sample_dict['description'] = sample_comment
                             sample_dict['additionalType'] = {
                                 'name': 'Sample', 'url': 'http://purl.obolibrary.org/obo/NCIT_C70699'}
-                            if sample_dict not in is_based_on:
-                                is_based_on.append(sample_dict)
+                            sample_dict_filtered = {
+                                k: v for k, v in sample_dict.items() if v is not None}
+
+                            if sample_dict_filtered not in is_based_on:
+                                is_based_on.append(sample_dict_filtered)
             # instruments
             if instruments := metadata.get('instrument'):
                 if instrument_models := metadata.get('instrument_model'):
@@ -230,8 +246,11 @@ class NCBI_SRA(NDEDatabase):
                             instrument_dict['description'] = instrument_model_desc
                             instrument_dict['additionalType'] = {
                                 'name': 'Instrument', 'url': 'http://purl.obolibrary.org/obo/NCIT_C16742'}
-                            if instrument_dict not in is_based_on:
-                                is_based_on.append(instrument_dict)
+                            instrument_dict_filtered = {
+                                k: v for k, v in instrument_dict.items() if v is not None}
+
+                            if instrument_dict_filtered not in is_based_on:
+                                is_based_on.append(instrument_dict_filtered)
             # cells
             if cell_lines := metadata.get('cell line'):
                 if cell_strain := metadata.get('strain'):
@@ -244,8 +263,11 @@ class NCBI_SRA(NDEDatabase):
                                 cell_dict['identifier'] = cell_strain
                                 cell_dict['additionalType'] = {
                                     'name': 'Cell', 'url': 'http://purl.obolibrary.org/obo/NCIT_C12508'}
-                                if cell_dict not in is_based_on:
-                                    is_based_on.append(cell_dict)
+                            cell_dict_filtered = {
+                                k: v for k, v in cell_dict.items() if v is not None}
+
+                            if cell_dict_filtered not in is_based_on:
+                                is_based_on.append(cell_dict_filtered)
             # hapmap
             if hapmap_ids := metadata.get('HapMap sample ID'):
                 if cell_lines := metadata.get('Cell line'):
@@ -257,8 +279,11 @@ class NCBI_SRA(NDEDatabase):
                             hapmap_dict['gender'] = sex
                             hapmap_dict['additionalType'] = {
                                 'name': 'HapMap', 'url': 'http://purl.obolibrary.org/obo/NCIT_C70979'}
-                            if hapmap_dict not in is_based_on:
-                                is_based_on.append(hapmap_dict)
+                            hapmap_dict_filtered = {
+                                k: v for k, v in hapmap_dict.items() if v is not None}
+
+                            if hapmap_dict_filtered not in is_based_on:
+                                is_based_on.append(hapmap_dict_filtered)
 
             if len(is_based_on):
                 output['isBasedOn'] = is_based_on
@@ -294,20 +319,18 @@ class NCBI_SRA(NDEDatabase):
                             conditions_of_access += f', {string}'
             if conditions_of_access != '':
                 output['conditionsOfAccess'] = conditions_of_access
+
             yield output
 
-        logger.info('Removing SRA_Accessions.tab')
-        # os.remove("SRA_Accessions.tab")
-        logger.info('Complete')
+        logger.info(f'Parsed {count} Studies')
 
     def update_cache(self):
-
         logger.info('Starting FTP Download')
-        fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
-        wget.download(fileloc, out='SRA_Accessions.tab')
+        # fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
+        # wget.download(fileloc, out='SRA_Accessions.tab')
         logger.info('FTP Download Complete')
 
-        logger.info('Retrieving Studies')
+        logger.info('Retrieving Studies from SRA_Accessions.tab')
         last_updated = self.retreive_last_updated()
         db = SRAweb()
         df = pd.read_csv(r"SRA_Accessions.tab", sep="\t",
@@ -320,8 +343,7 @@ class NCBI_SRA(NDEDatabase):
         logger.info('Total Studies Found: {}'.format(len(accession_list)))
         count = 0
 
-        # One at a time
-        logger.info('Retrieving Individual Study Metadata')
+        logger.info('Retrieving Individual Study Metadata from API')
         for x in accession_list:
             try:
                 meta_df = db.sra_metadata(x[0], detailed=True)
@@ -350,12 +372,14 @@ class NCBI_SRA(NDEDatabase):
                     if x[8] != '-':
                         meta_dict['ReplacedBy'] = x[8]
                     count += 1
-                    if count % 2500 == 0:
-                        break
                     if count % 100 == 0:
                         logger.info('{} Studies Retrieved'.format(count))
-                    yield json.dumps(meta_dict)
+                    yield (x[0], json.dumps(meta_dict))
             except KeyError as e:
                 continue
+
+        logger.info('Removing SRA_Accessions.tab')
+        os.remove("SRA_Accessions.tab")
+        logger.info('Removed SRA_Accessions.tab')
 
         self.insert_last_updated()
