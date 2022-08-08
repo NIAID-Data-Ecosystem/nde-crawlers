@@ -443,6 +443,8 @@ class SRAweb(SRAdb):
         exps_json = OrderedDict()
         runs_json = OrderedDict()
 
+        exp_json = OrderedDict()
+
         for uid in uids:
             exps_xml[uid] = self.format_xml(esummary_result[uid]["expxml"])
             runs_xml[uid] = self.format_xml(esummary_result[uid]["runs"])
@@ -453,7 +455,6 @@ class SRAweb(SRAdb):
 
         sra_record = []
         for uid, run_json in runs_json.items():
-            exp_json = OrderedDict()
             exp_json = exps_json[uid]
             if not run_json:
                 continue

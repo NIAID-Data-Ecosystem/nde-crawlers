@@ -1,7 +1,10 @@
-requests
-orjson
+lxml
+matplotlib
 numpy
-json
-ftplib
+orjson
 pandas
-pysradb
+requests
+requests_ftp
+tqdm
+wget
+xmltodict

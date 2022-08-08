@@ -4,7 +4,6 @@ import datetime
 import requests
 import numpy as np
 import json
-import ftplib
 import pandas as pd
 from pysradb.sraweb import SRAweb
 
@@ -23,8 +22,8 @@ class NCBI_SRA(NDEDatabase):
     def load_cache(self):
         logger.info('Starting FTP Download')
 
-        fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
-        wget.download(fileloc, out='SRA_Accessions.tab')
+        # fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
+        # wget.download(fileloc, out='SRA_Accessions.tab')
 
         logger.info('FTP Download Complete')
 
@@ -71,6 +70,7 @@ class NCBI_SRA(NDEDatabase):
                     count += 1
                     if count % 100 == 0:
                         logger.info('{} Studies Retrieved'.format(count))
+                        break
                     yield (x[0], json.dumps(meta_dict))
             except KeyError as e:
                 continue
@@ -94,11 +94,13 @@ class NCBI_SRA(NDEDatabase):
                     'name': 'NCBI SRA',
                     'url': 'https://www.ncbi.nlm.nih.gov/sra/',
                     'versionDate': datetime.date.today().isoformat()
-                }
+                },
+                '@type': 'Dataset',
             }
             # top level
             if accession := metadata.get('Accession'):
                 output['_id'] = 'NCBI_SRA_' + accession
+                output['url'] = 'https://www.ncbi.nlm.nih.gov/sra/' + accession
             if updated := metadata.get('Updated'):
                 output['dateModified'] = datetime.datetime.strptime(
                     updated, '%Y-%m-%dT%H:%M:%SZ').strftime('%Y-%m-%d')
@@ -120,6 +122,7 @@ class NCBI_SRA(NDEDatabase):
                 output['author'] = {
                     'name': contact_name[0],
                 }
+
             # distribution
             distribution_list = []
             if sra_urls := metadata.get('sra_url'):
@@ -319,6 +322,7 @@ class NCBI_SRA(NDEDatabase):
                             conditions_of_access += f', {string}'
             if conditions_of_access != '':
                 output['conditionsOfAccess'] = conditions_of_access
+                logger.info(conditions_of_access)
 
             yield output
 
