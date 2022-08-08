@@ -22,8 +22,8 @@ class NCBI_SRA(NDEDatabase):
     def load_cache(self):
         logger.info('Starting FTP Download')
 
-        # fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
-        # wget.download(fileloc, out='SRA_Accessions.tab')
+        fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
+        wget.download(fileloc, out='SRA_Accessions.tab')
 
         logger.info('FTP Download Complete')
 
@@ -70,7 +70,6 @@ class NCBI_SRA(NDEDatabase):
                     count += 1
                     if count % 100 == 0:
                         logger.info('{} Studies Retrieved'.format(count))
-                        break
                     yield (x[0], json.dumps(meta_dict))
             except KeyError as e:
                 continue
@@ -330,8 +329,8 @@ class NCBI_SRA(NDEDatabase):
 
     def update_cache(self):
         logger.info('Starting FTP Download')
-        # fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
-        # wget.download(fileloc, out='SRA_Accessions.tab')
+        fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
+        wget.download(fileloc, out='SRA_Accessions.tab')
         logger.info('FTP Download Complete')
 
         logger.info('Retrieving Studies from SRA_Accessions.tab')
