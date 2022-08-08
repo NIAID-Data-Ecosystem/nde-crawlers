@@ -13,6 +13,6 @@
 
     if [ -d $DIR ]; then
       flock --verbose --nonblock /crawler.lock \
-      -c "echo 'Removing /cache/$SPIDER_NAME' ; rm -rf $DIR && echo '/cache/$SPIDER_NAME removed'"
+      su -c "echo 'Removing /cache/$SPIDER_NAME' ; rm -rf $DIR && echo '/cache/$SPIDER_NAME removed'" biothings
     fi
 ) > /proc/1/fd/1 2> /proc/1/fd/2

@@ -48,8 +48,10 @@ except Exception as e:
     )
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-    
+
     logger.error(traceback.format_exc())
+finally:
+    fd.close()
 
 
 if is_parsed:

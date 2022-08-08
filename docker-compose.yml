@@ -29,6 +29,7 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+      - cache:/cache
   immport-crawler:
     build:
       context: immport_crawler
@@ -51,6 +52,16 @@ services:
   ncbi-geo-crawler:
     build:
       context: ncbi_geo_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
+  ncbi-pmc-crawler:
+    build:
+      context: ncbi_pmc_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
@@ -100,10 +111,18 @@ services:
     build:
       context: veupathdb
       dockerfile: Dockerfile
+      # uncomment to run development crontab
       # args:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  vivli-crawler:
+    build:
+      context: vivli
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
   zenodo-crawler:
     build:
       context: zenodo_oai-pmh

@@ -32,4 +32,4 @@ HTTPCACHE_ENABLED = True
 HTTPCACHE_EXPIRATION_SECS = 0
 HTTPCACHE_DIR = '/cache'
 # https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#rfc2616-policy
-# HTTPCACHE_POLICY = 'scrapy.extensions.httpcache.RFC2616Policy'
+HTTPCACHE_POLICY = 'middlewares.CachePolicy'

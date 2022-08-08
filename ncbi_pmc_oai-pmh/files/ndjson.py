@@ -4,12 +4,8 @@ import traceback
 import platform
 import logging
 import orjson
-from figshare import Figshare
-
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
+from ncbi_pmc import NCBI_PMC
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
 # set the release string to be ISO date format
@@ -18,7 +14,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'figshare_crawled'
+    '/data', 'ncbi_pmc_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -38,7 +34,7 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    parser = Figshare()
+    parser = NCBI_PMC()
     docs = parser.upload()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
@@ -56,6 +52,7 @@ except Exception as e:
     logger.error(traceback.format_exc())
 finally:
     fd.close()
+
 
 if is_parsed:
     try:

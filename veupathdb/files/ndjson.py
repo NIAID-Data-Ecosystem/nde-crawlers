@@ -43,7 +43,7 @@ try:
         line = orjson.dumps(record) + b"\n"
         fd.write(line)
     is_parsed = True
-    
+
 # parser failed
 except Exception as e:
     fd.close()
@@ -54,6 +54,8 @@ except Exception as e:
     os.unlink(rl_tmp_filename)
 
     logger.error(traceback.format_exc())
+finally:
+    fd.close()
 
 if is_parsed:
     try:
