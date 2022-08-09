@@ -124,26 +124,25 @@ class NCBI_SRA(NDEDatabase):
 
             # distribution
             distribution_list = []
-            if sra_urls := metadata.get('sra_url'):
-                for url in sra_urls:
-                    if url is not None:
-                        distribution_dict = {}
-                        distribution_dict['url'] = url
-                        if distribution_dict not in distribution_list:
-                            distribution_list.append(distribution_dict)
             if gcp_urls := metadata.get('GCP_url'):
-                for url in gcp_urls:
-                    if url is not None:
+                if gcp_free_egress := metadata.get('GCP_free_egress'):
+                    for url, string in zip(gcp_urls, gcp_free_egress):
                         distribution_dict = {}
-                        distribution_dict['url'] = url
-                        if distribution_dict not in distribution_list:
+                        if string is not None:
+                            distribution_dict['isAccessibleForFree'] = True
+                        if url is not None:
+                            distribution_dict['url'] = url
+                        if bool(distribution_dict) and distribution_dict not in distribution_list:
                             distribution_list.append(distribution_dict)
             if aws_urls := metadata.get('AWS_url'):
-                for url in aws_urls:
-                    if url is not None:
+                if aws_free_egress := metadata.get('AWS_free_egress'):
+                    for url, string in zip(aws_urls, gcp_free_egress):
                         distribution_dict = {}
-                        distribution_dict['contentUrl'] = url
-                        if distribution_dict not in distribution_list:
+                        if string is not None:
+                            distribution_dict['isAccessibleForFree'] = True
+                        if url is not None:
+                            distribution_dict['url'] = url
+                        if bool(distribution_dict) and distribution_dict not in distribution_list:
                             distribution_list.append(distribution_dict)
             if len(distribution_list):
                 output['distribution'] = distribution_list
@@ -294,10 +293,7 @@ class NCBI_SRA(NDEDatabase):
             if gcp_free_egress := metadata.get('GCP_free_egress'):
                 for string in gcp_free_egress:
                     if string is not None:
-                        if conditions_of_access == '':
-                            conditions_of_access = string
-                        elif string not in conditions_of_access:
-                            conditions_of_access += f', {string}'
+                        output['isAccessibleForFree'] = True
             if gcp_access_type := metadata.get('GCP_access_type'):
                 for string in gcp_access_type:
                     if string is not None:
@@ -308,10 +304,7 @@ class NCBI_SRA(NDEDatabase):
             if aws_free_egress := metadata.get('AWS_free_egress'):
                 for string in aws_free_egress:
                     if string is not None:
-                        if conditions_of_access == '':
-                            conditions_of_access = string
-                        elif string not in conditions_of_access:
-                            conditions_of_access += f', {string}'
+                        output['isAccessibleForFree'] = True
             if aws_access_type := metadata.get('AWS_access_type'):
                 for string in aws_access_type:
                     if string is not None:
