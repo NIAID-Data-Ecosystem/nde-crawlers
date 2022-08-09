@@ -1,14 +1,15 @@
 import wget
-from sql_database import NDEDatabase
 import datetime
 import requests
 import numpy as np
 import json
 import pandas as pd
-from pysradb.sraweb import SRAweb
-
 import logging
 import os
+
+from sql_database import NDEDatabase
+from pysradb.sraweb import SRAweb
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
