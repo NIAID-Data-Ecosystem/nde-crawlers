@@ -1,10 +1,11 @@
 import datetime
 import unicodedata
+import logging
+import json
+
 from sickle import Sickle
 from lxml import etree
 from sql_database import NDEDatabase
-import logging
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
