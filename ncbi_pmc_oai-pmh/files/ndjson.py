@@ -4,8 +4,12 @@ import traceback
 import platform
 import logging
 import orjson
+
 from ncbi_pmc import NCBI_PMC
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
 # set the release string to be ISO date format
