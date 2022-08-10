@@ -130,17 +130,17 @@ class NCBI_SRA(NDEDatabase):
                     for url, string in zip(gcp_urls, gcp_free_egress):
                         distribution_dict = {}
                         if string is not None:
-                            distribution_dict['isAccessibleForFree'] = True
+                            output['isAccessibleForFree'] = True
                         if url is not None:
                             distribution_dict['url'] = url
                         if bool(distribution_dict) and distribution_dict not in distribution_list:
                             distribution_list.append(distribution_dict)
             if aws_urls := metadata.get('AWS_url'):
                 if aws_free_egress := metadata.get('AWS_free_egress'):
-                    for url, string in zip(aws_urls, gcp_free_egress):
+                    for url, string in zip(aws_urls, aws_free_egress):
                         distribution_dict = {}
                         if string is not None:
-                            distribution_dict['isAccessibleForFree'] = True
+                            output['isAccessibleForFree'] = True
                         if url is not None:
                             distribution_dict['url'] = url
                         if bool(distribution_dict) and distribution_dict not in distribution_list:
@@ -289,33 +289,6 @@ class NCBI_SRA(NDEDatabase):
 
             if len(is_based_on):
                 output['isBasedOn'] = is_based_on
-
-            conditions_of_access = ''
-            if gcp_free_egress := metadata.get('GCP_free_egress'):
-                for string in gcp_free_egress:
-                    if string is not None:
-                        output['isAccessibleForFree'] = True
-            if gcp_access_type := metadata.get('GCP_access_type'):
-                for string in gcp_access_type:
-                    if string is not None:
-                        if conditions_of_access == '':
-                            conditions_of_access = string
-                        elif string not in conditions_of_access:
-                            conditions_of_access += f', {string}'
-            if aws_free_egress := metadata.get('AWS_free_egress'):
-                for string in aws_free_egress:
-                    if string is not None:
-                        output['isAccessibleForFree'] = True
-            if aws_access_type := metadata.get('AWS_access_type'):
-                for string in aws_access_type:
-                    if string is not None:
-                        if conditions_of_access == '':
-                            conditions_of_access = string
-                        elif string not in conditions_of_access:
-                            conditions_of_access += f', {string}'
-            if conditions_of_access != '':
-                output['conditionsOfAccess'] = conditions_of_access
-                logger.info(conditions_of_access)
 
             yield output
 
