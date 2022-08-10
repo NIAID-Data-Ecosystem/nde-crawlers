@@ -1,13 +1,16 @@
-from rpy2.robjects.vectors import StrVector
-import rpy2.robjects.packages as rpackages
-utils = rpackages.importr('utils')
-utils.chooseCRANmirror(ind=1)
-packages = ('Biostrings', 'dyplr', 'tidyverse')
-utils.install_packages(StrVector(packages))
+import scrapy
 
 
-# def String_to_DNA(x):
-#     return Biostrings.DNAString(x)
+class QuotesSpider(scrapy.Spider):
+    name = "quotes"
 
+    def start_requests(self):
+        url = 'https://bioconductor.org/packages/3.15/bioc/html/a4.html'
+        yield scrapy.Request(url=url, callback=self.parse)
 
-# omicron['dna'] = omicron.apply(lambda row: String_to_DNA(row['spike']), axis=1)
+    def parse(self, response):
+        page = response.url.split("/")[-2]
+        filename = f'quotes-{page}.html'
+        with open(filename, 'wb') as f:
+            f.write(response.body)
+        self.log(f'Saved file {filename}')
