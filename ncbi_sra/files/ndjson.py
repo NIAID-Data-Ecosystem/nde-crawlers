@@ -4,8 +4,7 @@ import traceback
 import platform
 import logging
 import orjson
-import dde
-
+from ncbi_sra import NCBI_SRA
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
@@ -15,7 +14,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'dde_crawled'
+    '/data', 'ncbi_sra_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -35,7 +34,8 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    docs = dde.parse()
+    parser = NCBI_SRA()
+    docs = parser.upload()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
@@ -50,8 +50,7 @@ except Exception as e:
     os.unlink(rl_tmp_filename)
 
     logger.error(traceback.format_exc())
-finally:
-    fd.close()
+
 
 if is_parsed:
     try:

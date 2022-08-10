@@ -1,0 +1,10 @@
+lxml
+matplotlib
+numpy
+orjson
+pandas
+requests
+requests_ftp
+tqdm
+wget
+xmltodict
