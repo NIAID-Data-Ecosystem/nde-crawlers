@@ -159,18 +159,6 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "@id": {"type": "keyword"},
             "@type": {"type": "keyword", "copy_to": ["all"]},
-            "about": {
-                "properties": {
-                    "@id": {
-                        "type": "text",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                    "@type": {
-                        "type": "text",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                }
-            },
             "abstract": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "all": {
                 "type": "text",
@@ -181,22 +169,6 @@ class NDESourceUploader(BaseSourceUploader):
             "applicationCategory": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "applicationSubCategory": {"type": "keyword", "copy_to": ["all"]},
             "applicationSuite": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-            "armGroup": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "intervention": {
-                        "properties": {
-                            "@type": {"type": "keyword"},
-                            "category": {"type": "keyword", "copy_to": ["all"]},
-                            "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                        }
-                    },
-                    "name": {"type": "keyword", "copy_to": ["all"]},
-                    "role": {"type": "keyword", "copy_to": ["all"]},
-                }
-            },
             "author": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -279,34 +251,6 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
-            "correction": {"type": "text"},
-            "creator": {
-                "properties": {
-                    "@id": {
-                        "type": "text",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                    "@type": {"type": "text"},
-                    "affiliation": {
-                        "properties": {"name": {"type": "keyword", "copy_to": ["all"]}}
-                    },
-                    "familyName": {"type": "text", "copy_to": ["all"]},
-                    "givenName": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "copy_to": ["all"]},
-                    "role": {"type": "keyword"},
-                    "title": {"type": "text"},
-                }
-            },
-            # TODO: AFTER FIXING ZENODO DELETE THIS MAPPING REPLACED BY includedInDataCatalog
-            "curatedBy": {
-                "properties": {
-                    "@type": {"type": "text"},
-                    "identifier": {"type": "keyword"},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
-                    "url": {"type": "text"},
-                    "versionDate": {"type": "keyword"},
-                }
-            },
             "date": {"type": "date"},
             "dateCreated": {"type": "date"},
             "dateModified": {"type": "date"},
@@ -330,18 +274,6 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "doi": {"type": "text", "copy_to": ["all"]},
             "duration": {"type": "text"},
-            "eligibilityCriteria": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "exclusionCriteria": {"type": "text", "copy_to": ["all"]},
-                    "gender": {"type": "text"},
-                    "healthyVolunteers": {"type": "boolean"},
-                    "inclusionCriteria": {"type": "text", "copy_to": ["all"]},
-                    "maximumAge": {"type": "text"},
-                    "minimumAge": {"type": "text"},
-                    "stdAge": {"type": "text", "copy_to": ["all"]},
-                }
-            },
             "funding": {
                 "properties": {
                     "description": {"type": "text", "copy_to": ["all"]},
@@ -371,11 +303,6 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
-            "hasResults": {"type": "boolean"},
-            "headline": {
-                "type": "text",
-                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-            },
             "healthCondition": {
                 "properties": {
                     "name": {"type": "keyword", "copy_to": ["all"]},
@@ -383,11 +310,6 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "identifier": {"type": "text", "copy_to": ["all"]},
-            "identifierSource": {"type": "keyword", "copy_to": ["all"]},
-            "image": {
-                "type": "text",
-                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-            },
             "input": {
                 "properties": {
                     "@type": {"type": "keyword"},
@@ -403,7 +325,6 @@ class NDESourceUploader(BaseSourceUploader):
                     "versionDate": {"type": "date"},
                 }
             },
-            "inComplianceWith": {"type": "text"},
             "inLanguage": {
                 "properties": {
                     "@type": {
@@ -424,16 +345,6 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
-                }
-            },
-            "instrument": {"type": "text", "copy_to": ["all"]},
-            "interventionText": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-            "interventions": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "category": {"type": "keyword", "copy_to": ["all"]},
-                    "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
                 }
             },
             "isBasedOn": {
@@ -462,13 +373,8 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
-            "issueNumber": {"type": "text"},
-            "journalName": {"type": "keyword", "copy_to": ["all"]},
-            "journalNameAbbrev": {"type": "keyword", "copy_to": ["all"]},
             "keywords": {"type": "keyword", "copy_to": ["all"]},
             "license": {"type": "text"},
-            "material": {"type": "text", "copy_to": ["all"]},
-            "measurementParameter": {"properties": {"resolution": {"type": "keyword"}}},
             "measurementTechnique": {
                 "properties": {
                     "name": {"type": "keyword", "copy_to": ["all"]},
@@ -477,38 +383,12 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "name": {"type": "keyword", "copy_to": ["all"]},
             "nctid": {"type": "keyword", "copy_to": ["all"]},
-            "outcome": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "outcomeMeasure": {"type": "text", "copy_to": ["all"]},
-                    "outcomeTimeFrame": {"type": "text", "copy_to": ["all"]},
-                    "outcomeType": {"type": "keyword", "copy_to": ["all"]},
-                }
-            },
             "output": {
                 "properties": {
                     "@type": {"type": "keyword"},
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
-            },
-            "pmid": {"type": "integer", "copy_to": ["all"]},
-            "protocolCategory": {"type": "keyword", "copy_to": ["all"]},
-            "protocolSetting": {"type": "keyword", "copy_to": ["all"]},
-            "publicationType": {"type": "keyword", "copy_to": ["all"]},
-            "relatedTo": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "abstract": {"type": "text", "analyzer": "nde_analyzer"},
-                    "citation": {"type": "text"},
-                    "datePublished": {"type": "date"},
-                    "description": {"type": "text"},
-                    "doi": {"type": "text", "copy_to": ["all"]},
-                    "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "pmid": {"type": "text"},
-                    "url": {"type": "text"},
-                }
             },
             "sameAs": {
                 "type": "text",
@@ -558,56 +438,6 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
-            "sponsor": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "class": {"type": "keyword", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
-                    "role": {"type": "keyword"},
-                }
-            },
-            "studyDesign": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "designAllocation": {"type": "keyword", "copy_to": ["all"]},
-                    "designModel": {"type": "keyword", "copy_to": ["all"]},
-                    "designPrimaryPurpose": {"type": "keyword", "copy_to": ["all"]},
-                    "designWhoMasked": {"type": "text", "copy_to": ["all"]},
-                    "phase": {"type": "keyword", "copy_to": ["all"]},
-                    "phaseNumber": {"type": "half_float"},
-                    "studyDesignText": {"type": "text", "copy_to": ["all"]},
-                    "studyType": {"type": "keyword", "copy_to": ["all"]},
-                }
-            },
-            "studyEvent": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "studyEventDate": {"type": "date"},
-                    "studyEventDateType": {"type": "text"},
-                    "studyEventType": {"type": "text"},
-                }
-            },
-            "studyLocation": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
-                    "studyLocationCity": {"type": "keyword", "copy_to": ["all"]},
-                    "studyLocationCountry": {"type": "keyword", "copy_to": ["all"]},
-                    "studyLocationState": {"type": "keyword", "copy_to": ["all"]},
-                    "studyLocationStatus": {"type": "keyword", "copy_to": ["all"]},
-                }
-            },
-            "studyStatus": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "enrollmentCount": {"type": "integer"},
-                    "enrollmentType": {"type": "text"},
-                    "status": {"type": "keyword", "copy_to": ["all"]},
-                    "statusDate": {"type": "date"},
-                    "statusExpanded": {"type": "boolean"},
-                    "whyStopped": {"type": "text", "copy_to": ["all"]},
-                }
-            },
             "temporalCoverage": {
                 "properties": {
                     "temporalInterval": {
@@ -627,38 +457,11 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "topicCategory": {"type": "keyword", "copy_to": ["all"]},
             "url": {"type": "text", "copy_to": ["all"]},
-            "usedToGenerate": {"type": "text"},
             "variableMeasured": {"type": "keyword", "copy_to": ["all"]},
             "version": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-            },
-            "volumeNumber": {"type": "text"},
-            "workFeatured": {
-                "properties": {
-                    "@type": {
-                        "type": "text",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                    "alternateName": {
-                        "type": "text",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                    "location": {
-                        "type": "text",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                    "name": {
-                        "type": "text",
-                        "analyzer": "nde_analyzer",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                    "url": {
-                        "type": "text",
-                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-                    },
-                }
-            },
+            }
         }
 
         return mapping
