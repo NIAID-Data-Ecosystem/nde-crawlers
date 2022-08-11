@@ -165,6 +165,14 @@ class NDESourceUploader(BaseSourceUploader):
                 "analyzer": "nde_analyzer",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
+            "aggregateRating": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "ratingCount": {"type": "unsigned_long"},
+                    "ratingValue": {"type": "double"},
+                    "reviewAspect": {"type": "text"}
+                }
+            },
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "applicationCategory": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "applicationSubCategory": {"type": "keyword", "copy_to": ["all"]},
@@ -347,6 +355,14 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "interactionStatistic": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "interactionType": {"type": "text"},
+                    "userInteractionCount": {"type": "unsigned_long"}
+                }
+            },
+            "isAvailableForFree": {"type": "boolean"},
             "isBasedOn": {
                 "properties": {
                     "@type": {"type": "keyword"},
@@ -373,6 +389,44 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
+            "isRelatedTo": {
+                "properties": {
+                    "@type": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "includedInDataCatalog": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                            "versionDate": {"type": "date"},
+                        }
+                    },
+                    "relationship": {"type": "text", "copy_to": ["all"]}
+                }
+            },
+            "isSimilarTo": {
+                "properties": {
+                    "@type": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "includedInDataCatalog": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                            "versionDate": {"type": "date"},
+                        }
+                    },
+                    "relationship": {"type": "keyword", "copy_to": ["all"]}
+                }
+            },
             "keywords": {"type": "keyword", "copy_to": ["all"]},
             "license": {"type": "text"},
             "measurementTechnique": {
@@ -390,6 +444,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
             },
+            "relationship": {"type": "text", "copy_to": ["all"]},
             "sameAs": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
@@ -457,6 +512,13 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "topicCategory": {"type": "keyword", "copy_to": ["all"]},
             "url": {"type": "text", "copy_to": ["all"]},
+            "usageInfo": {
+                "properties": {
+                    "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "variableMeasured": {"type": "keyword", "copy_to": ["all"]},
             "version": {
                 "type": "text",
