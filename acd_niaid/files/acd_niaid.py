@@ -39,84 +39,96 @@ def parse():
             trial['isRelatedTo'] = [
                 {
                     'name': 'NCT04401579',
-                    'identifier': 'accessclinicaldata_NCT04401579',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04401579'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04280705)'
                 },
                 {
                     'name': 'NCT04492475',
-                    'identifier': 'accessclinicaldata_NCT04492475',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04492475'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04280705)'
                 },
                 {
                     'name': 'NCT04640168',
-                    'identifier': 'accessclinicaldata_NCT04640168',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04640168'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04280705)'
                 }
             ]
         if trial['nct_number'] == 'NCT04401579':
             trial['isRelatedTo'] = [
                 {
                     'name': 'NCT04280705',
-                    'identifier': 'accessclinicaldata_NCT04280705',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04280705'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04401579)'
                 },
                 {
                     'name': 'NCT04492475',
-                    'identifier': 'accessclinicaldata_NCT04492475',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04492475'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04401579)'
                 },
                 {
                     'name': 'NCT04640168',
-                    'identifier': 'accessclinicaldata_NCT04640168',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04640168'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04401579)'
                 }
             ]
         if trial['nct_number'] == 'NCT04492475':
             trial['isRelatedTo'] = [
                 {
                     'name': 'NCT04280705',
-                    'identifier': 'accessclinicaldata_NCT04280705',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04280705'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04492475)'
                 },
                 {
                     'name': 'NCT04401579',
-                    'identifier': 'accessclinicaldata_NCT04401579',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04401579'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04492475)'
                 },
                 {
                     'name': 'NCT04640168',
-                    'identifier': 'accessclinicaldata_NCT04640168',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04640168'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04492475)'
                 }
             ]
         if trial['nct_number'] == 'NCT04640168':
             trial['isRelatedTo'] = [
                 {
                     'name': 'NCT04280705',
-                    'identifier': 'accessclinicaldata_NCT04280705',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04280705'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04640168)'
                 },
                 {
                     'name': 'NCT04401579',
-                    'identifier': 'accessclinicaldata_NCT04401579',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04401579'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04640168)'
                 },
                 {
                     'name': 'NCT04492475',
-                    'identifier': 'accessclinicaldata_NCT04492475',
+                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04492475'},
                     '@type': 'Dataset',
-                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
+                    'relationship': 'Different study arm of the same clinical trial (NCT04640168)'
                 }
             ]
 
@@ -211,8 +223,8 @@ def parse():
             "name": "AccessClinicalData@NIAID"
         }
         trial['@type'] = "Dataset"
-        trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" +
-        trial['identifier'][0]
+        trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + \
+            trial['identifier'][0]
 
         # getting rid of None values
         result = {k: v for k, v in trial.items() if v is not None}
