@@ -29,6 +29,96 @@ def parse():
     trials = json_obj['data']['clinical_trials']
 
     count = 0
+    # 1 NCT04280705
+    # 2 NCT04401579
+    # 3 NCT04492475
+    # 4 NCT04640168
+
+    for trial in trials:
+        if trial['nct_number'] == 'NCT04280705':
+            trial['isRelatedTo'] = [
+                {
+                    'name': 'NCT04401579',
+                    'identifier': 'accessclinicaldata_NCT04401579',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04492475',
+                    'identifier': 'accessclinicaldata_NCT04492475',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04640168',
+                    'identifier': 'accessclinicaldata_NCT04640168',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                }
+            ]
+        if trial['nct_number'] == 'NCT04401579':
+            trial['isRelatedTo'] = [
+                {
+                    'name': 'NCT04280705',
+                    'identifier': 'accessclinicaldata_NCT04280705',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04492475',
+                    'identifier': 'accessclinicaldata_NCT04492475',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04640168',
+                    'identifier': 'accessclinicaldata_NCT04640168',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                }
+            ]
+        if trial['nct_number'] == 'NCT04492475':
+            trial['isRelatedTo'] = [
+                {
+                    'name': 'NCT04280705',
+                    'identifier': 'accessclinicaldata_NCT04280705',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04401579',
+                    'identifier': 'accessclinicaldata_NCT04401579',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04640168',
+                    'identifier': 'accessclinicaldata_NCT04640168',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                }
+            ]
+        if trial['nct_number'] == 'NCT04640168':
+            trial['isRelatedTo'] = [
+                {
+                    'name': 'NCT04280705',
+                    'identifier': 'accessclinicaldata_NCT04280705',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04401579',
+                    'identifier': 'accessclinicaldata_NCT04401579',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                },
+                {
+                    'name': 'NCT04492475',
+                    'identifier': 'accessclinicaldata_NCT04492475',
+                    '@type': 'Dataset',
+                    'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'}
+                }
+            ]
 
     for trial in trials:
         trial['name'] = trial.pop('title')
@@ -121,8 +211,8 @@ def parse():
             "name": "AccessClinicalData@NIAID"
         }
         trial['@type'] = "Dataset"
-        trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + \
-            trial['identifier'][0]
+        trial['url'] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" +
+        trial['identifier'][0]
 
         # getting rid of None values
         result = {k: v for k, v in trial.items() if v is not None}
