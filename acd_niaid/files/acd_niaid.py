@@ -29,107 +29,139 @@ def parse():
     trials = json_obj['data']['clinical_trials']
 
     count = 0
-    # 1 NCT04280705
-    # 2 NCT04401579
-    # 3 NCT04492475
-    # 4 NCT04640168
 
     for trial in trials:
         if trial['nct_number'] == 'NCT04280705':
+            trial['isPartOf'] = [{
+                'name': 'Adaptive COVID-19 Treatment Trial',
+                'identifier': 'ACTT',
+                'url': 'https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway'
+            }]
+
             trial['isRelatedTo'] = [
                 {
-                    'name': 'NCT04401579',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04401579'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021',
+                    'identifier': 'accessclinicaldata_NCT04401579',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04280705)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04492475',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04492475'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 3 (ACTT-3) - New dataset released October 2021',
+                    'identifier': 'accessclinicaldata_NCT04492475',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04280705)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04640168',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04640168'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 4 (ACTT-4) - New dataset released May 2022',
+                    'identifier': 'accessclinicaldata_NCT04640168',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04280705)'
-                }
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
+                },
             ]
         if trial['nct_number'] == 'NCT04401579':
+            trial['isPartOf'] = [{
+                'name': 'Adaptive COVID-19 Treatment Trial',
+                'identifier': 'ACTT',
+                'url': 'https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway'
+            }]
+
             trial['isRelatedTo'] = [
                 {
-                    'name': 'NCT04280705',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04280705'},
+                    'name': 'Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021',
+                    'identifier': 'accessclinicaldata_NCT04280705',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04401579)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04492475',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04492475'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 3 (ACTT-3) - New dataset released October 2021',
+                    'identifier': 'accessclinicaldata_NCT04492475',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04401579)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04640168',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04640168'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 4 (ACTT-4) - New dataset released May 2022',
+                    'identifier': 'accessclinicaldata_NCT04640168',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04401579)'
-                }
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
+                },
             ]
         if trial['nct_number'] == 'NCT04492475':
+            trial['isPartOf'] = [{
+                'name': 'Adaptive COVID-19 Treatment Trial',
+                'identifier': 'ACTT',
+                'url': 'https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway'
+            }]
+
             trial['isRelatedTo'] = [
                 {
-                    'name': 'NCT04280705',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04280705'},
+                    'name': 'Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021',
+                    'identifier': 'accessclinicaldata_NCT04280705',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04492475)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04401579',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04401579'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021',
+                    'identifier': 'accessclinicaldata_NCT04401579',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04492475)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04640168',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04640168'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 4 (ACTT-4) - New dataset released May 2022',
+                    'identifier': 'accessclinicaldata_NCT04640168',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04492475)'
-                }
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
+                },
             ]
         if trial['nct_number'] == 'NCT04640168':
+            trial['isPartOf'] = [{
+                'name': 'Adaptive COVID-19 Treatment Trial',
+                'identifier': 'ACTT',
+                'url': 'https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway'
+            }]
+
             trial['isRelatedTo'] = [
                 {
-                    'name': 'NCT04280705',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04280705'},
+                    'name': 'Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021',
+                    'identifier': 'accessclinicaldata_NCT04280705',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04640168)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04401579',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04401579'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021',
+                    'identifier': 'accessclinicaldata_NCT04401579',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04640168)'
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
                 },
                 {
-                    'name': 'NCT04492475',
-                    'isPartOf': {'identifier': 'accessclinicaldata_NCT04492475'},
+                    'name': 'Adaptive COVID-19 Treatment Trial 3 (ACTT-3) - New dataset released October 2021',
+                    'identifier': 'accessclinicaldata_NCT04492475',
+                    'hasPart': {'identifier': 'ACTT'},
                     '@type': 'Dataset',
                     'includedInDataCatalog': {'name': 'AccessClinicalData@NIAID'},
-                    'relationship': 'Different study arm of the same clinical trial (NCT04640168)'
-                }
+                    'relationship': 'Different iteration of the same study, the Adaptive COVID-19 Treatment Trial'
+                },
             ]
 
     for trial in trials:
