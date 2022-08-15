@@ -201,7 +201,11 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "text"},
                     "affiliation": {
-                        "properties": {"name": {"type": "keyword", "copy_to": ["all"]}}
+                        "properties": {
+                            "@type": {"type": "keyword", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "sameAs": {"type": "keyword", "copy_to": ["all"]},
+                        }
                     },
                     "familyName": {"type": "text", "copy_to": ["all"]},
                     "givenName": {"type": "text", "copy_to": ["all"]},
