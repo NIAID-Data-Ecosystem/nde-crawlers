@@ -285,7 +285,6 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "doi": {"type": "text", "copy_to": ["all"]},
-            "duration": {"type": "text"},
             "funding": {
                 "properties": {
                     "description": {"type": "text", "copy_to": ["all"]},
@@ -313,6 +312,9 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "encodingFormat": {"type": "text"},
+                    "name": {"type": "text"},
+                    "url": {"type": "text"},
                 }
             },
             "healthCondition": {
