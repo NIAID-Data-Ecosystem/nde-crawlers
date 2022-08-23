@@ -1,4 +1,0 @@
-rpy2
-pandas
-scrapy>=2.5.0
-orjson

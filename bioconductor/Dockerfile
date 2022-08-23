@@ -1,13 +1,31 @@
 # when running in a development environment instead of a production environment specify crontab buildarg
 # docker build --build-arg CRONTAB=dev-crontab .
 FROM python:3.10 AS builder
+
 WORKDIR /build/wheels
 RUN apt-get -y -qq update && \
     apt-get install -y --no-install-recommends \
+    libcurl4-openssl-dev \
+    build-essential \
+    curl \
+    r-cran-httr \
+    php-xml \
+    r-cran-rcurl \
+    libxml2-dev \
+    gfortran \
+    r-cran-matrix \
+    r-cran-igraph \
+    libssl-dev \
+    r-base \
+    r-base-core \
+    r-recommended \
+    #
     rustc \
     cargo && \
     apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
+RUN R -q -e "install.packages(c('curl','igraph','BiocManager'))"
+
 RUN /usr/local/bin/pip install --upgrade pip wheel
 ADD files/requirements.txt .
 RUN pip wheel pip wheel
@@ -18,9 +36,26 @@ FROM python:3.10-slim
 # fetch & install cron
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    libcurl4-openssl-dev \
+    build-essential \
+    curl \
+    r-cran-httr \
+    php-xml \
+    r-cran-rcurl \
+    libxml2-dev \
+    gfortran \
+    r-cran-matrix \
+    r-cran-igraph \
+    libssl-dev \
+    r-base \
+    r-base-core \
+    r-recommended \
     cron && \
     apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
+RUN R -q -e "install.packages(c('curl','igraph','BiocManager'))"
+
+
 
 # setup environment
 # create user and group
@@ -59,11 +94,8 @@ ARG CRONTAB=prod-crontab
 # move files
 RUN mv docker-entrypoint.sh / && \
     mv ${CRONTAB} /etc/crontab
-RUN mkdir -p /data && chown -R biothings:biothings /data && \
-    mkdir -p /cache && chown -R biothings:biothings /cache
+RUN mkdir -p /data && chown -R biothings:biothings /data
 ENV PYTHONPATH="."
-ENV SCRAPY_SETTINGS_MODULE="settings"
 VOLUME [ "/data" ]
-VOLUME ["/cache"]
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/docker-entrypoint.sh"]
