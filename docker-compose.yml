@@ -11,18 +11,18 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  clinepidb-crawler:
+    build:
+      context: clinepidb
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      args:
+        CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   dde-crawler:
     build:
       context: dde_niaid
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-  dryad-crawler:
-    build:
-      context: dryad
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
@@ -78,16 +78,16 @@ services:
     volumes:
       - data:/data
       - cache:/cache
-  ncbi-sra-crawler:
-    build:
-      context: ncbi_sra
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-      - cache:/cache
+  # ncbi-sra-crawler:
+  #   build:
+  #     context: ncbi_sra_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
+  #     - cache:/cache
   omicsdi-crawler:
     build:
       context: omicsdi_crawler
@@ -184,14 +184,14 @@ services:
       - "127.0.0.1:8080:80"
 volumes:
   data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/nde/data
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /opt/nde/data
   cache:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/nde/cache
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /opt/nde/cache
