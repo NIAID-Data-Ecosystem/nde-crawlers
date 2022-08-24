@@ -131,7 +131,7 @@ def record_generator():
              }
 
             # tables.Contacts -- multiple                
-            record['author'] = [{'name': hit['contact_name'], 'affiliation': hit['affiliation']} for hit in record['tables']['Contacts']]
+            record['author'] = [{'name': hit['contact_name'], 'affiliation': {'name': hit['affiliation']}} for hit in record['tables']['Contacts']]
 
             # tables.HyperLinks
             hl_list = []
