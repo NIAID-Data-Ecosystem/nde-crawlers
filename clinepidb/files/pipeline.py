@@ -83,7 +83,7 @@ def record_generator():
             record['temporalCoverage'] = {
                 'temporalInterval': 
                     {
-                        'startDate': (temp_cov.split(' ')[0]), 
+                        'startDate': (temp_cov.split(' ')[0].replace(',', '')), 
                         'endDate': (temp_cov.split(' ')[-1])
                     }
             }
@@ -91,7 +91,7 @@ def record_generator():
                 record['temporalCoverage'] = {
                     'temporalInterval': 
                         {
-                            'startDate':record['tables']['StudyCharacteristicTable'][0]['Years'][0],
+                            'startDate':record['tables']['StudyCharacteristicTable'][0]['Years'][0].replace(',', ''),
                             'endDate': record['tables']['StudyCharacteristicTable'][0]['Years'][-1]
                         }
                 }
