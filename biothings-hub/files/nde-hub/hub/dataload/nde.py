@@ -394,6 +394,9 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text"},
                 }
             },
             "isRelatedTo": {
@@ -410,6 +413,12 @@ class NDESourceUploader(BaseSourceUploader):
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "text"},
                             "versionDate": {"type": "date"},
+                        }
+                    },
+                    "hasPart": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "identifier": {"type": "keyword", "copy_to": ["all"]},
                         }
                     },
                     "relationship": {"type": "text", "copy_to": ["all"]}
