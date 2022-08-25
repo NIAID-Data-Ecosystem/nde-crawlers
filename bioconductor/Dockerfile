@@ -36,6 +36,11 @@ FROM python:3.10-slim
 # fetch & install cron
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    cron && \
+    apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     build-essential \
     curl \
@@ -47,12 +52,7 @@ RUN apt-get update && \
     r-cran-matrix \
     r-cran-igraph \
     libssl-dev \
-    r-base \
-    r-base-core \
-    r-recommended \
-    cron && \
-    apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/*
+    r-base
 RUN R -q -e "install.packages(c('curl','igraph','BiocManager'))"
 
 
