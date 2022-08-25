@@ -239,6 +239,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "conditionsOfAccess": {"type": "text"},
+            "contentSize": {"type": "integer"},
             "contentUrl": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
@@ -313,7 +314,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
                     "encodingFormat": {"type": "text"},
-                    "name": {"type": "text"},
+                    "name": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
@@ -441,6 +442,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "mainEntityOfPage": {"type": "text"},
             "name": {"type": "keyword", "copy_to": ["all"]},
             "nctid": {"type": "keyword", "copy_to": ["all"]},
             "output": {
@@ -450,6 +452,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
             },
+            "programmingLanguage": {"type": "text", "copy_to": ["all"]},
             "relationship": {"type": "text", "copy_to": ["all"]},
             "sameAs": {
                 "type": "text",
