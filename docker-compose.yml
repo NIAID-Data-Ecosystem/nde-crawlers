@@ -20,7 +20,6 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
-      - cache:/cache
   # dde-crawler:
   #   build:
   #     context: dde_niaid
