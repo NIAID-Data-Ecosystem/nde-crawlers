@@ -1,3 +1,0 @@
-orjson
-pandas
-rpy2
