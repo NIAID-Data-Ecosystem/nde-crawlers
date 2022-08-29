@@ -149,12 +149,12 @@ def parse():
             output['applicationSubCategory'] = categories
         if project_name := data.get('sbg:projectName'):
             output['project'] = project_name
-        if creators := data.get('sbg:toolAuthor'):
-            creators = creators.split(', ')
-            creator_list = []
-            for creator in creators:
-                creator_list.append({"name": creator})
-            output['creator'] = creator_list
+        if authors := data.get('sbg:toolAuthor'):
+            authors = authors.split(', ')
+            author_list = []
+            for author in authors:
+                author_list.append({"name": author})
+            output['author'] = author_list
         if app_version := data.get('sbg:appVersion'):
             output['softwareVersion'] = app_version
         if modified_on := data.get('sbg:modifiedOn'):

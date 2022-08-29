@@ -1,13 +1,17 @@
 import datetime
+import json
 import unicodedata
 import logging
-import json
 
 from sickle import Sickle
 from lxml import etree
 from sql_database import NDEDatabase
 
-logging.basicConfig(level=logging.INFO)
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
 
