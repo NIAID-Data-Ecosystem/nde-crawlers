@@ -11,6 +11,15 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  bioconductor-crawler:
+    build:
+      context: bioconductor
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   clinepidb-crawler:
     build:
       context: clinepidb

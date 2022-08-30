@@ -269,6 +269,7 @@ class NDESourceUploader(BaseSourceUploader):
             "dateModified": {"type": "date"},
             "datePublished": {"type": "date"},
             "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+            "discussionUrl": {"type": "text", "copy_to": ["all"]},
             "distribution": {
                 "properties": {
                     "@id": {"type": "keyword"},
@@ -286,6 +287,11 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "doi": {"type": "text", "copy_to": ["all"]},
+            "downloadUrl": {
+                "properties": {
+                    "name": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "funding": {
                 "properties": {
                     "description": {"type": "text", "copy_to": ["all"]},
@@ -384,6 +390,11 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text"},
                 }
             },
+            "isBasisFor": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "isPartOf": {
                 "properties": {
                     "@id": {
@@ -461,6 +472,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
             },
+            "processorRequirements": {"type": "text", "copy_to": ["all"]},
             "programmingLanguage": {"type": "text", "copy_to": ["all"]},
             "relationship": {"type": "text", "copy_to": ["all"]},
             "sameAs": {
@@ -475,8 +487,27 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
+            "softwareAddOn": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "softwareHelp": {
+                "properties": {
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "softwareRequirements": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "softwareVersion": {"type": "text", "copy_to": ["all"]},
+            "sourceInfo": {
+                "properties": {
+                    "name": {"type": "text"},
+                    "description": {"type": "text"},
+                    "schema": {"properties": {"field": {"type": "text"}}},
+                    "url": {"type": "text"},
+                    "identifier": {"type": "text"},
+                }
+            },
             "spatialCoverage": {
                 "properties": {
                     "@type": {
