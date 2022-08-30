@@ -101,9 +101,14 @@ class DryadItemProcessorPipeline:
 
         if spatial_covs := item.pop('spatialCoverage', None):
             if isinstance(spatial_covs, list):
-                output['spatialCoverage'] = [{'name': spatial_cov} for spatial_cov in spatial_covs]
+                sc = []
+                for spatial_cov in spatial_covs:
+                    if isinstance(spatial_cov, str):
+                        sc.append({'name': spatial_cov})
+                output['spatialCoverage'] = sc
             else:
-                output['spatialCoverage'] = {'name': spatial_covs}
+                if isinstance(spatial_covs, str):
+                    output['spatialCoverage'] = {'name': spatial_covs}
 
         if citation := item.pop('citation', None):
             output['citation'] = {'url': citation}
