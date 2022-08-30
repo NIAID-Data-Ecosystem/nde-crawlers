@@ -21,24 +21,24 @@ def parse():
         if chunk:
             package_dict_list.append(dict(pat.findall(chunk)))
 
-    # logger.info('Retrieving Download Statistics from Bioconductor')
-    # download_stats_df = pd.read_csv(
-    #     'http://bioconductor.org/packages/stats/bioc/bioc_pkg_stats.tab', sep='\t')
-    # download_stats_df = download_stats_df[download_stats_df['Month'] != 'all']
-    # download_stats_df['date'] = download_stats_df['Month'].astype(
-    #     str) + '/' + download_stats_df['Year'].astype(str)
-    # download_stats_df['date'] = pd.to_datetime(
-    #     download_stats_df['date'], format='%b/%Y')
-    # download_stats_df_last_12_months = download_stats_df[download_stats_df['date']
-    #                                                      >= datetime.datetime.now() - datetime.timedelta(days=365)]
-    # download_stats_df_last_12_months = download_stats_df_last_12_months[
-    #     download_stats_df_last_12_months['date'] <= datetime.datetime.now()]
-    # aggregation_functions = {'Nb_of_downloads': 'sum'}
-    # download_stats_df_last_12_months = download_stats_df_last_12_months.groupby(
-    #     download_stats_df_last_12_months['Package']).aggregate(aggregation_functions)
-    # download_stats_df_last_12_months = download_stats_df_last_12_months.reset_index()
-    # download_stats_dicts = download_stats_df_last_12_months.to_dict(
-    #     orient='records')
+    logger.info('Retrieving Download Statistics from Bioconductor')
+    download_stats_df = pd.read_csv(
+        'http://bioconductor.org/packages/stats/bioc/bioc_pkg_stats.tab', sep='\t')
+    download_stats_df = download_stats_df[download_stats_df['Month'] != 'all']
+    download_stats_df['date'] = download_stats_df['Month'].astype(
+        str) + '/' + download_stats_df['Year'].astype(str)
+    download_stats_df['date'] = pd.to_datetime(
+        download_stats_df['date'], format='%b/%Y')
+    download_stats_df_last_12_months = download_stats_df[download_stats_df['date']
+                                                         >= datetime.datetime.now() - datetime.timedelta(days=365)]
+    download_stats_df_last_12_months = download_stats_df_last_12_months[
+        download_stats_df_last_12_months['date'] <= datetime.datetime.now()]
+    aggregation_functions = {'Nb_of_downloads': 'sum'}
+    download_stats_df_last_12_months = download_stats_df_last_12_months.groupby(
+        download_stats_df_last_12_months['Package']).aggregate(aggregation_functions)
+    download_stats_df_last_12_months = download_stats_df_last_12_months.reset_index()
+    download_stats_dicts = download_stats_df_last_12_months.to_dict(
+        orient='records')
 
     count = 0
     for metadata in package_dict_list:
@@ -65,10 +65,10 @@ def parse():
                 identifier+'.html'
             output['doi'] = f'10.18129/B9.bioc.{identifier}'
 
-            # downloads = [d['Nb_of_downloads']
-            #              for d in download_stats_dicts if d['Package'] == identifier][0]
-            # output['aggregateRating'] = {
-            #     'ratingValue': downloads, 'reviewAspect': 'Downloads in the last 12 months'}
+            downloads = [d['Nb_of_downloads']
+                         for d in download_stats_dicts if d['Package'] == identifier][0]
+            output['aggregateRating'] = {
+                'ratingValue': downloads, 'reviewAspect': 'Downloads in the last 12 months'}
 
         if version := metadata.get('Version'):
             output['softwareVersion'] = version

@@ -499,6 +499,15 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "softwareRequirements": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "softwareVersion": {"type": "text", "copy_to": ["all"]},
+            "sourceInfo": {
+                "properties": {
+                    "name": {"type": "text"},
+                    "description": {"type": "text"},
+                    "schema": {"properties": {"field": {"type": "text"}}},
+                    "url": {"type": "text"},
+                    "identifier": {"type": "text"},
+                }
+            },
             "spatialCoverage": {
                 "properties": {
                     "@type": {
