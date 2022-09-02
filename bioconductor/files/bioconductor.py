@@ -202,7 +202,15 @@ def parse():
             imports = [d.replace('\n', '').strip().replace('    ', '')
                        for d in imports.split(',') if d]
             for pkg_import in imports:
-                based_on.append({'identifier': pkg_import})
+                pkg_import = re.sub("[()].*?[)]", "", pkg_import)
+                pkg_import = pkg_import.strip()
+                based_on.append(
+                    {
+                        'name': pkg_import,
+                        'identifier': f'Bioconductor_{pkg_import}',
+                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_import}.html'
+                    }
+                )
         if len(based_on):
             output['isBasedOn'] = based_on
 
@@ -211,6 +219,8 @@ def parse():
             enhances = [d.replace('\n', '').strip().replace('    ', '')
                         for d in enhances.split(',') if d]
             for pkg_enhance in enhances:
+                pkg_enhance = re.sub("[()].*?[)]", "", pkg_enhance)
+                pkg_enhance = pkg_enhance.strip()
                 is_enhanced_by.append({'identifier': pkg_enhance})
         if len(is_enhanced_by):
             output['softwareAddOn'] = is_enhanced_by
@@ -220,6 +230,8 @@ def parse():
             depends_on_me = [d.replace('\n', '').strip().replace('    ', '')
                              for d in depends_on_me.split(',') if d]
             for pkg_dependency in depends_on_me:
+                pkg_dependency = re.sub("[()].*?[)]", "", pkg_dependency)
+                pkg_dependency = pkg_dependency.strip()
                 is_dependent_on.append({'identifier': pkg_dependency})
         if len(is_dependent_on):
             output['isBasisFor'] = is_dependent_on
@@ -229,22 +241,54 @@ def parse():
             suggests = [d.replace('\n', '').strip().replace('    ', '')
                         for d in suggests.split(',') if d]
             for pkg_suggest in suggests:
-                is_related_to.append({'identifier': pkg_suggest})
+                pkg_suggest = re.sub("[()].*?[)]", "", pkg_suggest)
+                pkg_suggest = pkg_suggest.strip()
+                is_related_to.append(
+                    {
+                        'name': pkg_suggest,
+                        'identifier': f'Bioconductor_{pkg_suggest}',
+                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_suggest}.html'
+                    }
+                )
         if depends := metadata.get('dependsOnMe'):
             depends = [d.replace('\n', '').strip().replace('    ', '')
                        for d in depends.split(',') if d]
             for pkg_dependency in depends:
-                is_related_to.append({'identifier': pkg_dependency})
+                pkg_dependency = re.sub("[()].*?[)]", "", pkg_dependency)
+                pkg_dependency = pkg_dependency.strip()
+                is_related_to.append(
+                    {
+                        'name': pkg_dependency,
+                        'identifier': f'Bioconductor_{pkg_dependency}',
+                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_dependency}.html'
+                    }
+                )
         if suggests_me := metadata.get('suggestsMe'):
             suggests_me = [d.replace('\n', '').strip().replace('    ', '')
                            for d in suggests_me.split(',') if d]
             for pkg_suggest in suggests_me:
-                is_related_to.append({'identifier': pkg_suggest})
+                pkg_suggest = re.sub("[()].*?[)]", "", pkg_suggest)
+                pkg_suggest = pkg_suggest.strip()
+                is_related_to.append(
+                    {
+                        'name': pkg_suggest,
+                        'identifier': f'Bioconductor_{pkg_suggest}',
+                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_suggest}.html'
+                    }
+                )
         if linking_to := metadata.get('LinkingTo'):
             linking_to = [d.replace('\n', '').strip().replace('    ', '')
                           for d in linking_to.split(',') if d]
             for pkg_link in linking_to:
-                is_related_to.append({'identifier': pkg_link})
+                pkg_link = re.sub("[()].*?[)]", "", pkg_link)
+                pkg_link = pkg_link.strip()
+                is_related_to.append(
+                    {
+                        'name': pkg_link,
+                        'identifier': f'Bioconductor_{pkg_link}',
+                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_link}.html'
+                    }
+                )
         if len(is_related_to):
             output['isRelatedTo'] = is_related_to
 
