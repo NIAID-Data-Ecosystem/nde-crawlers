@@ -175,7 +175,12 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "applicationCategory": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-            "applicationSubCategory": {"type": "keyword", "copy_to": ["all"]},
+            "applicationSubCategory": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "name": {"type": "keyword", "copy_to": ["all"]}
+                }
+            },
             "applicationSuite": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "author": {
                 "properties": {
@@ -292,6 +297,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "featureList": {"type": "text", "copy_to": ["all"]},
             "funding": {
                 "properties": {
                     "description": {"type": "text", "copy_to": ["all"]},
@@ -559,7 +565,19 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "topicCategory": {"type": "keyword", "copy_to": ["all"]},
+            "topicCategory": {
+                "properties": {
+                    "description": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "text", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                        }
+                    }
+                }
+            },
             "url": {"type": "text", "copy_to": ["all"]},
             "usageInfo": {
                 "properties": {

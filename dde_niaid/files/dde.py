@@ -8,6 +8,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
+
 def query_ols(iri):
     """ Gets the name field of measurementTechnique, infectiousAgent, infectiousDisease, and species in our nde schema
 
@@ -30,7 +31,7 @@ def query_ols(iri):
         return {'name': request['_embedded']['terms'][0]['label'], 'url': iri}
     else:
         return {'name': iri}
-    
+
 
 def parse():
     # initial request to find total number of hits
@@ -65,7 +66,7 @@ def parse():
                     for author in authors:
                         if affiliation := author.get('affiliation'):
                             author['affiliation'] = {'name': affiliation}
-                else: 
+                else:
                     if affiliation := authors.get('affiliation'):
                         authors['affiliation'] = {'name': affiliation}
                 hit['author'] = authors
@@ -73,14 +74,17 @@ def parse():
 
             # adjust date values
             if dates := hit.pop('_ts', None):
-                hit['dateCreated'] = datetime.datetime.fromisoformat(dates['date_created']).date().isoformat()
-                hit['dateModified'] = datetime.datetime.fromisoformat(dates['last_updated']).date().isoformat()
+                hit['dateCreated'] = datetime.datetime.fromisoformat(
+                    dates['date_created']).date().isoformat()
+                hit['dateModified'] = datetime.datetime.fromisoformat(
+                    dates['last_updated']).date().isoformat()
 
             # adjust applicationSubCategory to fit our schema
             if app_subs := hit.pop('applicationSubCategory', None):
                 hit['applicationSubCategory'] = []
                 for app_sub in app_subs:
-                    hit['applicationSubCategory'].append(app_sub.get('name'))
+                    hit['applicationSubCategory'].append(
+                        {'name': app_sub.get('name')})
 
             # adjust @type value to fit our schema
             if nde_type := hit.pop('@type', None):
@@ -132,7 +136,7 @@ def parse():
                         hit['species'].append(query_ols(a_species))
                 else:
                     hit['species'] = query_ols(species)
-            
+
             # remove unnecessary values
             hit.pop('_meta', None)
             hit.pop('_score', None)
@@ -145,4 +149,3 @@ def parse():
     else:
         logger.warning("Did not parse all the records \n"
                        "Total number parsed: %s \n Total number of documents: %s", count, total)
-
