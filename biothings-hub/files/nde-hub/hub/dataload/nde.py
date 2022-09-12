@@ -381,7 +381,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "userInteractionCount": {"type": "unsigned_long"}
                 }
             },
-            "isAvailableForFree": {"type": "boolean"},
+            "isAccessibleForFree": {"type": "boolean"},
             "isBasedOn": {
                 "properties": {
                     "@type": {"type": "keyword"},
