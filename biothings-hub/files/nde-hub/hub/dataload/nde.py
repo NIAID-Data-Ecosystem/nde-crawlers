@@ -500,6 +500,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "softwareHelp": {
                 "properties": {
+                    "name": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },

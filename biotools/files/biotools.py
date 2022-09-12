@@ -87,7 +87,7 @@ def parse_parameters(parameterdict):
 
 class cleandoc:
     basejson = {
-        "@type": "ComputationalTool",  # gettype
+        "@type": "ComputationalTool",
         # "@context": {
         #     "schema": "http://schema.org/",
         #     "outbreak": "https://discovery.biothings.io/view/outbreak/",
@@ -95,19 +95,18 @@ class cleandoc:
         # },
         "@context": 'https://schema.org/',
         "includedInDataCatalog": {
-            "@type": "ComputationalTool",  # gettype
-            "name": "bio.tools",  # check period
+            "@type": "ComputationalTool",
+            "name": "biotools",
             "url": "https://bio.tools/",
             'versionDate': datetime.date.today().isoformat()
         }
     }
 
-    def add_basic_info(biotooljsonhit):
+    def add_basic_info(biotooljsonhit, domain_dict):
         cleanjson = cleandoc.basejson
         cleanjson['name'] = biotooljsonhit['name']
         cleanjson['_id'] = 'biotools_' + biotooljsonhit['biotoolsID']
 
-        domain_dict = get_domain_list()
         for key in domain_dict:
             if biotooljsonhit['biotoolsID'] in domain_dict[key]['ids']:
                 cleanjson['topicCategory'] = {
@@ -232,10 +231,12 @@ class cleandoc:
     def add_softwarehelp(cleanjson, biotooljsonhit):
         if len(biotooljsonhit['documentation']) > 0:
             if isinstance(biotooljsonhit['documentation'], list) == True:
-                cleanjson['softwareHelp'] = [x['url']
-                                             for x in biotooljsonhit['documentation']]
+                urls = [{'url': x['url']}
+                        for x in biotooljsonhit['documentation']]
+                cleanjson['softwareHelp'] = urls
             if isinstance(biotooljsonhit['documentation'], dict) == True:
-                cleanjson['softwareHelp'] = [biotooljsonhit['documentation']]
+                urls = [{'url': biotooljsonhit['documentation']}]
+                cleanjson['softwareHelp'] = urls
         return cleanjson
 
     def add_author(cleanjson, biotooljsonhit):
@@ -302,6 +303,8 @@ def download_jsondocs():
     while i < total_pages+1:
         if i % 100 == 0:
             logger.info("Retrieved %s of %s pages" % (i, total_pages))
+        if i % 100 == 0:
+            break
         payloads = {'format': 'json', 'page': i}
         r = requests.get(biotoolsapiurl, params=payloads, timeout=20).json()
         time.sleep(1)
@@ -310,13 +313,13 @@ def download_jsondocs():
     return jsondoclist
 
 
-def transform_json(jsondoclist):
+def transform_json(jsondoclist, domain_dict):
     logger.info('Parsing Metadata')
     for i in range(len(jsondoclist)):
-        if i % 100 == 0:
+        if i % 1000 == 0 and i != 0:
             logger.info("Parsed %s of %s" % (i, len(jsondoclist)))
         biotooljsonhit = jsondoclist[i]
-        cleanjson = cleandoc.add_basic_info(biotooljsonhit)
+        cleanjson = cleandoc.add_basic_info(biotooljsonhit, domain_dict)
         cleanjson = cleandoc.add_app_sub_cat(cleanjson, biotooljsonhit)
         cleanjson = cleandoc.add_features(cleanjson, biotooljsonhit)
         cleanjson = cleandoc.add_links(cleanjson, biotooljsonhit)
@@ -343,5 +346,6 @@ def get_domain_list():
 
 def parse():
     jsondoclist = download_jsondocs()
-    doclist = transform_json(jsondoclist)
+    domain_dict = get_domain_list()
+    doclist = transform_json(jsondoclist, domain_dict)
     yield from doclist
