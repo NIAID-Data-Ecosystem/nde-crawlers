@@ -146,7 +146,11 @@ def parse():
             output['codeRepository'] = github_links
 
         if categories := data.get('sbg:categories'):
-            output['applicationSubCategory'] = {'name': categories}
+            category_list = []
+            for category in categories:
+                category_list.append({'name': category})
+            if len(category_list):
+                output['applicationSubCategory'] = category_list
         if project_name := data.get('sbg:projectName'):
             output['project'] = project_name
         if authors := data.get('sbg:toolAuthor'):

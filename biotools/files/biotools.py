@@ -5,7 +5,7 @@ import time
 import copy
 import logging
 
-from datetime import datetime
+import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
@@ -86,7 +86,6 @@ def parse_parameters(parameterdict):
 
 
 class cleandoc:
-    now = datetime.now()
     basejson = {
         "@type": "ComputationalTool",  # gettype
         # "@context": {
@@ -106,7 +105,22 @@ class cleandoc:
     def add_basic_info(biotooljsonhit):
         cleanjson = cleandoc.basejson
         cleanjson['name'] = biotooljsonhit['name']
-        cleanjson['_id'] = 'biotools_' + biotooljsonhit['name']
+        cleanjson['_id'] = 'biotools_' + biotooljsonhit['biotoolsID']
+
+        domain_dict = get_domain_list()
+        for key in domain_dict:
+            if biotooljsonhit['biotoolsID'] in domain_dict[key]['ids']:
+                cleanjson['topicCategory'] = {
+                    'name': domain_dict[key]['title'],
+                    'url': 'https://bio.tools/t?domain=' + domain_dict[key]['domain'],
+                    'curatedBy': {
+                        'name': 'Biotools',
+                        'url': 'https://bio.tools/domains'
+                    }
+                }
+                if domain_dict[key]['description'] is not None:
+                    cleanjson['topicCategory']['description'] = domain_dict[key]['description']
+
         cleanjson['description'] = biotooljsonhit['description']
         cleanjson['identifier'] = biotooljsonhit['biotoolsID']
         cleanjson['url'] = 'https://bio.tools/' + biotooljsonhit['biotoolsID']
@@ -274,20 +288,20 @@ class cleandoc:
 
 
 def download_jsondocs():
+    logger.info('Retrieving Metadata From API')
     jsondoclist = []
     biotoolsapiurl = 'https://bio.tools/api/t'
     payloads = {'format': 'json', 'page': '1'}
     # payloads = {'format': 'json', 'domain': 'covid-19', 'page': '1'}
-    #payloads = {'format': 'json', 'q': 'COVID-19','page':'1'}
+    # payloads = {'format': 'json', 'q': 'COVID-19','page':'1'}
     r = requests.get(biotoolsapiurl, params=payloads, timeout=5).json()
     count = r['count']
     list_num = len(r['list'])
     total_pages = math.ceil(count/list_num)
     i = 1
     while i < total_pages+1:
-        logger.info(i)
-        if i == 10:
-            break
+        if i % 100 == 0:
+            logger.info("Retrieved %s of %s pages" % (i, total_pages))
         payloads = {'format': 'json', 'page': i}
         r = requests.get(biotoolsapiurl, params=payloads, timeout=20).json()
         time.sleep(1)
@@ -297,7 +311,10 @@ def download_jsondocs():
 
 
 def transform_json(jsondoclist):
+    logger.info('Parsing Metadata')
     for i in range(len(jsondoclist)):
+        if i % 100 == 0:
+            logger.info("Parsed %s of %s" % (i, len(jsondoclist)))
         biotooljsonhit = jsondoclist[i]
         cleanjson = cleandoc.add_basic_info(biotooljsonhit)
         cleanjson = cleandoc.add_app_sub_cat(cleanjson, biotooljsonhit)
@@ -307,6 +324,21 @@ def transform_json(jsondoclist):
         cleanjson = cleandoc.add_author(cleanjson, biotooljsonhit)
         cleanjson = cleandoc.add_citations(cleanjson, biotooljsonhit)
         yield cleanNullTerms(cleanjson)
+
+
+def get_domain_list():
+    domain_dict = {}
+    biotools_domains = 'https://bio.tools/api/d/all'
+    r = requests.get(biotools_domains, timeout=5).json()
+    for domain in r['data']:
+        domain_dict[domain['title']] = {
+            'ids': [x['biotoolsID']
+                    for x in domain['resources']],
+            'title': domain['title'],
+            'description': domain['description'],
+            'domain': domain['domain'],
+        }
+    return domain_dict
 
 
 def parse():

@@ -1,10 +1,9 @@
 import datetime
 import os
-import traceback
 import platform
 import logging
 import orjson
-import biotools
+import dockstore
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
@@ -15,7 +14,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'biotools_crawled'
+    '/data', 'dockstore_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -35,7 +34,7 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    docs = biotools.parse()
+    docs = dockstore.parse()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
@@ -48,10 +47,10 @@ except Exception as e:
     )
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-
-    logger.error(traceback.format_exc())
+    logger.error(e)
 finally:
     fd.close()
+
 
 if is_parsed:
     try:
