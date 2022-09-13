@@ -1,3 +1,4 @@
+from urllib.error import HTTPError
 import wget
 import datetime
 import requests
@@ -9,6 +10,8 @@ import os
 
 from sql_database import NDEDatabase
 from pysradb.sraweb import SRAweb
+from json.decoder import JSONDecodeError
+from requests.adapters import HTTPAdapter, Retry
 
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +22,9 @@ class NCBI_SRA(NDEDatabase):
     # override variables
     SQL_DB = "ncbi_sra.db"
     EXPIRE = datetime.timedelta(days=90)
+
+    # Used for testing small chunks of data
+    DATA_LIMIT = 1000
 
     def load_cache(self):
         logger.info('Starting FTP Download')
@@ -36,10 +42,12 @@ class NCBI_SRA(NDEDatabase):
         filtered = only_live[only_live['Type'] == 'STUDY']
         accession_list = filtered[['Accession', 'Type', 'Status', 'Updated', 'Published',
                                    'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
+        if self.DATA_LIMIT:
+            accession_list = accession_list[:self.DATA_LIMIT]
+
         logger.info('Total Studies Found: {}'.format(len(accession_list)))
         count = 0
 
-        # One at a time
         logger.info('Retrieving Individual Study Metadata from API')
         for x in accession_list:
             try:
@@ -48,12 +56,22 @@ class NCBI_SRA(NDEDatabase):
                     meta_df = meta_df.replace({np.nan: None, '-': None})
                     meta_dict = meta_df.to_dict(orient='list')
                     meta_dict['Accession'] = x[0]
+
                     drs_url = f'https://locate.be-md.ncbi.nlm.nih.gov/idx/v1/{x[0]}?submitted=true&etl=false'
-                    drs_response = requests.get(drs_url)
-                    drs_json = json.loads(drs_response.text)
-                    if 'response' in drs_json:
-                        drs_id = drs_json['response'][x[0]]['drs']
-                        meta_dict['DRS'] = drs_id
+                    try:
+                        s = requests.Session()
+                        retries = Retry(total=5,
+                                        backoff_factor=0.1,
+                                        status_forcelist=[500, 502, 503, 504])
+                        s.mount('http://', HTTPAdapter(max_retries=retries))
+                        drs_response = s.get(drs_url)
+                        drs_json = json.loads(drs_response.text)
+                        if 'response' in drs_json:
+                            drs_id = drs_json['response'][x[0]]['drs']
+                            meta_dict['DRS'] = drs_id
+                    except HTTPError as e:
+                        logger.error(e)
+                        meta_dict['DRS'] = None
                     if x[1] != '-':
                         meta_dict['Type'] = x[1]
                     if x[3] != '-':
@@ -73,6 +91,9 @@ class NCBI_SRA(NDEDatabase):
                         logger.info('{} Studies Retrieved'.format(count))
                     yield (x[0], json.dumps(meta_dict))
             except KeyError as e:
+                continue
+            except JSONDecodeError as e:
+                logger.info(f'JSONDecodeError for Accession {x[0]}: {e}')
                 continue
         logger.info('Removing SRA_Accessions.tab')
         os.remove("SRA_Accessions.tab")
@@ -296,8 +317,10 @@ class NCBI_SRA(NDEDatabase):
 
     def update_cache(self):
         logger.info('Starting FTP Download')
+
         fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
         wget.download(fileloc, out='SRA_Accessions.tab')
+
         logger.info('FTP Download Complete')
 
         logger.info('Retrieving Studies from SRA_Accessions.tab')
@@ -322,11 +345,20 @@ class NCBI_SRA(NDEDatabase):
                     meta_dict = meta_df.to_dict(orient='list')
                     meta_dict['Accession'] = x[0]
                     drs_url = f'https://locate.be-md.ncbi.nlm.nih.gov/idx/v1/{x[0]}?submitted=true&etl=false'
-                    drs_response = requests.get(drs_url)
-                    drs_json = json.loads(drs_response.text)
-                    if 'response' in drs_json:
-                        drs_id = drs_json['response'][x[0]]['drs']
-                        meta_dict['DRS'] = drs_id
+                    try:
+                        s = requests.Session()
+                        retries = Retry(total=5,
+                                        backoff_factor=0.1,
+                                        status_forcelist=[500, 502, 503, 504])
+                        s.mount('http://', HTTPAdapter(max_retries=retries))
+                        drs_response = s.get(drs_url)
+                        drs_json = json.loads(drs_response.text)
+                        if 'response' in drs_json:
+                            drs_id = drs_json['response'][x[0]]['drs']
+                            meta_dict['DRS'] = drs_id
+                    except HTTPError as e:
+                        logger.error(e)
+                        meta_dict['DRS'] = None
                     if x[1] != '-':
                         meta_dict['Type'] = x[1]
                     if x[3] != '-':
@@ -346,6 +378,9 @@ class NCBI_SRA(NDEDatabase):
                         logger.info('{} Studies Retrieved'.format(count))
                     yield (x[0], json.dumps(meta_dict))
             except KeyError as e:
+                continue
+            except JSONDecodeError as e:
+                logger.info(f'JSONDecodeError for Accession {x[0]}: {e}')
                 continue
 
         logger.info('Removing SRA_Accessions.tab')

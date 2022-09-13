@@ -103,9 +103,9 @@ class SRAweb(SRAdb):
             self.esearch_params["sra"].append(("api_key", str(api_key)))
             self.esearch_params["geo"].append(("api_key", str(api_key)))
             self.efetch_params.append(("api_key", str(api_key)))
-            self.sleep_time = 1 / 10
-        else:
-            self.sleep_time = 1 / 3
+            # self.sleep_time = 1 / 10
+        # else:
+        #     self.sleep_time = 1 / 3
 
     @staticmethod
     def format_xml(string):
@@ -274,12 +274,13 @@ class SRAweb(SRAdb):
             try:
                 esearch_response = request.json()
             except JSONDecodeError:
-                sys.stderr.write(
-                    "Unable to parse esummary response json: {}{}. Aborting.".format(
-                        request.text, os.linesep
-                    )
-                )
-                sys.exit(1)
+                # sys.stderr.write(
+                #     "Unable to parse esummary response json: {}{}. Aborting.".format(
+                #         request.text, os.linesep
+                #     )
+                # )
+                # sys.exit(1)
+                pass
 
             # retry again
 
@@ -376,7 +377,7 @@ class SRAweb(SRAdb):
                     if request_json["error"] == "error forwarding request":
                         sys.stderr.write(
                             "Encountered error while making request.\n")
-                        sys.exit(1)
+                        # sys.exit(1)
                 time.sleep(int(retry_after))
                 # try again
                 request = requests.get(
@@ -403,21 +404,21 @@ class SRAweb(SRAdb):
                     "Unable to parse xml: {}{}".format(
                         request_text, os.linesep)
                 )
-                sys.exit(1)
+                # sys.exit(1)
             if not response:
                 sys.stderr.write(
                     "Unable to parse xml response. Received: {}{}".format(
                         xml_response, os.linesep
                     )
                 )
-                sys.exit(1)
+                # sys.exit(1)
             if retstart == 0:
                 results = response
             else:
                 result = response
                 for value in result:
                     results.append(value)
-            time.sleep(self.sleep_time)
+            # time.sleep(self.sleep_time)
         return results
 
     def sra_metadata(
@@ -566,7 +567,7 @@ class SRAweb(SRAdb):
         if not detailed:
             return metadata_df
 
-        time.sleep(self.sleep_time)
+        # time.sleep(self.sleep_time)
         efetch_result = self.get_efetch_response("sra", srp)
         if not isinstance(efetch_result, list):
             if efetch_result:
@@ -704,15 +705,20 @@ class SRAweb(SRAdb):
         metadata_df = metadata_df[metadata_df.columns.dropna()]
         metadata_df = metadata_df.drop_duplicates()
         metadata_df = metadata_df.replace(r"^\s*$", np.nan, regex=True)
-        ena_cols = [
-            "ena_fastq_http",
-            "ena_fastq_http_1",
-            "ena_fastq_http_2",
-            "ena_fastq_ftp",
-            "ena_fastq_ftp_1",
-            "ena_fastq_ftp_2",
-        ]
-        metadata_df[ena_cols] = np.nan
+        # ena_cols = [
+        #     "ena_fastq_http",
+        #     "ena_fastq_http_1",
+        #     "ena_fastq_http_2",
+        #     "ena_fastq_ftp",
+        #     "ena_fastq_ftp_1",
+        #     "ena_fastq_ftp_2",
+        # ]
+        # metadata_df["ena_fastq_http"] = pd.concat(np.nan)
+        # metadata_df["ena_fastq_http_1"] = pd.concat(np.nan)
+        # metadata_df["ena_fastq_http_2"] = pd.concat(np.nan)
+        # metadata_df["ena_fastq_ftp"] = pd.concat(np.nan)
+        # metadata_df["ena_fastq_ftp_1"] = pd.concat(np.nan)
+        # metadata_df["ena_fastq_ftp_2"] = pd.concat(np.nan)
 
         metadata_df = metadata_df.set_index("run_accession")
         # multithreading lookup on ENA, since a lot of time is spent waiting
@@ -828,7 +834,7 @@ class SRAweb(SRAdb):
                      "accession": "experiment_alias"}
         )
         srx = gsm_df.experiment_accession.tolist()
-        time.sleep(self.sleep_time)
+        # time.sleep(self.sleep_time)
         srs_df = self.srx_to_srs(srx)
         gsm_df = srs_df.merge(gsm_df, on="experiment_accession")[
             ["experiment_alias", "sample_accession"]
@@ -912,7 +918,7 @@ class SRAweb(SRAdb):
     def srs_to_gsm(self, srs, **kwargs):
         """Get GSM for a SRS"""
         srx_df = self.srs_to_srx(srs)
-        time.sleep(self.sleep_time)
+        # time.sleep(self.sleep_time)
         gsm_df = self.srx_to_gsm(
             srx_df.experiment_accession.tolist(), **kwargs)
         srs_df = srx_df.merge(gsm_df, on="experiment_accession")
