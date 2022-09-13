@@ -5,6 +5,7 @@ import platform
 import logging
 import orjson
 from ncbi_sra import NCBI_SRA
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 

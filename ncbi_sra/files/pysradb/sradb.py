@@ -21,7 +21,6 @@ from .download import download_file
 from .download import get_file_size
 from .download import millify
 from .filter_attrs import expand_sample_attribute_columns
-from .taxid2name import TAXID_TO_NAME
 from .utils import _find_aspera_keypath
 from .utils import _get_url
 from .utils import confirm
