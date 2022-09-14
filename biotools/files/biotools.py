@@ -303,8 +303,6 @@ def download_jsondocs():
     while i < total_pages+1:
         if i % 100 == 0:
             logger.info("Retrieved %s of %s pages" % (i, total_pages))
-        if i % 100 == 0:
-            break
         payloads = {'format': 'json', 'page': i}
         r = requests.get(biotoolsapiurl, params=payloads, timeout=20).json()
         time.sleep(1)

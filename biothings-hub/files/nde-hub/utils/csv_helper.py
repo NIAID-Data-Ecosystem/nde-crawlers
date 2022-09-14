@@ -2,7 +2,7 @@ import pandas as pd
 
 
 def get_source_data(source_name):
-    df = pd.read_csv(f'{source_name}.csv')
+    df = pd.read_csv(f'hub/dataload/sources/{source_name}/{source_name}.csv')
     col1 = 'source_property'
     col2 = 'nde_property'
     result = dict(zip(df[col1], df[col2]))
