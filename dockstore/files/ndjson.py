@@ -2,10 +2,14 @@ import datetime
 import os
 import platform
 import logging
+import traceback
 import orjson
 import dockstore
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
 # set the release string to be ISO date format
@@ -41,13 +45,14 @@ try:
     is_parsed = True
 # parser failed
 except Exception as e:
-    fd.close()
-    logger.warning(
+    logger.error(
         "Errors occurred while running, so not saving potentially corrupt data."
     )
+    logger.error(traceback.format_exc())
+    
+    fd.close()
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-    logger.error(e)
 finally:
     fd.close()
 
