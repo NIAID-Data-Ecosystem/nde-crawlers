@@ -196,6 +196,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "givenName": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
+                    "email": {"type": "text"},
                     "role": {"type": "keyword"},
                     "title": {"type": "text"},
                     "url": {"type": "keyword"},
