@@ -192,6 +192,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "sameAs": {"type": "keyword", "copy_to": ["all"]},
                         }
                     },
+                    "email": {"type": "keyword", "copy_to": ["all"]},
                     "familyName": {"type": "text", "copy_to": ["all"]},
                     "givenName": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
