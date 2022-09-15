@@ -1,3 +1,0 @@
-scrapy>=2.5.0
-orjson
-extruct
