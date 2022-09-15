@@ -205,6 +205,7 @@ class NDESourceUploader(BaseSourceUploader):
             "citation": {
                 "properties": {
                     "@type": {"type": "keyword"},
+                    "abstract": {"type": "text"},
                     "author": {
                         "properties": {
                             "@type": {"type": "text"},
@@ -213,7 +214,9 @@ class NDESourceUploader(BaseSourceUploader):
                             "name": {"type": "text", "copy_to": ["all"]},
                         }
                     },
+                    "citation": {"type": "text"},
                     "datePublished": {"type": "date"},
+                    "description": {"type": "text"},
                     "doi": {"type": "keyword", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "issueNumber": {"type": "text"},
@@ -229,15 +232,28 @@ class NDESourceUploader(BaseSourceUploader):
             "citedBy": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "abstract": {"type": "text", "analyzer": "nde_analyzer"},
+                    "abstract": {"type": "text"},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
                     "citation": {"type": "text"},
                     "datePublished": {"type": "date"},
-                    "description": {"type": "text", "analyzer": "nde_analyzer"},
-                    "doi": {"type": "text", "copy_to": ["all"]},
-                    "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "analyzer": "nde_analyzer"},
+                    "description": {"type": "text"},
+                    "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "issueNumber": {"type": "text"},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "journalNameAbbrev": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "pagination": {"type": "text"},
                     "pmid": {"type": "text", "copy_to": ["all"]},
-                    "url": {"type": "text"},
+                    "url": {"type": "keyword"},
+                    "volumeNumber": {"type": "text"},
                 }
             },
             "codeRepository": {
