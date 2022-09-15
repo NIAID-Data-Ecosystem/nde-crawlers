@@ -5,7 +5,7 @@ description,description
 identifier,biotoolsID
 description,description
 homepage,codeRepository
-homepage,contentUrl
+homepage,mainEntityOfPage
 version,softwareVersion
 toolType,applicationCategory
 license,license

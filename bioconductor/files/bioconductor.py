@@ -67,8 +67,10 @@ def parse():
 
             downloads = [d['Nb_of_downloads']
                          for d in download_stats_dicts if d['Package'] == identifier][0]
-            output['aggregateRating'] = {
-                'ratingValue': downloads, 'reviewAspect': 'Downloads in the last 12 months'}
+            output['interactionStatistic'] = {
+                'userInteractionCount': downloads,
+                'interactionType': 'Downloads in the last 12 months'
+            }
 
         if version := metadata.get('Version'):
             output['softwareVersion'] = version
@@ -99,30 +101,30 @@ def parse():
                        for d in authors.split(',') if d]
             for author in authors:
                 if ' and ' in author:
-                    url = None
+                    email = None
                     one = author.split(' and ')[0]
                     if one.find('<') != -1:
-                        url = one[one.find('<')+1:one.find('>')]
+                        email = one[one.find('<')+1:one.find('>')]
                         one = re.sub("[<].*?[>]", "", one)
-                        if url:
-                            author_list.append({'name': one, 'url': url})
+                        if email:
+                            author_list.append({'name': one, 'email': email})
                         else:
                             author_list.append({'name': one})
-                    url = None
+                    email = None
                     two = author.split(' and ')[1]
                     if two.find('<') != -1:
-                        url = two[two.find('<')+1:two.find('>')]
+                        email = two[two.find('<')+1:two.find('>')]
                         two = re.sub("[<].*?[>]", "", two)
-                    if url:
-                        author_list.append({'name': two, 'url': url})
+                    if email:
+                        author_list.append({'name': two, 'email': email})
                     else:
                         author_list.append({'name': two})
-                    url = None
+                    email = None
                 else:
                     if author.find('<') != -1:
-                        url = author[author.find('<')+1:author.find('>')]
-                    if url:
-                        author_list.append({'name': author, 'url': url})
+                        email = author[author.find('<')+1:author.find('>')]
+                    if email:
+                        author_list.append({'name': author, 'email': email})
                     else:
                         author_list.append({'name': author})
 
@@ -206,8 +208,9 @@ def parse():
                 pkg_import = pkg_import.strip()
                 based_on.append(
                     {
+                        '_id': f'Bioconductor_{pkg_import}',
+                        'identifier': pkg_import,
                         'name': pkg_import,
-                        'identifier': f'Bioconductor_{pkg_import}',
                         'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_import}.html'
                     }
                 )
@@ -232,7 +235,13 @@ def parse():
             for pkg_dependency in depends_on_me:
                 pkg_dependency = re.sub("[()].*?[)]", "", pkg_dependency)
                 pkg_dependency = pkg_dependency.strip()
-                is_dependent_on.append({'identifier': pkg_dependency})
+                is_dependent_on.append(
+                    {
+                        'name': pkg_dependency,
+                        'identifier': f'Bioconductor_{pkg_dependency}',
+                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_dependency}.html'
+                    }
+                )
         if len(is_dependent_on):
             output['isBasisFor'] = is_dependent_on
 
@@ -284,8 +293,9 @@ def parse():
                 pkg_link = pkg_link.strip()
                 is_related_to.append(
                     {
+                        '_id': f'Bioconductor_{pkg_link}',
+                        'identifier': pkg_link,
                         'name': pkg_link,
-                        'identifier': f'Bioconductor_{pkg_link}',
                         'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_link}.html'
                     }
                 )
