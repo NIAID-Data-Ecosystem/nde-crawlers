@@ -121,6 +121,7 @@ def parse():
                         author_list.append({'name': two})
                     email = None
                 else:
+                    email = None
                     if author.find('<') != -1:
                         email = author[author.find('<')+1:author.find('>')]
                     if email:
