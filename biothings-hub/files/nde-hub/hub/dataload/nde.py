@@ -417,6 +417,8 @@ class NDESourceUploader(BaseSourceUploader):
             "isBasisFor": {
                 "properties": {
                     "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
                 }
             },
             "isPartOf": {
