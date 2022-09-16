@@ -14,8 +14,9 @@ logger = logging.getLogger('nde-logger')
 def cleanNullTerms(d):
     clean = {}
     for k, v in d.items():
-        if v is not None and len(v) > 0:
-            clean[k] = v
+        if not isinstance(v, bool):
+            if v is not None and len(v) > 0:
+                clean[k] = v
     return clean
 
 
@@ -337,6 +338,7 @@ def transform_json(jsondoclist, domain_dict):
         cleanjson = cleandoc.add_author(cleanjson, biotooljsonhit)
         cleanjson = cleandoc.add_citations(cleanjson, biotooljsonhit)
         yield cleanNullTerms(cleanjson)
+    logger.info('Finished Parsing. Total records: %s' % len(jsondoclist))
 
 
 def get_domain_list():
