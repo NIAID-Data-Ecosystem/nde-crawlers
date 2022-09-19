@@ -3,7 +3,7 @@ import os
 import platform
 import logging
 import orjson
-import biocontainer
+import biocontainers
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
@@ -14,7 +14,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'biocontainer_crawled'
+    '/data', 'biocontainers_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
@@ -34,7 +34,7 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    docs = biocontainer.parse()
+    docs = biocontainers.parse()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
