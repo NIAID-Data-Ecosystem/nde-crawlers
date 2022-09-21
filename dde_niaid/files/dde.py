@@ -41,7 +41,7 @@ def parse():
     total = request['total']
     pages = (total - 1) // 1000
     count = 0
-
+    logger.info("Starting requests...")
     # paginate through the requests
     for page in range(pages + 1):
         url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated&size=1000&from=" \
