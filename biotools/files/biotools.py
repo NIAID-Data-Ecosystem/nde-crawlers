@@ -211,7 +211,7 @@ class cleandoc:
             for eachdict in biotooljsonhit['link']:
                 biotoollinks.append(eachdict)
         if isinstance(biotooljsonhit['download'], list) == True:
-            for eachdict in biotooljsonhit['link']:
+            for eachdict in biotooljsonhit['download']:
                 biotoollinks.append(eachdict)
         if isinstance(biotooljsonhit['link'], dict) == True:
             biotoollinks.append(biotooljsonhit['link'])
@@ -230,7 +230,7 @@ class cleandoc:
                     if ('Issue' or 'issue') in eachitem['type']:
                         discussionUrl.append(eachitem['url'])
                     if ('file' in eachitem['type']):
-                        downloadUrl.append(eachitem['url'])
+                        downloadUrl.append({'name': eachitem['url']})
                     if ('note' in eachitem.keys()) and (eachitem['note'] != None) and ('image' in eachitem['note']):
                         downloadUrl.append(eachitem['url'])
             if len(codeRepository) > 0:
@@ -238,7 +238,7 @@ class cleandoc:
             if len(discussionUrl) > 0:
                 cleanjson['discussionUrl'] = list(set(discussionUrl))
             if len(downloadUrl) > 0:
-                cleanjson['downloadUrl'] = list(set(downloadUrl))
+                cleanjson['downloadUrl'] = downloadUrl
         return cleanjson
 
     def add_softwarehelp(cleanjson, biotooljsonhit):
