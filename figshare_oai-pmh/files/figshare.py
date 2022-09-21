@@ -2,9 +2,11 @@ import json
 import time
 import logging
 import datetime
+
 from sickle import Sickle
 from sql_database import NDEDatabase
 from xml.etree import ElementTree
+from oai_helper import oai_helper
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -49,11 +51,19 @@ class Figshare(NDEDatabase):
                     time.sleep(1)
                     logger.info("Loading cache. Loaded %s records", count)
 
+                if count % 1000 == 0:
+                    raise StopIteration
+
                 # in each doc we want record.identifier and record stored
                 doc = {'header': dict(record.header), 'metadata': record.metadata,
                        'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
                 yield (record.header.identifier, json.dumps(doc))
+
+                # records = oai_helper()
+                # for record in records:
+                #     yield record
+                # break
 
             except StopIteration:
                 logger.info("Finished Loading. Total Records: %s", count)
@@ -75,9 +85,6 @@ class Figshare(NDEDatabase):
             #         missing.append(key)
 
             count += 1
-            if count % 10 == 0:
-                # figshare requires us to parse 10 records a second for the oai-pmh
-                time.sleep(1)
             if count % 1000 == 0:
                 logger.info("Parsed %s records", count)
                 # logging missing properties
@@ -85,7 +92,7 @@ class Figshare(NDEDatabase):
                 #     logger.info(f'Missing {missing}')
 
             output = {
-                "includedInDataCatalog": {"name": "Figshare", 'versionDate': datetime.today().isoformat(), 'url': "https://figshare.com"},
+                "includedInDataCatalog": {"name": "Figshare", 'versionDate': datetime.date.today().isoformat(), 'url': "https://figshare.com"},
             }
             if title := metadata.get('title'):
                 output['name'] = title[0]
@@ -113,7 +120,7 @@ class Figshare(NDEDatabase):
                     output['description'] = abstract
 
             if date := metadata.get('date'):
-                output['dateModified'] = datetime.strptime(
+                output['dateModified'] = datetime.datetime.strptime(
                     date[0], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
 
             # sdPublsher = publisher > instituion/department > figshare

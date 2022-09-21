@@ -18,7 +18,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'figshare_crawled'
+    'c/data', 'figshare_crawled'
 )
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(
