@@ -79,12 +79,13 @@ def parse():
                 hit['dateModified'] = datetime.datetime.fromisoformat(
                     dates['last_updated']).date().isoformat()
 
+            # WE DONT NEED TO CHANGE THIS
             # adjust applicationSubCategory to fit our schema
-            if app_subs := hit.pop('applicationSubCategory', None):
-                hit['applicationSubCategory'] = []
-                for app_sub in app_subs:
-                    hit['applicationSubCategory'].append(
-                        {'name': app_sub.get('name')})
+            # if app_subs := hit.pop('applicationSubCategory', None):
+                # hit['applicationSubCategory'] = []
+                # for app_sub in app_subs:
+                #     hit['applicationSubCategory'].append(
+                #         {'name': app_sub.get('name')})
 
             # adjust @type value to fit our schema
             if nde_type := hit.pop('@type', None):
