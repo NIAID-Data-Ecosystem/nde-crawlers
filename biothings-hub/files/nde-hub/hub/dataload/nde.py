@@ -174,7 +174,7 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
-            "applicationCategory": {"type": "keyword", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+            "applicationCategory": {"type": "keyword", "copy_to": ["all"]},
             "applicationSubCategory": {
                 "properties": {
                     "@type": {"type": "text"},
