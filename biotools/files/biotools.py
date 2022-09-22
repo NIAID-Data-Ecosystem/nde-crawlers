@@ -232,7 +232,7 @@ class cleandoc:
                     if ('file' in eachitem['type']):
                         downloadUrl.append({'name': eachitem['url']})
                     if ('note' in eachitem.keys()) and (eachitem['note'] != None) and ('image' in eachitem['note']):
-                        downloadUrl.append(eachitem['url'])
+                        downloadUrl.append({'name': eachitem['url']})
             if len(codeRepository) > 0:
                 cleanjson['codeRepository'] = list(set(codeRepository))
             if len(discussionUrl) > 0:
@@ -316,6 +316,8 @@ def download_jsondocs():
     while i < total_pages+1:
         if i % 100 == 0:
             logger.info("Retrieved %s of %s pages" % (i, total_pages))
+        if i % 400 == 0:
+            break
         payloads = {'format': 'json', 'page': i}
         r = requests.get(biotoolsapiurl, params=payloads, timeout=20).json()
         time.sleep(1)
