@@ -174,7 +174,7 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
-            "applicationCategory": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+            "applicationCategory": {"type": "keyword", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "applicationSubCategory": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -499,7 +499,7 @@ class NDESourceUploader(BaseSourceUploader):
                 },
             },
             "processorRequirements": {"type": "text", "copy_to": ["all"]},
-            "programmingLanguage": {"type": "text", "copy_to": ["all"]},
+            "programmingLanguage": {"type": "keyword", "copy_to": ["all"]},
             "relationship": {"type": "text", "copy_to": ["all"]},
             "sameAs": {
                 "type": "text",
