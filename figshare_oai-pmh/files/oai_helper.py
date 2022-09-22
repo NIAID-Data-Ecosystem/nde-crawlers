@@ -15,12 +15,15 @@ logging.basicConfig(
 logger = logging.getLogger('nde-logger')
 
 
-def oai_helper():
+def oai_helper(last_updated=None):
+    if last_updated:
+        url = f'https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc&from={last_updated}'
+        logger.info('Retrieving records from %s', last_updated)
 
+    url = 'https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc'
     count = 0
 
-    response = requests.get(
-        f"https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc")
+    response = requests.get(url)
 
     logger.info("Response size: %s", len(response.content))
     logger.info("Response status: %s", response.status_code)
@@ -36,25 +39,32 @@ def oai_helper():
         logger.info(response_dict)
 
     for record in records:
-        count += 1
+        header = record['header']
+        if 'status' in header and header['status'] == 'deleted':
+            logger.info('Record %s has been deleted. Not saving record to cache.',
+                        header['identifier'])
+        else:
+            count += 1
 
-        metadata = record['metadata']['uketd_dc:uketddc']
-        metadata = {k: v for k, v in metadata.items() if '@' not in k}
-        metadata = {k.split(':')[-1]: v for k, v in metadata.items()}
-        metadata = {k: [v] if not isinstance(
-            v, list) else v for k, v in metadata.items()}
+            metadata = record['metadata']['uketd_dc:uketddc']
+            metadata = {k: v for k, v in metadata.items()
+                        if '@' not in k}
+            metadata = {k.split(':')[-1]: v for k,
+                        v in metadata.items()}
+            metadata = {k: [v] if not isinstance(
+                v, list) else v for k, v in metadata.items()}
 
-        xml = ElementTree.fromstring(response_string)
+            xml = ElementTree.fromstring(response_string)
 
-        doc = {'header': record['header'],
-               'metadata': metadata,
-               'xml': ElementTree.tostring(xml, encoding='unicode')
-               }
+            doc = {'header': header,
+                   'metadata': metadata,
+                   'xml': ElementTree.tostring(xml, encoding='unicode')
+                   }
 
-        identifier = record['header']['identifier']
+            identifier = header['identifier']
+            logger.info('Current Record: %s', identifier)
 
-        yield (identifier, json.dumps(doc))
-
+            yield (identifier, json.dumps(doc))
     try:
         resumptionToken = response_dict['OAI-PMH']['ListRecords']['resumptionToken']['#text']
     except KeyError:
@@ -72,7 +82,7 @@ def oai_helper():
             s.mount('http://', HTTPAdapter(max_retries=retries))
 
             response = s.get(
-                f"https://api.figshare.com/v2/oai?verb=ListRecords&resumptionToken={resumptionToken}")
+                f'https://api.figshare.com/v2/oai?verb=ListRecords&resumptionToken={resumptionToken}')
 
             logger.info("Response size: %s", len(response.content))
             logger.info("Response status: %s", response.status_code)
@@ -87,57 +97,50 @@ def oai_helper():
             except KeyError:
                 logger.info("Could not find records in response")
                 logger.info(response_dict)
-                break
+                raise StopIteration
 
             for record in records:
-                count += 1
+                header = record['header']
+                if 'status' in header and header['status'] == 'deleted':
+                    logger.info('Record %s has been deleted. Not saving record to cache.',
+                                header['identifier'])
+                else:
+                    count += 1
 
-                metadata = record['metadata']['uketd_dc:uketddc']
-                metadata = {k: v for k, v in metadata.items() if '@' not in k}
-                metadata = {k.split(':')[-1]: v for k, v in metadata.items()}
-                metadata = {k: [v] if not isinstance(
-                    v, list) else v for k, v in metadata.items()}
+                    metadata = record['metadata']['uketd_dc:uketddc']
+                    metadata = {k: v for k, v in metadata.items()
+                                if '@' not in k}
+                    metadata = {k.split(':')[-1]: v for k,
+                                v in metadata.items()}
+                    metadata = {k: [v] if not isinstance(
+                        v, list) else v for k, v in metadata.items()}
 
-                xml = ElementTree.fromstring(response_string)
+                    xml = ElementTree.fromstring(response_string)
 
-                doc = {'header': record['header'],
-                       'metadata': metadata,
-                       'xml': ElementTree.tostring(xml, encoding='unicode')
-                       }
+                    doc = {'header': header,
+                           'metadata': metadata,
+                           'xml': ElementTree.tostring(xml, encoding='unicode')
+                           }
 
-                identifier = record['header']['identifier']
+                    identifier = header['identifier']
+                    logger.info('Current Record: %s', identifier)
 
-                yield (identifier, json.dumps(doc))
+                    yield (identifier, json.dumps(doc))
 
             if count % 100 == 0:
                 time.sleep(1)
                 logger.info("Retrieved %s records", count)
 
-            if count % 1000 == 0:
-                raise StopIteration
+            # if count % 1000 == 0:
+            #     raise StopIteration
 
             try:
                 resumptionToken = response_dict['OAI-PMH']['ListRecords']['resumptionToken']['#text']
             except KeyError:
                 logger.info("Could not find resumptionToken in response")
                 logger.info(response_dict)
-                break
+                raise StopIteration
 
         except StopIteration:
             logger.info('Finished retrieving %s records', count)
             break
-
-    # by set
-    # sickle = Sickle('http://www.duo.uio.no/oai/request')
-    # sets = sickle.ListSets()  # gets all sets
-    # for recs in sets:
-    #     for rec in recs:
-    #         if rec[0] == 'setSpec':
-    #             try:
-    #                 print rec[1][0], self.spec_list[rec[1][0]]
-    #                 records = sickle.ListRecords(
-    #                     metadataPrefix='xoai', set=rec[1][0], ignore_deleted=True)
-    #                 self.write_file_and_metadata()
-    #             except Exception as e:
-    #                 # simple exception handling if not possible to retrieve record
-    #                 print('Exception: {}'.format(e))
