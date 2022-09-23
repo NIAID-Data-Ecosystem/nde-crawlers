@@ -2,6 +2,7 @@ import json
 import requests
 import logging
 import requests
+import time
 
 from requests.adapters import HTTPAdapter, Retry
 from xml.etree import ElementTree
@@ -152,8 +153,12 @@ def oai_helper(last_updated=None):
 
                     logger.info('Current Record: %s', identifier)
 
-                    if count % 1000 == 0:
-                        raise StopIteration
+                if count % 100 == 0:
+                    logger.info("Retrieved %s records", count)
+
+                # test small number of records
+                # if count % 1000 == 0:
+                #     raise StopIteration
 
                     yield (identifier, json.dumps(doc))
 
