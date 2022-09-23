@@ -3,7 +3,7 @@ import json
 import unicodedata
 import logging
 
-from sickle import Sickle
+# from sickle import Sickle
 from lxml import etree
 from sql_database import NDEDatabase
 from oai_helper import oai_helper
@@ -21,8 +21,8 @@ class NCBI_PMC(NDEDatabase):
     SQL_DB = "ncbi_pmc.db"
     EXPIRE = datetime.timedelta(days=90)
 
-    sickle = Sickle('https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi',
-                    max_retries=10, default_retry_after=20)
+    # sickle = Sickle('https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi',
+    #                 max_retries=10, default_retry_after=20)
 
     def load_cache(self):
         """Retrives the raw data using a sickle request and formats so dump can store it into the cache table

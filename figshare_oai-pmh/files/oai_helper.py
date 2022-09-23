@@ -5,6 +5,7 @@ import logging
 import xmltodict
 import requests
 
+from datetime import datetime
 from requests.adapters import HTTPAdapter, Retry
 from xml.etree import ElementTree
 
@@ -38,14 +39,16 @@ def oai_helper(last_updated=None):
     count = 0
 
     # Retry logic to handle 500 errors
+
     s = requests.Session()
 
-    retries = Retry(total=5,
+    retries = Retry(total=10,
                     backoff_factor=0.1,
                     status_forcelist=[500, 502, 503, 504])
 
     s.mount('http://', HTTPAdapter(max_retries=retries))
 
+    now = datetime.now()
     response = s.get(url)
 
     logger.info("Response size: %s", len(response.content))
@@ -67,6 +70,9 @@ def oai_helper(last_updated=None):
     for record in records:
         # Here we check if the record is a deleted record, if it is we ignore it
         header = record['header']
+        identifier = header['identifier']
+        logger.info('Current Record: %s', identifier)
+
         if 'status' in header and header['status'] == 'deleted':
             logger.info('Record %s has been deleted. Not saving record to cache.',
                         header['identifier'])
@@ -82,10 +88,10 @@ def oai_helper(last_updated=None):
                    'xml': ElementTree.tostring(xml, encoding='unicode')
                    }
 
-            identifier = header['identifier']
-            logger.info('Current Record: %s', identifier)
-
             yield (identifier, json.dumps(doc))
+    end = datetime.now()
+    logger.info(
+        'Time taken to request and store response: %s', end - now)
     try:
         resumptionToken = response_dict['OAI-PMH']['ListRecords']['resumptionToken']['#text']
     except KeyError:
@@ -97,15 +103,8 @@ def oai_helper(last_updated=None):
 
     while True:
         try:
-            s = requests.Session()
-
-            retries = Retry(total=5,
-                            backoff_factor=0.1,
-                            status_forcelist=[500, 502, 503, 504])
-
-            s.mount('http://', HTTPAdapter(max_retries=retries))
-
             # With the resumptionToken defined we can now start looping through each request
+            now = datetime.now()
             response = s.get(
                 f'https://api.figshare.com/v2/oai?verb=ListRecords&resumptionToken={resumptionToken}')
 
@@ -126,6 +125,10 @@ def oai_helper(last_updated=None):
 
             for record in records:
                 header = record['header']
+                identifier = header['identifier']
+
+                logger.info('Current Record: %s', identifier)
+
                 if 'status' in header and header['status'] == 'deleted':
                     logger.info('Record %s has been deleted. Not saving record to cache.',
                                 header['identifier'])
@@ -142,13 +145,14 @@ def oai_helper(last_updated=None):
                            'xml': ElementTree.tostring(xml, encoding='unicode')
                            }
 
-                    identifier = header['identifier']
-                    logger.info('Current Record: %s', identifier)
-
                     yield (identifier, json.dumps(doc))
+            end = datetime.now()
+            logger.info(
+                'Time taken to request and store response: %s', end - now)
 
             if count % 100 == 0:
                 time.sleep(1)
+                logger.info('Sleeping for 1 second')
                 logger.info("Retrieved %s records", count)
 
             # test small number of records

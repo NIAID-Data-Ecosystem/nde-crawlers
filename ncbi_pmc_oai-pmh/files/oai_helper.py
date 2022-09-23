@@ -2,8 +2,8 @@ import json
 import requests
 import logging
 import requests
-import time
 
+from datetime import datetime
 from requests.adapters import HTTPAdapter, Retry
 from xml.etree import ElementTree
 
@@ -63,6 +63,9 @@ def oai_helper(last_updated=None):
 
     s.mount('http://', HTTPAdapter(max_retries=retries))
 
+    now = datetime.now()
+    response = s.get(url)
+
     response = s.get(url)
 
     logger.info("Response size: %s", len(response.content))
@@ -83,6 +86,10 @@ def oai_helper(last_updated=None):
     for record in records:
         # Here we check if the record is a deleted record, if it is we ignore it
         header_dict = get_header(record)
+        identifier = header_dict['identifier']
+
+        logger.info('Current Record: %s', identifier)
+
         if 'status' in header_dict and header_dict['status'] == 'deleted':
             logger.info('Record %s has been deleted. Not saving record to cache.',
                         header_dict['identifier'])
@@ -92,12 +99,13 @@ def oai_helper(last_updated=None):
             metadata_dict = get_metadata(record)
 
             record_xml = ElementTree.tostring(record, encoding='unicode')
-            identifier = header_dict['identifier']
             doc = {'header': header_dict, 'metadata': metadata_dict,
                    'xml': record_xml}
 
-            logger.info('Current Record: %s', identifier)
             yield (identifier, json.dumps(doc))
+    end = datetime.now()
+    logger.info(
+        'Time taken to request and store response: %s', end - now)
 
     resumptionToken = xml.find(
         './/{http://www.openarchives.org/OAI/2.0/}resumptionToken').text
@@ -110,15 +118,16 @@ def oai_helper(last_updated=None):
 
     while True:
         try:
-            s = requests.Session()
+            # s = requests.Session()
 
-            retries = Retry(total=5,
-                            backoff_factor=0.1,
-                            status_forcelist=[500, 502, 503, 504])
+            # retries = Retry(total=10,
+            #                 backoff_factor=0.1,
+            #                 status_forcelist=[500, 502, 503, 504])
 
-            s.mount('http://', HTTPAdapter(max_retries=retries))
+            # s.mount('http://', HTTPAdapter(max_retries=retries))
 
             # With the resumptionToken defined we can now start looping through each request
+            now = datetime.now()
             response = s.get(
                 f'https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi?verb=ListRecords&resumptionToken={resumptionToken}')
 
@@ -138,6 +147,9 @@ def oai_helper(last_updated=None):
 
             for record in records:
                 header_dict = get_header(record)
+                identifier = header_dict['identifier']
+                logger.info('Current Record: %s', identifier)
+
                 if 'status' in header_dict and header_dict['status'] == 'deleted':
                     logger.info('Record %s has been deleted. Not saving record to cache.',
                                 header_dict['identifier'])
@@ -147,20 +159,25 @@ def oai_helper(last_updated=None):
 
                     record_xml = ElementTree.tostring(
                         record, encoding='unicode')
-                    identifier = header_dict['identifier']
                     doc = {'header': header_dict, 'metadata': metadata_dict,
                            'xml': record_xml}
 
-                    logger.info('Current Record: %s', identifier)
-
                 if count % 100 == 0:
                     logger.info("Retrieved %s records", count)
+
+                    yield (identifier, json.dumps(doc))
 
                 # test small number of records
                 # if count % 1000 == 0:
                 #     raise StopIteration
 
-                    yield (identifier, json.dumps(doc))
+            end = datetime.now()
+
+            logger.info(
+                'Time taken to request and store response: %s', end - now)
+
+            if count % 100 == 0:
+                logger.info("Retrieved %s records", count)
 
             resumptionToken = xml.find(
                 './/{http://www.openarchives.org/OAI/2.0/}resumptionToken').text

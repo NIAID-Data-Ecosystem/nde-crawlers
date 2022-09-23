@@ -1,11 +1,11 @@
 import json
-import time
+# import time
 import logging
 import datetime
 
 # from sickle import Sickle
 from sql_database import NDEDatabase
-from xml.etree import ElementTree
+# from xml.etree import ElementTree
 from oai_helper import oai_helper
 
 logging.basicConfig(
@@ -64,6 +64,7 @@ class Figshare(NDEDatabase):
         # used to test single record
         # record = sickle.GetRecord(
         #     identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
+        # TODO parse time
         count = 0
         for record in records:
             data = json.loads(record[1])
