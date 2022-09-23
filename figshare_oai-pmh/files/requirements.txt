@@ -1,2 +1,3 @@
 orjson
 Sickle
+xmltodict

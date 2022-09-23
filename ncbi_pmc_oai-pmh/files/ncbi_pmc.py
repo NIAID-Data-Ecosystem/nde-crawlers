@@ -6,6 +6,7 @@ import logging
 from sickle import Sickle
 from lxml import etree
 from sql_database import NDEDatabase
+from oai_helper import oai_helper
 
 
 logging.basicConfig(
@@ -29,27 +30,33 @@ class NCBI_PMC(NDEDatabase):
             A tuple (_id, data formatted as a json string)
         """
 
-        records = self.sickle.ListRecords(
-            metadataPrefix='pmc', ignore_deleted=True)
+        # records = self.sickle.ListRecords(
+        #     metadataPrefix='pmc', ignore_deleted=True)
+        # count = 0
+        # while True:
+        #     try:
+        #         # get the next item
+        #         record = records.next()
+        #         count += 1
+        #         if count % 100 == 0:
+        #             logger.info("Loading cache. Loaded %s records", count)
+
+        #         # in each doc we want record.identifier and record stored
+        #         doc = {'header': dict(record.header), 'metadata': record.metadata,
+        #                'xml': etree.tostring(record.xml, encoding='unicode')}
+
+        #         yield (record.header.identifier, json.dumps(doc))
+
+        #     except StopIteration:
+        #         logger.info("Finished Loading. Total Records: %s", count)
+        #         # if StopIteration is raised, break from loop
+        #         break
+        records = oai_helper()
         count = 0
-        while True:
-            try:
-                # get the next item
-                record = records.next()
-                count += 1
-                if count % 100 == 0:
-                    logger.info("Loading cache. Loaded %s records", count)
-
-                # in each doc we want record.identifier and record stored
-                doc = {'header': dict(record.header), 'metadata': record.metadata,
-                       'xml': etree.tostring(record.xml, encoding='unicode')}
-
-                yield (record.header.identifier, json.dumps(doc))
-
-            except StopIteration:
-                logger.info("Finished Loading. Total Records: %s", count)
-                # if StopIteration is raised, break from loop
-                break
+        for record in records:
+            count += 1
+            yield record
+        logger.info("Finished Loading. Total Records: %s", count)
 
     def parse(self, records):
         for record in records:
@@ -282,44 +289,49 @@ class NCBI_PMC(NDEDatabase):
             if bool(citation_dict):
                 output['citation'] = citation_dict
 
-            if 'distribution' in output:
-                yield output
+            yield output
 
     def update_cache(self):
         """If cache is not expired get the new records to add to the cache since last_updated"""
 
         last_updated = self.retreive_last_updated()
+        records = oai_helper(last_updated)
+        count = 0
+        for record in records:
+            count += 1
+            yield record
+        logger.info("Finished updating cache. Total new records: %s", count)
 
         # get all the records since last_updated to add into current cache
-        logger.info("Updating cache from %s", last_updated)
-        records = self.sickle.ListRecords(**{
-            'metadataPrefix': 'pmc',
-            'ignore_deleted': True,
-            'from': last_updated
-        }
-        )
+        # logger.info("Updating cache from %s", last_updated)
+        # records = self.sickle.ListRecords(**{
+        #     'metadataPrefix': 'pmc',
+        #     'ignore_deleted': True,
+        #     'from': last_updated
+        # }
+        # )
 
-        # Very similar to load_cache()
-        count = 0
-        while True:
-            try:
-                # get the next item
-                record = records.next()
-                count += 1
-                if count % 100 == 0:
-                    logger.info(
-                        "Updating cache. %s new updated records", count)
+        # # Very similar to load_cache()
+        # count = 0
+        # while True:
+        #     try:
+        #         # get the next item
+        #         record = records.next()
+        #         count += 1
+        #         if count % 100 == 0:
+        #             logger.info(
+        #                 "Updating cache. %s new updated records", count)
 
-                # in each doc we want record.identifier and record stored
-                doc = {'header': dict(record.header), 'metadata': record.metadata,
-                       'xml': etree.tostring(record.xml, encoding='unicode')}
+        #         # in each doc we want record.identifier and record stored
+        #         doc = {'header': dict(record.header), 'metadata': record.metadata,
+        #                'xml': etree.tostring(record.xml, encoding='unicode')}
 
-                yield (record.header.identifier, json.dumps(doc))
+        #         yield (record.header.identifier, json.dumps(doc))
 
-            except StopIteration:
-                logger.info(
-                    "Finished updating cache. Total new records: %s", count)
-                # if StopIteration is raised, break from loop
-                break
+        #     except StopIteration:
+        #         logger.info(
+        #             "Finished updating cache. Total new records: %s", count)
+        #         # if StopIteration is raised, break from loop
+        #         break
 
         self.insert_last_updated()

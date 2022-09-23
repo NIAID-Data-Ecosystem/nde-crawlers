@@ -121,12 +121,12 @@ class Figshare(NDEDatabase):
                 department = metadata.get('department')
                 if institution and department:
                     if institution[0] != department[0]:
-                        output['sdPublisher'] = institution[0] + \
-                            '/' + department[0]
+                        output['sdPublisher'] = {
+                            'name': institution[0] + '/' + department[0]}
                     else:
-                        output['sdPublisher'] = institution[0]
+                        output['sdPublisher'] = {'name': institution[0]}
                 else:
-                    output['sdPublisher'] = 'figshare'
+                    output['sdPublisher'] = {'name': 'figshare'}
 
             if type := metadata.get('type'):
                 if len(type) > 1:

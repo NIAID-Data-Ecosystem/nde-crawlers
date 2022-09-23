@@ -74,16 +74,16 @@ services:
   #     #   CRONTAB: dev-crontab
   #   volumes:
   #     - data:/data
-  # figshare-crawler:
-  #   build:
-  #     context: figshare_oai-pmh
-  #     dockerfile: Dockerfile
-  #     # uncomment to run development crontab
-  #     # args:
-  #     #   CRONTAB: dev-crontab
-  #   volumes:
-  #     - data:/data
-  #     - cache:/cache
+  figshare-crawler:
+    build:
+      context: figshare_oai-pmh
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
   # immport-crawler:
   #   build:
   #     context: immport_crawler
@@ -113,16 +113,16 @@ services:
   #   volumes:
   #     - data:/data
   #     - cache:/cache
-  # ncbi-pmc-crawler:
-  #   build:
-  #     context: ncbi_pmc_oai-pmh
-  #     dockerfile: Dockerfile
-  #     # uncomment to run development crontab
-  #     # args:
-  #     #   CRONTAB: dev-crontab
-  #   volumes:
-  #     - data:/data
-  #     - cache:/cache
+  ncbi-pmc-crawler:
+    build:
+      context: ncbi_pmc_oai-pmh
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
   # ncbi-sra-crawler:
   #   build:
   #     context: ncbi_sra

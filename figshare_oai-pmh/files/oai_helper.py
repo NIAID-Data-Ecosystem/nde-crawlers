@@ -15,7 +15,21 @@ logging.basicConfig(
 logger = logging.getLogger('nde-logger')
 
 
+def clean_metadata(metadata):
+    # Used to clean up dictionary keys and convert values to lists
+    result = {}
+    for k, v in metadata.items():
+        if '@' not in k:
+            if not isinstance(v, list):
+                result[k.split(':')[-1]] = [v]
+            else:
+                result[k.split(':')[-1]] = v
+    return result
+
+
 def oai_helper(last_updated=None):
+    # last_updated is a date defined in the update_cache function to retrieve records from a specific date
+    # last_updated will default to None when called in load_cache
     if last_updated:
         url = f'https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc&from={last_updated}'
         logger.info('Retrieving records from %s', last_updated)
@@ -23,36 +37,43 @@ def oai_helper(last_updated=None):
     url = 'https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc'
     count = 0
 
-    response = requests.get(url)
+    # Retry logic to handle 500 errors
+    s = requests.Session()
+
+    retries = Retry(total=5,
+                    backoff_factor=0.1,
+                    status_forcelist=[500, 502, 503, 504])
+
+    s.mount('http://', HTTPAdapter(max_retries=retries))
+
+    response = s.get(url)
 
     logger.info("Response size: %s", len(response.content))
     logger.info("Response status: %s", response.status_code)
 
     response_string = response.text
 
-    response_dict = xmltodict.parse(response_string, dict_constructor=dict)
+    response_dict = xmltodict.parse(
+        response_string, dict_constructor=dict)
 
+    # Check if records exist
     try:
         records = response_dict['OAI-PMH']['ListRecords']['record']
     except KeyError:
         logger.info("Could not find records in response")
         logger.info(response_dict)
+        return
 
     for record in records:
+        # Here we check if the record is a deleted record, if it is we ignore it
         header = record['header']
         if 'status' in header and header['status'] == 'deleted':
             logger.info('Record %s has been deleted. Not saving record to cache.',
                         header['identifier'])
         else:
             count += 1
-
             metadata = record['metadata']['uketd_dc:uketddc']
-            metadata = {k: v for k, v in metadata.items()
-                        if '@' not in k}
-            metadata = {k.split(':')[-1]: v for k,
-                        v in metadata.items()}
-            metadata = {k: [v] if not isinstance(
-                v, list) else v for k, v in metadata.items()}
+            metadata = clean_metadata(metadata)
 
             xml = ElementTree.fromstring(response_string)
 
@@ -70,6 +91,9 @@ def oai_helper(last_updated=None):
     except KeyError:
         logger.info("Could not find resumptionToken in response")
         logger.info(response_dict)
+        return
+
+    # We will repeat the above since we do not have the resumptionToken defined until AFTER the first request
 
     while True:
         try:
@@ -81,6 +105,7 @@ def oai_helper(last_updated=None):
 
             s.mount('http://', HTTPAdapter(max_retries=retries))
 
+            # With the resumptionToken defined we can now start looping through each request
             response = s.get(
                 f'https://api.figshare.com/v2/oai?verb=ListRecords&resumptionToken={resumptionToken}')
 
@@ -108,12 +133,7 @@ def oai_helper(last_updated=None):
                     count += 1
 
                     metadata = record['metadata']['uketd_dc:uketddc']
-                    metadata = {k: v for k, v in metadata.items()
-                                if '@' not in k}
-                    metadata = {k.split(':')[-1]: v for k,
-                                v in metadata.items()}
-                    metadata = {k: [v] if not isinstance(
-                        v, list) else v for k, v in metadata.items()}
+                    metadata = clean_metadata(metadata)
 
                     xml = ElementTree.fromstring(response_string)
 
@@ -131,6 +151,7 @@ def oai_helper(last_updated=None):
                 time.sleep(1)
                 logger.info("Retrieved %s records", count)
 
+            # test small number of records
             # if count % 1000 == 0:
             #     raise StopIteration
 
