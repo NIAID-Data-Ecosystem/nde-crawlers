@@ -46,14 +46,14 @@ try:
     is_parsed = True
 # parser failed
 except Exception as e:
-    fd.close()
-    logger.warning(
+    logger.error(
         "Errors occurred while running, so not saving potentially corrupt data."
     )
+    logger.error(traceback.format_exc())
+    
+    fd.close()
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-
-    logger.error(traceback.format_exc())
 finally:
     fd.close()
 

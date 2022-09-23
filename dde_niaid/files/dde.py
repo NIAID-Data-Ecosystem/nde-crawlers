@@ -41,7 +41,7 @@ def parse():
     total = request['total']
     pages = (total - 1) // 1000
     count = 0
-
+    logger.info("Starting requests...")
     # paginate through the requests
     for page in range(pages + 1):
         url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated&size=1000&from=" \
@@ -79,12 +79,13 @@ def parse():
                 hit['dateModified'] = datetime.datetime.fromisoformat(
                     dates['last_updated']).date().isoformat()
 
+            # WE DONT NEED TO CHANGE THIS
             # adjust applicationSubCategory to fit our schema
-            if app_subs := hit.pop('applicationSubCategory', None):
-                hit['applicationSubCategory'] = []
-                for app_sub in app_subs:
-                    hit['applicationSubCategory'].append(
-                        {'name': app_sub.get('name')})
+            # if app_subs := hit.pop('applicationSubCategory', None):
+                # hit['applicationSubCategory'] = []
+                # for app_sub in app_subs:
+                #     hit['applicationSubCategory'].append(
+                #         {'name': app_sub.get('name')})
 
             # adjust @type value to fit our schema
             if nde_type := hit.pop('@type', None):

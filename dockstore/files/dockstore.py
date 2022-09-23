@@ -74,26 +74,23 @@ def parse():
 
         if identifier := metadata.get('toolname'):
             output['identifier'] = identifier
-            output['_id'] = 'dockstore_' + identifier
+            output['_id'] = 'dockstore_' + identifier.replace('/', '_')
 
         if doi := metadata.get('aliases'):
             output['doi'] = doi[0]
 
         author_list = []
         if author := metadata.get('author'):
-            if affiliation := metadata.get('organization'):
-                author_dict = {}
-                authors = author.split(', ')
-                for author in authors:
-                    author_dict['author'] = {
-                        'name': author, 'affiliation': affiliation}
-                    author_list.append(author_dict)
-            else:
-                author_dict = {}
-                authors = author.split(', ')
-                for author in authors:
-                    author_dict['author'] = {'name': author}
-                    author_list.append(author_dict)
+            # if affiliation := metadata.get('organization'):
+            #     authors = author.split(', ')
+            #     for author in authors:
+            #         if author != 'Unknown author' and author != 'docker':
+            #             author_list.append({
+            #                 'name': author, 'affiliation': {'name': affiliation}})
+            # else:
+            authors = author.split(', ')
+            for author in authors:
+                author_list.append({'name': author})
         if len(author_list):
             output['author'] = author_list
 
@@ -113,10 +110,18 @@ def parse():
                                 'url': 'https://dockstore.org/search?entryType=workflows&searchMode=files'
                             }
                         }
+                if 'github.com' in url:
+                    output['codeRepository'] = 'https://' + \
+                        url[10:].split(':')[0]
             elif url.startswith('#service/'):
                 output['url'] = 'https://dockstore.org/services/' + url[9:]
+                if 'github.com' in url:
+                    output['codeRepository'] = 'https://' + \
+                        url[9:].split(':')[0]
             else:
                 output['url'] = 'https://dockstore.org/containers/' + url
+                if 'github' in url:
+                    output['codeRepository'] = 'https://' + url.split(':')[0]
 
         if date_modified := metadata.get('meta_version'):
             if metadata.get('versions') == []:
@@ -150,7 +155,8 @@ def parse():
                         x) for x in version['descriptor_type'] if x not in languages]
                 if languages != []:
                     for language in languages:
-                        if language != 'CWL' or language != 'WDL':
+                        if language != 'CWL' and language != 'WDL':
                             languages.remove(language)
-                    output['programmingLanguage'] = languages
+                    if languages != []:
+                        output['programmingLanguage'] = languages
         yield output

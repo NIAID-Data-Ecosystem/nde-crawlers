@@ -14,8 +14,9 @@ logger = logging.getLogger('nde-logger')
 def cleanNullTerms(d):
     clean = {}
     for k, v in d.items():
-        if v is not None and len(v) > 0:
-            clean[k] = v
+        if not isinstance(v, bool):
+            if v is not None and len(v) > 0:
+                clean[k] = v
     return clean
 
 
@@ -128,15 +129,26 @@ class cleandoc:
         if 'github' in biotooljsonhit['homepage']:
             cleanjson['codeRepository'] = biotooljsonhit['homepage']
         else:
-            cleanjson['contentUrl'] = biotooljsonhit['homepage']
+            cleanjson['mainEntityOfPage'] = biotooljsonhit['homepage']
         cleanjson['softwareVersion'] = biotooljsonhit['version']
         cleanjson['applicationCategory'] = biotooljsonhit['toolType']
         cleanjson['license'] = biotooljsonhit['license']
         cleanjson['programmingLanguage'] = biotooljsonhit['language']
-        if biotooljsonhit['accessibility'] != None:
-            cleanjson['conditionsOfAccess'] = biotooljsonhit['accessibility']
-        elif biotooljsonhit['cost'] != None:
-            cleanjson['conditionsOfAccess'] = biotooljsonhit['cost']
+
+        if biotooljsonhit['accessibility'] == 'Open access':
+            cleanjson['conditionsOfAccess'] = 'Open'
+        elif biotooljsonhit['accessibility'] == 'Open access(with restrictions)':
+            cleanjson['conditionsOfAccess'] = 'Restricted'
+        elif biotooljsonhit['accessibility'] == 'Restricted access':
+            cleanjson['conditionsOfAccess'] = 'Closed'
+
+        if biotooljsonhit['cost'] == 'Free of charge':
+            cleanjson['isAccessibleForFree'] = True
+        elif biotooljsonhit['cost'] == 'Free of charge (with restrictions)':
+            cleanjson['isAccessibleForFree'] = True
+        elif biotooljsonhit['cost'] == 'Commercial':
+            cleanjson['isAccessibleForFree'] = False
+
         try:
             cleanjson['dateModified'] = biotooljsonhit['lastUpdate'].split('T')[
                 0]
@@ -152,9 +164,10 @@ class cleandoc:
     def add_app_sub_cat(cleanjson, biotooljsonhit):
         try:
             alltopics = biotooljsonhit['topic']
-            topicjson = parse_defined_terms(alltopics)
-            if topicjson != -1:
-                cleanjson['applicationSubCategory'] = {'name': topicjson}
+            # topicjson = parse_defined_terms(alltopics)
+            # if topicjson != -1:
+            topics = [x['term'] for x in alltopics]
+            cleanjson['keywords'] = topics
         except:
             pass
         return cleanjson
@@ -198,7 +211,7 @@ class cleandoc:
             for eachdict in biotooljsonhit['link']:
                 biotoollinks.append(eachdict)
         if isinstance(biotooljsonhit['download'], list) == True:
-            for eachdict in biotooljsonhit['link']:
+            for eachdict in biotooljsonhit['download']:
                 biotoollinks.append(eachdict)
         if isinstance(biotooljsonhit['link'], dict) == True:
             biotoollinks.append(biotooljsonhit['link'])
@@ -217,15 +230,15 @@ class cleandoc:
                     if ('Issue' or 'issue') in eachitem['type']:
                         discussionUrl.append(eachitem['url'])
                     if ('file' in eachitem['type']):
-                        downloadUrl.append(eachitem['url'])
+                        downloadUrl.append({'name': eachitem['url']})
                     if ('note' in eachitem.keys()) and (eachitem['note'] != None) and ('image' in eachitem['note']):
-                        downloadUrl.append(eachitem['url'])
+                        downloadUrl.append({'name': eachitem['url']})
             if len(codeRepository) > 0:
                 cleanjson['codeRepository'] = list(set(codeRepository))
             if len(discussionUrl) > 0:
                 cleanjson['discussionUrl'] = list(set(discussionUrl))
             if len(downloadUrl) > 0:
-                cleanjson['downloadUrl'] = list(set(downloadUrl))
+                cleanjson['downloadUrl'] = downloadUrl
         return cleanjson
 
     def add_softwarehelp(cleanjson, biotooljsonhit):
@@ -267,7 +280,7 @@ class cleandoc:
         return cleanjson
 
     def add_citations(cleanjson, biotooljsonhit):
-        isBasisFor = []
+        citation = []
         for eachpub in biotooljsonhit['publication']:
             tmppub = copy.deepcopy(eachpub)
             tmppub['@type'] = 'Publication'
@@ -282,8 +295,8 @@ class cleandoc:
             for key, value in dict(tmppub).items():
                 if (value is None) or (len(value) == 0):
                     del tmppub[key]
-            isBasisFor.append(tmppub)
-        cleanjson['isBasisFor'] = isBasisFor
+            citation.append(tmppub)
+        cleanjson['citation'] = citation
 
         return cleanjson
 
@@ -303,6 +316,8 @@ def download_jsondocs():
     while i < total_pages+1:
         if i % 100 == 0:
             logger.info("Retrieved %s of %s pages" % (i, total_pages))
+        if i % 400 == 0:
+            break
         payloads = {'format': 'json', 'page': i}
         r = requests.get(biotoolsapiurl, params=payloads, timeout=20).json()
         time.sleep(1)
@@ -325,6 +340,7 @@ def transform_json(jsondoclist, domain_dict):
         cleanjson = cleandoc.add_author(cleanjson, biotooljsonhit)
         cleanjson = cleandoc.add_citations(cleanjson, biotooljsonhit)
         yield cleanNullTerms(cleanjson)
+    logger.info('Finished Parsing. Total records: %s' % len(jsondoclist))
 
 
 def get_domain_list():
