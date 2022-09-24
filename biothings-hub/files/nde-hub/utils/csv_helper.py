@@ -1,11 +1,15 @@
-import pandas as pd
+from biothings.utils.dataload import tab2dict
 
 
 def get_source_data(source_name):
-    df = pd.read_csv(f'hub/dataload/sources/{source_name}/{source_name}.csv')
-    col1 = 'source_property'
-    col2 = 'nde_property'
-    result = dict(zip(df[col1], df[col2]))
-    result = {k: v for k, v in result.items() if not pd.isna(k)
-              and not pd.isna(v)}
+    datafile = f'hub/dataload/sources/{source_name}/{source_name}.csv'
+    test = f'{source_name}.csv'
+    result = tab2dict(test, cols=[0, 1], key=0, sep=',')
+    # convert values that are lists to strings
+    for key in result:
+        if isinstance(result[key], list):
+            result[key] = str(result[key])
     return result
+
+
+print(get_source_data('biocontainers'))

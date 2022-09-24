@@ -1,0 +1,13 @@
+source_property,nde_property
+description,description
+name,name
+name,url
+pmid,citation
+identifiers,sameAs
+pulls,interactionStatistic
+tool_tags,keywords
+tool_url,codeRepository
+tool_url,mainEntityOfPage
+toolclass,applicationCategory
+updated,datePublished
+updated,dateModified

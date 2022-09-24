@@ -20,6 +20,15 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  biocontainers-crawler:
+    build:
+      context: biocontainers
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   biotools-crawler:
     build:
       context: biotools

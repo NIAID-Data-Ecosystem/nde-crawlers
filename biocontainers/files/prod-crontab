@@ -1,0 +1,15 @@
+# Most Likely python:* images use Debian therefore the cron software
+# is a heavily modified Vixie Cron
+# We use this to automate stuff
+# Example of job definition:
+# .---------------- minute (0 - 59)
+# |  .------------- hour (0 - 23)
+# |  |  .---------- day of month (1 - 31)
+# |  |  |  .------- month (1 - 12) OR jan,feb,mar,apr ...
+# |  |  |  |  .---- day of week (0 - 6) (Sunday=0 or 7) OR sun,mon,tue,wed,thu,fri,sat
+# |  |  |  |  |
+# *  *  *  *  * user-name command to be executed
+#               we have to use root in order to write to stdout and stderr
+0 0 * * * root /home/biothings/run-biocontainers.sh
+@reboot root /home/biothings/run-biocontainers.sh
+# remember the newline at the end

@@ -1,10 +1,12 @@
 import json
-import time
+# import time
 import logging
 import datetime
-from sickle import Sickle
+
+# from sickle import Sickle
 from sql_database import NDEDatabase
-from xml.etree import ElementTree
+# from xml.etree import ElementTree
+from oai_helper import oai_helper
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -12,58 +14,57 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
-# during testing used this list to check if any properties were NOT in the list, if not then print the property
-# properties = ["title", "creator", "subject", "description", "date", "publisher", "type", "identifier", "language", "relation",
-#               "rights", "license", "abstract", "isReferencedBy", "issued", "institution", "department", "sponsor", "grantnumber", "authoridentifier", "embargodate", "qualificationname", "qualificationlevel", "advisor"]
-# used to add missing properties and print later
-# missing = []
-
-# TODO
-# known covid categories according to docs https://covid19.figshare.com/f/faqs to siphon off later
-# covid_keywords = ['covid-19', '2019-ncov', 'coronavirus', 'sars-cov-2', '2019ncov',
-#                   'covid19', 'corona virus', 'sarscov2', 'covid2019', 'covid_19', 'sars-cov2', 'covid 19']
-
 
 class Figshare(NDEDatabase):
     SQL_DB = 'figshare.db'
     EXPIRE = datetime.timedelta(days=90)
 
-    sickle = Sickle('https://api.figshare.com/v2/oai',
-                    max_retries=10, default_retry_after=20)
+    # sickle = Sickle('https://api.figshare.com/v2/oai',
+    #                 max_retries=10, default_retry_after=20)
 
     def load_cache(self):
-        """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
-        Returns:
-            A tuple (_id, data formatted as a json string)
-        """
-        records = self.sickle.ListRecords(
-            metadataPrefix='uketd_dc', ignore_deleted=True)
+        # """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
+        # Returns:
+        #     A tuple (_id, data formatted as a json string)
+        # """
+        # records = self.sickle.ListRecords(
+        #     metadataPrefix='uketd_dc', ignore_deleted=True)
 
+        # while True:
+        #     try:
+        #         # get the next item
+        #         record = records.next()
+        #         count += 1
+        #         if count % 100 == 0:
+        #             time.sleep(1)
+        #             logger.info("Loading cache. Loaded %s records", count)
+
+        #         if count % 1000 == 0:
+        #             raise StopIteration
+
+        #         # in each doc we want record.identifier and record stored
+        #         doc = {'header': dict(record.header), 'metadata': record.metadata,
+        #                'xml': ElementTree.tostring(record.xml, encoding='unicode')}
+
+        #         yield (record.header.identifier, json.dumps(doc))
+
+        #     except StopIteration:
+        #         logger.info("Finished Loading. Total Records: %s", count)
+        #         # if StopIteration is raised, break from loop
+        #         break
+
+        records = oai_helper()
         count = 0
-        while True:
-            try:
-                # get the next item
-                record = records.next()
-                count += 1
-                if count % 100 == 0:
-                    time.sleep(1)
-                    logger.info("Loading cache. Loaded %s records", count)
-
-                # in each doc we want record.identifier and record stored
-                doc = {'header': dict(record.header), 'metadata': record.metadata,
-                       'xml': ElementTree.tostring(record.xml, encoding='unicode')}
-
-                yield (record.header.identifier, json.dumps(doc))
-
-            except StopIteration:
-                logger.info("Finished Loading. Total Records: %s", count)
-                # if StopIteration is raised, break from loop
-                break
+        for record in records:
+            count += 1
+            yield record
+        logger.info("Finished Loading. Total Records: %s", count)
 
     def parse(self, records):
         # used to test single record
         # record = sickle.GetRecord(
         #     identifier='oai:figshare.com:article/5849037', metadataPrefix='uketd_dc')
+        # TODO parse time
         count = 0
         for record in records:
             data = json.loads(record[1])
@@ -75,9 +76,6 @@ class Figshare(NDEDatabase):
             #         missing.append(key)
 
             count += 1
-            if count % 10 == 0:
-                # figshare requires us to parse 10 records a second for the oai-pmh
-                time.sleep(1)
             if count % 1000 == 0:
                 logger.info("Parsed %s records", count)
                 # logging missing properties
@@ -85,7 +83,7 @@ class Figshare(NDEDatabase):
                 #     logger.info(f'Missing {missing}')
 
             output = {
-                "includedInDataCatalog": {"name": "Figshare", 'versionDate': datetime.today().isoformat(), 'url': "https://figshare.com"},
+                "includedInDataCatalog": {"name": "Figshare", 'versionDate': datetime.date.today().isoformat(), 'url': "https://figshare.com"},
             }
             if title := metadata.get('title'):
                 output['name'] = title[0]
@@ -113,7 +111,7 @@ class Figshare(NDEDatabase):
                     output['description'] = abstract
 
             if date := metadata.get('date'):
-                output['dateModified'] = datetime.strptime(
+                output['dateModified'] = datetime.datetime.strptime(
                     date[0], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
 
             # sdPublsher = publisher > instituion/department > figshare
@@ -124,12 +122,12 @@ class Figshare(NDEDatabase):
                 department = metadata.get('department')
                 if institution and department:
                     if institution[0] != department[0]:
-                        output['sdPublisher'] = institution[0] + \
-                            '/' + department[0]
+                        output['sdPublisher'] = {
+                            'name': institution[0] + '/' + department[0]}
                     else:
-                        output['sdPublisher'] = institution[0]
+                        output['sdPublisher'] = {'name': institution[0]}
                 else:
-                    output['sdPublisher'] = 'figshare'
+                    output['sdPublisher'] = {'name': 'figshare'}
 
             if type := metadata.get('type'):
                 if len(type) > 1:
@@ -183,36 +181,42 @@ class Figshare(NDEDatabase):
         last_updated = self.retreive_last_updated()
 
         # get all the records since last_updated to add into current cache
-        logger.info("Updating cache from %s", last_updated)
-        records = self.sickle.ListRecords(**{
-            'metadataPrefix': 'uketd_dc',
-            'ignore_deleted': True,
-            'from': last_updated
-        }
-        )
-
-        # Very similar to load_cache()
+        # logger.info("Updating cache from %s", last_updated)
+        # records = self.sickle.ListRecords(**{
+        #     'metadataPrefix': 'uketd_dc',
+        #     'ignore_deleted': True,
+        #     'from': last_updated
+        # }
+        # )
+        records = oai_helper(last_updated)
         count = 0
-        while True:
-            try:
-                # get the next item
-                record = records.next()
-                count += 1
-                if count % 100 == 0:
-                    time.sleep(1)
-                    logger.info(
-                        "Updating cache. %s new updated records", count)
+        for record in records:
+            count += 1
+            yield record
+        logger.info("Finished updating cache. Total new records: %s", count)
 
-                # in each doc we want record.identifier and record stored
-                doc = {'header': dict(record.header), 'metadata': record.metadata,
-                       'xml': ElementTree.tostring(record.xml, encoding='unicode')}
+        # # Very similar to load_cache()
+        # count = 0
+        # while True:
+        #     try:
+        #         # get the next item
+        #         record = records.next()
+        #         count += 1
+        #         if count % 100 == 0:
+        #             time.sleep(1)
+        #             logger.info(
+        #                 "Updating cache. %s new updated records", count)
 
-                yield (record.header.identifier, json.dumps(doc))
+        #         # in each doc we want record.identifier and record stored
+        #         doc = {'header': dict(record.header), 'metadata': record.metadata,
+        #                'xml': ElementTree.tostring(record.xml, encoding='unicode')}
 
-            except StopIteration:
-                logger.info(
-                    "Finished updating cache. Total new records: %s", count)
-                # if StopIteration is raised, break from loop
-                break
+        #         yield (record.header.identifier, json.dumps(doc))
+
+        #     except StopIteration:
+        #         logger.info(
+        #             "Finished updating cache. Total new records: %s", count)
+        #         # if StopIteration is raised, break from loop
+        #         break
 
         self.insert_last_updated()
