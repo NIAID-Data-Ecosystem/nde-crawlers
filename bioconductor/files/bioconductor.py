@@ -9,6 +9,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
 
+def get_pkg_names(package_dict_list):
+    return [pkg['Package'] for pkg in package_dict_list]
+
+
+def get_cran_pkg_names():
+    url = 'https://cran.r-project.org/src/contrib/PACKAGES'
+    response = requests.get(url)
+    if response.status_code != 200:
+        logger.error('Failed to retrieve CRAN package names')
+        return []
+    data = response.text
+    package_list = []
+    for line in data.splitlines():
+        if line.startswith('Package:'):
+            package_list.append(line.split('Package: ')[1])
+    return package_list
+
+
 def parse():
     logger.info('Retrieving package metadata from Bioconductor')
     url = "https://bioconductor.org/packages/release/bioc/VIEWS"
@@ -20,6 +38,9 @@ def parse():
     for chunk in data.split("\n\n"):
         if chunk:
             package_dict_list.append(dict(pat.findall(chunk)))
+
+    package_names = get_pkg_names(package_dict_list)
+    cran_package_names = get_cran_pkg_names()
 
     logger.info('Retrieving Download Statistics from Bioconductor')
     download_stats_df = pd.read_csv(
@@ -207,14 +228,30 @@ def parse():
             for pkg_import in imports:
                 pkg_import = re.sub("[()].*?[)]", "", pkg_import)
                 pkg_import = pkg_import.strip()
-                based_on.append(
-                    {
-                        '_id': f'Bioconductor_{pkg_import}',
-                        'identifier': pkg_import,
-                        'name': pkg_import,
-                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_import}.html'
-                    }
-                )
+                if pkg_import in package_names:
+                    based_on.append(
+                        {
+                            '_id': f'Bioconductor_{pkg_import}',
+                            'identifier': pkg_import,
+                            'name': pkg_import,
+                            'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_import}.html'
+                        }
+                    )
+                elif pkg_import in cran_package_names:
+                    based_on.append(
+                        {
+                            'identifier': pkg_import,
+                            'name': pkg_import,
+                            'url': f'https://cran.r-project.org/web/packages/{pkg_import}/index.html'
+                        }
+                    )
+                else:
+                    based_on.append(
+                        {
+                            'identifier': pkg_import,
+                            'name': pkg_import,
+                        }
+                    )
         if len(based_on):
             output['isBasedOn'] = based_on
 
@@ -236,13 +273,31 @@ def parse():
             for pkg_dependency in depends_on_me:
                 pkg_dependency = re.sub("[()].*?[)]", "", pkg_dependency)
                 pkg_dependency = pkg_dependency.strip()
-                is_dependent_on.append(
-                    {
-                        'name': pkg_dependency,
-                        'identifier': f'Bioconductor_{pkg_dependency}',
-                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_dependency}.html'
-                    }
-                )
+                if pkg_dependency in package_names:
+                    is_related_to.append(
+                        {
+                            '_id': f'Bioconductor_{pkg_dependency}',
+                            'identifier': pkg_dependency,
+                            'name': pkg_dependency,
+                            'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_dependency}.html'
+                        }
+                    )
+                elif pkg_dependency in cran_package_names:
+                    based_on.append(
+                        {
+                            'identifier': pkg_dependency,
+                            'name': pkg_dependency,
+                            'url': f'https://cran.r-project.org/web/packages/{pkg_dependency}/index.html'
+                        }
+                    )
+                else:
+                    based_on.append(
+                        {
+                            'identifier': pkg_dependency,
+                            'name': pkg_dependency,
+                        }
+                    )
+
         if len(is_dependent_on):
             output['isBasisFor'] = is_dependent_on
 
@@ -253,53 +308,120 @@ def parse():
             for pkg_suggest in suggests:
                 pkg_suggest = re.sub("[()].*?[)]", "", pkg_suggest)
                 pkg_suggest = pkg_suggest.strip()
-                is_related_to.append(
-                    {
-                        'name': pkg_suggest,
-                        'identifier': f'Bioconductor_{pkg_suggest}',
-                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_suggest}.html'
-                    }
-                )
+                if pkg_suggest in package_names:
+                    is_related_to.append(
+                        {
+                            '_id': f'Bioconductor_{pkg_suggest}',
+                            'identifier': pkg_suggest,
+                            'name': pkg_suggest,
+                            'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_suggest}.html'
+                        }
+                    )
+                elif pkg_suggest in cran_package_names:
+                    based_on.append(
+                        {
+                            'identifier': pkg_suggest,
+                            'name': pkg_suggest,
+                            'url': f'https://cran.r-project.org/web/packages/{pkg_suggest}/index.html'
+                        }
+                    )
+                else:
+                    based_on.append(
+                        {
+                            'identifier': pkg_suggest,
+                            'name': pkg_suggest,
+                        }
+                    )
         if depends := metadata.get('dependsOnMe'):
             depends = [d.replace('\n', '').strip().replace('    ', '')
                        for d in depends.split(',') if d]
             for pkg_dependency in depends:
                 pkg_dependency = re.sub("[()].*?[)]", "", pkg_dependency)
                 pkg_dependency = pkg_dependency.strip()
-                is_related_to.append(
-                    {
-                        'name': pkg_dependency,
-                        'identifier': f'Bioconductor_{pkg_dependency}',
-                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_dependency}.html'
-                    }
-                )
+                if pkg_dependency in package_names:
+                    is_related_to.append(
+                        {
+                            '_id': f'Bioconductor_{pkg_dependency}',
+                            'identifier': pkg_dependency,
+                            'name': pkg_dependency,
+                            'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_dependency}.html'
+                        }
+                    )
+                elif pkg_dependency in cran_package_names:
+                    based_on.append(
+                        {
+                            'identifier': pkg_dependency,
+                            'name': pkg_dependency,
+                            'url': f'https://cran.r-project.org/web/packages/{pkg_dependency}/index.html'
+                        }
+                    )
+                else:
+                    based_on.append(
+                        {
+                            'identifier': pkg_dependency,
+                            'name': pkg_dependency,
+                        }
+                    )
         if suggests_me := metadata.get('suggestsMe'):
             suggests_me = [d.replace('\n', '').strip().replace('    ', '')
                            for d in suggests_me.split(',') if d]
             for pkg_suggest in suggests_me:
                 pkg_suggest = re.sub("[()].*?[)]", "", pkg_suggest)
                 pkg_suggest = pkg_suggest.strip()
-                is_related_to.append(
-                    {
-                        'name': pkg_suggest,
-                        'identifier': f'Bioconductor_{pkg_suggest}',
-                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_suggest}.html'
-                    }
-                )
+                if pkg_suggest in package_names:
+                    is_related_to.append(
+                        {
+                            '_id': f'Bioconductor_{pkg_suggest}',
+                            'identifier': pkg_suggest,
+                            'name': pkg_suggest,
+                            'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_suggest}.html'
+                        }
+                    )
+                elif pkg_suggest in cran_package_names:
+                    based_on.append(
+                        {
+                            'identifier': pkg_suggest,
+                            'name': pkg_suggest,
+                            'url': f'https://cran.r-project.org/web/packages/{pkg_suggest}/index.html'
+                        }
+                    )
+                else:
+                    based_on.append(
+                        {
+                            'identifier': pkg_suggest,
+                            'name': pkg_suggest,
+                        }
+                    )
         if linking_to := metadata.get('LinkingTo'):
             linking_to = [d.replace('\n', '').strip().replace('    ', '')
                           for d in linking_to.split(',') if d]
             for pkg_link in linking_to:
                 pkg_link = re.sub("[()].*?[)]", "", pkg_link)
                 pkg_link = pkg_link.strip()
-                is_related_to.append(
-                    {
-                        '_id': f'Bioconductor_{pkg_link}',
-                        'identifier': pkg_link,
-                        'name': pkg_link,
-                        'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_link}.html'
-                    }
-                )
+                if pkg_link in package_names:
+                    is_related_to.append(
+                        {
+                            '_id': f'Bioconductor_{pkg_link}',
+                            'identifier': pkg_link,
+                            'name': pkg_link,
+                            'url': f'https://www.bioconductor.org/packages/release/bioc/html/{pkg_link}.html'
+                        }
+                    )
+                elif pkg_link in cran_package_names:
+                    based_on.append(
+                        {
+                            'identifier': pkg_link,
+                            'name': pkg_link,
+                            'url': f'https://cran.r-project.org/web/packages/{pkg_link}/index.html'
+                        }
+                    )
+                else:
+                    based_on.append(
+                        {
+                            'identifier': pkg_link,
+                            'name': pkg_link,
+                        }
+                    )
         if len(is_related_to):
             output['isRelatedTo'] = is_related_to
 

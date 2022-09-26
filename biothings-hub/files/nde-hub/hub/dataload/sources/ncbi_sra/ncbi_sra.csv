@@ -1,0 +1,23 @@
+source_property,nde_property
+Accession,url
+Updated,dateModified
+Published,datePublished
+Recieved,dateCreated
+Visibility,conditionsOfAccess
+ReplacedBy,sameAs
+study_title,name
+study_abstract,description
+contact_name,author
+GCP_url,contentUrl
+GCP_free_egress,isAccessibleForFree
+AWS_url,contentUrl
+AWS_free_egress,isAccessibleForFree
+organism_taxid,species.identifier
+organism_name,species.name
+run_accession,isBasedOn.identifier
+BioProject,isBasedOn.identifier
+experiment_accession,isBasedOn.identifier
+sample_accession,isBasedOn.identifier
+instrument,isBasedOn.identifier
+cell line,isBasedOn.identifier
+HapMap sample ID,isBasedOn.identifier

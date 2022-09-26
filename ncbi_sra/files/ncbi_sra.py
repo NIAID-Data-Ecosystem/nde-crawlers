@@ -24,7 +24,7 @@ class NCBI_SRA(NDEDatabase):
     EXPIRE = datetime.timedelta(days=90)
 
     # Used for testing small chunks of data
-    DATA_LIMIT = 1000
+    DATA_LIMIT = 500
 
     def load_cache(self):
         logger.info('Starting FTP Download')
@@ -42,6 +42,8 @@ class NCBI_SRA(NDEDatabase):
         filtered = only_live[only_live['Type'] == 'STUDY']
         accession_list = filtered[['Accession', 'Type', 'Status', 'Updated', 'Published',
                                    'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
+
+        # Used for testing small chunks of data
         if self.DATA_LIMIT:
             accession_list = accession_list[:self.DATA_LIMIT]
 
@@ -95,6 +97,9 @@ class NCBI_SRA(NDEDatabase):
             except JSONDecodeError as e:
                 logger.info(f'JSONDecodeError for Accession {x[0]}: {e}')
                 continue
+            except HTTPError as e:
+                logger.info(f'HTTPError for Accession {x[0]}: {e}')
+                logger.info(e)
         logger.info('Removing SRA_Accessions.tab')
         os.remove("SRA_Accessions.tab")
         logger.info('Removed SRA_Accessions.tab')
@@ -153,7 +158,7 @@ class NCBI_SRA(NDEDatabase):
                         if string is not None:
                             output['isAccessibleForFree'] = True
                         if url is not None:
-                            distribution_dict['url'] = url
+                            distribution_dict['contentUrl'] = url
                         if bool(distribution_dict) and distribution_dict not in distribution_list:
                             distribution_list.append(distribution_dict)
             if aws_urls := metadata.get('AWS_url'):
@@ -163,7 +168,7 @@ class NCBI_SRA(NDEDatabase):
                         if string is not None:
                             output['isAccessibleForFree'] = True
                         if url is not None:
-                            distribution_dict['url'] = url
+                            distribution_dict['contentUrl'] = url
                         if bool(distribution_dict) and distribution_dict not in distribution_list:
                             distribution_list.append(distribution_dict)
             if len(distribution_list):
@@ -198,6 +203,7 @@ class NCBI_SRA(NDEDatabase):
                         'name': 'Species', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
                     if species_dict not in species_list:
                         species_list.append(species_dict)
+            output['species'] = species_list
 
             # isBasedOn
             is_based_on = []

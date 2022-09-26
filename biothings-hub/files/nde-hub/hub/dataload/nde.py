@@ -404,6 +404,12 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "keyword"},
                     "abstract": {"type": "text"},
+                    "additionalType": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
+                    },
                     "citation": {"type": "text"},
                     "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
@@ -565,6 +571,13 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "species": {
                 "properties": {
+                    "additionalType": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
+                    },
+                    "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }

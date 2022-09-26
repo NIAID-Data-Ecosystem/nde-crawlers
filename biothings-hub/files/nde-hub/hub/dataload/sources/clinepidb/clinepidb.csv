@@ -1,0 +1,16 @@
+source_property,nde_property
+Study_Design,measurementTechnique
+description,description
+summary,description
+WHO,keywords
+Participant_Type,keywords
+Country,spatialCoverage
+study_access,conditionOfAccess
+Years,temporalCoverage
+disease,healthCondition
+Publications,citation
+release_date,distribution.dateModified
+dataset_name,distribution.name
+contact_name,author.name
+Contacts,affiliation
+HyperLinks,isBasedOn.url

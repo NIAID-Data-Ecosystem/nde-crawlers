@@ -49,7 +49,7 @@ except Exception as e:
         "Errors occurred while running, so not saving potentially corrupt data."
     )
     logger.error(traceback.format_exc())
-    
+
     fd.close()
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
