@@ -3,6 +3,9 @@
 # PYTHONPATH="$PYTHONPATH:." SCRAPY_SETTINGS_MODULE="settings" scrapy runspider spider.py
 # If you are using the Dockerfile, runspider does this for you: /home/biothings/run-spider.sh
 
+import scrapy
+import time
+import json
 from scrapy.spiders import SitemapSpider
 from extruct import JsonLdExtractor
 
@@ -23,9 +26,9 @@ class DryadSpider(SitemapSpider):
     sitemap_rules = [('/stash/', 'extract_from_jsonld')]
 
     # for testing purposes limit requests to urls
-    # limit = 2000  # Limit entries
+    # limit = 70  # Limit entries
     # count = 0  # Entries counter
-
+    #
     # def sitemap_filter(self, entries):
     #     for entry in entries:
     #         if self.count >= self.limit:
@@ -36,13 +39,19 @@ class DryadSpider(SitemapSpider):
     def extract_from_jsonld(self, response, **kwargs):
         jslds = JsonLdExtractor().extract(response.body)
 
+        callback_url = "https://datadryad.org/api/v2/datasets/doi%3A" + response.url.split(':')[3].replace('/', '%2F')
+
         for jsld in jslds:
             out = jsld
-            date_published = response.xpath("//div[@class='o-metadata__group2-item']/text()").extract()[0]
-            assert "Publication date" in date_published, f"Did not get publication date: {date_published} ID: {out['@id']}"
+            time.sleep(2)
+            request = scrapy.Request(callback_url, callback=self.parse_api)
+            request.meta['item'] = out
+            yield request
 
-            out['datePublished'] = date_published
-            yield out
-
+    def parse_api(self, response):
+        item = response.meta['item']
+        item['callback_url'] = response.url
+        item.update(json.loads(response.body.decode('utf-8')))
+        yield item
 
 

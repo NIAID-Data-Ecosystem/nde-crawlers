@@ -52,11 +52,14 @@ class DryadItemProcessorPipeline:
         if name := item.pop('name', None):
             output['name'] = name
 
-        if description := item.pop('description', None):
+        if description := item.pop('abstract', None):
+            if methods := item.pop('methods', None):
+                description = description + "\nMethods\n" + methods
+                print("methods ran")
             output['description'] = description
 
-        if content_url := item.pop('contentUrl', None):
-            output['contentUrl'] = content_url
+        if has_part := item.pop('usageNotes', None):
+            output['hasPart'] = has_part
 
         if identifier := item.pop('identifier', None):
             output['identifier'] = identifier
@@ -66,10 +69,35 @@ class DryadItemProcessorPipeline:
         if keywords := item.pop('keywords', None):
             output['keywords'] = keywords
 
-        if author := item.pop('creator', None):
-            output['author'] = author
+        # we want to convert author.sameAs to author.url. If orcid url then convert to author.identifier
+        if authors := item.pop('creator', None):
+            author_list = []
+            # checks if there is a list of authors
+            if not isinstance(authors, list):
+                if same_as := authors.pop('sameAs', None):
+                    if 'orcid' in same_as:
+                        authors['identifier'] = same_as
+                    else:
+                        authors['url'] = same_as
+                output['author'] = authors
+            else:
+                for author in authors:
+                    if same_as := author.pop('sameAs', None):
+                        if 'orcid' in same_as:
+                            author['identifier'] = same_as
+                        else:
+                            author['url'] = same_as
+                    author_list.append(author)
+                output['author'] = author_list
 
+        # change distribution
         if distribution := item.pop('distribution', None):
+            if distribution.get("hasPart"):
+                raise AssertionError('Distribution contains hasPart')
+            elif content_url := item.pop('contentUrl', None):
+                distribution["hasPart"] = content_url
+            else:
+                pass
             output['distribution'] = distribution
 
         # There are 2 different cases and 4 different time format
@@ -114,18 +142,71 @@ class DryadItemProcessorPipeline:
             output['citation'] = {'url': citation}
 
         if license_obj := item.pop('license', None):
-            output['license'] = license_obj['license']
+            output['license'] = license_obj
 
-        if date_pub := item.pop('datePublished'):
-            date_pub = datetime.datetime.strptime(date_pub.split(': ')[1], '%B %d, %Y').date().isoformat()
+        if date_pub := item.pop('publicationDate', None):
+            date_pub = datetime.datetime.fromisoformat(date_pub).date().isoformat()
             output['datePublished'] = date_pub
 
+        if is_accessible := item.pop('isAccessibleForFree', None):
+            output['isAccessibleForFree'] = is_accessible
+
+        if coa := item.pop('visibility', None):
+            output['conditionsOfAccess'] = coa
+
+        if funding := item.pop('funders', None):
+            fds = []
+            for funder in funding:
+                fd = {}
+                if name := funder.get('organization'):
+                    fd['funder'] = {'name': name}
+                if add_type := funder.get('identifierType'):
+                    fd['additionalType'] = add_type
+                if url := funder.get('identifier'):
+                    fd['url'] = url
+                if identifier := funder.get('awardNumber'):
+                    fd['identifier'] = identifier
+                fds.append(fd)
+            output['funding'] = fds
+
+
+        # if date_pub := item.pop('datePublished'):
+        #     date_pub = datetime.datetime.strptime(date_pub.split(': ')[1], '%B %d, %Y').date().isoformat()
+        #     output['datePublished'] = date_pub
+
+        # remove unneeded values
         item.pop('provider', None)
-        item.pop('isAccessibleForFree', None)
         item.pop('publisher', None)
         item.pop('version', None)
+        item.pop('links', None)
+        item.pop('identifier', None)
+        item.pop('id', None)
+        item.pop('storageSize', None)
+        item.pop('relatedPublicationISSN', None)
+        # made using api
+        item.pop('description', None)
+        # provided in json+ld as name
+        item.pop('title', None)
+        # provided in json+ld as creators
+        item.pop('authors', None)
+        item.pop('relatedWorks', None)
+        item.pop('versionNumber', None)
+        item.pop('versionStatus', None)
+        item.pop('curationStatus', None)
+        item.pop('versionChanges', None)
+        item.pop('lastModificationDate', None)
+        item.pop('sharingLink', None)
+        item.pop('userId', None)
+        item.pop('changedFields', None)
+        item.pop('license', None)
+        # already in spatialCoverage
+        item.pop('locations', None)
+        item.pop('_links', None)
+        item.pop('fieldOfScience', None)
+        callback_url = item.pop('callback_url', None)
 
         if item:
-            logger.warning("Haven't parsed all keys in dryad_crawler: " + "\t".join(item.keys()))
+            logger.warning("Haven't parsed all keys in dryad_crawler: " + ", ".join(item.keys()))
+            logger.warning("Callback URL: %s", callback_url)
         
         return output
