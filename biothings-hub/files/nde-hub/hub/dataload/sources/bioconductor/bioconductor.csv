@@ -16,9 +16,8 @@ mac.binary.ver,downloadUrl
 vignettes,softwareHelp
 Imports,isBasedOn
 Enhances,softwareAddOn
-dependsOnMe,isBasisFor
+dependsOnMe,"isBasisFor, isRelatedTo"
 Suggests,isRelatedTo
-dependsOnMe,isRelatedTo
 suggestsMe,isRelatedTo
 LinkingTo,isRelatedTo
 URL,codeRepository

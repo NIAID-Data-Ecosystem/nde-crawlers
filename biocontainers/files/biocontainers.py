@@ -2,8 +2,6 @@ import datetime
 import logging
 import requests
 
-from requests.adapters import HTTPAdapter, Retry
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
@@ -30,8 +28,6 @@ def parse():
 
         offset += 1000
 
-        break
-
     logger.info('Retrieved %s Tools', total)
     logger.info('Parsing %s Tools', total)
 
@@ -57,21 +53,11 @@ def parse():
             output['name'] = name
             output['url'] = f'https://biocontainers.pro/tools/{name}'
             output['_id'] = 'biocontainers_' + name
+
             versions_response = requests.get(
                 f'https://api.biocontainers.pro//ga4gh/trs/v2/tools/{name}/versions')
-            if versions_response.status_code != 200:
-                print(name, versions_response.status_code, 'versions')
+
             # similars_response = requests.get(
-            #     f'https://api.biocontainers.pro//ga4gh/trs/v2/tools/{name}/similars')
-            # if similars_response.status_code != 200:
-            #     print(name, similars_response.status_code, 'similars')
-
-            # s = requests.Session()
-            # retries = Retry(total=5, backoff_factor=1,
-            #                 status_forcelist=[502, 503, 504])
-            # s.mount('http://', HTTPAdapter(max_retries=retries))
-
-            # similars_response = s.get(
             #     f"https://api.biocontainers.pro//ga4gh/trs/v2/tools/{name}/similars")
             # if similars_response.status_code != 200:
             #     print(name, similars_response.status_code, 'similars')
@@ -85,6 +71,9 @@ def parse():
                 if identifier.startswith('PMID:'):
                     output['pmids'] = identifier.split(":")[1]
             output['sameAs'] = same_as
+
+        if license := metadata.get('license'):
+            output['license'] = license
 
         if pulls := metadata.get('pulls'):
             output['interactionStatistic'] = {
@@ -105,6 +94,7 @@ def parse():
             output['applicationCategory'] = toolclass['description']
 
         dates = []
+        software_requirements = []
         if versions_response.status_code == 200:
             for version in versions_response.json():
                 if images := version.get('images'):
@@ -112,9 +102,17 @@ def parse():
                         if updated := image.get('updated'):
                             dates.append(datetime.datetime.strptime(
                                 updated, '%Y-%m-%dT%H:%M:%SZ').strftime('%Y-%m-%d'))
-        if dates:
+                        if software_requirement := version.get('image_type'):
+                            if software_requirement not in software_requirements:
+                                software_requirements.append(
+                                    software_requirement)
+
+        if len(dates):
             output['datePublished'] = sorted(dates)[0]
             output['dateModified'] = sorted(dates)[-1]
+
+        if len(software_requirements):
+            output['availableOnDevice'] = software_requirements
 
         # similars = []
         # if similars_response.status_code == 200:

@@ -1,5 +1,5 @@
 source_property,nde_property
-toolname,identifier
+toolname,"identifier, name"
 aliases,doi
 author,author
 organization,affiliation
@@ -7,7 +7,6 @@ description,description
 id,url
 meta_version,datePublished
 toolclass,applicationCategory
-toolname,name
 versions.meta_version,dateModified
 versions.name,softwareVersion
 versions.descriptor_type,programmingLanguage
