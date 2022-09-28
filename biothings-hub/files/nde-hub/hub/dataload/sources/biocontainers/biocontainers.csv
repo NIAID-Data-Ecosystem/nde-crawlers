@@ -6,8 +6,6 @@ pmid,citation
 identifiers,sameAs
 pulls,interactionStatistic
 tool_tags,keywords
-tool_url,codeRepository
-tool_url,mainEntityOfPage
+tool_url,"codeRepository, mainEntityOfPage"
 toolclass,applicationCategory
-updated,datePublished
-updated,dateModified
+updated,"datePublished, dateModified"

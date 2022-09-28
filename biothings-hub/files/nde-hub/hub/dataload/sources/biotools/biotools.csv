@@ -3,9 +3,7 @@ term,name
 uri,url
 description,description
 identifier,biotoolsID
-description,description
-homepage,codeRepository
-homepage,mainEntityOfPage
+homepage,"codeRepository, mainEntityOfPage"
 version,softwareVersion
 toolType,applicationCategory
 license,license
@@ -19,8 +17,7 @@ operation,featureList
 input,input
 output,output
 type,dateCreated
-link,codeRepository
-link,discussionUrl
+link,"codeRepository, discussionUrl"
 download,downloadUrl
 documentation,softwareHelp
 credit,author

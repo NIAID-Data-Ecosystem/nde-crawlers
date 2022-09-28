@@ -203,6 +203,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
+            "availableOnDevice": {"type": "text"},
             "citation": {
                 "properties": {
                     "@type": {"type": "keyword"},
