@@ -579,8 +579,9 @@ class SRAweb(SRAdb):
         # print(efetch_result, 'efetch')
         for record in efetch_result:
             study_abstract = False
-            if 'STUDY_ABSTRACT' in record['STUDY']['DESCRIPTOR']:
-                study_abstract = record['STUDY']['DESCRIPTOR']['STUDY_ABSTRACT']
+            if isinstance(record['STUDY']['DESCRIPTOR'], dict):
+                if 'STUDY_ABSTRACT' in record['STUDY']['DESCRIPTOR']:
+                    study_abstract = record['STUDY']['DESCRIPTOR']['STUDY_ABSTRACT']
 
             if "SAMPLE_ATTRIBUTES" in record["SAMPLE"]:
                 sample_attributes = record["SAMPLE"]["SAMPLE_ATTRIBUTES"][

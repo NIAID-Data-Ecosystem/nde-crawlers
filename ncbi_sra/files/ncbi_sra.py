@@ -99,7 +99,10 @@ class NCBI_SRA(NDEDatabase):
                 continue
             except HTTPError as e:
                 logger.info(f'HTTPError for Accession {x[0]}: {e}')
-                logger.info(e)
+                continue
+            except TypeError as e:
+                logger.info(f'TypeError for Accession {x[0]}: {e}')
+                continue
         logger.info('Removing SRA_Accessions.tab')
         os.remove("SRA_Accessions.tab")
         logger.info('Removed SRA_Accessions.tab')
