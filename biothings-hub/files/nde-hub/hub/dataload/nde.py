@@ -178,7 +178,9 @@ class NDESourceUploader(BaseSourceUploader):
             "applicationSubCategory": {
                 "properties": {
                     "@type": {"type": "text"},
-                    "name": {"type": "keyword", "copy_to": ["all"]}
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
                 }
             },
             "applicationSuite": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
@@ -359,6 +361,7 @@ class NDESourceUploader(BaseSourceUploader):
             "input": {
                 "properties": {
                     "@type": {"type": "keyword"},
+                    "description": {"type": "text"},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
