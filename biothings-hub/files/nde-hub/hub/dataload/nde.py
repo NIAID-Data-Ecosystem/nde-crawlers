@@ -175,7 +175,6 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "applicationCategory": {"type": "keyword", "copy_to": ["all"]},
-            # add identifier and url?
             "applicationSubCategory": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -319,7 +318,6 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "text", "copy_to": ["all"]},
                 }
             },
-            # add make object with name/identifier?
             "featureList": {"type": "text", "copy_to": ["all"]},
             "funding": {
                 "properties": {
