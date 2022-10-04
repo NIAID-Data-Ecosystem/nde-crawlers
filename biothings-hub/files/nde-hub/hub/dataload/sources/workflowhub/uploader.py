@@ -20,11 +20,11 @@ class WorkflowHub_Uploader(NDESourceUploader):
     __metadata__ = {
         "src_meta": {
             "sourceInfo": {
-                "description": "BioContainers is a community-driven project that provides the infrastructure and basic guidelines to create, manage and distribute bioinformatics containers with a special focus on omics fields such as proteomics, genomics, transcriptomics and metabolomics. The currently available BioContainers containers facilitate the usage, and reproducibility of software and algorithms. They can be integrated into more comprehensive bioinformatics pipelines and different architectures (local desktop, Cloud environments or HPC clusters). BioContainers is based on the popular frameworks Conda, Docker and Singularity.",
-                "identifier": "BioContainers",
-                "name": "BioContainers",
+                "description": "WorkflowHub is a registry for describing, sharing and publishing scientific computational workflows. The registry supports any workflow in its native repository. WorkflowHub aims to facilitate discovery and re-use of workflows in an accessible and interoperable way. This is achieved through extensive use of open standards and tools, including Common Workflow Language (CWL), RO-Crate, BioSchemas and TRS, in accordance with the FAIR principles.",
+                "identifier": "WorkflowHub",
+                "name": "WorkflowHub",
                 "schema": get_source_data(name),
-                "url": "https://biocontainers.pro/"
+                "url": "https://workflowhub.eu/"
             }
         }
     }
