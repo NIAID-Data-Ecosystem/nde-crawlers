@@ -290,6 +290,14 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
+            "curatedBy": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                    "versionDate": {"type": "date"},
+                }
+            },
             "date": {"type": "date"},
             "dateCreated": {"type": "date"},
             "dateModified": {"type": "date"},

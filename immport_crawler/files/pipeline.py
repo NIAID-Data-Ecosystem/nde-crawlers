@@ -64,4 +64,8 @@ class Immport2OutbreakDatasetPipeline:
                 item['includedInDataCatalog']['name'] = "ImmPort"
             if 'date' not in item:
                 item['date'] = date
+        
+        # temp fix for outbreak.info
+        if cb_outbreak := item.get('includedInDataCatalog'):
+            item['curatedBy'] = cb_outbreak
         return item

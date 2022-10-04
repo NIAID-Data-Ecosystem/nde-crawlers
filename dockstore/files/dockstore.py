@@ -159,4 +159,8 @@ def parse():
                             languages.remove(language)
                     if languages != []:
                         output['programmingLanguage'] = languages
+        # temp fix for outbreak.info
+        if cb_outbreak := output.get('includedInDataCatalog'):
+            output['curatedBy'] = cb_outbreak
+            
         yield output

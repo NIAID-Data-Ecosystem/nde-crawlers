@@ -133,6 +133,20 @@ class Zenodo(NDEDatabase):
                     # for k in keyword:
                     output['keywords'].append(keyword)
 
+            if topic_categories := data['metadata'].get('relatedIdentifier'):
+                tcs = []
+                for topic_category in topic_categories:
+                    if 'https://zenodo.org/communities/' in topic_category:
+                        tc = {'name': topic_category.rsplit('/', 1)[-1],
+                            'url': topic_category}
+                        tcs.append(tc)
+                if tcs:
+                    output['topicCategory'] = tcs
+
+            # temp fix for outbreak.info
+            if cb_outbreak := output.get('includedInDataCatalog'):
+                output['curatedBy'] = cb_outbreak
+
             # used for testing to print out xml tags
             # for element in root.iter():
             #     print("%s - %s" % (element.tag, element.text))

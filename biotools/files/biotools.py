@@ -159,6 +159,11 @@ class cleandoc:
                 0]
         except:
             cleanjson['dateCreated'] = biotooljsonhit['additionDate']
+
+        # temp fix for outbreak.info
+        if cb_outbreak := cleanjson.get('includedInDataCatalog'):
+            cleanjson['curatedBy'] = cb_outbreak
+        
         return cleanjson
 
     def add_app_sub_cat(cleanjson, biotooljsonhit):

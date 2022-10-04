@@ -179,23 +179,25 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
-  # vivli-crawler:
-  #   build:
-  #     context: vivli
-  #     dockerfile: Dockerfile
-  #     # uncomment to run development crontab
-  #     # args:
-  #     #   CRONTAB: dev-crontab
-  # zenodo-crawler:
-  #   build:
-  #     context: zenodo_oai-pmh
-  #     dockerfile: Dockerfile
-  #     # uncomment to run development crontab
-  #     # args:
-  #     #   CRONTAB: dev-crontab
-  #   volumes:
-  #     - data:/data
-  #     - cache:/cache
+  vivli-crawler:
+    build:
+      context: vivli
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+  zenodo-crawler:
+    build:
+      context: zenodo_oai-pmh
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
   mongodb:
     image: mongo:4.4
     ports:
