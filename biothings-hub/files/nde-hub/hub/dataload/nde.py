@@ -614,7 +614,7 @@ class NDESourceUploader(BaseSourceUploader):
             "topicCategory": {
                 "properties": {
                     "description": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                     "curatedBy": {
                         "properties": {
