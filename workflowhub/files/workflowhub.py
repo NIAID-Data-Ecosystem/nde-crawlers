@@ -11,7 +11,11 @@ def get_ids():
     logger.info('Getting workflow ids')
     count = 0
     url = 'https://workflowhub.eu/ga4gh/trs/v2/tools'
-    response = requests.get(url)
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        logger.error(err)
     result = []
     for workflow in response.json():
         count += 1
@@ -61,7 +65,7 @@ def parse_metadata(metadata):
             output['description'] = description
 
         if latest_version := attributes.get('latest_version'):
-            output['softwareVersion'] = latest_version
+            output['softwareVersion'] = str(latest_version)
 
         if tags := attributes.get('tags'):
             output['keywords'] = tags

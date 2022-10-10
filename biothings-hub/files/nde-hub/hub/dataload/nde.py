@@ -370,6 +370,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "keyword"},
                     "description": {"type": "text"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
@@ -512,6 +513,7 @@ class NDESourceUploader(BaseSourceUploader):
             "output": {
                 "properties": {
                     "@type": {"type": "keyword"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "encodingFormat": {"type": "text", "copy_to": ["all"]},
                 },
