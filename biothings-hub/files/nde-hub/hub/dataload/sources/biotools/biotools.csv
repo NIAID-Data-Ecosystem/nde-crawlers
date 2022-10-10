@@ -16,7 +16,6 @@ topic,applicationSubCategory
 operation,featureList
 input,input
 output,output
-type,dateCreated
 link,"codeRepository, discussionUrl"
 download,downloadUrl
 documentation,softwareHelp
