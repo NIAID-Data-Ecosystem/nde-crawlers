@@ -135,8 +135,9 @@ class Zenodo(NDEDatabase):
 
             if topic_categories := data['metadata'].get('relatedIdentifier'):
                 tcs = []
+                # some values may be null: https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:6670&metadataPrefix=oai_datacite
                 for topic_category in topic_categories:
-                    if 'https://zenodo.org/communities/' in topic_category:
+                    if topic_category and 'https://zenodo.org/communities/' in topic_category:
                         tc = {'name': topic_category.rsplit('/', 1)[-1],
                             'url': topic_category}
                         tcs.append(tc)
