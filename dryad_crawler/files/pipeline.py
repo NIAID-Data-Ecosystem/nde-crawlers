@@ -55,11 +55,10 @@ class DryadItemProcessorPipeline:
         if description := item.pop('abstract', None):
             if methods := item.pop('methods', None):
                 description = description + "\nMethods\n" + methods
-                print("methods ran")
             output['description'] = description
 
         if has_part := item.pop('usageNotes', None):
-            output['hasPart'] = has_part
+            output['hasPart'] = {'name': has_part}
 
         if identifier := item.pop('identifier', None):
             output['identifier'] = identifier

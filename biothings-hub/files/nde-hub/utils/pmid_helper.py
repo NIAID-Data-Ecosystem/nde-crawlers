@@ -8,6 +8,7 @@ import os
 import orjson
 import yaml
 import time
+import traceback
 
 from .date import add_date
 from Bio import Entrez
@@ -15,10 +16,8 @@ from Bio import Medline
 from datetime import datetime
 from typing import Optional, List, Iterable, Dict
 from itertools import islice
-from config import GEO_API_KEY, GEO_EMAIL
+from config import GEO_API_KEY, GEO_EMAIL, logger
 
-import logging
-logger = logging.getLogger('nde-logger')
 
 def get_pub_date(date: str):
     """helper method to solve the problem transforming dates such as "2000 Spring" into date().isoformat dates
@@ -187,8 +186,20 @@ def load_pmid_ctfd(data_folder):
 
             # check if there are any pmids before requesting
             if pmid_list:
-                 # batch request
-                eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
+                # batch request retry up to 3 times
+                tries = 3
+                for i in range(tries):
+                    try:
+                        eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
+                    except Exception as e:
+                        if i < tries - 1: # i is zero indexed
+                            logger.error("Error occurred while making batch API request. Retrying...")
+                            time.sleep(1)
+                            continue
+                        else:
+                            logger.error(traceback.format_exc())
+                            raise e
+                    break
                 # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
                 if api_key:
                     time.sleep(0.1)
