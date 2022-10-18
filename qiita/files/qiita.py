@@ -10,7 +10,7 @@ logger = logging.getLogger('nde-logger')
 COOKIE = 'user="2|1:0|10:1665435969|4:user|32:ImR5bGFud2VsemVsQGdtYWlsLmNvbSI=|a81f6d43704c37a1422da8da927b936505257850f1b5708364a98d163d4f3ad3"'
 
 
-def retrieve_study_metdata():
+def retrieve_study_metadata():
     logger.info('Retrieving study metadata from Qiita')
 
     url = 'https://qiita.ucsd.edu/study/list_studies/?&user=dylanwelzel@gmail.com&visibility=public&sEcho=344&query=&_=1665437236850'
@@ -20,37 +20,44 @@ def retrieve_study_metdata():
 
 
 def retrieve_study_samples(study_id):
-    logger.info('Retrieving sample information from each individual study')
-
     url = f'https://qiita.ucsd.edu/study/description/sample_template/columns/?study_id={study_id}'
     headers = {'Cookie': COOKIE}
     r = requests.get(url, headers=headers)
 
-    result = {}
+    result = []
 
     for column_name in r.json()['values']:
         url = f'https://qiita.ucsd.edu/study/description/sample_template/columns/?study_id={study_id}&column={column_name}'
         headers = {'Cookie': COOKIE}
         r = requests.get(url, headers=headers)
 
-        result[column_name] = {}
+        sample_dict = {'name': column_name,
+                       'values': []}
 
         for value in r.json()['values']:
-            if value in result[column_name]:
-                result[column_name][value] += 1
-            else:
-                result[column_name][value] = 1
+            count = r.json()['values'].count(value)
+            value_dict = {
+                '@type': 'DefinedTerm',
+                'name': value,
+                'count': count
+            }
+            if value_dict not in sample_dict['values']:
+                sample_dict['values'].append(value_dict)
+
+        result.append(sample_dict)
 
     return result
 
 
 def parse():
-    # Parse the metadata
-    studies = retrieve_study_metdata()
-
+    studies = retrieve_study_metadata()
+    count = 0
+    logger.info('Parsing study metadata')
     for study in studies:
-        study_id = study['study_id']
-        # study_samples = retrieve_study_samples(study_id)
+        count += 1
+        logger.info(f'Parsing study {count} of {len(studies)}')
+        if count % 50 == 0:
+            logger.info('Parsed %s studies', count)
 
         output = {'includedInDataCatalog': {
             '@type': 'Dataset',
@@ -66,9 +73,11 @@ def parse():
 
         if study_id := study.get('study_id'):
             output['url'] = f'https://qiita.ucsd.edu/study/description/{study_id}'
+            output['_id'] = f'qiita_{study_id}'
 
-        if study_alias := study.get('study_alias'):
-            output['_id'] = study_alias
+            # TODO use helper to import sample metadata to proper mapping
+            study_samples = retrieve_study_samples(study_id)
+            output['material'] = study_samples
 
         if study_title := study.get('study_title'):
             output['name'] = study_title
@@ -85,19 +94,21 @@ def parse():
 
         if pubs := study.get('pubs'):
             publications = re.findall(r'>(.*?)<', pubs)
-            doi = []
-            pmid = []
+            doi_list = []
+            pmid_list = []
             for publication in publications:
                 if '10.' in publication:
                     if 'http' in publication:
-                        doi.append(publication.replace(
+                        doi_list.append(publication.replace(
                             'https://doi.org/', ''))
                     else:
-                        doi.append(publication)
+                        doi_list.append(publication)
                 if len(publication) == 8:
-                    pmid.append(publication)
-            output['pmids'] = pmid
-            output['doi'] = doi
+                    pmid_list.append(publication)
+            if len(pmid_list):
+                output['pmids'] = ','.join(pmid_list)
+            if len(doi_list):
+                output['doi'] = doi_list
 
         if ebi_study_accession := study.get('ebi_study_accession'):
             output['mainEntityOfPage'] = f'https://www.ebi.ac.uk/ena/browser/view/{ebi_study_accession}'

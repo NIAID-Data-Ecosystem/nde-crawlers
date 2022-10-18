@@ -143,6 +143,15 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  qiita-crawler:
+    build:
+      context: qiita
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   reframedb-crawler:
     build:
       context: reframedb
