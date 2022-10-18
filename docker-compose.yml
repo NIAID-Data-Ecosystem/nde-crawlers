@@ -79,8 +79,8 @@ services:
       context: figshare_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -108,8 +108,8 @@ services:
       context: ncbi_geo_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -118,8 +118,8 @@ services:
       context: ncbi_pmc_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -128,8 +128,8 @@ services:
       context: ncbi_sra
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -138,8 +138,8 @@ services:
       context: omicsdi_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -170,18 +170,18 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
-  workflowhub-crawler:
+  vivli-crawler:
     build:
-      context: workflowhub
+      context: vivli
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
-  vivli-crawler:
+  workflowhub-crawler:
     build:
-      context: vivli
+      context: workflowhub
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
@@ -193,8 +193,8 @@ services:
       context: zenodo_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache

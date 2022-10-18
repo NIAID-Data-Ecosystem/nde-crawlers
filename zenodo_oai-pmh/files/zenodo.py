@@ -87,7 +87,6 @@ class Zenodo(NDEDatabase):
         # dictionary log the types that cannot be converted
         missing_types = {}
 
-
         for record in records:
             data = json.loads(record[1])
             identifier = record[0]

@@ -166,10 +166,16 @@ class NDEDatabase:
     def retreive_cache(self):
         con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
+        logger.info('Retrieving dumped records from cache...')
         c.execute("SELECT * from cache")
-        records = c.fetchall()
+        count = 0
+        for record in c:
+            count += 1
+            if count % 10000 == 0:
+                logger.info("Retrieving and parsing cache. Parsed %s records", count)
+            yield record
+        logger.info("Finished Parsing. Total Records: %s", count)
         con.close()
-        return records
 
     def parse(self, records):
         """Parse the request information"""
