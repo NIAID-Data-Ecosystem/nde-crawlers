@@ -11,6 +11,6 @@
 # *  *  *  *  * user-name command to be executed
 #               we have to use root in order to write to stdout and stderr
 #               parameter is the spider name
-0 0 * * * root /home/biothings/run-spider.sh
+0 0 1-7 * 2 root /home/biothings/run-spider.sh
 @reboot root /home/biothings/run-spider.sh 
 # remember the newline at the end

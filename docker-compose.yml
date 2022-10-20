@@ -202,8 +202,8 @@ services:
       context: zenodo_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
