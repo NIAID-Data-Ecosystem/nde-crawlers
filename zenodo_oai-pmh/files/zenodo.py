@@ -20,7 +20,7 @@ logger = logging.getLogger('nde-logger')
 class Zenodo(NDEDatabase):
     # override variables
     SQL_DB = "zenodo.db"
-    EXPIRE = datetime.timedelta(days=90)
+    EXPIRE = datetime.timedelta(days=180)
 
     # connect to the website
     sickle = Sickle('https://zenodo.org/oai2d', max_retries=4, default_retry_after=10)
