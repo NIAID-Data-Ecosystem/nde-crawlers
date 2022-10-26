@@ -1,0 +1,22 @@
+source_property,nde_property
+entryId,"url, _id"
+projectTitle,name
+projectDescription,description
+institution,author.affiliation
+laboratory,author.affiliation
+contactName,author.name
+projectRole,author.role
+email,author.email
+publicationTitle,ncitation.ame
+publicationUrl,citation.url
+doi,citation.doi
+supplementaryLinks,"mainEntityOfPage, isBasedOn.codeRepository"
+accession,sameAs
+accessible,isAccessibleForFree
+effectiveOrgan,keywords
+organ,keywords
+organPart,keywords
+disease,healthCondition.name
+genusSpecies,species
+lastModifiedDate,dateModified
+submissionDate,datePublished
