@@ -47,6 +47,16 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  dataverse-crawler:
+    build:
+      context: dataverse
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+      - cache:/cache
   dde-crawler:
     build:
       context: dde_niaid
@@ -79,8 +89,8 @@ services:
       context: figshare_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -117,8 +127,8 @@ services:
       context: ncbi_geo_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -127,8 +137,8 @@ services:
       context: ncbi_pmc_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -137,8 +147,8 @@ services:
       context: ncbi_sra
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -147,8 +157,8 @@ services:
       context: omicsdi_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -211,8 +221,8 @@ services:
       context: zenodo_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache

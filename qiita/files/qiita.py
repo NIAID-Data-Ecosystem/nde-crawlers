@@ -76,8 +76,8 @@ def parse():
             output['_id'] = f'qiita_{study_id}'
 
             # TODO use helper to import sample metadata to proper mapping
-            study_samples = retrieve_study_samples(study_id)
-            output['material'] = study_samples
+            # study_samples = retrieve_study_samples(study_id)
+            # output['material'] = study_samples
 
         if study_title := study.get('study_title'):
             output['name'] = study_title

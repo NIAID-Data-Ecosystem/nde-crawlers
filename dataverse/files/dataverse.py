@@ -4,11 +4,8 @@ import json
 import logging
 import requests
 from html.parser import HTMLParser
+
 from sql_database import NDEDatabase
-
-#import sys
-#sys.path.append("/Users/nacosta/Documents/nde-crawlers/dataverse")
-
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -18,6 +15,9 @@ logger = logging.getLogger('nde-logger')
 
 class Dataverse(NDEDatabase):
     SQL_DB = "dataverse.db"
+    EXPIRE = datetime.timedelta(days=90)
+    NO_CACHE = True
+
     DATAVERSE_SERVER = "https://dataverse.harvard.edu/api"
     DATA_URL = f"{DATAVERSE_SERVER}/search?q=data"
     EXPORT_URL = f"{DATAVERSE_SERVER}/datasets/export?exporter=schema.org"
@@ -26,11 +26,10 @@ class Dataverse(NDEDatabase):
         logger.info("finding all dataverses data available")
         #dataverses = self.find_relevant_dataverses()
         dataverse_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataverse"
-        dataverse_ids = [data['identifier'] for data in self.compile_paginated_data(dataverse_endpoint)]
-        logger.info(f"found {len(dataverse_ids)} dataverse IDs")
         datasets = []
         logger.info("extracting dataverse datasets...")
-        for dv_id in dataverse_ids:
+        for dv_data in self.compile_paginated_data(dataverse_endpoint):
+            dv_id = dv_data['identifier']
             dv_id_query = f"{self.DATAVERSE_SERVER}/search?q=*&type=dataset&subtree={dv_id}"
             datasets_and_files = self.compile_paginated_data(dv_id_query)
             datasets.extend(datasets_and_files)
@@ -104,7 +103,7 @@ class Dataverse(NDEDatabase):
                 return res
 
 
-    def compile_paginated_data(self, query_endpoint, per_page=10, verbose=False):
+    def compile_paginated_data(self, query_endpoint, per_page=50, verbose=False):
         """ Extract Data By Page
         pages through data, compiling all response['data']['items']
         and returning them.
@@ -136,7 +135,7 @@ class Dataverse(NDEDatabase):
             page_data = response.get('data').get('items')
             start += per_page
             data_pages.extend(page_data)
-            continue_paging = total and start < 50# total
+            continue_paging = total and start < 200 #total
         return data_pages
 
 
@@ -191,14 +190,15 @@ class Dataverse(NDEDatabase):
         process_time = time.process_time() - start_time
         logger.info(f"load cache successful, {record_ct} datasets loaded in {process_time:.2f} seconds")
 
+
     def parse(self, records):
         
         start_time = time.process_time()
         logger.info(f"Starting metadata parser on {len(records)} records...")
         count = 0
 
-        for data_obj in records:
-            dataset=json.loads(data_obj[1])
+        for record in records:
+            dataset=json.loads(record[1])
 
             dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'] , "%Y-%m-%d").date().isoformat()
             dataset['datePublished'] = datetime.datetime.strptime(dataset['datePublished'] , "%Y-%m-%d").date().isoformat()
@@ -232,20 +232,3 @@ class Dataverse(NDEDatabase):
             yield dataset
         process_time = time.process_time() - start_time
         logger.info(f"completed parsing individual metadata, {count} records parsed in {process_time:.2f} seconds")
-
-# if __name__ == '__main__':
-#     obj = Dataverse()
-#     cache_file_data = []
-#     for rec in obj.load_cache():
-#         cache_file_data.append(rec)
-#         print(rec)
-#     #print(len(cache_file_data))
-#     with open('load_cache_testing.json', 'w') as output:
-#         json.dump([data for data in cache_file_data[:20]], output, indent=4)
-#     parse_file_data = []
-#     for rec in obj.parse():
-#         parse_file_data.append(rec)
-#         print(json.dumps(rec, indent=4))
-#     #print(len(parse_file_data))
-#     with open('parse_output_test.json', 'w') as output:
-#         json.dump([data for data in parse_file_data[:20]], output, indent=4)

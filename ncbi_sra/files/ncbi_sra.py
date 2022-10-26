@@ -24,7 +24,7 @@ class NCBI_SRA(NDEDatabase):
     EXPIRE = datetime.timedelta(days=90)
 
     # Used for testing small chunks of data
-    DATA_LIMIT = 500
+    DATA_LIMIT = None
 
     def load_cache(self):
         logger.info('Starting FTP Download')
