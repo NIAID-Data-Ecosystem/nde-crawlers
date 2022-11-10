@@ -102,6 +102,7 @@ def oai_helper(last_updated=None):
     # We will repeat the above since we do not have the resumptionToken defined until AFTER the first request
 
     while True:
+        logger.info("Continuing to next page...")
         try:
             # With the resumptionToken defined we can now start looping through each request
             now = datetime.now()
@@ -160,7 +161,9 @@ def oai_helper(last_updated=None):
             #     raise StopIteration
 
             try:
+                logger.info('Getting resumptionToken...')
                 resumptionToken = response_dict['OAI-PMH']['ListRecords']['resumptionToken']['#text']
+                logger.info('Gottem: %s', resumptionToken)
             except KeyError:
                 logger.info("Could not find resumptionToken in response")
                 logger.info(response_dict)

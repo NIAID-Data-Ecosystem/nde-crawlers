@@ -91,6 +91,7 @@ class NDEDatabase:
         con.commit()
 
         c.execute("DROP TABLE IF EXISTS cache")
+        con.commit()
         c.execute("""CREATE TABLE cache (
                       _id text NOT NULL PRIMARY KEY,
                       data text NOT NULL
