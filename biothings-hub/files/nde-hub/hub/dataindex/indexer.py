@@ -18,6 +18,14 @@ class NDEIndexer(Indexer):
                 ]
             }
         }
+
+        self.es_index_settings["analysis"]["filter"] = {
+            "shingle": {
+                "type": "shingle",
+                "min_shingle_size": 2,
+                "max_shingle_size": 3
+            }
+        }
         
         self.es_index_settings["analysis"]["analyzer"]["nde_analyzer"] = {
             "type": "custom",
@@ -28,6 +36,20 @@ class NDEIndexer(Indexer):
             "filter": [
                 "lowercase",
                 "asciifolding"
+            ]
+        }
+
+        # Testing standard tokenizer instead of the custom char_tokenizer
+        self.es_index_settings["analysis"]["analyzer"]["phrase_suggester"] = {
+            "type": "custom",
+            "tokenizer": "char_tokenizer",
+            "char_filter": [
+                "html_strip"
+            ],
+            "filter": [
+                "lowercase",
+                "asciifolding",
+                "shingle"
             ]
         }
 
