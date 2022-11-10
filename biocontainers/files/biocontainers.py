@@ -2,6 +2,8 @@ import datetime
 import logging
 import requests
 
+from requests.adapters import HTTPAdapter, Retry
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
@@ -15,10 +17,22 @@ def parse():
     total = 0
 
     tool_metadata = []
+    s = requests.Session()
+    retries = Retry(total=5,
+                    backoff_factor=0.1,
+                    status_forcelist=[500, 502, 503, 504])
+    s.mount('http://', HTTPAdapter(max_retries=retries))
+
     while True:
         url = f'https://api.biocontainers.pro/ga4gh/trs/v2/tools?limit={limit}&offset={offset}'
-        all_data = requests.get(url)
-        if all_data.status_code != 200:
+        try:
+            all_data = s.get(url)
+            all_data.raise_for_status()
+        except requests.HTTPError as e:
+            logger.error(f'HTTP Error: {e}')
+            raise Exception(f'HTTP Error: {e}')
+        if all_data.status_code == 204:
+            # 204 means we've successfully reached the end of the metadata through pagination
             break
         for obj in all_data.json():
             total += 1
