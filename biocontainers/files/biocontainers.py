@@ -28,6 +28,9 @@ def parse():
 
         offset += 1000
 
+    if len(tool_metadata) == 0:
+        raise Exception(f'{url} returned no data')
+
     logger.info('Retrieved %s Tools', total)
     logger.info('Parsing %s Tools', total)
 
