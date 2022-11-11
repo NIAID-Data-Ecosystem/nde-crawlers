@@ -510,7 +510,16 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "mainEntityOfPage": {"type": "text"},
-            "name": {"type": "keyword", "copy_to": ["all"]},
+            "name": {
+                "type": "keyword",
+                "copy_to": ["all"],
+                "fields": {
+                    "phrase_suggester": {
+                        "type": "text",
+                        "analyzer": "phrase_suggester"
+                    }
+                }
+            },
             "nctid": {"type": "keyword", "copy_to": ["all"]},
             "output": {
                 "properties": {

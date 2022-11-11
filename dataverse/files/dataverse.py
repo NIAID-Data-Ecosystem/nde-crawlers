@@ -13,6 +13,7 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
 
+
 class Dataverse(NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
@@ -24,7 +25,6 @@ class Dataverse(NDEDatabase):
 
     def get_all_datasets_from_dataverses(self):
         logger.info("finding all dataverses data available")
-        #dataverses = self.find_relevant_dataverses()
         dataverse_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataverse"
         datasets = []
         logger.info("extracting dataverse datasets...")
@@ -99,11 +99,11 @@ class Dataverse(NDEDatabase):
                     return False
             else:
                 # success, response is the document
-                logger.info(f"schema export successful {gid}")
+                #logger.info(f"schema export successful {gid}")
                 return res
 
 
-    def compile_paginated_data(self, query_endpoint, per_page=50, verbose=False):
+    def compile_paginated_data(self, query_endpoint, per_page=1000, verbose=False):
         """ Extract Data By Page
         pages through data, compiling all response['data']['items']
         and returning them.
@@ -135,7 +135,7 @@ class Dataverse(NDEDatabase):
             page_data = response.get('data').get('items')
             start += per_page
             data_pages.extend(page_data)
-            continue_paging = total and start < 200 #total
+            continue_paging = total and start < total
         return data_pages
 
 
@@ -181,7 +181,7 @@ class Dataverse(NDEDatabase):
         start_time = time.process_time()
         datasets = self.fetch_datasets()
         record_ct = 0
-        # get the schemas for the data
+        records = []
         for gid, data in datasets.items():
             schema_record = self.get_schema_document(gid, data.get('url'))
             if schema_record:
@@ -189,46 +189,109 @@ class Dataverse(NDEDatabase):
                 yield (schema_record['@id'], json.dumps(schema_record))
         process_time = time.process_time() - start_time
         logger.info(f"load cache successful, {record_ct} datasets loaded in {process_time:.2f} seconds")
+        return records
 
-
-    def parse(self, records):
-        
+    def parse(self,records):
         start_time = time.process_time()
         logger.info(f"Starting metadata parser on {len(records)} records...")
         count = 0
 
         for record in records:
-            dataset=json.loads(record[1])
+            try:
+                dataset=json.loads(record[1])
+                dataset['url'] = dataset['identifier']
+                dataset['doi'] = dataset.pop('identifier')
+                dataset['_id'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse')
+                dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'] , "%Y-%m-%d").date().isoformat()
+                dataset['datePublished'] = datetime.datetime.strptime(dataset['datePublished'] , "%Y-%m-%d").date().isoformat()
 
-            dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'] , "%Y-%m-%d").date().isoformat()
-            dataset['datePublished'] = datetime.datetime.strptime(dataset['datePublished'] , "%Y-%m-%d").date().isoformat()
-
-            dataset['url'] = dataset.pop('identifier')
-            dataset['doi'] = dataset['url'].replace("/","_").replace('https:__doi.org','Dataverse')
-
-            if dataset['author'] is None:
-                dataset.pop('author')
-                if dataset['creator']:
-                    dataset['author'] = dataset.pop('creator')
+                if dataset['author'] is None:
+                    dataset.pop('author')
+                    if dataset['creator']:
+                        dataset['author'] = dataset.pop('creator')
+                        for data_dict in dataset["author"]:
+                            if "affiliation" in data_dict.keys():
+                                data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
+                    else:
+                        dataset.pop('creator')
                 else:
+                    for data_dict in dataset["author"]:
+                        if "affiliation" in data_dict.keys():
+                            data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
                     dataset.pop('creator')
-            else:
-                dataset.pop('creator')
 
-            if dataset['publisher'] is None:
-                dataset.pop('publisher')
-                if dataset['provider']:
-                    dataset['publisher'] = dataset.pop('provider')
+                if dataset['publisher'] is None:
+                    dataset.pop('publisher')
+                    if dataset['provider']:
+                        dataset['sdPublisher'] = [dataset.pop('provider')]
+                    else:
+                        dataset['sdPublisher'] = [dataset.pop('provider')]
                 else:
+                    dataset['sdPublisher'] = [dataset.pop("publisher")]
                     dataset.pop('provider')
-            else:
-                dataset.pop('provider')
-            
-            if "funder" in dataset.keys():
-                dataset['funding'] = {"funder": dataset.pop('funder')}
+                
+                if "funder" in dataset.keys():
+                    dataset['funding'] = {"funder": dataset.pop('funder')}
 
-            count += 1
+                if "description" in dataset.keys():
+                    dataset["description"] = dataset.pop("description")[0]
 
-            yield dataset
+                if "keywords" in dataset.keys():
+                    if dataset['keywords']:
+                        dataset["keywords"]  = dataset.pop("keywords")[0]
+                
+                if dataset["license"]:
+                    if type(dataset["license"]) is str:
+                        pass
+                    elif type(dataset["license"]) is dict:
+                        if "url" in dataset['license'].keys():
+                            dataset["license"] = dataset['license']['url']
+                        elif "text" in dataset['license'].keys():
+                            dataset["license"] = dataset['license']['text']
+                        else:
+                            dataset.pop('license')
+
+                if "temporalCoverage" in dataset.keys() and dataset["temporalCoverage"]:
+                    dataset["temporalCoverage"] = [{
+                        "temporalInterval": {
+                            "duration": dataset["temporalCoverage"][0]
+                        }
+                    }]
+
+                if "spatialCoverage" in dataset.keys():
+                    dataset["spatialCoverage"] = [{ "name": dataset.pop("spatialCoverage")[0] }]
+
+                if "distribution" in dataset.keys():
+                    for data_dict in dataset["distribution"]:
+                        if "fileFormat" in data_dict.keys():
+                            data_dict["encodingFormat"] = data_dict.pop("fileFormat")
+                        if "identifier" in data_dict.keys():
+                            data_dict["contentUrl"] = data_dict.pop("identifier")
+                        if "contentSize" in  data_dict.keys():
+                            data_dict.pop("contentSize")
+
+                pmids = []
+                if "citation" in dataset.keys() and dataset['citation']:
+                    for data_dict in dataset['citation']:
+                        if "@id" in data_dict.keys():
+                            pmid = data_dict['@id'].split("/")[-1]
+                            pmids.append(pmid)
+                    dataset['pmids'] = ','.join(pmids)
+                    dataset.pop('citation')
+
+                if "includedInDataCatalog" in dataset.keys():
+                    dataset["includedInDataCatalog"] =  [dataset["includedInDataCatalog"]]
+
+                count += 1
+
+                dataset.pop("@id")
+                if "version" in dataset.keys():
+                    dataset.pop("version")
+
+                yield dataset
+            except Exception as error:
+                logger.warning(error)
+                pass
+
         process_time = time.process_time() - start_time
         logger.info(f"completed parsing individual metadata, {count} records parsed in {process_time:.2f} seconds")
