@@ -103,6 +103,15 @@ services:
         CRONTAB: dev-crontab
     volumes:
       - data:/data
+  hubmap-crawler:
+    build:
+      context: hubmap
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      args:
+        CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   immport-crawler:
     build:
       context: immport_crawler

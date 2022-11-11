@@ -10,7 +10,7 @@ def retrieve_ids():
     '''Get all project IDs from the HCA and convert to UUID format'''
     url = 'https://service.azul.data.humancellatlas.org/index/catalogs'
     sources = requests.get(url).json()[
-        'catalogs']['dcp20']['plugins']['repository']['sources']
+        'catalogs']['dcp21']['plugins']['repository']['sources']
 
     logger.info('Retrieving %s project IDs', len(sources))
 

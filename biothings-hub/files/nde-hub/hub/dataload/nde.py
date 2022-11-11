@@ -265,7 +265,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "conditionsOfAccess": {"type": "text"},
-            "contentSize": {"type": "integer"},
+            "contentSize": {"type": "text"},
             "contentUrl": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
@@ -317,6 +317,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "contentSize": {"type": "text"},
                     "name": {"type": "keyword"},
                 }
             },
@@ -505,6 +506,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                    "description": {"type": "text"},
                 }
             },
             "mainEntityOfPage": {"type": "text"},
