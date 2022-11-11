@@ -19,7 +19,7 @@ def parse():
     tool_metadata = []
     s = requests.Session()
     retries = Retry(total=5,
-                    backoff_factor=0.1,
+                    backoff_factor=300,
                     status_forcelist=[500, 502, 503, 504])
     s.mount('http://', HTTPAdapter(max_retries=retries))
 
