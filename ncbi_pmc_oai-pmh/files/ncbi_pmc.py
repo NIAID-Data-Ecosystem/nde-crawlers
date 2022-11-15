@@ -2,12 +2,18 @@ import datetime
 import json
 import unicodedata
 import logging
+import wget
+import tarfile
+import os
+import shutil
+import socket
 
-# from sickle import Sickle
 from lxml import etree
 from sql_database import NDEDatabase
-from oai_helper import oai_helper
-
+from xml.etree import ElementTree
+from ftplib import FTP, error_temp
+from time import sleep
+from urllib.error import ContentTooShortError
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -21,57 +27,150 @@ class NCBI_PMC(NDEDatabase):
     SQL_DB = "ncbi_pmc.db"
     EXPIRE = datetime.timedelta(days=90)
 
-    # sickle = Sickle('https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi',
-    #                 max_retries=10, default_retry_after=20)
+    def get_metadata(self, record):
+        '''Converts the XML record to a dictionary'''
+        metadata_dict = {}
+        for el in record.iter():
+            key = el.tag.split('}')[-1]
+            if key not in metadata_dict:
+                metadata_dict[key] = [x.strip()
+                                      for x in el.itertext() if x.strip() != '']
+            else:
+                text_list = [x.strip()
+                             for x in el.itertext() if x.strip() != '']
+                for text in text_list:
+                    metadata_dict[key].append(text)
+        metadata_dict.pop('article')
+        return metadata_dict
+
+    def get_zipped_files(self, last_updated=None):
+        '''Used to get the list of zipped files from the FTP server'''
+        try_count = 0
+        while True:
+            try:
+                logger.info('Connecting to ftp.ncbi.nlm.nih.gov')
+                ftp = FTP('ftp.ncbi.nlm.nih.gov')
+                ftp.login()
+                logger.info('Connected to ftp.ncbi.nlm.nih.gov')
+                ftp.cwd('pub/pmc/oa_bulk/oa_comm/xml/')
+                logger.info(
+                    'Changed directory to pub/pmc/oa_bulk/oa_comm/xml/')
+                files = ftp.nlst()
+                break
+            except (error_temp, BrokenPipeError, socket.timeout) as e:
+                try_count += 1
+                if try_count > 10:
+                    raise e
+                else:
+                    logger.error('Error getting file list. %s. Retrying...', e)
+                    logger.info('Try count: %s of 10', try_count)
+                    sleep(try_count * 2)
+        zipped_filenames = [x for x in files if x.endswith('.tar.gz')]
+
+        if last_updated:
+            new_files = []
+            for zipped_filename in zipped_filenames:
+                # get the last modified date of the file
+                last_modified = ftp.sendcmd('MDTM ' + zipped_filename)
+                # convert to YYYY-MM-DD format
+                last_modified = datetime.datetime.strptime(
+                    last_modified[4:], '%Y%m%d%H%M%S').strftime('%Y-%m-%d')
+                # if the file has been updated since last_updated, add it to the list of files to download
+                if last_modified > last_updated and zipped_filename.endswith('.tar.gz'):
+                    new_files.append(zipped_filename)
+            logger.info(
+                f'Found {len(new_files)} new files since last update on {last_updated}')
+            return new_files
+        else:
+            logger.info(f'Found {len(zipped_filenames)} files')
+            return zipped_filenames
 
     def load_cache(self):
-        """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
-        Returns:
-            A tuple (_id, data formatted as a json string)
-        """
+        zipped_filenames = self.get_zipped_files()
 
-        # records = self.sickle.ListRecords(
-        #     metadataPrefix='pmc', ignore_deleted=True)
-        # count = 0
-        # while True:
-        #     try:
-        #         # get the next item
-        #         record = records.next()
-        #         count += 1
-        #         if count % 100 == 0:
-        #             logger.info("Loading cache. Loaded %s records", count)
+        logger.info('Starting to download files')
 
-        #         # in each doc we want record.identifier and record stored
-        #         doc = {'header': dict(record.header), 'metadata': record.metadata,
-        #                'xml': etree.tostring(record.xml, encoding='unicode')}
-
-        #         yield (record.header.identifier, json.dumps(doc))
-
-        #     except StopIteration:
-        #         logger.info("Finished Loading. Total Records: %s", count)
-        #         # if StopIteration is raised, break from loop
-        #         break
-        records = oai_helper()
         count = 0
-        for record in records:
-            count += 1
-            yield record
-        logger.info("Finished Loading. Total Records: %s", count)
+        for zipped_filename in zipped_filenames:
+            retry_count = 0
+            while True:
+                try:
+                    logger.info('Downloading %s', zipped_filename)
+                    wget.download(
+                        'https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/oa_comm/xml/' + zipped_filename)
+                    break
+                except ContentTooShortError as e:
+                    retry_count += 1
+                    if retry_count > 10:
+                        raise e
+                    else:
+                        logger.error(
+                            'Error downloading file. %s. Retrying...', e)
+                        logger.info('Try count: %s of 10', retry_count)
+                        sleep(retry_count * 2)
+
+            logger.info('Downloaded %s', zipped_filename)
+
+            unzipped_file = tarfile.open(zipped_filename)
+            logger.info('Unzipped %s', zipped_filename)
+
+            unzipped_filepaths = unzipped_file.getnames()
+            logger.info('Retrieved list of unzipped files in %s',
+                        zipped_filename)
+
+            unzipped_file.extractall()
+            logger.info('Extracted %s', zipped_filename)
+
+            unzipped_file.close()
+            logger.info('Closed %s', zipped_filename)
+
+            os.remove(zipped_filename)
+            logger.info('Deleted %s', zipped_filename)
+
+            logger.info('Starting to yield files to cache')
+            for xml_filepath in unzipped_filepaths:
+                count += 1
+                if count % 1000 == 0:
+                    logger.info('Yielded %s files to cache', count)
+
+                record_file = open(xml_filepath)
+                # logger.info('Opened %s', xml_filepath)
+
+                record = ElementTree.parse(record_file)
+                root = record.getroot()
+                metadata_dict = self.get_metadata(root)
+                record_xml_string = ElementTree.tostring(
+                    root, encoding='unicode')
+                doc = {'metadata': metadata_dict,
+                       'xml': record_xml_string}
+
+                yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
+                # logger.info('Yielded %s', xml_filepath)
+
+                record_file.close()
+                # logger.info('Closed %s', xml_filepath)
+
+            directories = set([x.split('/')[0]
+                               for x in unzipped_filepaths])
+            [shutil.rmtree(x, ignore_errors=True)
+             for x in directories]
+            logger.info('Deleted directories: %s', directories)
 
     def parse(self, records):
         for record in records:
             data = json.loads(record[1])
             root = etree.fromstring(data['xml'])
             metadata = data['metadata']
-            header = data['header']
 
-            output = {"includedInDataCatalog":
-                      {"name": "NCBI PMC",
-                       'versionDate': datetime.date.today().strftime('%Y-%m-%d'),
-                       'url': "https://www.ncbi.nlm.nih.gov/pmc/"},
-                      'dateModified': datetime.datetime.strptime(header['datestamp'], '%Y-%m-%d').strftime('%Y-%m-%d'),
-                      "@type": "Dataset"
-                      }
+            output = {
+                "includedInDataCatalog": {
+                    '@type': 'Dataset',
+                    "name": "NCBI PMC",
+                    'versionDate': datetime.date.today().strftime('%Y-%m-%d'),
+                    'url': "https://www.ncbi.nlm.nih.gov/pmc/"
+                },
+                "@type": "Dataset"
+            }
 
             citation_dict = {}
             if identifiers := metadata.get('article-id'):
@@ -83,10 +182,10 @@ class NCBI_PMC(NDEDatabase):
                     if identifier.startswith('10.'):
                         citation_dict['doi'] = identifier
             notes = root.find(
-                './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}notes')
+                './/notes')
             if notes is not None:
                 volume = notes.find(
-                    './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}volume')
+                    './/volume')
                 if volume is not None:
                     citation_dict['volume'] = volume.text
 
@@ -95,26 +194,26 @@ class NCBI_PMC(NDEDatabase):
 
             # Supplemental Data
             supplemental_data_arr = root.findall(
-                './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}supplementary-material')
+                './/supplementary-material')
             distribuiton_list = []
             for supplemental_data in supplemental_data_arr:
                 distribution_obj = {}
                 caption = supplemental_data.find(
-                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}caption')
+                    'caption')
                 if caption is not None:
                     file_name = caption.find(
-                        '{https://jats.nlm.nih.gov/ns/archiving/1.3/}title')
+                        'title')
                     if file_name is not None:
                         if file_name.text is not None:
                             name = unicodedata.normalize(
                                 'NFKD', file_name.text)
                             distribution_obj['name'] = name
                     description = caption.find(
-                        '{https://jats.nlm.nih.gov/ns/archiving/1.3/}p')
+                        'p')
                     if description is not None:
                         distribution_obj['description'] = description.text
                 media = supplemental_data.find(
-                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}media')
+                    'media')
                 if media is not None:
                     file_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{output['identifier']}/bin/"+media.get(
                         '{http://www.w3.org/1999/xlink}href')
@@ -128,15 +227,15 @@ class NCBI_PMC(NDEDatabase):
                 citation_dict['journalName'] = journal_title[0]
 
             pub_date = root.find(
-                './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}pub-date[@pub-type="epub"]')
+                './/pub-date[@pub-type="epub"]')
             if pub_date is not None:
                 date_string = ''
                 year = pub_date.find(
-                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}year')
+                    'year')
                 month = pub_date.find(
-                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}month')
+                    'month')
                 day = pub_date.find(
-                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}day')
+                    'day')
                 if year is not None:
                     date_string = year.text
                 if month is not None:
@@ -162,7 +261,7 @@ class NCBI_PMC(NDEDatabase):
                 output['keywords'] = keywords
 
             funding_group = root.findall(
-                ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}funding-source")
+                ".//funding-source")
             funder_list = []
             for funder in funding_group:
                 if funder.text is not None:
@@ -170,9 +269,9 @@ class NCBI_PMC(NDEDatabase):
                         {'funder': {'name': funder.text}})
                 else:
                     name = funder.find(
-                        './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}institution')
+                        './/institution')
                     # institution_id = funder.find(
-                    #     './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}institution-id')
+                    #     './/institution-id')
                     if name is not None:
                         funder_list.append(
                             {'funder': {'name': name.text}})
@@ -180,11 +279,11 @@ class NCBI_PMC(NDEDatabase):
                 output['funding'] = funder_list
 
             publisher_sec = root.find(
-                ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}publisher")
+                ".//publisher")
             if publisher_sec is not None:
                 publisher_list = publisher_sec.getchildren()
                 for publisher in publisher_list:
-                    if publisher.tag == '{https://jats.nlm.nih.gov/ns/archiving/1.3/}publisher-name':
+                    if publisher.tag == 'publisher-name':
                         output['sdPublisher'] = {'name': publisher.text}
 
             # if title := metadata.get('article-title'):
@@ -192,46 +291,46 @@ class NCBI_PMC(NDEDatabase):
             #         output['name'] = 'Supplementary materials in ' + title[0]
 
             article_meta_sec = root.find(
-                ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-meta")
+                ".//article-meta")
             if article_meta_sec is not None:
                 if 'volume' not in citation_dict:
                     volume = article_meta_sec.find(
-                        './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}volume')
+                        './/volume')
                     if volume is not None:
                         citation_dict['volume'] = volume.text
 
                 article_meta_list = article_meta_sec.getchildren()
                 for article_meta in article_meta_list:
-                    if article_meta.tag == '{https://jats.nlm.nih.gov/ns/archiving/1.3/}title-group':
+                    if article_meta.tag == 'title-group':
                         for child in article_meta.getchildren():
-                            if child.tag == '{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-title':
+                            if child.tag == 'article-title':
                                 if child.text is not None:
                                     output['name'] = 'Supplementary materials in ' + \
                                         '"'+child.text+'"'
                                     citation_dict['name'] = child.text
 
             pmid = root.find(
-                ".//{https://jats.nlm.nih.gov/ns/archiving/1.3/}article-id[@pub-id-type='pmid']")
+                ".//article-id[@pub-id-type='pmid']")
             if pmid is not None:
                 citation_dict['pmid'] = pmid.text
                 citation_dict['identifier'] = 'PMID:' + pmid.text
                 citation_dict['url'] = f'https://pubmed.ncbi.nlm.nih.gov/{pmid.text}'
 
             contrib_list = root.findall(
-                './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}contrib')
+                './/contrib')
             author_list = []
             for contrib in contrib_list:
                 author_dict = {}
                 author_id = contrib.find(
-                    '{https://jats.nlm.nih.gov/ns/archiving/1.3/}contrib-id')
+                    'contrib-id')
                 if author_id is not None:
                     author_dict['identifier'] = author_id.text
                 surname = contrib.find(
-                    './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}surname')
+                    './/surname')
                 if surname is not None:
                     author_dict['familyName'] = surname.text
                 given_name = contrib.find(
-                    './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}given-names')
+                    './/given-names')
                 if given_name is not None:
                     author_dict['givenName'] = given_name.text
                 if bool(author_dict):
@@ -243,10 +342,10 @@ class NCBI_PMC(NDEDatabase):
 
             # Data Availability
             # data_availability_sec = root.find(
-            #     './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}sec[@sec-type="data-availability"]')
+            #     './/sec[@sec-type="data-availability"]')
             # if data_availability_sec is not None:
             #     data_availability_titles = data_availability_sec.findall(
-            #         '{https://jats.nlm.nih.gov/ns/archiving/1.3/}p')
+            #         'p')
             #     if data_availability_titles is not None:
             #         for title in data_availability_titles:
             #             data_availability_dict = {}
@@ -256,23 +355,23 @@ class NCBI_PMC(NDEDatabase):
             #                 data_availability_dict['title'] = data_availability_text
 
             #             data_availability_content_titles = title.findall(
-            #                 './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}p')
+            #                 './/p')
             #             for title in data_availability_content_titles:
             #                 data_availability_content_link = title.find(
-            #                     './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}ext-link')
+            #                     './/ext-link')
             #                 content_list.append({
             #                     'link_title': title.text.replace(' (', ''), 'link': data_availability_content_link.text})
             #             data_availability_dict['content'] = content_list
 
             # abstract
             abstract_sec = root.find(
-                './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}abstract')
+                './/abstract')
             if abstract_sec is not None:
                 description_string = ''
                 abstract_title = abstract_sec.findall(
-                    './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}title')
+                    './/title')
                 abstract_text = abstract_sec.findall(
-                    './/{https://jats.nlm.nih.gov/ns/archiving/1.3/}p')
+                    './/p')
                 for title, text in zip(abstract_title, abstract_text):
                     if title.text is not None:
                         if description_string == '':
@@ -295,43 +394,74 @@ class NCBI_PMC(NDEDatabase):
         """If cache is not expired get the new records to add to the cache since last_updated"""
 
         last_updated = self.retreive_last_updated()
-        records = oai_helper(last_updated)
+
+        new_files = self.get_zipped_files(last_updated)
+
+        logger.info('Starting to download files')
+
         count = 0
-        for record in records:
-            count += 1
-            yield record
-        logger.info("Finished updating cache. Total new records: %s", count)
+        for zipped_filename in new_files:
+            retry_count = 0
+            while True:
+                try:
+                    logger.info('Downloading %s', zipped_filename)
+                    wget.download(
+                        'https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/oa_comm/xml/' + zipped_filename)
+                    break
+                except ContentTooShortError as e:
+                    retry_count += 1
+                    if retry_count > 10:
+                        raise e
+                    else:
+                        logger.error(
+                            'Error downloading file. %s. Retrying...', e)
+                        logger.info('Try count: %s of 10', retry_count)
+                        sleep(retry_count * 2)
+            logger.info('Downloaded %s', zipped_filename)
 
-        # get all the records since last_updated to add into current cache
-        # logger.info("Updating cache from %s", last_updated)
-        # records = self.sickle.ListRecords(**{
-        #     'metadataPrefix': 'pmc',
-        #     'ignore_deleted': True,
-        #     'from': last_updated
-        # }
-        # )
+            unzipped_file = tarfile.open(zipped_filename)
+            logger.info('Unzipped %s', zipped_filename)
 
-        # # Very similar to load_cache()
-        # count = 0
-        # while True:
-        #     try:
-        #         # get the next item
-        #         record = records.next()
-        #         count += 1
-        #         if count % 100 == 0:
-        #             logger.info(
-        #                 "Updating cache. %s new updated records", count)
+            unzipped_filepaths = unzipped_file.getnames()
+            logger.info('Retrieved list of unzipped files in %s',
+                        zipped_filename)
 
-        #         # in each doc we want record.identifier and record stored
-        #         doc = {'header': dict(record.header), 'metadata': record.metadata,
-        #                'xml': etree.tostring(record.xml, encoding='unicode')}
+            unzipped_file.extractall()
+            logger.info('Extracted %s', zipped_filename)
 
-        #         yield (record.header.identifier, json.dumps(doc))
+            unzipped_file.close()
+            logger.info('Closed %s', zipped_filename)
 
-        #     except StopIteration:
-        #         logger.info(
-        #             "Finished updating cache. Total new records: %s", count)
-        #         # if StopIteration is raised, break from loop
-        #         break
+            os.remove(zipped_filename)
+            logger.info('Deleted %s', zipped_filename)
+
+            logger.info('Starting to yield files to cache')
+            for xml_filepath in unzipped_filepaths:
+                count += 1
+                if count % 1000 == 0:
+                    logger.info('Yielded %s files to cache', count)
+
+                record_file = open(xml_filepath)
+                # logger.info('Opened %s', xml_filepath)
+
+                record = ElementTree.parse(record_file)
+                root = record.getroot()
+                metadata_dict = self.get_metadata(root)
+                record_xml_string = ElementTree.tostring(
+                    root, encoding='unicode')
+                doc = {'metadata': metadata_dict,
+                       'xml': record_xml_string}
+
+                yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
+                # logger.info('Yielded %s', xml_filepath)
+
+                record_file.close()
+                # logger.info('Closed %s', xml_filepath)
+
+            directories = set([x.split('/')[0]
+                               for x in unzipped_filepaths])
+            [shutil.rmtree(x, ignore_errors=True)
+             for x in directories]
+            logger.info('Deleted directories: %s', directories)
 
         self.insert_last_updated()
