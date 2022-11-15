@@ -25,7 +25,7 @@ class NDEDatabase:
         # parses directory name from database name
         self.DIR_NAME = self.SQL_DB.split('.')[0]
         # puts directory into cache folder
-        self.path = os.path.join('d/cache/', self.DIR_NAME)
+        self.path = os.path.join('/cache/', self.DIR_NAME)
         # make the directory
         os.makedirs(self.path, exist_ok=True)
 

@@ -1,3 +1,4 @@
 orjson
 Sickle
 xmltodict
+wget

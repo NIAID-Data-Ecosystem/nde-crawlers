@@ -6,13 +6,14 @@ import wget
 import tarfile
 import os
 import shutil
+import socket
 
-# from sickle import Sickle
 from lxml import etree
 from sql_database import NDEDatabase
-from oai_helper import oai_helper
 from xml.etree import ElementTree
-from ftplib import FTP
+from ftplib import FTP, error_temp
+from time import sleep
+from urllib.error import ContentTooShortError
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -21,86 +22,139 @@ logging.basicConfig(
 logger = logging.getLogger('nde-logger')
 
 
-def get_metadata(record):
-    # Used to create a dictionary of the metadata information
-    metadata_dict = {}
-    for el in record.iter():
-        key = el.tag.split('}')[-1]
-        if key not in metadata_dict:
-            metadata_dict[key] = [x.strip()
-                                  for x in el.itertext() if x.strip() != '']
-        else:
-            text_list = [x.strip()
-                         for x in el.itertext() if x.strip() != '']
-            for text in text_list:
-                metadata_dict[key].append(text)
-    metadata_dict.pop('article')
-    return metadata_dict
-
-
 class NCBI_PMC(NDEDatabase):
     # override variables
     SQL_DB = "ncbi_pmc.db"
     EXPIRE = datetime.timedelta(days=90)
 
-    def load_cache(self):
-        """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
-        Returns:
-            A tuple (_id, data formatted as a json string)
-        """
-        # connect to https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/oa_comm/xml/ and retrieve all baseline tar.gz
-        # extract all xml files and store in a folder
-        # iterate through all xml files and parse the data
-        # store the data in a json string
-        # return the json string
-        # ftp = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/oa_comm/xml/"
-        # find file with oa_comm_xml.PMC009xxxxxx.baseline.2022-09-03.tar.gz
-        # connect to ftp
-        ftp = FTP('ftp.ncbi.nlm.nih.gov')
-        ftp.login()
-        ftp.cwd('pub/pmc/oa_bulk/oa_comm/xml/')
-        # get all files in the directory
-        files = ftp.nlst()
+    def get_metadata(self, record):
+        '''Converts the XML record to a dictionary'''
+        metadata_dict = {}
+        for el in record.iter():
+            key = el.tag.split('}')[-1]
+            if key not in metadata_dict:
+                metadata_dict[key] = [x.strip()
+                                      for x in el.itertext() if x.strip() != '']
+            else:
+                text_list = [x.strip()
+                             for x in el.itertext() if x.strip() != '']
+                for text in text_list:
+                    metadata_dict[key].append(text)
+        metadata_dict.pop('article')
+        return metadata_dict
+
+    def get_zipped_files(self, last_updated=None):
+        '''Used to get the list of zipped files from the FTP server'''
+        try_count = 0
+        while True:
+            try:
+                logger.info('Connecting to ftp.ncbi.nlm.nih.gov')
+                ftp = FTP('ftp.ncbi.nlm.nih.gov')
+                ftp.login()
+                logger.info('Connected to ftp.ncbi.nlm.nih.gov')
+                ftp.cwd('pub/pmc/oa_bulk/oa_comm/xml/')
+                logger.info(
+                    'Changed directory to pub/pmc/oa_bulk/oa_comm/xml/')
+                files = ftp.nlst()
+                break
+            except (error_temp, BrokenPipeError, socket.timeout) as e:
+                try_count += 1
+                if try_count > 10:
+                    raise e
+                else:
+                    logger.error('Error getting file list. %s. Retrying...', e)
+                    logger.info('Try count: %s of 10', try_count)
+                    sleep(try_count * 2)
         zipped_filenames = [x for x in files if x.endswith('.tar.gz')]
-        # get size of each file in zipped_filenames
-        test = ['oa_comm_xml.incr.2022-09-06.tar.gz',
-                'oa_comm_xml.incr.2022-09-20.tar.gz',
-                'oa_comm_xml.incr.2022-11-10.tar.gz']
+
+        if last_updated:
+            new_files = []
+            for zipped_filename in zipped_filenames:
+                # get the last modified date of the file
+                last_modified = ftp.sendcmd('MDTM ' + zipped_filename)
+                # convert to YYYY-MM-DD format
+                last_modified = datetime.datetime.strptime(
+                    last_modified[4:], '%Y%m%d%H%M%S').strftime('%Y-%m-%d')
+                # if the file has been updated since last_updated, add it to the list of files to download
+                if last_modified > last_updated and zipped_filename.endswith('.tar.gz'):
+                    new_files.append(zipped_filename)
+            logger.info(
+                f'Found {len(new_files)} new files since last update on {last_updated}')
+            return new_files
+        else:
+            logger.info(f'Found {len(zipped_filenames)} files')
+            return zipped_filenames
+
+    def load_cache(self):
+        zipped_filenames = self.get_zipped_files()
+
+        logger.info('Starting to download files')
+
         count = 0
-        # zipped_filenames replaces test
-        for filename in test:
-            wget.download(
-                'https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/oa_comm/xml/' + filename)
-            zipped_file = tarfile.open(filename)
-            file_names = zipped_file.getnames()
-            zipped_file.extractall()
-            zipped_file.close()
-            # delete the zipped file
-            os.remove(filename)
-            for xml_filepath in file_names:
+        for zipped_filename in zipped_filenames:
+            retry_count = 0
+            while True:
+                try:
+                    logger.info('Downloading %s', zipped_filename)
+                    wget.download(
+                        'https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/oa_comm/xml/' + zipped_filename)
+                    break
+                except ContentTooShortError as e:
+                    retry_count += 1
+                    if retry_count > 10:
+                        raise e
+                    else:
+                        logger.error(
+                            'Error downloading file. %s. Retrying...', e)
+                        logger.info('Try count: %s of 10', retry_count)
+                        sleep(retry_count * 2)
+
+            logger.info('Downloaded %s', zipped_filename)
+
+            unzipped_file = tarfile.open(zipped_filename)
+            logger.info('Unzipped %s', zipped_filename)
+
+            unzipped_filepaths = unzipped_file.getnames()
+            logger.info('Retrieved list of unzipped files in %s',
+                        zipped_filename)
+
+            unzipped_file.extractall()
+            logger.info('Extracted %s', zipped_filename)
+
+            unzipped_file.close()
+            logger.info('Closed %s', zipped_filename)
+
+            os.remove(zipped_filename)
+            logger.info('Deleted %s', zipped_filename)
+
+            logger.info('Starting to yield files to cache')
+            for xml_filepath in unzipped_filepaths:
                 count += 1
-                print(count)
+                if count % 1000 == 0:
+                    logger.info('Yielded %s files to cache', count)
+
                 record_file = open(xml_filepath)
+                # logger.info('Opened %s', xml_filepath)
+
                 record = ElementTree.parse(record_file)
                 root = record.getroot()
-                metadata_dict = get_metadata(root)
+                metadata_dict = self.get_metadata(root)
                 record_xml_string = ElementTree.tostring(
                     root, encoding='unicode')
                 doc = {'metadata': metadata_dict,
                        'xml': record_xml_string}
 
-                yield (xml_filepath, json.dumps(doc))
+                yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
+                # logger.info('Yielded %s', xml_filepath)
+
                 record_file.close()
-            [shutil.rmtree(x.split('/')[0], ignore_errors=True)
-             for x in file_names]
-            # break
+                # logger.info('Closed %s', xml_filepath)
 
-        # unzip the file
-
-        # for record in records:
-        #     count += 1
-        #     yield record
-        # logger.info("Finished Loading. Total Records: %s", count)
+            directories = set([x.split('/')[0]
+                               for x in unzipped_filepaths])
+            [shutil.rmtree(x, ignore_errors=True)
+             for x in directories]
+            logger.info('Deleted directories: %s', directories)
 
     def parse(self, records):
         for record in records:
@@ -108,13 +162,15 @@ class NCBI_PMC(NDEDatabase):
             root = etree.fromstring(data['xml'])
             metadata = data['metadata']
 
-            output = {"includedInDataCatalog":
-                      {"name": "NCBI PMC",
-                       'versionDate': datetime.date.today().strftime('%Y-%m-%d'),
-                       'url': "https://www.ncbi.nlm.nih.gov/pmc/"},
-                      #   'dateModified': datetime.datetime.strptime(header['datestamp'], '%Y-%m-%d').strftime('%Y-%m-%d'),
-                      "@type": "Dataset"
-                      }
+            output = {
+                "includedInDataCatalog": {
+                    '@type': 'Dataset',
+                    "name": "NCBI PMC",
+                    'versionDate': datetime.date.today().strftime('%Y-%m-%d'),
+                    'url': "https://www.ncbi.nlm.nih.gov/pmc/"
+                },
+                "@type": "Dataset"
+            }
 
             citation_dict = {}
             if identifiers := metadata.get('article-id'):
@@ -338,43 +394,74 @@ class NCBI_PMC(NDEDatabase):
         """If cache is not expired get the new records to add to the cache since last_updated"""
 
         last_updated = self.retreive_last_updated()
-        records = oai_helper(last_updated)
+
+        new_files = self.get_zipped_files(last_updated)
+
+        logger.info('Starting to download files')
+
         count = 0
-        for record in records:
-            count += 1
-            yield record
-        logger.info("Finished updating cache. Total new records: %s", count)
+        for zipped_filename in new_files:
+            retry_count = 0
+            while True:
+                try:
+                    logger.info('Downloading %s', zipped_filename)
+                    wget.download(
+                        'https://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/oa_comm/xml/' + zipped_filename)
+                    break
+                except ContentTooShortError as e:
+                    retry_count += 1
+                    if retry_count > 10:
+                        raise e
+                    else:
+                        logger.error(
+                            'Error downloading file. %s. Retrying...', e)
+                        logger.info('Try count: %s of 10', retry_count)
+                        sleep(retry_count * 2)
+            logger.info('Downloaded %s', zipped_filename)
 
-        # get all the records since last_updated to add into current cache
-        # logger.info("Updating cache from %s", last_updated)
-        # records = self.sickle.ListRecords(**{
-        #     'metadataPrefix': 'pmc',
-        #     'ignore_deleted': True,
-        #     'from': last_updated
-        # }
-        # )
+            unzipped_file = tarfile.open(zipped_filename)
+            logger.info('Unzipped %s', zipped_filename)
 
-        # # Very similar to load_cache()
-        # count = 0
-        # while True:
-        #     try:
-        #         # get the next item
-        #         record = records.next()
-        #         count += 1
-        #         if count % 100 == 0:
-        #             logger.info(
-        #                 "Updating cache. %s new updated records", count)
+            unzipped_filepaths = unzipped_file.getnames()
+            logger.info('Retrieved list of unzipped files in %s',
+                        zipped_filename)
 
-        #         # in each doc we want record.identifier and record stored
-        #         doc = {'header': dict(record.header), 'metadata': record.metadata,
-        #                'xml': etree.tostring(record.xml, encoding='unicode')}
+            unzipped_file.extractall()
+            logger.info('Extracted %s', zipped_filename)
 
-        #         yield (record.header.identifier, json.dumps(doc))
+            unzipped_file.close()
+            logger.info('Closed %s', zipped_filename)
 
-        #     except StopIteration:
-        #         logger.info(
-        #             "Finished updating cache. Total new records: %s", count)
-        #         # if StopIteration is raised, break from loop
-        #         break
+            os.remove(zipped_filename)
+            logger.info('Deleted %s', zipped_filename)
+
+            logger.info('Starting to yield files to cache')
+            for xml_filepath in unzipped_filepaths:
+                count += 1
+                if count % 1000 == 0:
+                    logger.info('Yielded %s files to cache', count)
+
+                record_file = open(xml_filepath)
+                # logger.info('Opened %s', xml_filepath)
+
+                record = ElementTree.parse(record_file)
+                root = record.getroot()
+                metadata_dict = self.get_metadata(root)
+                record_xml_string = ElementTree.tostring(
+                    root, encoding='unicode')
+                doc = {'metadata': metadata_dict,
+                       'xml': record_xml_string}
+
+                yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
+                # logger.info('Yielded %s', xml_filepath)
+
+                record_file.close()
+                # logger.info('Closed %s', xml_filepath)
+
+            directories = set([x.split('/')[0]
+                               for x in unzipped_filepaths])
+            [shutil.rmtree(x, ignore_errors=True)
+             for x in directories]
+            logger.info('Deleted directories: %s', directories)
 
         self.insert_last_updated()
