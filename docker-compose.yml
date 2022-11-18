@@ -25,8 +25,8 @@ services:
       context: biocontainers
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   biotools-crawler:
@@ -52,8 +52,8 @@ services:
       context: dataverse
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -89,8 +89,8 @@ services:
       context: figshare_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -136,8 +136,8 @@ services:
       context: ncbi_geo_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -146,8 +146,8 @@ services:
       context: ncbi_pmc_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -156,8 +156,8 @@ services:
       context: ncbi_sra
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -166,8 +166,8 @@ services:
       context: omicsdi_crawler
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -176,8 +176,8 @@ services:
       context: qiita
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   reframedb-crawler:
@@ -230,8 +230,8 @@ services:
       context: zenodo_oai-pmh
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
