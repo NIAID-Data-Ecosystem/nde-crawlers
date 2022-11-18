@@ -138,7 +138,7 @@ def parse():
                     distribution_dict[
                         'contentUrl'] = f'https://assets.hubmapconsortium.org/{uuid}/{rel_path}'
                 if size := file.get('size'):
-                    distribution_dict['contentSize'] = int(size)
+                    distribution_dict['contentSize'] = size
                 if file_type := file.get('type'):
                     if file_type != 'unknown':
                         distribution_dict['encodingFormat'] = file_type
