@@ -151,7 +151,7 @@ class NCBI_PMC(NDEDatabase):
 
                     record_file.close()
                     # logger.info('Closed %s', xml_filepath)
-                except etree.ParseError as e:
+                except ElementTree.ParseError as e:
                     logger.error('Error parsing %s', xml_filepath)
                     logger.error(e)
                     record_file.close()
@@ -467,7 +467,7 @@ class NCBI_PMC(NDEDatabase):
 
                     record_file.close()
                     # logger.info('Closed %s', xml_filepath)
-                except etree.ParseError as e:
+                except ElementTree.ParseError as e:
                     logger.error('Error parsing %s', xml_filepath)
                     logger.error(e)
                     record_file.close()
