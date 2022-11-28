@@ -136,19 +136,27 @@ class NCBI_PMC(NDEDatabase):
                 record_file = open(xml_filepath)
                 # logger.info('Opened %s', xml_filepath)
 
-                record = ElementTree.parse(record_file)
-                root = record.getroot()
-                metadata_dict = self.get_metadata(root)
-                record_xml_string = ElementTree.tostring(
-                    root, encoding='unicode')
-                doc = {'metadata': metadata_dict,
-                       'xml': record_xml_string}
+                try:
+                    record = ElementTree.parse(record_file)
 
-                yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
-                # logger.info('Yielded %s', xml_filepath)
+                    root = record.getroot()
+                    metadata_dict = self.get_metadata(root)
+                    record_xml_string = ElementTree.tostring(
+                        root, encoding='unicode')
+                    doc = {'metadata': metadata_dict,
+                           'xml': record_xml_string}
 
-                record_file.close()
-                # logger.info('Closed %s', xml_filepath)
+                    yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
+                    # logger.info('Yielded %s', xml_filepath)
+
+                    record_file.close()
+                    # logger.info('Closed %s', xml_filepath)
+                except etree.ParseError as e:
+                    logger.error('Error parsing %s', xml_filepath)
+                    logger.error(e)
+                    record_file.close()
+                    os.remove(xml_filepath)
+                    continue
 
             directories = set([x.split('/')[0]
                                for x in unzipped_filepaths])
@@ -444,19 +452,27 @@ class NCBI_PMC(NDEDatabase):
                 record_file = open(xml_filepath)
                 # logger.info('Opened %s', xml_filepath)
 
-                record = ElementTree.parse(record_file)
-                root = record.getroot()
-                metadata_dict = self.get_metadata(root)
-                record_xml_string = ElementTree.tostring(
-                    root, encoding='unicode')
-                doc = {'metadata': metadata_dict,
-                       'xml': record_xml_string}
+                try:
+                    record = ElementTree.parse(record_file)
 
-                yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
-                # logger.info('Yielded %s', xml_filepath)
+                    root = record.getroot()
+                    metadata_dict = self.get_metadata(root)
+                    record_xml_string = ElementTree.tostring(
+                        root, encoding='unicode')
+                    doc = {'metadata': metadata_dict,
+                           'xml': record_xml_string}
 
-                record_file.close()
-                # logger.info('Closed %s', xml_filepath)
+                    yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
+                    # logger.info('Yielded %s', xml_filepath)
+
+                    record_file.close()
+                    # logger.info('Closed %s', xml_filepath)
+                except etree.ParseError as e:
+                    logger.error('Error parsing %s', xml_filepath)
+                    logger.error(e)
+                    record_file.close()
+                    os.remove(xml_filepath)
+                    continue
 
             directories = set([x.split('/')[0]
                                for x in unzipped_filepaths])
