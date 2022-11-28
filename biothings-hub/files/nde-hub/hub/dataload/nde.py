@@ -511,7 +511,8 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "mainEntityOfPage": {"type": "text"},
             "name": {
-                "type": "keyword",
+                "type": "text",
+                "analyzer": "nde_analyzer",
                 "copy_to": ["all"],
                 "fields": {
                     "phrase_suggester": {
