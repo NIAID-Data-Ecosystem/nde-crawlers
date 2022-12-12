@@ -199,6 +199,9 @@ def parse():
             else:
                 pass
 
+            if url := output.get("doi"):
+                output["url"] = doi
+
             if description := request.get('description'):
                 output['description'] = description
             elif description := request.get('extractedBriefSummary'):
