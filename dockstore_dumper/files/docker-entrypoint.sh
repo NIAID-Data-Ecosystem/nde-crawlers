@@ -2,5 +2,7 @@
 
 env >> /etc/environment
 
-# start cron in the foreground (replacing the current process)
+/home/biothings/run-dockstore.sh 
+
+# start cron in the foreground (-f) (replacing the current process) set log level (-L) to 15
 exec /usr/sbin/cron -f -L 15
