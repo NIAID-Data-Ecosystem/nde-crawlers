@@ -189,6 +189,9 @@ class NCBI_PMC(NDEDatabase):
                         output['_id'] = 'NCBI_PMC_' + identifier
                     if identifier.startswith('10.'):
                         citation_dict['doi'] = identifier
+            else:
+                logger.info(f'No identifier found for {record[1]}')
+                continue
             notes = root.find(
                 './/notes')
             if notes is not None:
