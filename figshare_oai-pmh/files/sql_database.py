@@ -27,7 +27,7 @@ class NDEDatabase:
         # puts directory into cache folder
         self.path = os.path.join('/cache/', self.DIR_NAME)
         # make the directory
-        os.makedirs(self.path, exist_ok=True)
+        os.makedirs(self.path, exist_ok = True)
 
     def is_cache_expired(self):
         """ Uses the SQL_DB to connect to a sqlite db to check if the cache is expired in metadata table
@@ -41,15 +41,13 @@ class NDEDatabase:
 
         # SQLite table names are case insensitive, but comparison is case sensitive by default.
         # To make this work properly in all cases you need to add COLLATE NOCASE.
-        c.execute(
-            """SELECT name FROM sqlite_master WHERE type='table' AND name='metadata' COLLATE NOCASE""")
+        c.execute("""SELECT name FROM sqlite_master WHERE type='table' AND name='metadata' COLLATE NOCASE""")
 
         # if the table exists check date_created if not return True
         if c.fetchone():
             c.execute("""SELECT date FROM metadata WHERE name='date_created'""")
             date_created = c.fetchall()
-            assert len(
-                date_created) <= 1, "There is more than one date_created."
+            assert len(date_created) <= 1, "There is more than one date_created."
             date_created = datetime.date.fromisoformat(date_created[0][0])
             today = datetime.date.today()
             # compare if date is expired
@@ -83,7 +81,7 @@ class NDEDatabase:
         c.execute("""INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
                   """, ('date_created', today))
-
+        
         # add date_updated
         c.execute("""INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
@@ -91,7 +89,6 @@ class NDEDatabase:
         con.commit()
 
         c.execute("DROP TABLE IF EXISTS cache")
-        con.commit()
         c.execute("""CREATE TABLE cache (
                       _id text NOT NULL PRIMARY KEY,
                       data text NOT NULL
@@ -120,11 +117,11 @@ class NDEDatabase:
         last_updated = c.fetchall()
         assert len(last_updated) <= 1, "There is more than one last_updated."
         last_updated = last_updated[0][0]
-
+        
         con.close()
-
+        
         return last_updated
-
+    
     def insert_last_updated(self):
         """Helper method for update_cache. Changes the date_updated in the metadata table to today"""
         # connect to database
@@ -144,7 +141,7 @@ class NDEDatabase:
 
     def dump(self, records):
         """Stores raw data from a list or generator into the cache table. Each value of the list contains (_id, data)"""
-
+        
         # connect to database
         con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
@@ -169,10 +166,16 @@ class NDEDatabase:
     def retreive_cache(self):
         con = sqlite3.connect(self.path + '/' + self.SQL_DB)
         c = con.cursor()
+        logger.info('Retrieving dumped records from cache...')
         c.execute("SELECT * from cache")
-        records = c.fetchall()
+        count = 0
+        for record in c:
+            count += 1
+            if count % 10000 == 0:
+                logger.info("Retrieving and parsing cache. Parsed %s records", count)
+            yield record
+        logger.info("Finished Parsing. Total Records: %s", count)
         con.close()
-        return records
 
     def parse(self, records):
         """Parse the request information"""
@@ -200,3 +203,4 @@ class NDEDatabase:
             records = self.retreive_cache()
             # pipeline to transform data to put into the ndjson file
             return self.parse(records)
+        

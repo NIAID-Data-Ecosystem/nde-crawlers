@@ -362,7 +362,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "healthCondition": {
                 "properties": {
-                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer" : "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
