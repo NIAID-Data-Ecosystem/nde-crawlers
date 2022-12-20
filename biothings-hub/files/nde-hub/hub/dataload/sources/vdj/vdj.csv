@@ -1,0 +1,9 @@
+source_property,nde_property
+study_abstract,description
+study_id,url
+study_alias,_id
+study_title,name
+study_tags,keywords
+pi,author
+pubs,"doi,pmids"
+ebi_study_accession,mainEntityOfPage
