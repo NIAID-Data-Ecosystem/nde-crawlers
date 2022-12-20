@@ -198,6 +198,15 @@ services:
       #   CRONTAB: dev-crontab
     volumes:
       - data:/data
+  vdj-crawler:
+    build:
+      context: vdj
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
   veupathdb-crawler:
     build:
       context: veupathdb
