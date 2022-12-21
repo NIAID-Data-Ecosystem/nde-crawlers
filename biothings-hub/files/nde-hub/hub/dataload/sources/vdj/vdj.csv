@@ -1,9 +1,16 @@
-source_property,nde_property
-study_abstract,description
-study_id,url
-study_alias,_id
-study_title,name
-study_tags,keywords
-pi,author
-pubs,"doi,pmids"
-ebi_study_accession,mainEntityOfPage
+study_id, identifier
+study_title, name
+study_type, keywords
+study_description, description
+inclusion_exclusion_criteria, description
+lab_name, author.name
+lab_address, author.affiliation
+submitted_by, author.name
+collected_by, author.name
+grants, description
+pub_ids, citation
+adc_publish_date, datePublished
+adc_update_date, dateModified
+archive_file, distribution.conentUrl
+download_url, distribution.conentUrl
+file_size, distribution.contentSize

@@ -2,6 +2,7 @@ import datetime
 import logging
 import requests
 import json
+import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
@@ -91,7 +92,7 @@ def parse():
             authors = []
             author_dict = {}
             if lab_name := study_info.get('lab_name'):
-                author_dict['name'] = {'name': lab_name}
+                author_dict['name'] = lab_name
 
             if lab_address := study_info.get('lab_address'):
                 author_dict['affiliation'] = {
@@ -128,7 +129,13 @@ def parse():
             #     output['funding'] = {'description': grants}
 
             if pub_ids := study_info.get('pub_ids'):
-                output['pmids'] = pub_ids.split(':')[1].strip()
+                if 'pmid' in pub_ids:
+                    output['pmids'] = pub_ids.split(':')[1].strip()
+                elif 'doi' in pub_ids.lower():
+                    doi = re.search(r'10\.\d{4,9}\/[-._;()/:A-Z0-9]+',
+                                    pub_ids, re.IGNORECASE)
+                    if doi:
+                        output['doi'] = doi.group(0)
 
             if adc_publish_date := study_info.get('adc_publish_date'):
                 adc_publish_date = adc_publish_date.split('.')[0].strip()
@@ -137,7 +144,7 @@ def parse():
 
             if adc_update_date := study_info.get('adc_update_date'):
                 adc_update_date = adc_update_date.split('.')[0].strip()
-                output['datePublished'] = datetime.datetime.strptime(
+                output['dateModified'] = datetime.datetime.strptime(
                     adc_update_date, '%Y-%m-%dT%H:%M:%S').strftime('%Y-%m-%d')
 
         if publisher := study.get('publisher'):
