@@ -73,6 +73,8 @@ def parse():
             output['contributor'] = contributor
 
         if coa := record['attributes'].get('study_access'):
+            if coa.casefold() == "public":
+                coa = "Open"
             output['conditionsOfAccess'] = coa
 
         if abstract := record['attributes'].get('summary'):
@@ -160,13 +162,16 @@ def parse():
                 output['isRelatedTo'] = irt_list
 
         # grabs urls
+        # Traditionally we've been using url as the url where the source contains the dataset.
+        # Should only be one url
         if links := record['tables'].get('HyperLinks'):
             link_list = []
             for link in links:
                 if url := link.get('url'):
                     link_list.append(url)
             if link_list:
-                output['url'] = link_list
+                assert len(link_list) == 1, "There is more than one url"
+                output['url'] = link_list[0]
 
         yield output
 
