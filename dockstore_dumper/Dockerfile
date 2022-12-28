@@ -62,4 +62,4 @@ RUN mv docker-entrypoint.sh / && \
 RUN mkdir -p /data && chown -R biothings:biothings /data
 ENV PYTHONPATH="."
 STOPSIGNAL SIGINT
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/home/biothings/run-dockstore.sh"]

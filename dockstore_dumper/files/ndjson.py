@@ -53,6 +53,7 @@ except Exception as e:
     fd.close()
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
+    raise
 finally:
     fd.close()
 
