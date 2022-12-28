@@ -284,6 +284,10 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "email": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
                     "name": {
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
@@ -451,6 +455,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "alternateName": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
@@ -461,6 +466,12 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "citation": {
+                        "properties": {
+                            "pmid": {"type": "text", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
                     },
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
@@ -478,7 +489,8 @@ class NDESourceUploader(BaseSourceUploader):
                             "identifier": {"type": "keyword", "copy_to": ["all"]},
                         }
                     },
-                    "relationship": {"type": "text", "copy_to": ["all"]}
+                    "relationship": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
                 }
             },
             "isSimilarTo": {

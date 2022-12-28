@@ -126,20 +126,11 @@ services:
       context: mendeley
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
-  microbiomedb-crawler:
-    build:
-      context: microbiomedb
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
-    volumes:
-      - data:/data
   ncbi-geo-crawler:
     build:
       context: ncbi_geo_crawler
@@ -201,15 +192,6 @@ services:
   sb-apps-crawler:
     build:
       context: sb_apps
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-  vdj-crawler:
-    build:
-      context: vdj
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
