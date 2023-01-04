@@ -79,7 +79,7 @@ def parse():
             if study_type := study_info.get('study_type'):
                 measurement_technique = {}
                 if id := study_type.get('id'):
-                    measurement_technique['id'] = id
+                    measurement_technique['identifier'] = id
                 if label := study_type.get('label'):
                     measurement_technique['name'] = label
                 if len(measurement_technique) > 0:

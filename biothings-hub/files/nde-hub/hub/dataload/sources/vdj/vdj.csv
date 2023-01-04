@@ -1,6 +1,7 @@
 study_id, identifier
 study_title, name
-study_type, keywords
+study_type.label, measurementTechnique.name
+study_type.id, measurementTechnique.identifier
 study_description, description
 inclusion_exclusion_criteria, description
 lab_name, author.name
