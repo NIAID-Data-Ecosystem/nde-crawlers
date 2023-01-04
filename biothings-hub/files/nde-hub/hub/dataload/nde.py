@@ -174,7 +174,7 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
-            "applicationCategory": {"type": "keyword", "copy_to": ["all"]},
+            "applicationCategory": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
             "applicationSubCategory": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -406,7 +406,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "infectiousAgent": {
                 "properties": {
-                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
@@ -518,7 +518,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "description": {"type": "text"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
@@ -544,7 +544,7 @@ class NDESourceUploader(BaseSourceUploader):
                 },
             },
             "processorRequirements": {"type": "text", "copy_to": ["all"]},
-            "programmingLanguage": {"type": "keyword", "copy_to": ["all"]},
+            "programmingLanguage": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
             "relationship": {"type": "text", "copy_to": ["all"]},
             "sameAs": {
                 "type": "text",
@@ -617,7 +617,7 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
@@ -659,7 +659,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
-            "variableMeasured": {"type": "keyword", "copy_to": ["all"]},
+            "variableMeasured": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
             "version": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
