@@ -77,8 +77,14 @@ def parse():
                 output['name'] = study_title
 
             if study_type := study_info.get('study_type'):
+                measurement_technique = {}
+                if id := study_type.get('id'):
+                    measurement_technique['id'] = id
                 if label := study_type.get('label'):
-                    output['keywords'] = label
+                    measurement_technique['name'] = label
+                if len(measurement_technique) > 0:
+                    measurement_technique['inDefinedTermSet'] = "NCI Thesaurus"
+                    output['measurementTechnique'] = measurement_technique
 
             if study_description := study_info.get('study_description'):
                 output['description'] = study_description
@@ -135,8 +141,8 @@ def parse():
                     doi = re.search(r'10\.\d{4,9}\/[-._;()/:A-Z0-9]+',
                                     pub_ids, re.IGNORECASE)
                     if doi:
-                        output['doi'] = doi.group(0)
-
+                        output['citation'] = {"doi": doi.group(0)
+                                              }
             if adc_publish_date := study_info.get('adc_publish_date'):
                 adc_publish_date = adc_publish_date.split('.')[0].strip()
                 output['datePublished'] = datetime.datetime.strptime(

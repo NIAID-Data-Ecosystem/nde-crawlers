@@ -366,7 +366,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "healthCondition": {
                 "properties": {
-                    "name": {"type": "keyword", "normalizer" : "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
@@ -516,9 +516,10 @@ class NDESourceUploader(BaseSourceUploader):
             "license": {"type": "text"},
             "measurementTechnique": {
                 "properties": {
+                    "description": {"type": "text"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
-                    "description": {"type": "text"},
                 }
             },
             "mainEntityOfPage": {"type": "text"},
