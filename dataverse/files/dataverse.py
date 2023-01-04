@@ -1,20 +1,24 @@
 import datetime
+#from sqlite3 import DataError
 import time
 import json
 import logging
 import requests
 from html.parser import HTMLParser
 
-from sql_database import NDEDatabase
-
+#from sql_database import NDEDatabase
+import sys
+sys.path.append("/Users/nacosta/Documents/nde-crawlers")
 logging.basicConfig(
+    filename="dataverse_new_parser.log",
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
     level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
+# outfile = open("skipped_urls.txt", "w")
+# outfile.write("Data URLs being skipped....\n")
 
-
-class Dataverse(NDEDatabase):
+class Dataverse():#NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
     NO_CACHE = True
@@ -22,19 +26,6 @@ class Dataverse(NDEDatabase):
     DATAVERSE_SERVER = "https://dataverse.harvard.edu/api"
     DATA_URL = f"{DATAVERSE_SERVER}/search?q=data"
     EXPORT_URL = f"{DATAVERSE_SERVER}/datasets/export?exporter=schema.org"
-
-    def get_all_datasets_from_dataverses(self):
-        logger.info("finding all dataverses data available")
-        dataverse_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataverse"
-        datasets = []
-        logger.info("extracting dataverse datasets...")
-        for dv_data in self.compile_paginated_data(dataverse_endpoint):
-            dv_id = dv_data['identifier']
-            dv_id_query = f"{self.DATAVERSE_SERVER}/search?q=*&type=dataset&subtree={dv_id}"
-            datasets_and_files = self.compile_paginated_data(dv_id_query)
-            datasets.extend(datasets_and_files)
-        logger.info(f"{len(datasets)} dataverse datasets extracted")
-        return datasets
 
 
     def scrape_schema_representation(self, url):
@@ -52,7 +43,6 @@ class Dataverse(NDEDatabase):
             def handle_starttag(self, tag, attrs):
                 if tag == 'script' and 'type' in attrs and attrs.get('type') == "application/ld+json":
                     self.readingSchema = True
-                    print('herexs')
 
             def handle_data(self, data):
                 if self.readingSchema:
@@ -61,10 +51,10 @@ class Dataverse(NDEDatabase):
         try:
             req = requests.get(url)
         except Exception as requestException:
-            logger.error(f"Failed to get {url} due to {requestException}")
+            logger.info(f"failed to get {url} due to {requestException}")
             return False
         if not req.ok:
-            logger.error(f"failed to get {url}")
+            logger.info(f"unable to retrieve {url}, status code:{req.status_code}")
             return False
         parser = SchemaScraper()
         parser.feed(req.text)
@@ -74,33 +64,31 @@ class Dataverse(NDEDatabase):
 
 
     def get_schema_document(self, gid, url, verbose=False):
-        if "https://hdl.handle.net/" in url:
+        schema_export_url = f"{self.EXPORT_URL}&persistentId={gid}"
+        try:
+            req = requests.get(schema_export_url)
+        except Exception as requestException:
+            logger.info(f"Failed to get {schema_export_url} due to {requestException}")
             return False
-        else:
-            schema_export_url = f"{self.EXPORT_URL}&persistentId={gid}"
-            if verbose == True:
-                logger.info(f"exporting schema.org document for {gid}")
-            try:
-                req = requests.get(schema_export_url)
-            except Exception as requestException:
-                logger.error(f"Failed to get {schema_export_url} due to {requestException}")
-                return False
-            try:
-                res = req.json()
-            except json.decoder.JSONDecodeError:
-                return False
-            if res.get('status') and res.get('status') == 'ERROR':
-                logger.warning(f"document export failed, scraping {url} instead")
-                document = self.scrape_schema_representation(url)
-                if document:
-                    logger.info("successfully scrapped document")
-                    return document
-                else:
-                    return False
+        try:
+            res = req.json()
+        except json.decoder.JSONDecodeError:
+            logger.info(f"failed to get {schema_export_url}, {url}, {req.status_code}")
+            return False
+        if res.get('status') and res.get('status') == 'ERROR':
+            #logger.warning(f"document export failed, scraping {url} instead")
+            document = self.scrape_schema_representation(url)
+            if document:
+                logger.info(f"successfully scrapped document, {url}")
+                return document
             else:
-                # success, response is the document
-                #logger.info(f"schema export successful {gid}")
-                return res
+                logger.info(f"schema.org export failed on {schema_export_url}, {url},  {req.status_code}, {res.get('status')}, {res.get('message')}")
+                logger.info("will attempt to yield original metadata for dataset....")
+                return False
+        else:
+            # success, response is the document
+            #logger.info(f"schema export successful {gid}")
+            return res
 
 
     def compile_paginated_data(self, query_endpoint, per_page=1000, verbose=False):
@@ -112,34 +100,45 @@ class Dataverse(NDEDatabase):
         continue_paging = True
         start   = 0
         retries = 0
-        data_pages = []
+        #data_pages = []
         
         while continue_paging:
             url = f"{query_endpoint}&per_page={per_page}&start={start}"
-            if verbose == True:
-                logger.info(f"querying endpoint {url}")
+            #logger.info(f"querying endpoint {url}")
             try:
                 req = requests.get(url)
             except Exception as requestException:
                 logger.error(f"Failed to get {url} due to {requestException}")
                 if retries > 5:
-                    logger.error(f"Failed too many times on endpoint {url}")
+                    logger.error(f"Failed to retrieve too many times on endpoint {url}")
                 retries += 1
                 # after 1 retry, limit per-page to 200, after 2, limit to 50
                 per_page = 200 if retries == 1 else 50
             try:
                 response = req.json()
             except ValueError:
-                logger.error(f"Failed to get a JSON response from {url}") 
-            total = response.get('data').get('total_count')
-            page_data = response.get('data').get('items')
-            start += per_page
-            data_pages.extend(page_data)
-            continue_paging = total and start < total
-        return data_pages
+                logger.error(f"Failed to get a JSON response from {url}")
+            if response:
+                try:
+                    total = response.get('data').get('total_count')
+                    page_data = response.get('data').get('items')
+                    start += per_page
+                    for page in page_data:
+                        # dataset pages use "global_id" key
+                        if "global_id" in page.keys():
+                            yield (page['global_id'], page['url'], page)
+                        # dataverse pages have "identifier" key
+                        elif "identifier" in page.keys():
+                            yield (page["identifier"], page['url'], page) # EXTRACT ID HERE 
+                    #data_pages.extend(page_data)
+                    continue_paging = total and start < total
+                except Exception as exception:
+                    logger.info("passing datapage because of exception: ", exception)
+            else:
+                pass
 
 
-    def fetch_datasets(self):
+    def load_cache(self):
         """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
         Returns:
             A tuple (_id, data formatted as a json string)
@@ -148,150 +147,208 @@ class Dataverse(NDEDatabase):
         extracts their global_id, which in this case is a DOI
         returns a dictionary mapping global_id -> dataset
         """
-        dataset_ids = set([None])
-        datasets    = []
-
-        logger.info("starting extraction of all search data")
-        new_data = self.compile_paginated_data(self.DATA_URL)
-        unique_data = [dataset for dataset in new_data if dataset.get('global_id') not in dataset_ids]
-        datasets.extend(unique_data)
-        logger.info(f"{len(unique_data)} unique search dataset records extracted")
-
-        dataset_ids |= set([dataset.get('global_id') for dataset in unique_data])
-        data_for_gid = {d.get('global_id'): d for d in datasets}
-
-        logger.info("starting extraction of all dataverse data")
-        dataverse_data = self.get_all_datasets_from_dataverses()
-        dataverse_data_for_gid = {d.get('global_id'): d for d in dataverse_data}
-
-        total_datasets = {
-            **data_for_gid,
-            **dataverse_data_for_gid
-        }
-
-        try:
-            total_datasets.pop('')
-        except KeyError:
-            pass
-        return total_datasets
-
-
-    def load_cache(self):
-        logger.info("Loading cache....")
+        logger.info("Load cache process starting....")
         start_time = time.process_time()
-        datasets = self.fetch_datasets()
-        record_ct = 0
-        records = []
-        for gid, data in datasets.items():
-            schema_record = self.get_schema_document(gid, data.get('url'))
-            if schema_record:
-                record_ct += 1
-                yield (schema_record['@id'], json.dumps(schema_record))
+        dataset_ids = [] #set([None])
+        #datasets    = []
+        handle_ct = 0
+        dataset_ct = 0
+        dataverse_ct = 0  
+        schema_ct = 0
+        skipped_data = 0   
+        # dataverse type: data --> (identifier, data_dict)
+        logger.info("Starting extraction of dataverse type data....")
+        for data in self.compile_paginated_data(self.DATA_URL+"&type=dataverse"):
+            dataverse_query = f"{self.DATAVERSE_SERVER}/search?q=*&type=dataset&type=file&subtree={data[0]}"
+            for dv_data in self.compile_paginated_data(dataverse_query):
+                if "https://hdl.handle.net/" in dv_data[1]:
+                    schema_record = self.scrape_schema_representation(dv_data[1])
+                    handle_ct += 1
+                else:
+                    schema_record = self.get_schema_document(dv_data[0], dv_data[1])
+                if schema_record:
+                    dataset_ids.append(dv_data[0])
+                    dataverse_ct += 1
+                    schema_ct += 1
+                    yield (schema_record['@id'], json.dumps(schema_record))
+                elif schema_record == False:
+                    #skipped_data += 1
+                    if dv_data[2]:
+                        logger.info(f"yielding original dataset for {dv_data[1]}")
+                        yield (dv_data[0], json.dumps(dv_data[2]))
+                    else:
+                        skipped_data += 1
+                        logger.info(f"error retrieving schema export for document with id, {dv_data[0]}, skipping dataset") 
+
+                    # outfile.write(f"[INFO] {dv_data[1]} \n")
+        logger.info(f"Extraction of dataverse data complete, {dataverse_ct} dataset schemas were extracted, and {len(set(dataset_ids))} unique ids total.")
+        
+        logger.info("starting extraction of dataset type data....")
+        # # dataset type: data --> (global_id, url)
+        for data in self.compile_paginated_data(self.DATA_URL+"&type=dataset"):
+            if data[0] not in dataset_ids:
+                dataset_ids.append(data[0])
+                if "https://hdl.handle.net/" in data[1]:
+                    self.scrape_schema_representation(data[1])
+                    handle_ct += 1
+                else:
+                    schema_record = self.get_schema_document(data[0], data[1])
+                    if schema_record:
+                        schema_ct += 1
+                        dataset_ct += 1
+                        #print(json.dumps(schema_record, indent=4))
+                        yield (schema_record['@id'], json.dumps(schema_record))
+                    elif schema_record == False:
+                        if data[2]:
+                            logger.info(f"yielding original dataset for {data[1]}")
+                            yield (data[0], json.dumps(data[2]))
+                        else:
+                            skipped_data += 1
+                            logger.info(f"error retrieving schema export for document with id, {data[0]}, skipping dataset") 
         process_time = time.process_time() - start_time
-        logger.info(f"load cache successful, {record_ct} datasets loaded in {process_time:.2f} seconds")
-        return records
+        # outfile.write(f"[INFO] TOTAL SKIPPED DATA: {skipped_data}")
+        logger.info(f"Extraction of dataset data complete, {dataset_ct} dataset schemas were extracted, {len(set(dataset_ids))} unique ids total.")
+        logger.info(f"{schema_ct} schemas extracted in {process_time} seconds.")
+        logger.info ("LOAD CACHE PROCESS COMPLETE.")
+
 
     def parse(self,records):
         start_time = time.process_time()
-        logger.info(f"Starting metadata parser on {len(records)} records...")
         count = 0
-
+        logger.info(f"Starting metadata parser...")
         for record in records:
             try:
                 dataset=json.loads(record[1])
-                dataset['url'] = dataset['identifier']
-                dataset['doi'] = dataset.pop('identifier')
-                dataset['_id'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse')
-                dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'] , "%Y-%m-%d").date().isoformat()
-                dataset['datePublished'] = datetime.datetime.strptime(dataset['datePublished'] , "%Y-%m-%d").date().isoformat()
+                # schema.org exported data
+                if "@context" in dataset or "@type" in dataset:
+                    # print(json.dumps(dataset,indent=4))
+                    dataset=json.loads(record[1])
+                    dataset['url'] = dataset['identifier']
+                    dataset['doi'] = dataset.pop('identifier')
+                    dataset['_id'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse')
+                    dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'] , "%Y-%m-%d").date().isoformat()
 
-                if dataset['author'] is None:
-                    dataset.pop('author')
-                    if dataset['creator']:
-                        dataset['author'] = dataset.pop('creator')
+                    if 'datePublished' in dataset:
+                        dataset['datePublished'] = datetime.datetime.strptime(dataset['datePublished'] , "%Y-%m-%d").date().isoformat()
+
+                    if dataset['author'] is None:
+                        dataset.pop('author')
+                        if dataset['creator']:
+                            dataset['author'] = dataset.pop('creator')
+                            for data_dict in dataset["author"]:
+                                if "affiliation" in data_dict.keys():
+                                    data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
+                        else:
+                            dataset.pop('creator')
+                    else:
                         for data_dict in dataset["author"]:
                             if "affiliation" in data_dict.keys():
                                 data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
-                    else:
                         dataset.pop('creator')
-                else:
-                    for data_dict in dataset["author"]:
-                        if "affiliation" in data_dict.keys():
-                            data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
-                    dataset.pop('creator')
 
-                if dataset['publisher'] is None:
-                    dataset.pop('publisher')
-                    if dataset['provider']:
-                        dataset['sdPublisher'] = [dataset.pop('provider')]
-                    else:
-                        dataset['sdPublisher'] = [dataset.pop('provider')]
-                else:
-                    dataset['sdPublisher'] = [dataset.pop("publisher")]
-                    dataset.pop('provider')
-                
-                if "funder" in dataset.keys():
-                    dataset['funding'] = {"funder": dataset.pop('funder')}
-
-                if "description" in dataset.keys():
-                    dataset["description"] = dataset.pop("description")[0]
-
-                if "keywords" in dataset.keys():
-                    if dataset['keywords']:
-                        dataset["keywords"]  = dataset.pop("keywords")[0]
-                
-                if dataset["license"]:
-                    if type(dataset["license"]) is str:
-                        pass
-                    elif type(dataset["license"]) is dict:
-                        if "url" in dataset['license'].keys():
-                            dataset["license"] = dataset['license']['url']
-                        elif "text" in dataset['license'].keys():
-                            dataset["license"] = dataset['license']['text']
+                    if dataset['publisher'] is None:
+                        dataset.pop('publisher')
+                        if dataset['provider']:
+                            dataset['sdPublisher'] = [dataset.pop('provider')]
                         else:
-                            dataset.pop('license')
+                            dataset['sdPublisher'] = [dataset.pop('provider')]
+                    else:
+                        dataset['sdPublisher'] = [dataset.pop("publisher")]
+                        dataset.pop('provider')
 
-                if "temporalCoverage" in dataset.keys() and dataset["temporalCoverage"]:
-                    dataset["temporalCoverage"] = [{
-                        "temporalInterval": {
-                            "duration": dataset["temporalCoverage"][0]
-                        }
-                    }]
+                    if "funder" in dataset:
+                        dataset['funding'] = {"funder": dataset.pop('funder')}
 
-                if "spatialCoverage" in dataset.keys():
-                    dataset["spatialCoverage"] = [{ "name": dataset.pop("spatialCoverage")[0] }]
+                    if "description" in dataset:
+                        dataset["description"] = dataset.pop("description")[0]
 
-                if "distribution" in dataset.keys():
-                    for data_dict in dataset["distribution"]:
-                        if "fileFormat" in data_dict.keys():
-                            data_dict["encodingFormat"] = data_dict.pop("fileFormat")
-                        if "identifier" in data_dict.keys():
-                            data_dict["contentUrl"] = data_dict.pop("identifier")
-                        if "contentSize" in  data_dict.keys():
-                            data_dict.pop("contentSize")
+                    if "keywords" in dataset:
+                        if dataset['keywords']:
+                            dataset["keywords"]  = dataset.pop("keywords")[0]
 
-                pmids = []
-                if "citation" in dataset.keys() and dataset['citation']:
-                    for data_dict in dataset['citation']:
-                        if "@id" in data_dict.keys():
-                            pmid = data_dict['@id'].split("/")[-1]
-                            pmids.append(pmid)
-                    dataset['pmids'] = ','.join(pmids)
-                    dataset.pop('citation')
+                    if dataset["license"]:
+                        if type(dataset["license"]) is str:
+                            pass
+                        elif type(dataset["license"]) is dict:
+                            if "url" in dataset['license'].keys():
+                                dataset["license"] = dataset['license']['url']
+                            elif "text" in dataset['license'].keys():
+                                dataset["license"] = dataset['license']['text']
+                            else:
+                                dataset.pop('license')
 
-                if "includedInDataCatalog" in dataset.keys():
-                    dataset["includedInDataCatalog"] =  [dataset["includedInDataCatalog"]]
+                    if "temporalCoverage" in dataset and dataset["temporalCoverage"]:
+                        dataset["temporalCoverage"] = [{
+                            "temporalInterval": {
+                                "duration": dataset["temporalCoverage"][0]
+                            }
+                        }]
 
-                count += 1
+                    if "spatialCoverage" in dataset:
+                        dataset["spatialCoverage"] = [{ "name": dataset.pop("spatialCoverage")[0] }]
 
-                dataset.pop("@id")
-                if "version" in dataset.keys():
-                    dataset.pop("version")
+                    if "distribution" in dataset:
+                        for data_dict in dataset["distribution"]:
+                            if "fileFormat" in data_dict.keys():
+                                data_dict["encodingFormat"] = data_dict.pop("fileFormat")
+                            if "identifier" in data_dict.keys():
+                                data_dict["contentUrl"] = data_dict.pop("identifier")
+                            if "contentSize" in  data_dict.keys():
+                                data_dict.pop("contentSize")
 
-                yield dataset
+                    pmids = []
+                    if "citation" in dataset and dataset['citation']:
+                        for data_dict in dataset['citation']:
+                            if "@id" in data_dict.keys():
+                                pmid = data_dict['@id'].split("/")[-1]
+                                pmids.append(pmid)
+                        dataset['pmids'] = ','.join(pmids)
+                        dataset.pop('citation')
+
+                    if "includedInDataCatalog" in dataset:
+                        dataset["includedInDataCatalog"] =  [dataset["includedInDataCatalog"]]
+
+                    count += 1
+
+                    dataset.pop("@id")
+
+                    if "version" in dataset:
+                        dataset.pop("version")
+
+                    yield dataset
+
+                else:
+                    # here is where the non-expoted metadata is translated
+                    if "type" in dataset: 
+                        dataset["@type"] = dataset.pop('type')
+                    if "global_id" in dataset:
+                        dataset["identifier"] = dataset.pop('global_id')
+                    if "published_at" in dataset:
+                        dataset["datePublished"]= dataset.pop('published_at')
+                    if "subjects" in dataset:
+                        if "keywords" in dataset:
+                            dataset["keywords"] += dataset.pop('subjects')
+                        else:
+                            dataset["keywords"] = dataset.pop('subjects')    
+                    if "createdAt" in dataset:
+                        dataset["dateCreated"] = dataset.pop('createdAt')
+                    if "upatedAt" in dataset:
+                        dataset["dateModified"] = dataset.pop('updatedAt')
+                    if "authors" in dataset:
+                        dataset["author"] = {'name': dataset.pop('authors')}
+                    
+                    dataset.pop("citationHtml")
+                    dataset.pop("identifier_of_dataverse")
+                    dataset.pop("name_of_dataverse")
+                    dataset.pop("storageIdentifier")
+                    dataset.pop("fileCount")
+                    dataset.pop("versionId")
+                    dataset.pop("versionState")
+                    yield dataset
+
             except Exception as error:
-                logger.warning(error)
-                pass
+                logger.info(f"skipping record with error - {error}")
 
         process_time = time.process_time() - start_time
-        logger.info(f"completed parsing individual metadata, {count} records parsed in {process_time:.2f} seconds")
+        logger.info(f"Completed parsing individual metadata, {count} records parsed in {process_time:.2f} seconds")
+        logger.info("PARSE PROCESS COMPLETE.")

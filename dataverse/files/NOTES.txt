@@ -1,0 +1,65 @@
+# Dataverse Datasource
+
+## Notes  
+What we know:
+ - Based off their metrics, https://dataverse.org/metrics, we should expect **210k datasets**, and **13k dataverses**.  
+
+ - Some data is inactive, will be skipped
+    i.e. 
+    https://dataverse.harvard.edu/dataverse/ddadenmark?q=&types=datasets&sort=dateSort&order=desc&page=1,
+    http://nesstar.dda.dk/webview/?mode=documentation&submode=abstract&studydoc=http%3A%2F%2Fnesstar.dda.dk%2Fobj%2FfStudy%2FDDA1507D&top=yes, 
+    https://hdl.handle.net/1902.5/DDA1507D
+
+- Some data urls are outdated....
+    i.e.
+    https://www.icpsr.umich.edu/web/HMCA/studies/35623/versions/V2
+     - https://www.icpsr.umich.edu/web/HMCA/studies/35623/ 
+        - check if we get already, skip urls, if not get the canonical url
+    - if version is outdated we skip, correct url will be found.
+
+- Some data export into schema.org format is failing, will pass original metadata record and provide a unique parse
+    Example of successful export: https://dataverse.harvard.edu/api/datasets/export?exporter=schema.org&persistentId=doi:10.7910/DVN/W7UJMD
+    Failed export: 
+    nde-logger failed to get https://dataverse.harvard.edu/api/datasets/export?exporter=schema.org&persistentId=doi:10.5064/F6ZP448B, 403, ERROR, Export Failed
+    Although we can't export, we still retrieve metadata, therefore we can still pass the metadata and modify it in the parser.
+    (it will be different than the modifications being done on the exported schema.org data)
+    -- metadata example (fails schema.org export):
+        {
+            "name": "Using participatory approaches to assess the acceptability of surveillance systems: The case of bovine tuberculosis in Belgium",
+            "type": "dataset",
+            "url": "https://doi.org/10.5064/F6W66HPK",
+            "global_id": "doi:10.5064/F6W66HPK",
+            "description": "Project Summary: Bovine tuberculosis (bTB) surveillance in Belgium is essential to maintain the officially free status and to preserve animal and public health. An evaluation of the system is thus needed to ascertain the surveillance provides a precise description of the current situation in the country. The evaluation should assess stakeholders\u2019 perceptions and expectations about the system due to the fact that the acceptability has an influence on the levels of sensitivity and timelines s of the surveillance system. The objective of the study was to assess the acceptability of the bTB surveillance in Belgium, using participatory tools and the OASIS flash tool (\u2018analysis tool for surveillance systems\u2019). For the participatory process, focus group discussions and individual interviews were implemented with representatives involved with the system, both from cattle and wildlife part of the surveillance. Data Abstract: The shared data are anonymized transcripts of participatory interviews implemented in Belgium in the frame of the evaluation of the bovine tuberculosis surveillance system. Participants to the interviews were selected according to their role in the Belgium bovine tuberculosis surveillance system (e.g. private veterinarian, farmer) and to their willingness to take part to such a study.",
+            "published_at": "2018-04-22T02:16:47Z",
+            "publisher": "QDR Harvested Dataverse",
+            "citationHtml": "Calba, Cl&eacute;mentine, 2018, \"Using participatory approaches to assess the acceptability of surveillance systems: The case of bovine tuberculosis in Belgium\", <a href=\"https://doi.org/10.5064/F6W66HPK\" target=\"_blank\">https://doi.org/10.5064/F6W66HPK</a>, QDR Main Collection",
+            "identifier_of_dataverse": "qdr",
+            "name_of_dataverse": "QDR Harvested Dataverse",
+            "citation": "Calba, Cl\u00e9mentine, 2018, \"Using participatory approaches to assess the acceptability of surveillance systems: The case of bovine tuberculosis in Belgium\", https://doi.org/10.5064/F6W66HPK, QDR Main Collection",
+            "storageIdentifier": "s3://10.5064/F6W66HPK",
+            "keywords": [
+                "acceptability",
+                "bovine tuberculosis",
+                "evaluation",
+                "participatory epidemiology",
+                "surveillance"
+            ],
+            "subjects": [
+                "Medicine, Health and Life Sciences",
+                "Social Sciences"
+            ],
+            "fileCount": 19,
+            "versionId": 136494,
+            "versionState": "RELEASED",
+            "createdAt": "2018-04-22T02:16:47Z",
+            "updatedAt": "2018-04-22T02:16:47Z",
+            "contacts": [
+                {
+                    "name": "",
+                    "affiliation": ""
+                }
+            ],
+            "authors": [
+                "Calba, Cl\u00e9mentine"
+            ]
+        }
