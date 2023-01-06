@@ -339,7 +339,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "properties": {
                             "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                             "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                             "role": {"type": "keyword"},
                             "url": {"type": "text", "copy_to": ["all"]},
@@ -512,7 +512,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "relationship": {"type": "keyword", "copy_to": ["all"]}
                 }
             },
-            "keywords": {"type": "keyword", "copy_to": ["all"]},
+            "keywords": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
             "license": {"type": "text"},
             "measurementTechnique": {
                 "properties": {

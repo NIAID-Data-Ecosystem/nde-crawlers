@@ -343,3 +343,12 @@ SKIP_CHECK_VERSIONS = True
 
 # Specify how many previous release indices we should keep
 RELEASE_KEEP_N_RECENT_INDICES = 1
+
+# auto archive config
+
+AUTO_ARCHIVE_CONFIG = {
+    "nde_hub*": {
+        "schedule": "* 0 * * *",  # run daily at 0am UTC
+        "days": 180
+    },
+}
