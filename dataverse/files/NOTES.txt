@@ -63,3 +63,187 @@ What we know:
                 "Calba, Cl\u00e9mentine"
             ]
         }
+
+Final Data Translations:
+
+Case 1: If data was "straight-forward", or easily exported into schema.org (exporter=schema.org),  
+    i.e. 
+        {
+            "@context": "http://schema.org",
+            "@type": "Dataset",
+            "name": "Replication Data for: LegGov - Global Legitimacy Crises",
+            "author": [
+                {
+                    "name": "Sommerer, Thomas",
+                    "affiliation": {
+                        "name": "(University of Potsdam)"
+                    }
+                }
+            ],
+            "datePublished": "2022-07-15",
+            "dateModified": "2022-07-15",
+            "license": "http://creativecommons.org/publicdomain/zero/1.0",
+            "includedInDataCatalog": [
+                {
+                    "@type": "DataCatalog",
+                    "name": "Harvard Dataverse",
+                    "url": "https://dataverse.harvard.edu"
+                }
+            ],
+            "distribution": [
+                {
+                    "@type": "DataDownload",
+                    "name": " A1-A82 regression tables Sommerer et al. 2022.pdf",
+                    "description": "Chapter 6: The Consequences of IO Legitimacy Crises: A Multivariate Approach",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378779",
+                    "encodingFormat": "application/pdf"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": " CH3_Consequences_of_IOlegitimacy_crises.tab",
+                    "description": "Chapter 3: Patterns of Legitimacy Crises in 32 International Organizations",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378776",
+                    "encodingFormat": "text/tab-separated-values"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": " CH6_Consequences_of_IOlegitimacy_crises.tab",
+                    "description": "Chapter 6: The Consequences of IO Legitimacy Crises: A Multivariate Approach",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378778",
+                    "encodingFormat": "text/tab-separated-values"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": "CH3_Code for Figure3_2-3_8.do",
+                    "description": "Chapter 3: Patterns of Legitimacy Crises in 32 International Organizations",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378777",
+                    "encodingFormat": "application/x-stata-syntax"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": "CH3_Code for Figure3_9-3_13.do",
+                    "description": "Chapter 3: Patterns of Legitimacy Crises in 32 International Organizations",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378773",
+                    "encodingFormat": "application/x-stata-syntax"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": "CH6_REPLICATION_DECISION.do",
+                    "description": "Chapter 6: The Consequences of IO Legitimacy Crises: A Multivariate Approach",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378771",
+                    "encodingFormat": "application/x-stata-syntax"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": "CH6_REPLICATION_FIGURES.do",
+                    "description": "Chapter 6: The Consequences of IO Legitimacy Crises: A Multivariate Approach",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378774",
+                    "encodingFormat": "application/x-stata-syntax"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": "CH6_REPLICATION_INSTITUTIONAL.do",
+                    "description": "Chapter 6: The Consequences of IO Legitimacy Crises: A Multivariate Approach",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378772",
+                    "encodingFormat": "application/x-stata-syntax"
+                },
+                {
+                    "@type": "DataDownload",
+                    "name": "CH6_REPLICATION_RESOURCES.do",
+                    "description": "Chapter 6: The Consequences of IO Legitimacy Crises: A Multivariate Approach",
+                    "contentUrl": "https://dataverse.harvard.edu/api/access/datafile/6378775",
+                    "encodingFormat": "application/x-stata-syntax"
+                }
+            ],
+            "url": "https://doi.org/10.7910/DVN/BZSF72",
+            "doi": "https://doi.org/10.7910/DVN/BZSF72",
+            "_id": "Dataverse_10.7910_DVN_BZSF72",
+            "sdPublisher": [
+                {
+                    "@type": "Organization",
+                    "name": "Harvard Dataverse"
+                }
+            ],
+            "description": "Online supplementary material and replication data for Sommerer et al. (2022), \"Global Legitimacy Crises - Decline and Revival in Multilateral Governance\"",
+            "keywords": "Social Sciences",
+            "pmids": "global-legitimacy-crises-9780192856326?facet_narrowbypubdate_facet=Next%203%20months&lang=en&cc=ma"
+        }
+
+Case 2: Else metadata export unavailable, transate raw metadata  
+    i.e 
+        {
+            "name": "Research on Pathways to Desistance [Maricopa County, AZ and Philadelphia County, PA]: Calendar Data, 2000-2010 [Restricted]",
+            "url": "https://doi.org/10.3886/ICPSR32282.v2",
+            "description": "The Calendar data files are comprised of 47 total parts spread across 13 distinct topical domains. Academic Achievement Antisocial Activity Community-Based Services Contact With the Justice System Court Monitoring Gainful Activity Head Injury Living Situation Making and Spending Money Medication Out of Community Placement Romance School Each topical domain contains multiple reference periods for looking at the topic across the entire data collection period of the study. Users who request these restricted data should first review the documentation available from NAHDAP (user guide and frequency codeb ooks) and from the Pathways Website (domain content codebooks) http://www.pathwaysstudy.pitt.edu/codebook/calendars.html . This review will help determine which specific datasets will be needed for your project. The \"Research Description\" in ICPSR's Data Access Request System (IDARS) must include a specific explanation of why you need each topic domain selected on the \"Data Selection\" page in IDARS. Most projects should only require one reference period per topic domain being requested. Data requests for all reference periods within a given domain will not be approved without a satisfactory explanation of why all of the reference periods are required for your project. Since the Calendar data collection is very extensive and Restricted Data Use Agreements are only for 2 years, data requests are not expected to need the entire Calendar data collection. The Pathways to Desistance study was a multi-site study that followed 1,354 serious juvenile offenders from adolescence to young adulthood in two locales between the years 2000 and 2010. Enrolled into the study were adjudicated youths from the juvenile and adult court systems in Maricopa County (Phoenix), Arizona (N=654) and Philadelphia County, Pennsylvania (N=700). Respondents were enrolled and baseline interviews conducted from November 2000 to January 2003. Follow-up interviews were then scheduled with the respondents at 6, 12, 18, 24, 30, 36, 48, 60, 72 and 84 months past their baseline interview. The enrolled youth were at least 14 years old and under 18 years old at the time of their committing offense and were found guilty of a serious offense (predominantly felonies, with a few exceptions for some misdemeanor property offenses, sexual assault, or weapons offenses).",
+            "publisher": "ICPSR Harvested Dataverse",
+            "citation": "Mulvey, Edward P., 2014, \"Research on Pathways to Desistance [Maricopa County, AZ and Philadelphia County, PA]: Calendar Data, 2000-2010 [Restricted]\", https://doi.org/10.3886/ICPSR32282.v2, Inter-university Consortium for Political and Social Research",
+            "keywords": [
+                "academic achievement",
+                "community involvement",
+                "crime",
+                "demographic characteristics",
+                "employment",
+                "family life",
+                "friendships",
+                "household composition",
+                "income",
+                "injuries",
+                "interpersonal relations",
+                "juvenile crime",
+                "juvenile offenders",
+                "medications",
+                "personal adjustment",
+                "psychological evaluation",
+                "psychosocial assessment",
+                "religion",
+                "service providers",
+                "social behavior",
+                "substance abuse",
+                ""
+            ],
+            "updatedAt": "2015-04-09T03:21:39Z",
+            "contacts": [
+                {
+                    "name": "",
+                    "affiliation": ""
+                }
+            ],
+            "publications": [
+                {}
+            ],
+            "geographicCoverage": [
+                {
+                    "country": "",
+                    "other": "Please see geographic coverage.,"
+                },
+                {
+                    "country": "",
+                    "other": "Arizona,"
+                },
+                {
+                    "country": "",
+                    "other": "Pennsylvania,"
+                },
+                {
+                    "country": "",
+                    "other": "Philadelphia,"
+                },
+                {
+                    "country": "",
+                    "other": "Phoenix,"
+                },
+                {
+                    "country": "",
+                    "other": "United States,"
+                }
+            ],
+            "@type": "dataset",
+            "identifier": "doi:10.3886/ICPSR32282.v2",
+            "datePublished": "2015-04-09T03:21:39Z",
+            "dateCreated": "2015-04-09T03:21:39Z",
+            "author": {
+                "name": [
+                    "Mulvey, Edward P."
+                ]
+            }
+        }

@@ -42,8 +42,7 @@ is_parsed = False
 # run parser
 try:
     parser = Dataverse()
-    record_generator = parser.upload()
-    for record in record_generator:
+    for record in parser.upload():
         line = orjson.dumps(record) + b"\n"
         fd.write(line)
     is_parsed = True
