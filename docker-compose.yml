@@ -271,7 +271,7 @@ services:
       context: biothings-hub
       dockerfile: Dockerfile
       args:
-        PYTHON_VERSION: 3.8
+        PYTHON_VERSION: "3.8"
     depends_on:
       - "mongodb"
       - "elasticsearch"
