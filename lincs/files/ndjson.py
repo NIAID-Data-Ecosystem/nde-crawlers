@@ -4,7 +4,7 @@ import traceback
 import platform
 import logging
 import orjson
-from dataverse import Dataverse
+from lincs import LINCS
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -18,7 +18,7 @@ release_string = datetime.datetime.now(
     datetime.timezone.utc
 ).strftime('%Y-%m-%dT%H:%M:%SZ')
 dirname = os.path.join(
-    '/data', 'dataverse_crawled'
+    '/data', 'lincs_crawled'
 )
 
 #save the UTC date and time of at start of crawling, in ISO-8601
@@ -41,8 +41,8 @@ fd = open(tmp_filename, 'wb')
 is_parsed = False
 # run parser
 try:
-    parser = Dataverse()
-    for record in parser.upload():
+    obj = LINCS()
+    for record in obj.parser():
         line = orjson.dumps(record) + b"\n"
         fd.write(line)
     is_parsed = True

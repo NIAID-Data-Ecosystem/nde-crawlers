@@ -1,24 +1,23 @@
 import datetime
-#from sqlite3 import DataError
+# from sqlite3 import DataError
 import time
 import json
 import logging
 import requests
 from html.parser import HTMLParser
 
-#from sql_database import NDEDatabase
-import sys
-sys.path.append("/Users/nacosta/Documents/nde-crawlers")
+from sql_database import NDEDatabase
+
+# import sys
+# sys.path.append("/Users/nacosta/Documents/nde-crawlers")
+
 logging.basicConfig(
-    filename="dataverse_new_parser.log",
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
     level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger('nde-logger')
-# outfile = open("skipped_urls.txt", "w")
-# outfile.write("Data URLs being skipped....\n")
 
-class Dataverse():#NDEDatabase):
+class Dataverse(NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
     NO_CACHE = True
@@ -180,7 +179,6 @@ class Dataverse():#NDEDatabase):
                         skipped_data += 1
                         logger.info(f"error retrieving schema export for document with id, {dv_data[0]}, skipping dataset") 
 
-                    # outfile.write(f"[INFO] {dv_data[1]} \n")
         logger.info(f"Extraction of dataverse data complete, {dataverse_ct} dataset schemas were extracted, and {len(set(dataset_ids))} unique ids total.")
         
         logger.info("starting extraction of dataset type data....")
@@ -206,13 +204,12 @@ class Dataverse():#NDEDatabase):
                             skipped_data += 1
                             logger.info(f"error retrieving schema export for document with id, {data[0]}, skipping dataset") 
         process_time = time.process_time() - start_time
-        # outfile.write(f"[INFO] TOTAL SKIPPED DATA: {skipped_data}")
         logger.info(f"Extraction of dataset data complete, {dataset_ct} dataset schemas were extracted, {len(set(dataset_ids))} unique ids total.")
         logger.info(f"{schema_ct} schemas extracted in {process_time} seconds.")
         logger.info ("LOAD CACHE PROCESS COMPLETE.")
 
 
-    def parse(self,records):
+    def parse(self, records):
         start_time = time.process_time()
         count = 0
         logger.info(f"Starting metadata parser...")
@@ -221,7 +218,7 @@ class Dataverse():#NDEDatabase):
                 dataset=json.loads(record[1])
                 # schema.org exported data
                 if "@context" in dataset or "@type" in dataset:
-                    # print(json.dumps(dataset,indent=4))
+                    ...
                     dataset=json.loads(record[1])
                     dataset['url'] = dataset['identifier']
                     dataset['doi'] = dataset.pop('identifier')
@@ -318,24 +315,30 @@ class Dataverse():#NDEDatabase):
                     yield dataset
 
                 else:
-                    # here is where the non-expoted metadata is translated
-                    if "type" in dataset: 
+                    # here is where the non-exported metadata is translated
+                    dataset["context"] = "http://schema.org"
+                    dataset['doi'] = dataset.pop('global_id')
+                    dataset['_id'] = dataset['doi'].replace("/","_").replace('doi:','Dataverse')
+                    #dataset['dateModified'] = datetime.datetime.strptime(dataset['updatedAt'] , "%Y-%m-%d").date().isoformat()
+                    # have to strip Z from time to get into correct format 
+                    if 'updatedAt' in dataset:
+                        dataset['dateModified'] = dataset['updatedAt'].strip("Z")
+                        dataset.pop('updatedAt') 
+                    if "type" in dataset:
                         dataset["@type"] = dataset.pop('type')
-                    if "global_id" in dataset:
-                        dataset["identifier"] = dataset.pop('global_id')
                     if "published_at" in dataset:
-                        dataset["datePublished"]= dataset.pop('published_at')
+                        dataset["datePublished"]= dataset['published_at'].strip("Z")
+                        dataset.pop('published_at')
                     if "subjects" in dataset:
                         if "keywords" in dataset:
                             dataset["keywords"] += dataset.pop('subjects')
                         else:
                             dataset["keywords"] = dataset.pop('subjects')    
                     if "createdAt" in dataset:
-                        dataset["dateCreated"] = dataset.pop('createdAt')
-                    if "upatedAt" in dataset:
-                        dataset["dateModified"] = dataset.pop('updatedAt')
+                        dataset["dateCreated"] = dataset['createdAt'].strip('Z')
+                        dataset.pop('createdAt')
                     if "authors" in dataset:
-                        dataset["author"] = {'name': dataset.pop('authors')}
+                        dataset["author"]=[{'name': dataset.pop('authors')}]
                     
                     dataset.pop("citationHtml")
                     dataset.pop("identifier_of_dataverse")
@@ -344,6 +347,7 @@ class Dataverse():#NDEDatabase):
                     dataset.pop("fileCount")
                     dataset.pop("versionId")
                     dataset.pop("versionState")
+
                     yield dataset
 
             except Exception as error:
