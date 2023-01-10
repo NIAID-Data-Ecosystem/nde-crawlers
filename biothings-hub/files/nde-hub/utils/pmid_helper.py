@@ -55,9 +55,9 @@ def get_pub_date(date: str):
         else:
             logger.warning("Need to update isoformat transformation: %s", date)
             return None
-    # if length is 3 should be year month day or year month day-day
+    # if length is 3 should be year month day or year month day-day or year month-month day
     elif date_len == 3:
-        return datetime.strptime(s_date[0] + ' ' + s_date[1] + ' ' + s_date[2].split('-')[0], '%Y %b %d').date().isoformat()
+        return datetime.strptime(s_date[0] + ' ' + s_date[1].split('-')[0] + ' ' + s_date[2].split('-')[0], '%Y %b %d').date().isoformat()
     # exception case there are quite a few entries with this case "2020 Jan - Feb"
     elif date_len == 4:
         if s_date[1] in months and s_date[3] in months and s_date[2] == "-":
