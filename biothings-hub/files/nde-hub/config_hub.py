@@ -347,8 +347,8 @@ RELEASE_KEEP_N_RECENT_INDICES = 1
 # auto archive config
 
 AUTO_ARCHIVE_CONFIG = {
-    "nde_hub*": {
-        "schedule": "* 0 * * *",  # run daily at 0am UTC
+    "nde_hub": {
+        "schedule": "* 1 * * *",  # run daily at 1am UTC
         "days": 180
     },
 }
