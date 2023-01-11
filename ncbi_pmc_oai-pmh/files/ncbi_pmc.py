@@ -187,11 +187,12 @@ class NCBI_PMC(NDEDatabase):
                         output['identifier'] = identifier
                         output['url'] = f'https://www.ncbi.nlm.nih.gov/pmc/articles/{identifier}'
                         output['_id'] = 'NCBI_PMC_' + identifier
-                    if identifier.startswith('10.'):
+                    elif identifier.startswith('10.'):
                         citation_dict['doi'] = identifier
-            else:
-                logger.info(f'No identifier found for {record[1]}')
+            if 'identifier' not in output:
+                logger.info('Article has been deleted, skipping')
                 continue
+
             notes = root.find(
                 './/notes')
             if notes is not None:
