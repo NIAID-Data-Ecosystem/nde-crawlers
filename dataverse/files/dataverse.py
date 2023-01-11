@@ -8,9 +8,6 @@ from html.parser import HTMLParser
 
 from sql_database import NDEDatabase
 
-# import sys
-# sys.path.append("/Users/nacosta/Documents/nde-crawlers")
-
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
     level=logging.INFO,
@@ -171,8 +168,9 @@ class Dataverse(NDEDatabase):
                     schema_ct += 1
                     yield (schema_record['@id'], json.dumps(schema_record))
                 elif schema_record == False:
-                    #skipped_data += 1
-                    if dv_data[2]:
+                    if "https://hdl.handle.net/" in dv_data[1]:
+                        pass
+                    elif dv_data[2]:
                         logger.info(f"yielding original dataset for {dv_data[1]}")
                         yield (dv_data[0], json.dumps(dv_data[2]))
                     else:
@@ -180,7 +178,6 @@ class Dataverse(NDEDatabase):
                         logger.info(f"error retrieving schema export for document with id, {dv_data[0]}, skipping dataset") 
 
         logger.info(f"Extraction of dataverse data complete, {dataverse_ct} dataset schemas were extracted, and {len(set(dataset_ids))} unique ids total.")
-        
         logger.info("starting extraction of dataset type data....")
         # # dataset type: data --> (global_id, url)
         for data in self.compile_paginated_data(self.DATA_URL+"&type=dataset"):
@@ -197,7 +194,9 @@ class Dataverse(NDEDatabase):
                         #print(json.dumps(schema_record, indent=4))
                         yield (schema_record['@id'], json.dumps(schema_record))
                     elif schema_record == False:
-                        if data[2]:
+                        if "https://hdl.handle.net/" in data[1]:
+                            pass
+                        elif data[2]:
                             logger.info(f"yielding original dataset for {data[1]}")
                             yield (data[0], json.dumps(data[2]))
                         else:
