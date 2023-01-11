@@ -27,6 +27,8 @@ class NCBI_SRA(NDEDatabase):
     def query_sra(self, study_info):
 
         study_acc = study_info[0]
+        # TODO rebuild with improved logging
+        logger.info(f'Current Study: {study_acc}')
         if study_acc == '-':
             return (study_acc, json.dumps(None))
         try:
@@ -103,8 +105,7 @@ class NCBI_SRA(NDEDatabase):
                 count += 1
                 if count % 1000 == 0:
                     end = time.time()
-                    logger.info('Retrieved {} Studies in {} seconds'.format(
-                        count, end - start))
+                    logger.info('Retrieved 1000 Studies in {} seconds'.format(end - start))
                     start = time.time()
 
         logger.info('Removing SRA_Accessions.tab')

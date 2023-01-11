@@ -14,6 +14,7 @@ from xml.etree import ElementTree
 from ftplib import FTP, error_temp
 from time import sleep
 from urllib.error import ContentTooShortError
+from dateutil.parser import parse
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -180,6 +181,37 @@ class NCBI_PMC(NDEDatabase):
                 "@type": "Dataset"
             }
 
+            date_published = root.find(
+                './/pub-date[@pub-type="pmc-release"]')
+            if date_published is not None:
+                date_published_string = ''
+                year = date_published.find(
+                    'year')
+                month = date_published.find(
+                    'month')
+                day = date_published.find(
+                    'day')
+                if year is not None:
+                    date_published_string = year.text
+                if month is not None:
+                    if len(month.text) == 1:
+                        date_published_string += f'-0{month.text}'
+                    else:
+                        date_published_string += '-' + month.text
+                if day is not None:
+                    if len(day.text) == 1:
+                        date_published_string += f'-0{day.text}'
+                    else:
+                        date_published_string += '-' + day.text
+                if date_published_string != '':
+                    try:
+                        date_published_string = parse(date_published_string)
+                        date_published_string = date_published_string.date()
+                        date_published_string = date_published_string.isoformat()
+                        output['datePublished'] = date_published_string
+                    except ValueError:
+                        print(f'Unable to parse date: {date_published_string}')
+
             citation_dict = {}
             if identifiers := metadata.get('article-id'):
                 for identifier in identifiers:
@@ -261,7 +293,13 @@ class NCBI_PMC(NDEDatabase):
                     else:
                         date_string += '-' + day.text
                 if date_string != '':
-                    citation_dict['datePublished'] = date_string
+                    try:
+                        date_string = parse(date_string)
+                        date_string = date_string.date()
+                        date_string = date_string.isoformat()
+                        citation_dict['datePublished'] = date_string
+                    except ValueError:
+                        print(f'Unable to parse date: {date_string}')
 
             # if issn := metadata.get('issn'):
             #     output['issueNumber'] = issn[0]
