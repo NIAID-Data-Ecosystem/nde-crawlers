@@ -1,10 +1,6 @@
-lxml
-matplotlib
-numpy
 orjson
+datetime
+sickle
 pandas
-requests
-requests_ftp
-tqdm
+kingfisher
 wget
-xmltodict
