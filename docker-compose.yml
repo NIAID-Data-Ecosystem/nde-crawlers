@@ -126,8 +126,8 @@ services:
       context: lincs
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      # args:
-      #   CRONTAB: dev-crontab
+      args:
+        CRONTAB: dev-crontab
     volumes:
       - data:/data
   mendeley-crawler:

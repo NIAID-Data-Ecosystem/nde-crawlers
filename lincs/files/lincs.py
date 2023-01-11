@@ -1,7 +1,6 @@
 import requests
 import logging
-import sys
-sys.path.append("/Users/nacosta/Documents/nde-crawlers")
+
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
     level=logging.INFO,
@@ -9,7 +8,7 @@ logging.basicConfig(
 logger = logging.getLogger('nde-logger')
 
 class LINCS():
-  def parser():
+  def parser(self):
     lincsportal_url = "https://lincsportal.ccs.miami.edu/dcic/api/fetchdata?limit=1000&searchTerm=*"
     lincsportal_res = requests.get(lincsportal_url)
     logger.info(f"Started extraction of LINCS database: {lincsportal_url}.")
@@ -18,8 +17,6 @@ class LINCS():
 
     doc_ct = 0
     success_ct = 0
-    # ctr_x = 0
-    # key_set = set()
 
     for document in lincsportal_data['results']["documents"]:
         # modify doc
@@ -33,7 +30,7 @@ class LINCS():
           document["author"] = {
             "name": document.pop("principalinvestigator"),
             "url": document.pop("centerurl"),
-            "affiliation": document.pop("centerfullname"),
+            "affiliation": [{'name': document.pop("centerfullname")}],
             } 
         if "funding" in document:
           document["funding"] = {'identfier': document.pop("funding")}
@@ -45,12 +42,14 @@ class LINCS():
           document["name"] = document.pop("datasetname")
         if "datasetid" in document:
           document["identifier"] = document.pop("datasetid")
+          document["_id"] = document["identifier"]
         if "datereleased" in document:
           document["datePublished"] = document.pop("datereleased")
         if "assayname" in document:
-          document["measurementTechnique"] = document.pop("assayname")
-        if 'assayformat' in document:
-          document["measurementTechnique"].append(document.pop("assayformat"))
+          measure_tech = document.pop("assayname")
+          if 'assayformat' in document:
+            measure_tech.append(document.pop("assayformat"))
+          document["measurementTechnique"] = [ {'description': measure_tech} ]
         document["keywords"] = []
         if 'assaydesignmethod' in document: 
           document["keywords"] = document.pop("assaydesignmethod")
@@ -78,7 +77,9 @@ class LINCS():
           document["isBasedOn"] = [{"url": document.pop("toollink")}]
         if 'datasetgroup' in document:
           document['isRelatedTo'] = [{'url': document.pop('datasetgroup')}]
-
+        if 'cellline' in document:
+          for x in document['cellline']:
+            document['keywords'].append(x)
         if 'concentrations' in document: document.pop("concentrations")
         if 'timepoints' in document: document.pop("timepoints")
         if 'expentimentalcomments' in document: document.pop("expentimentalcomments")
@@ -100,8 +101,8 @@ class LINCS():
         if '_version_' in document: document.pop('_version_')
         if 'endpoints' in document: document.pop('endpoints')
         if 'smlincsidentifier' in document: document.pop('smlincsidentifier')
+        if 'pipeline' in document: document.pop('pipeline')
 
         yield document
         success_ct += 1
-
     logger.info(f"{doc_ct} documents found from https://lincsportal.ccs.miami.edu/, and {success_ct} documents successfully parsed from that set.")
