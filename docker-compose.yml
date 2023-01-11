@@ -52,8 +52,8 @@ services:
       context: dataverse
       dockerfile: Dockerfile
       # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
+      # args:
+      #   CRONTAB: dev-crontab
     volumes:
       - data:/data
       - cache:/cache
@@ -115,6 +115,15 @@ services:
   immport-crawler:
     build:
       context: immport_crawler
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      # args:
+      #   CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+  lincs-crawler:
+    build:
+      context: lincs
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
