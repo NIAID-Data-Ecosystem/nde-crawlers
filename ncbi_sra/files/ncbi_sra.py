@@ -18,6 +18,7 @@ class NCBI_SRA(NDEDatabase):
     # override variables
     SQL_DB = "ncbi_sra.db"
     EXPIRE = datetime.timedelta(days=90)
+    NO_CACHE = True
 
     # Used for testing small chunks of data
     DATA_LIMIT = None
@@ -56,9 +57,18 @@ class NCBI_SRA(NDEDatabase):
         except KeyError as e:
             logger.error(f'KeyError for {study_acc}: {e}')
             return (study_acc, json.dumps(None))
+        except Exception as e:
+            if "HTTP Failure" in str(e):
+                logger.error(f'HTTP Failure for {study_acc}: {e}')
+                return (study_acc, json.dumps(None))
+            else:
+                logger.error(f'Unknown Error for {study_acc}: {e}')
+                return (study_acc, json.dumps(None))
+
+
+
 
     def load_cache(self):
-        start = time.time()
         logger.info('Starting FTP Download')
 
         fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
@@ -85,6 +95,7 @@ class NCBI_SRA(NDEDatabase):
 
         logger.info('Retrieving Individual Study Metadata from API')
 
+        start = time.time()
         with ThreadPoolExecutor(max_workers=3) as pool:
             data = pool.map(self.query_sra, accession_list)
             for item in data:
