@@ -18,7 +18,6 @@ class NCBI_SRA(NDEDatabase):
     # override variables
     SQL_DB = "ncbi_sra.db"
     EXPIRE = datetime.timedelta(days=90)
-    NO_CACHE = True
 
     # Used for testing small chunks of data
     DATA_LIMIT = None
@@ -67,9 +66,6 @@ class NCBI_SRA(NDEDatabase):
                 logger.error(f'Unknown Error for {study_acc}: {e}')
                 return (study_acc, json.dumps(None))
 
-
-
-
     def load_cache(self):
         logger.info('Starting FTP Download')
 
@@ -105,7 +101,8 @@ class NCBI_SRA(NDEDatabase):
                 count += 1
                 if count % 1000 == 0:
                     end = time.time()
-                    logger.info('Retrieved 1000 Studies in {} seconds'.format(end - start))
+                    logger.info(
+                        'Retrieved 1000 Studies in {} seconds'.format(end - start))
                     start = time.time()
 
         logger.info('Removing SRA_Accessions.tab')
@@ -343,14 +340,21 @@ class NCBI_SRA(NDEDatabase):
         logger.info(f'Finished Parsing {count} Studies')
 
     def update_cache(self):
+        RETRIEVE_METHOD = False
         start = time.time()
+
+        last_record = self.retrieve_last_record()
         last_updated = self.retreive_last_updated()
-        # logger.info('Starting FTP Download')
+
+
+        logger.info(f"Last Record: {last_record}")
+
+        logger.info('Starting FTP Download')
 
         fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
         wget.download(fileloc, out='SRA_Accessions.tab')
 
-        # logger.info('FTP Download Complete')
+        logger.info('FTP Download Complete')
 
         logger.info('Retrieving Studies from SRA_Accessions.tab')
 
@@ -358,13 +362,19 @@ class NCBI_SRA(NDEDatabase):
                          usecols=['Accession', 'Type', 'Status', 'Updated', 'Published', 'Experiment', 'Sample', 'BioProject', 'ReplacedBy'])
         only_live = df[df['Status'] == 'live']
         filtered = only_live[only_live['Type'] == 'STUDY']
-        new_studies = filtered[filtered['Updated'] > last_updated]
-        accession_list = new_studies[['Accession', 'Type', 'Status', 'Updated', 'Published',
-                                      'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
+        if RETRIEVE_METHOD == True:
+            accession_list = filtered[['Accession', 'Type', 'Status', 'Updated', 'Published',
+                                    'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
+            # ignore studies before last_record
+            for i, study in enumerate(accession_list):
+                if study[0] == last_record:
+                    accession_list = accession_list[i:]
+                    break
+        else:
+            new_studies = filtered[filtered['Updated'] > last_updated]
+            accession_list = new_studies[['Accession', 'Type', 'Status', 'Updated', 'Published',
+                                        'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
 
-        # Used for testing small chunks of data
-        if self.DATA_LIMIT:
-            accession_list = accession_list[:self.DATA_LIMIT]
 
         logger.info('Total Studies Found: {}'.format(len(accession_list)))
         count = 0
