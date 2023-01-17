@@ -219,12 +219,18 @@ def load_pmid_ctfd(data_folder):
                         # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
                         if eutils_info.get(pmid):
                             if citation := eutils_info[pmid].get('citation'):
-                                if rec.get('citation'):
+                                if rec_citation := rec.get('citation'):
+                                    # if the user originally had a citation field that is not a list change citation to list
+                                    if not isinstance(rec_citation, list):
+                                        rec['citation'] = [rec_citation]
                                     rec['citation'].append(citation)
                                 else:
                                     rec['citation'] = [citation]
                             if funding := eutils_info[pmid].get('funding'):
-                                if rec.get('funding'):
+                                if rec_funding := rec.get('funding'):
+                                    # if the user originally had a funding field that is not a list change funding to list
+                                    if not isinstance(rec_funding, list):
+                                        rec['funding'] = [rec_funding]
                                     rec['funding'] += funding
                                 else:
                                     rec['funding'] = funding
