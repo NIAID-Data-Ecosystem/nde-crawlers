@@ -2,3 +2,4 @@ orjson
 Sickle
 xmltodict
 wget
+python-dateutil
