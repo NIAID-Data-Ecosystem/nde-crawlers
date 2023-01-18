@@ -531,6 +531,9 @@ class NDESourceUploader(BaseSourceUploader):
                     "phrase_suggester": {
                         "type": "text",
                         "analyzer": "phrase_suggester"
+                    },
+                    "raw": {
+                        "type": "keyword"
                     }
                 }
             },
