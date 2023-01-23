@@ -21,7 +21,7 @@ def parse():
     public_ids = []
     while True:
         data_count = 0
-        url = f"https://workspace.niaiddata.org/ns/amigo/api/v1/apps/explore?limit={limit}&offset={offset}&order_by=label"
+        url = f"https://cavatica.sbgenomics.com/ns/amigo/api/v1/apps/explore?limit={limit}&offset={offset}&order_by=label"
         all_apps = requests.get(url)
         json_obj = json.loads(all_apps.text)
         obj_list = json_obj['data']
@@ -41,7 +41,7 @@ def parse():
     logger.info('Started Individual App Calls')
     for id in public_ids:
         app_meta_data = requests.get(
-            "https://workspace.niaiddata.org/ns/brood/v1/raw/" + id)
+            "https://cavatica.sbgenomics.com/ns/brood/v1/raw/" + id)
         app_json = json.loads(app_meta_data.text)
         all_app_meta_data.append(app_json)
         counter += 1
@@ -55,7 +55,7 @@ def parse():
             "_id": "SB_Public_Apps_" + identifier.split('/')[2],
             "includedInDataCatalog": {"name": "PublicApps@SevenBridges"},
             "@type": "ComputationalTool",
-            "url": "https://workspace.niaiddata.org/public/apps/" + identifier
+            "url": "https://cavatica.sbgenomics.com/public/apps/" + identifier
         }
         if app_class := data.get('class'):
             output['applicationCategory'] = app_class

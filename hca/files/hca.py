@@ -9,8 +9,11 @@ logger = logging.getLogger('nde-logger')
 def retrieve_ids():
     '''Get all project IDs from the HCA and convert to UUID format'''
     url = 'https://service.azul.data.humancellatlas.org/index/catalogs'
-    sources = requests.get(url).json()[
-        'catalogs']['dcp21']['plugins']['repository']['sources']
+
+    sources = requests.get(url).json()['catalogs']
+    for key in sources:
+        sources = sources[key]['plugins']['repository']['sources']
+        break
 
     logger.info('Retrieving %s project IDs', len(sources))
 
