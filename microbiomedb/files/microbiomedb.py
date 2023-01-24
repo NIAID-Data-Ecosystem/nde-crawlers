@@ -12,8 +12,8 @@ logger = logging.getLogger('nde-logger')
 
 
 def parse():
-
-
+    # mapping https://docs.google.com/spreadsheets/d/1uz1puYgLiiud2zuncXv43S1BkQvDNAeyl8pRiXgT14Y/edit?usp=sharing
+    
     url = 'https://beta.microbiomedb.org/mbio.beta/service/record-types/dataset/searches/AllDatasets/reports/standard?' \
               'reportConfig={"attributes":[acknowledgement,pmids,study_categories,description,type,institution,' \
               'card_headline,contact,project_availability,study_access,email,is_species_scope,summary,dataset_sha1_digest,' \

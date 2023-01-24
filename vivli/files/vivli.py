@@ -55,6 +55,7 @@ def get_ids():
 
 
 def parse():
+    # mapping https://docs.google.com/spreadsheets/d/1c7Iv2PrZPfs_QXIu5IWQfLKp0hc0HGK0Kl5Vqd9Dcpw/edit#gid=0
     ids = get_ids()
     with requests.Session() as session:
         logger.info("Getting IDS...")
