@@ -83,11 +83,10 @@ class Dataverse(NDEDatabase):
                 return False
         else:
             # success, response is the document
-            #logger.info(f"schema export successful {gid}")
             return res
 
 
-    def compile_paginated_data(self, query_endpoint, per_page=1000, verbose=False):
+    def compile_paginated_data(self, query_endpoint, per_page=100, verbose=False):
         """ Extract Data By Page
         pages through data, compiling all response['data']['items']
         and returning them.
@@ -171,7 +170,7 @@ class Dataverse(NDEDatabase):
                     if "https://hdl.handle.net/" in dv_data[1]:
                         pass
                     elif dv_data[2]:
-                        logger.info(f"yielding original dataset for {dv_data[1]}")
+                        logger.info(f"caching original dataset for {dv_data[1]}")
                         yield (dv_data[0], json.dumps(dv_data[2]))
                     else:
                         skipped_data += 1
@@ -197,14 +196,14 @@ class Dataverse(NDEDatabase):
                         if "https://hdl.handle.net/" in data[1]:
                             pass
                         elif data[2]:
-                            logger.info(f"yielding original dataset for {data[1]}")
+                            logger.info(f"caching original dataset for {data[1]}")
                             yield (data[0], json.dumps(data[2]))
                         else:
                             skipped_data += 1
                             logger.info(f"error retrieving schema export for document with id, {data[0]}, skipping dataset") 
         process_time = time.process_time() - start_time
         logger.info(f"Extraction of dataset data complete, {dataset_ct} dataset schemas were extracted, {len(set(dataset_ids))} unique ids total.")
-        logger.info(f"{schema_ct} schemas extracted in {process_time} seconds.")
+        logger.info(f"{schema_ct} schemas extracted in {process_time:.2f} seconds.")
         logger.info ("LOAD CACHE PROCESS COMPLETE.")
 
 
@@ -292,14 +291,15 @@ class Dataverse(NDEDatabase):
                             if "contentSize" in  data_dict.keys():
                                 data_dict.pop("contentSize")
 
-                    pmids = []
-                    if "citation" in dataset and dataset['citation']:
+                    if "citation" in dataset:
+                        cit_list = []
                         for data_dict in dataset['citation']:
-                            if "@id" in data_dict.keys():
-                                pmid = data_dict['@id'].split("/")[-1]
-                                pmids.append(pmid)
-                        dataset['pmids'] = ','.join(pmids)
-                        dataset.pop('citation')
+                            if "text" in data_dict: 
+                                cit_list.append({"citation": data_dict["text"]})
+                        if cit_list:
+                            dataset['citation'] = cit_list
+                        else:
+                            dataset.pop("citation")
 
                     if "includedInDataCatalog" in dataset:
                         dataset["includedInDataCatalog"] =  [dataset["includedInDataCatalog"]]
@@ -312,6 +312,7 @@ class Dataverse(NDEDatabase):
                         dataset.pop("version")
 
                     yield dataset
+                    # logger.info('document parsing successful')
 
                 else:
                     # here is where the non-exported metadata is translated
@@ -339,7 +340,8 @@ class Dataverse(NDEDatabase):
                     if "authors" in dataset:
                         dataset["author"]=[{'name': dataset.pop('authors')}]
                     
-                    dataset.pop("citationHtml")
+                    logger.info(f"citationHtml: {dataset['citationHtml']}")
+                    # dataset.pop("citationHtml")
                     dataset.pop("identifier_of_dataverse")
                     dataset.pop("name_of_dataverse")
                     dataset.pop("storageIdentifier")
@@ -348,6 +350,7 @@ class Dataverse(NDEDatabase):
                     dataset.pop("versionState")
 
                     yield dataset
+                    #logger.info('document parsing successful')
 
             except Exception as error:
                 logger.info(f"skipping record with error - {error}")
