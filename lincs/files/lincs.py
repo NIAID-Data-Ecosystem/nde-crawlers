@@ -21,6 +21,10 @@ class LINCS():
     for document in lincsportal_data['results']["documents"]:
         # modify doc
         doc_ct += 1
+
+        document['@type'] = "Dataset"
+        document['includedInDataCatalog'] = {'name': 'LINCS'}
+
         if "centerdatasetid" in document:
           document["url"] = document.pop("centerdatasetid")
         #document["description"] = []
@@ -80,6 +84,8 @@ class LINCS():
         if 'cellline' in document:
           for x in document['cellline']:
             document['keywords'].append(x)
+
+        
         if 'concentrations' in document: document.pop("concentrations")
         if 'timepoints' in document: document.pop("timepoints")
         if 'expentimentalcomments' in document: document.pop("expentimentalcomments")
