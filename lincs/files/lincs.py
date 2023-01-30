@@ -1,5 +1,10 @@
+from cgi import test
 import requests
 import logging
+import datetime
+# import sys
+import json
+
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -21,9 +26,18 @@ class LINCS():
     for document in lincsportal_data['results']["documents"]:
         # modify doc
         doc_ct += 1
-        if "centerdatasetid" in document:
-          document["url"] = document.pop("centerdatasetid")
-        #document["description"] = []
+
+        document['@type'] = "Dataset"
+        document['includedInDataCatalog'] = {
+          'name': 'LINCS',
+          'url': 'https://lincsportal.ccs.miami.edu/datasets/',
+          '@type': 'Dataset',
+          'versionDate' : datetime.datetime.now().isoformat()
+          }
+        document['url'] = f'https://lincsportal.ccs.miami.edu/datasets/view/{document["datasetid"]}'
+
+        #   document["url"] = document.pop("centerdatasetid")
+
         if "assayoverview" in document:
           document["description"] = document.pop('assayoverview')
         if "centerurl" in document:
@@ -32,29 +46,55 @@ class LINCS():
             "url": document.pop("centerurl"),
             "affiliation": [{'name': document.pop("centerfullname")}],
             } 
+        
         if "funding" in document:
-          document["funding"] = {'identfier': document.pop("funding")}
+          document["funding"] = [{'identifier': document.pop("funding")}]
+
         if 'datemodified' in document:
           document["dateUpdated"] = document.pop('datemodified')
+        
         if 'screeninglabinvestigator' in document:
-          document['author']=[{"name":document.pop("screeninglabinvestigator")}]
+          if len(document["screeninglabinvestigator"].split(',  ')) > 1:
+            author_list = []
+            for author in document["screeninglabinvestigator"].split(',  '):
+              author_list.append({"name": author})
+            document['author'] = author_list
+            document.pop("screeninglabinvestigator")
+          else:
+            document['author'] = {"name": document.pop("screeninglabinvestigator")}
+
         if "datasetname" in document:
           document["name"] = document.pop("datasetname")
+
         if "datasetid" in document:
           document["identifier"] = document.pop("datasetid")
-          document["_id"] = document["identifier"]
+          document["_id"] = "LINCS_"+document["identifier"]
+
         if "datereleased" in document:
           document["datePublished"] = document.pop("datereleased")
+
         if "assayname" in document:
-          measure_tech = document.pop("assayname")
+          document["measurementTechnique"]={'name':','.join(document.pop('assayname'))}
           if 'assayformat' in document:
-            measure_tech.append(document.pop("assayformat"))
-          document["measurementTechnique"] = [ {'description': measure_tech} ]
+            document["measurementTechnique"]['description'] = document.pop('assayformat')
+          
+
+        if 'size' in document:
+          if len(set(document['size'])) > 1:
+            size_list = []
+            for size in document['size']:
+                size_list.append({"contentSize": size})
+            document["distribution"] = size_list
+            document.pop('size')
+          else:
+            document["distribution"] = {"contentSize": ''.join(document.pop("size"))}
+
+        if 'physicaldetection' in document:
+          document["variableMeasured"] = document.pop("physicaldetection")
+
         document["keywords"] = []
         if 'assaydesignmethod' in document: 
           document["keywords"] = document.pop("assaydesignmethod")
-        if 'physicaldetection' in document:
-          document["variableMeasured"] = document.pop("physicaldetection")
         if 'biologicalprocess' in document:
           document["keywords"] = document["keywords"] + document.pop("biologicalprocess")
         if 'technologies' in document:
@@ -67,19 +107,34 @@ class LINCS():
           for x in document['protein']:
             document['keywords'].append(x)
           document.pop('protein')
-        if 'size' in document:
-          document["distribution"] = [{"contentsize": document.pop("size")}]
+
         if "tool" in document and "toollink" in document:
-          document["isBasedOn"] = [{"name": document.pop("tool"), "url": document.pop("toollink")}]
+          isBasedOn_list = []
+          for index, tool in enumerate(document['tool']):
+            temp_dict = {"name": tool, "url": document['toollink'][index]}
+            isBasedOn_list.append(temp_dict)
+          document["isBasedOn"] = isBasedOn_list #[{"name": document.pop("tool"), "url": document.pop("toollink")}]
+          document.pop('tool')
+          document.pop('toollink')
         elif "tool" in document:
-          document["isBasedOn"] = [{"name": document.pop("tool")}]
+          document.pop('tool')
         elif "toollink" in document:
-          document["isBasedOn"] = [{"url": document.pop("toollink")}]
+          document.pop('toollink')
+
         if 'datasetgroup' in document:
-          document['isRelatedTo'] = [{'url': document.pop('datasetgroup')}]
+          rt_id = document.pop('datasetgroup')
+          document['isRelatedTo'] = [{
+            '_id':'LINCS_'+rt_id,
+            'identifier': rt_id,
+            'name': rt_id ,
+            'url': f'https://lincsportal.ccs.miami.edu/datasets/view/{rt_id}' 
+            }]
+
         if 'cellline' in document:
           for x in document['cellline']:
             document['keywords'].append(x)
+          document.pop("cellline")
+
         if 'concentrations' in document: document.pop("concentrations")
         if 'timepoints' in document: document.pop("timepoints")
         if 'expentimentalcomments' in document: document.pop("expentimentalcomments")
@@ -102,7 +157,14 @@ class LINCS():
         if 'endpoints' in document: document.pop('endpoints')
         if 'smlincsidentifier' in document: document.pop('smlincsidentifier')
         if 'pipeline' in document: document.pop('pipeline')
-
-        yield document
-        success_ct += 1
+        if 'phosphoprotein' in document: document.pop('phosphoprotein')
+        if "dockerized_container" in document: document.pop("dockerized_container")
+        if 'iPSC' in document: document.pop('iPSC')
+        if 'primarycell' in document: document.pop('primarycell')
+        if 'differentiatediPSC' in document: document.pop('differentiatediPSC')
+        if 'antibody' in document: document.pop('antibody')
+        if "centerdatasetid" in document: document.pop("centerdatasetid")
+        if document['_id']:
+          yield document
+          success_ct += 1
     logger.info(f"{doc_ct} documents found from https://lincsportal.ccs.miami.edu/, and {success_ct} documents successfully parsed from that set.")

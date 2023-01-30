@@ -139,11 +139,11 @@ class NCBI_PMC(NDEDatabase):
 
                 try:
                     record = ElementTree.parse(record_file)
-
                     root = record.getroot()
                     metadata_dict = self.get_metadata(root)
                     record_xml_string = ElementTree.tostring(
                         root, encoding='unicode')
+
                     doc = {'metadata': metadata_dict,
                            'xml': record_xml_string}
 
@@ -164,11 +164,17 @@ class NCBI_PMC(NDEDatabase):
             [shutil.rmtree(x, ignore_errors=True)
              for x in directories]
             logger.info('Deleted directories: %s', directories)
+            break
 
     def parse(self, records):
         for record in records:
             data = json.loads(record[1])
-            root = etree.fromstring(data['xml'])
+            try:
+                root = etree.fromstring(data['xml'])
+            except etree.XMLSyntaxError as e:
+                logger.error('Error parsing XML for %s', record[0])
+                logger.error(e)
+                continue
             metadata = data['metadata']
 
             output = {
@@ -210,7 +216,8 @@ class NCBI_PMC(NDEDatabase):
                         date_published_string = date_published_string.isoformat()
                         output['datePublished'] = date_published_string
                     except ValueError:
-                        print(f'Unable to parse date: {date_published_string}')
+                        logger.info(
+                            f'Unable to parse date: {date_published_string}')
 
             citation_dict = {}
             if identifiers := metadata.get('article-id'):
@@ -231,10 +238,7 @@ class NCBI_PMC(NDEDatabase):
                 volume = notes.find(
                     './/volume')
                 if volume is not None:
-                    citation_dict['volume'] = volume.text
-
-            # if bool(citation_dict):
-            #     output['citation'] = [citation_dict]
+                    citation_dict['volumeNumber'] = volume.text
 
             # Supplemental Data
             supplemental_data_arr = root.findall(
@@ -299,7 +303,7 @@ class NCBI_PMC(NDEDatabase):
                         date_string = date_string.isoformat()
                         citation_dict['datePublished'] = date_string
                     except ValueError:
-                        print(f'Unable to parse date: {date_string}')
+                        logger.info(f'Unable to parse date: {date_string}')
 
             # if issn := metadata.get('issn'):
             #     output['issueNumber'] = issn[0]
@@ -347,17 +351,19 @@ class NCBI_PMC(NDEDatabase):
                     volume = article_meta_sec.find(
                         './/volume')
                     if volume is not None:
-                        citation_dict['volume'] = volume.text
+                        citation_dict['volumeNumber'] = volume.text
 
-                article_meta_list = article_meta_sec.getchildren()
-                for article_meta in article_meta_list:
-                    if article_meta.tag == 'title-group':
-                        for child in article_meta.getchildren():
-                            if child.tag == 'article-title':
-                                if child.text is not None:
-                                    output['name'] = 'Supplementary materials in ' + \
-                                        '"'+child.text+'"'
-                                    citation_dict['name'] = child.text
+                title_group = article_meta_sec.find(
+                    './/title-group')
+                if title_group is not None:
+                    article_title = title_group.find(
+                        './/article-title')
+                    if article_title is not None:
+                        article_name = ''.join(article_title.itertext())
+                        if article_name != '':
+                            output['name'] = 'Supplementary materials in ' + \
+                                '"'+article_name+'"'
+                            citation_dict['name'] = article_name
 
             pmid = root.find(
                 ".//article-id[@pub-id-type='pmid']")
@@ -414,29 +420,91 @@ class NCBI_PMC(NDEDatabase):
             #             data_availability_dict['content'] = content_list
 
             # abstract
-            abstract_sec = root.find(
+            abstract_secs = root.findall(
                 './/abstract')
-            if abstract_sec is not None:
-                description_string = ''
-                abstract_title = abstract_sec.findall(
-                    './/title')
-                abstract_text = abstract_sec.findall(
-                    './/p')
-                for title, text in zip(abstract_title, abstract_text):
-                    if title.text is not None:
-                        if description_string == '':
-                            description_string = title.text
-                        else:
-                            description_string += '\n' + title.text
-                    if text.text is not None:
-                        if description_string == '':
-                            description_string = text.text
-                        else:
-                            description_string += '\n' + text.text
-                if description_string != '':
-                    output['description'] = description_string
+            if len(abstract_secs) > 0:
+                description_text = ""
+                for abstract_sec in abstract_secs:
+                    abstract_title = abstract_sec.find(
+                        './/title')
+                    abstract_text = abstract_sec.find(
+                        './/p')
+                    if abstract_title is not None:
+                        abstract_title_text = ''.join(
+                            abstract_title.itertext())
+                        if abstract_title_text is not None:
+                            if description_text != '':
+                                description_text += f'\n{abstract_title_text}\n'
+                            else:
+                                description_text += abstract_title_text
+                    if abstract_text is not None:
+                        abstract_text_text = ''.join(
+                            abstract_text.itertext())
+                        if abstract_text_text is not None:
+                            if description_text != '':
+                                description_text += f'\n{abstract_text_text}'
+                            else:
+                                description_text += abstract_text_text
+                if description_text != '':
+                    output['description'] = description_text
+
+            body_sec = root.find('.//body')
+            if body_sec is not None:
+                description_text = ""
+                sec_list = body_sec.findall('.//sec')
+                if len(sec_list) > 0:
+                    for sec in sec_list:
+                        sec_children = sec.getchildren()
+                        for sec_child in sec_children:
+                            if sec_child.tag == 'title':
+                                sec_title_text = ''.join(
+                                    sec_child.itertext())
+                                if sec_title_text is not None:
+                                    if description_text != '':
+                                        description_text += f'\n{sec_title_text}\n'
+                                    else:
+                                        description_text += sec_title_text
+                            if sec_child.tag == 'p':
+                                sec_text_text = ''.join(
+                                    sec_child.itertext())
+                                if sec_text_text is not None:
+                                    if description_text != '':
+                                        description_text += f'\n{sec_text_text}'
+                                    else:
+                                        description_text += sec_text_text
+                    if description_text != '':
+                        output['description'] = description_text
+                else:
+                    body_children = body_sec.getchildren()
+                    for body_child in body_children:
+                        if body_child.tag == 'title':
+                            body_title_text = ''.join(
+                                body_child.itertext())
+                            if body_title_text is not None:
+                                if description_text != '':
+                                    description_text += f'\n{body_title_text}\n'
+                                else:
+                                    description_text += body_title_text
+                        if body_child.tag == 'p':
+                            body_text_text = ''.join(
+                                body_child.itertext())
+                            if body_text_text is not None:
+                                if description_text != '':
+                                    description_text += f'\n{body_text_text}'
+                                else:
+                                    description_text += body_text_text
+                    if description_text != '':
+                        output['description'] = description_text
+
             if bool(citation_dict):
                 output['citation'] = citation_dict
+
+            if 'name' not in output:
+                logger.info(f'no name for {output["identifier"]}')
+            if output['name'] == 'Supplementary materials in " "':
+                logger.info(f'name exists, but no title for {output["identifier"]}')
+            if 'description' not in output:
+                logger.info(f'no description for {output["identifier"]}')
 
             yield output
 
