@@ -1,0 +1,20 @@
+source_property,nde_property
+displayName, name
+study_categories, keywords
+type, keywords
+description, description
+institution, contributor.affiliation
+contact, contributor.name
+study_access, conditionsOfAccess
+email, contributor.email
+card_points, description
+card_headline, doi
+summary,abstract
+dataset_id,identifier
+dataset_name, alternateName
+pmids_download, "citation, funding"
+contacts, author
+DownloadVersion, distribution
+Publications, "citation, funding"
+AssociatedDatasets, "isPartOf, isRelatedTo"
+HyperLinks, url
