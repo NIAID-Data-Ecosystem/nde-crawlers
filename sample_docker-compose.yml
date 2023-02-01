@@ -1,0 +1,56 @@
+version: '3'
+
+services:
+  # when updating changes to code: "docker-compose up --detach --build dde-crawler"
+  dde-crawler:
+    build:
+      context: dde_niaid
+      dockerfile: Dockerfile
+      # uncomment to run development crontab
+      args:
+        CRONTAB: dev-crontab
+    volumes:
+      - data:/data
+  mongodb:
+    image: mongo:4.4
+    ports:
+      - "127.0.0.1:27017:27017"
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.2.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+    ports:
+      - "9200:9200"
+  nde-hub:
+    build:
+      context: biothings-hub
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: "3.8"
+    depends_on:
+      - "mongodb"
+      - "elasticsearch"
+    environment:
+      - ES_HOST=elasticsearch:9200
+      - MONGO_HOST=mongodb:27017
+    volumes:
+      # Update this to wherever you want VS Code to mount the folder of your project
+      - data:/data
+      - cache:/cache
+    ports:
+      # ports are mapped to 19522 and 19580 because of changes for production environment
+      - "127.0.0.1:7022:19522"
+      - "127.0.0.1:7080:19580"
+      - "127.0.0.1:7081:19581"
+  hub-webapp:
+    build:
+      context: biothings-webapp
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:80"
+volumes:
+  data:
+  cache:
