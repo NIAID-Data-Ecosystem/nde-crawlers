@@ -1,0 +1,26 @@
+source_property,nde_property
+@context,@context
+@type,@type
+identifier,"url, doi, identifier"
+name,name
+creator,author
+author,author
+datePublished,datePublished
+dateModified,dateModified
+description,description
+keywords,keywords
+citation,citation.citation
+license,license
+includedInDataCatalog,includedInDataCatalog
+publisher,sdPublisher
+funder,funder
+distribution,distribution
+type,@type
+global_id,doi
+published_at,datePublished
+identifier_of_dataverse,sdPublisher.identifier
+name_of_dataverse,sdPublisher.name
+subjects,topicCategory
+createdAt,dateCreated
+updatedAt,dateModified
+authors,author.name
