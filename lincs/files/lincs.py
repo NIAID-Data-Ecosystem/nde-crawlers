@@ -2,7 +2,6 @@ from cgi import test
 import requests
 import logging
 import datetime
-# import sys
 import json
 
 
@@ -24,7 +23,6 @@ class LINCS():
     success_ct = 0
 
     for document in lincsportal_data['results']["documents"]:
-        # modify doc
         doc_ct += 1
 
         document['@type'] = "Dataset"
@@ -32,23 +30,22 @@ class LINCS():
           'name': 'LINCS',
           'url': 'https://lincsportal.ccs.miami.edu/datasets/',
           '@type': 'Dataset',
-          'versionDate' : datetime.datetime.now().isoformat()
+          'versionDate' : datetime.datetime.today().strftime('%Y-%m-%d')
           }
         document['url'] = f'https://lincsportal.ccs.miami.edu/datasets/view/{document["datasetid"]}'
 
-        #   document["url"] = document.pop("centerdatasetid")
-
         if "assayoverview" in document:
           document["description"] = document.pop('assayoverview')
+
         if "centerurl" in document:
           document["author"] = {
             "name": document.pop("principalinvestigator"),
             "url": document.pop("centerurl"),
-            "affiliation": [{'name': document.pop("centerfullname")}],
+            "affiliation": {'name': document.pop("centerfullname")},
             } 
-        
+
         if "funding" in document:
-          document["funding"] = [{'identifier': document.pop("funding")}]
+          document["funding"] = {'identifier': document.pop("funding")}
 
         if 'datemodified' in document:
           document["dateUpdated"] = document.pop('datemodified')
@@ -77,7 +74,6 @@ class LINCS():
           document["measurementTechnique"]={'name':','.join(document.pop('assayname'))}
           if 'assayformat' in document:
             document["measurementTechnique"]['description'] = document.pop('assayformat')
-          
 
         if 'size' in document:
           if len(set(document['size'])) > 1:
@@ -123,17 +119,18 @@ class LINCS():
 
         if 'datasetgroup' in document:
           rt_id = document.pop('datasetgroup')
-          document['isRelatedTo'] = [{
+          document['isRelatedTo'] = {
             '_id':'LINCS_'+rt_id,
             'identifier': rt_id,
             'name': rt_id ,
             'url': f'https://lincsportal.ccs.miami.edu/datasets/view/{rt_id}' 
-            }]
+            }
 
         if 'cellline' in document:
           for x in document['cellline']:
             document['keywords'].append(x)
           document.pop("cellline")
+        document['keywords']=','.join(document['keywords'])
 
         if 'concentrations' in document: document.pop("concentrations")
         if 'timepoints' in document: document.pop("timepoints")
@@ -164,6 +161,7 @@ class LINCS():
         if 'differentiatediPSC' in document: document.pop('differentiatediPSC')
         if 'antibody' in document: document.pop('antibody')
         if "centerdatasetid" in document: document.pop("centerdatasetid")
+
         if document['_id']:
           yield document
           success_ct += 1
