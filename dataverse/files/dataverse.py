@@ -1,11 +1,10 @@
 import datetime
-# from sqlite3 import DataError
+from sqlite3 import DataError
 import time
 import json
 import logging
 import requests
 from html.parser import HTMLParser
-
 from sql_database import NDEDatabase
 
 logging.basicConfig(
@@ -86,7 +85,7 @@ class Dataverse(NDEDatabase):
             return res
 
 
-    def compile_paginated_data(self, query_endpoint, per_page=100, verbose=False):
+    def compile_paginated_data(self, query_endpoint, per_page=1000, verbose=False):
         """ Extract Data By Page
         pages through data, compiling all response['data']['items']
         and returning them.
@@ -152,32 +151,35 @@ class Dataverse(NDEDatabase):
         schema_ct = 0
         skipped_data = 0   
         # dataverse type: data --> (identifier, data_dict)
-        logger.info("Starting extraction of dataverse type data....")
+        logger.info("Starting extraction of type 'dataverse' data....")
         for data in self.compile_paginated_data(self.DATA_URL+"&type=dataverse"):
             dataverse_query = f"{self.DATAVERSE_SERVER}/search?q=*&type=dataset&type=file&subtree={data[0]}"
-            for dv_data in self.compile_paginated_data(dataverse_query):
-                if "https://hdl.handle.net/" in dv_data[1]:
-                    schema_record = self.scrape_schema_representation(dv_data[1])
+            for dataverse_data in self.compile_paginated_data(dataverse_query):
+                # unique case: if url is handle.net/ data scrape the schema else proceed to export schema document
+                if "https://hdl.handle.net/" in dataverse_data[1]:
+                    schema_record = self.scrape_schema_representation(dataverse_data[1])
                     handle_ct += 1
                 else:
-                    schema_record = self.get_schema_document(dv_data[0], dv_data[1])
+                    schema_record = self.get_schema_document(dataverse_data[0], dataverse_data[1])
+                # if the schema extraction was successful yield the exported schema document
+                # else handle unique cases
                 if schema_record:
-                    dataset_ids.append(dv_data[0])
+                    dataset_ids.append(dataverse_data[0])
                     dataverse_ct += 1
                     schema_ct += 1
                     yield (schema_record['@id'], json.dumps(schema_record))
                 elif schema_record == False:
-                    if "https://hdl.handle.net/" in dv_data[1]:
+                    if "https://hdl.handle.net/" in dataverse_data[1]:
                         pass
-                    elif dv_data[2]:
-                        logger.info(f"caching original dataset for {dv_data[1]}")
-                        yield (dv_data[0], json.dumps(dv_data[2]))
+                    elif dataverse_data[2]:
+                        logger.info(f"caching original dataset for {dataverse_data[1]}")
+                        yield (dataverse_data[0], json.dumps(dataverse_data[2]))
                     else:
                         skipped_data += 1
-                        logger.info(f"error retrieving schema export for document with id, {dv_data[0]}, skipping dataset") 
+                        logger.info(f"error retrieving schema export for document with id, {dataverse_data[0]}, skipping dataset") 
 
         logger.info(f"Extraction of dataverse data complete, {dataverse_ct} dataset schemas were extracted, and {len(set(dataset_ids))} unique ids total.")
-        logger.info("starting extraction of dataset type data....")
+        logger.info("Starting extraction of type 'dataset' data....")
         # # dataset type: data --> (global_id, url)
         for data in self.compile_paginated_data(self.DATA_URL+"&type=dataset"):
             if data[0] not in dataset_ids:
@@ -209,18 +211,20 @@ class Dataverse(NDEDatabase):
 
     def parse(self, records):
         start_time = time.process_time()
-        count = 0
+        parse_ct = 0
         logger.info(f"Starting metadata parser...")
+        # rec = ('doi:10.18738/T8/YJMLKO', '{"name": "ChIP-seq peak calls for epigenetic marks in GBM tumors", "type": "dataset", "url": "https://doi.org/10.18738/T8/YJMLKO", "global_id": "doi:10.18738/T8/YJMLKO", "description": "MACS2 narrowPeak files from ChIP-seq experiments for 11 primary GBM tumors, each targeting CTCF transcription factor marks and H3K27Ac, H3K27Me3, H3K4Me1, H3K4Me3, H3K9Ac, and H3K9Me3 histone modifications. See Methods section of doi:10.1158/0008-5472.CAN-17-1724 for more information.", "published_at": "2018-11-05T05:17:42Z", "publisher": "Texas Data Repository Harvested Dataverse", "citationHtml": "Battenhouse, Anna; Hall, Amelia Weber, 2018, \\"ChIP-seq peak calls for epigenetic marks in GBM tumors\\", <a href=\\"https://doi.org/10.18738/T8/YJMLKO\\" target=\\"_blank\\">https://doi.org/10.18738/T8/YJMLKO</a>, Texas Data Repository Dataverse", "identifier_of_dataverse": "tdr_harvested", "name_of_dataverse": "Texas Data Repository Harvested Dataverse", "citation": "Battenhouse, Anna; Hall, Amelia Weber, 2018, \\"ChIP-seq peak calls for epigenetic marks in GBM tumors\\", https://doi.org/10.18738/T8/YJMLKO, Texas Data Repository Dataverse", "storageIdentifier": "s3://10.18738/T8/YJMLKO", "keywords": ["Medicine, Health and Life Sciences", "glioblastoma", "bivalent", "enhancer", "epigenetic", "histone modification"], "subjects": [], "fileCount": 84, "versionId": 146549, "versionState": "RELEASED", "createdAt": "2018-11-05T05:17:42Z", "updatedAt": "2018-11-05T05:17:42Z", "contacts": [{"name": "", "affiliation": ""}], "authors": ["Battenhouse, Anna", "Hall, Amelia Weber"]}')
+        # records = [rec]
         for record in records:
             try:
                 dataset=json.loads(record[1])
-                # schema.org exported data
+                # here is where the exported schema.org data is parsed
                 if "@context" in dataset or "@type" in dataset:
-                    ...
                     dataset=json.loads(record[1])
                     dataset['url'] = dataset['identifier']
                     dataset['doi'] = dataset.pop('identifier')
-                    dataset['_id'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse')
+                    dataset['identifier'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse_')
+                    dataset['_id'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse_')
                     dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'] , "%Y-%m-%d").date().isoformat()
 
                     if 'datePublished' in dataset:
@@ -253,6 +257,8 @@ class Dataverse(NDEDatabase):
 
                     if "funder" in dataset:
                         dataset['funding'] = {"funder": dataset.pop('funder')}
+                        for data_dict in dataset['funding']['funder']:
+                            data_dict.pop('@type')
 
                     if "description" in dataset:
                         dataset["description"] = dataset.pop("description")[0]
@@ -302,9 +308,8 @@ class Dataverse(NDEDatabase):
                             dataset.pop("citation")
 
                     if "includedInDataCatalog" in dataset:
-                        dataset["includedInDataCatalog"] =  [dataset["includedInDataCatalog"]]
-
-                    count += 1
+                        dataset["includedInDataCatalog"] =  dataset["includedInDataCatalog"]
+                        dataset["includedInDataCatalog"]['versionDate'] = datetime.datetime.today().strftime('%Y-%m-%d')
 
                     dataset.pop("@id")
 
@@ -312,49 +317,98 @@ class Dataverse(NDEDatabase):
                         dataset.pop("version")
 
                     yield dataset
-                    # logger.info('document parsing successful')
+                    parse_ct += 1
 
                 else:
-                    # here is where the non-exported metadata is translated
-                    dataset["context"] = "http://schema.org"
+                    # here is where the non-exported metadata is parsed
+
+                    # add schema source info variables
+                    dataset["@context"] = "http://schema.org"
+                    if 'type' in dataset: 
+                        dataset['@type'] = dataset.pop('type')
+                    else:
+                        dataset['@type'] = 'dataset'
                     dataset['doi'] = dataset.pop('global_id')
-                    dataset['_id'] = dataset['doi'].replace("/","_").replace('doi:','Dataverse')
-                    #dataset['dateModified'] = datetime.datetime.strptime(dataset['updatedAt'] , "%Y-%m-%d").date().isoformat()
+                    dataset['identifier'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse_')
+                    dataset['_id'] = dataset['doi'].replace("/","_").replace('doi:','Dataverse_')
+                    dataset['includedInDataCatalog'] = {
+                        '@type': 'dataset',
+                        'name': 'Dataverse',
+                        'url': 'https://dataverse.harvard.edu/',
+                        'versionDate': datetime.datetime.today().strftime('%Y-%m-%d')
+                    }
+
                     # have to strip Z from time to get into correct format 
                     if 'updatedAt' in dataset:
                         dataset['dateModified'] = dataset['updatedAt'].strip("Z")
-                        dataset.pop('updatedAt') 
-                    if "type" in dataset:
-                        dataset["@type"] = dataset.pop('type')
+                        dataset.pop('updatedAt')
+                        dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'], '%Y-%m-%dT%H:%M:%S').strftime('%Y-%m-%d')
+
                     if "published_at" in dataset:
                         dataset["datePublished"]= dataset['published_at'].strip("Z")
                         dataset.pop('published_at')
+                        dataset["datePublished"]=datetime.datetime.strptime(dataset["datePublished"], '%Y-%m-%dT%H:%M:%S').strftime('%Y-%m-%d')
+                    
+                    
+                    if 'identifier_of_dataverse' in dataset:
+                        dataset['sdPublisher'] = {
+                            'identifier': dataset.pop("identifier_of_dataverse"),
+                            'name': dataset.pop("name_of_dataverse")
+                        }
+
                     if "subjects" in dataset:
-                        if "keywords" in dataset:
-                            dataset["keywords"] += dataset.pop('subjects')
+                        if not dataset['subjects']:
+                            pass
+                        elif len(dataset['subjects']) > 1:
+                            dataset['topicCategory'] = []
+                            for subject in dataset['subjects']:
+                                dataset['topicCategory'].append({
+                                    'description': subject
+                                })
                         else:
-                            dataset["keywords"] = dataset.pop('subjects')    
+                            dataset['topicCategory'] = {'description': dataset['subjects'][0] }
+                        dataset.pop('subjects')
+
+                    if 'keywords' in dataset:
+                        dataset['keywords'] = ','.join(dataset['keywords'])
+
                     if "createdAt" in dataset:
                         dataset["dateCreated"] = dataset['createdAt'].strip('Z')
                         dataset.pop('createdAt')
+                        dataset["dateCreated"]=datetime.datetime.strptime(dataset["dateCreated"], '%Y-%m-%dT%H:%M:%S').strftime('%Y-%m-%d')
+
                     if "authors" in dataset:
-                        dataset["author"]=[{'name': dataset.pop('authors')}]
-                    
-                    logger.info(f"citationHtml: {dataset['citationHtml']}")
-                    # dataset.pop("citationHtml")
-                    dataset.pop("identifier_of_dataverse")
-                    dataset.pop("name_of_dataverse")
+                        # print(len(dataset['authors']))
+                        if not dataset['authors']:
+                            # print("[case1]")
+                            dataset.pop('authors')
+                        elif len(dataset['authors']) > 1:
+                            # print("[case2]")
+                            dataset['author'] = []
+                            for author in dataset['authors']:
+                                author_dict = {'name': author}
+                                dataset['author'].append(author_dict)
+                            dataset.pop('authors')
+                        else:
+                            # print("[case3]")
+                            dataset["author"]={'name': dataset.pop('authors')[0]}
+                    if 'citation' in dataset:
+                        dataset['citation']={"citation": dataset.pop("citation")}
+
+                    dataset.pop('publisher')
+                    dataset.pop("citationHtml")
                     dataset.pop("storageIdentifier")
                     dataset.pop("fileCount")
                     dataset.pop("versionId")
                     dataset.pop("versionState")
+                    dataset.pop('contacts')
 
                     yield dataset
-                    #logger.info('document parsing successful')
+                    parse_ct += 1
 
             except Exception as error:
-                logger.info(f"skipping record with error - {error}")
+                logger.info(f"skipping with error - {error}, record id - {record[0]} \n{record}")
 
         process_time = time.process_time() - start_time
-        logger.info(f"Completed parsing individual metadata, {count} records parsed in {process_time:.2f} seconds")
-        logger.info("PARSE PROCESS COMPLETE.")
+        logger.info(f"Completed parsing individual metadata, {parse_ct} records parsed in {process_time:.2f} seconds")
+        logger.info("Document parsing complete")
