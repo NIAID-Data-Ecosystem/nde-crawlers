@@ -16,7 +16,7 @@ logger = logging.getLogger('nde-logger')
 
 class NCBI_SRA(NDEDatabase):
     # override variables
-    SQL_DB = "ncbi_sra.db"
+    SQL_DB = "ncbi_sra2.db"
     EXPIRE = datetime.timedelta(days=90)
 
     # Used for testing small chunks of data
@@ -24,9 +24,7 @@ class NCBI_SRA(NDEDatabase):
 
     # API
     def query_sra(self, study_info):
-
         study_acc = study_info[0]
-        # TODO rebuild with improved logging
         logger.info(f'Current Study: {study_acc}')
         if study_acc == '-':
             return (study_acc, json.dumps(None))
@@ -70,7 +68,21 @@ class NCBI_SRA(NDEDatabase):
         logger.info('Starting FTP Download')
 
         fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
-        wget.download(fileloc, out='SRA_Accessions.tab')
+        retry_count = 0
+        while True:
+            try:
+                logger.info('Starting FTP Download')
+                wget.download(fileloc, out='SRA_Accessions.tab')
+                break
+            except ContentTooShortError as e:
+                retry_count += 1
+                if retry_count > 10:
+                    raise e
+                else:
+                    logger.error(
+                        'Error downloading file. %s. Retrying...', e)
+                    logger.info('Try count: %s of 10', retry_count)
+                    sleep(retry_count * 2)
 
         logger.info('FTP Download Complete')
 
@@ -97,6 +109,7 @@ class NCBI_SRA(NDEDatabase):
         with ThreadPoolExecutor(max_workers=3) as pool:
             data = pool.map(self.query_sra, accession_list)
             for item in data:
+                logger.info(f"Yielding {item[0]}")
                 yield item
                 count += 1
                 if count % 1000 == 0:
@@ -113,31 +126,41 @@ class NCBI_SRA(NDEDatabase):
         logger.info('Parsing Individual Study Metadata')
 
         count = 0
+        too_big = 0
 
         for study in studies:
 
             count += 1
             if count % 1000 == 0:
-                logger.info('{} Studies Parsed'.format(count))
+                logger.info(f"Studies Parsed: {count}")
 
-            metadata = json.loads(study[1])
+            study_metadata = json.loads(study[1])
 
-            if metadata is None:
+            logger.info(f"Study: {study[0]}")
+
+            if study_metadata is None:
                 logger.info(f'No Metadata for {study[0]}')
                 continue
-            if len(metadata) == 0:
+            if len(study_metadata) == 0:
                 logger.info(f'No Metadata for {study[0]}')
                 continue
 
-            # get last item in list, which is the ftp info
-            ftp_info = metadata[-1]
+            logger.info(f"Total runs: {len(study_metadata) - 1}")
+
+            if len(study_metadata) > 18000:
+                logger.info(
+                    f"{study[0]} has more than 18000 records: {len(study_metadata)}")
+                study_metadata = study_metadata[-18000:]
+                too_big += 1
+
+            ftp_info = study_metadata.pop()
             output = {
                 '@context': "https://schema.org/",
                 'includedInDataCatalog': {
                     '@type': 'Dataset',
                     'name': 'NCBI SRA',
                     'url': 'https://www.ncbi.nlm.nih.gov/sra/',
-                    'versionDate': datetime.date.today().isoformat()
+                    'versionDate': datetime.date.today().strftime('%Y-%m-%d')
                 },
                 '@type': 'Dataset',
             }
@@ -154,205 +177,176 @@ class NCBI_SRA(NDEDatabase):
             if replaced_by := ftp_info.get('ftp_replacedBy'):
                 output['sameAs'] = replaced_by
 
-            for run in study:
+            is_based_on = []
+            distribution_list = []
+            species_list = []
+            author_list = []
 
-                if study_title := run.get('study_title'):
-                    output['name'] = study_title[0]
-                if study_abstract := metadata.get('study_abstract'):
-                    output['description'] = study_abstract[0]
-                if contact_name := metadata.get('contact_name'):
-                    output['author'] = {
-                        'name': contact_name[0],
-                    }
+            if bio_project := ftp_info.get('ftp_bioProject'):
+                bio_project_dict = {}
+                bio_project_dict['identifier'] = bio_project
+                bio_project_dict['additionalType'] = {
+                    'name': 'BioProject', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
+                is_based_on.append(bio_project_dict)
+
+            for run_metadata in study_metadata:
+                if study_title := run_metadata.get('study_title'):
+                    output['name'] = study_title
+                if study_abstract := run_metadata.get('study_abstract'):
+                    output['description'] = study_abstract
+
+                author_dict = {}
+                if organisation := run_metadata.get('organisation'):
+                    author_dict['name'] = organisation
+                if organisation_contact_email := run_metadata.get('organisation_contact_email'):
+                    author_dict['email'] = organisation_contact_email
+                if bool(author_dict) and author_dict not in author_list:
+                    author_list.append(author_dict)
 
                 # distribution
-                distribution_list = []
-                if gcp_urls := metadata.get('GCP_url'):
-                    if gcp_free_egress := metadata.get('GCP_free_egress'):
-                        for url, string in zip(gcp_urls, gcp_free_egress):
-                            distribution_dict = {}
-                            if string is not None:
-                                output['isAccessibleForFree'] = True
-                            if url is not None:
-                                distribution_dict['contentUrl'] = url
-                            if bool(distribution_dict) and distribution_dict not in distribution_list:
-                                distribution_list.append(distribution_dict)
-                if aws_urls := metadata.get('AWS_url'):
-                    if aws_free_egress := metadata.get('AWS_free_egress'):
-                        for url, string in zip(aws_urls, aws_free_egress):
-                            distribution_dict = {}
-                            if string is not None:
-                                output['isAccessibleForFree'] = True
-                            if url is not None:
-                                distribution_dict['contentUrl'] = url
-                            if bool(distribution_dict) and distribution_dict not in distribution_list:
-                                distribution_list.append(distribution_dict)
-                if len(distribution_list):
-                    output['distribution'] = distribution_list
+                distribution_dict = {}
+                if gcp_url := run_metadata.get('GCP_url'):
+                    distribution_dict['contentUrl'] = gcp_url
+                if gcp_free_egress := run_metadata.get('GCP_free_egress'):
+                    output['isAccessibleForFree'] = True
+                if bool(distribution_dict) and distribution_dict not in distribution_list:
+                    distribution_list.append(distribution_dict)
+
+                distribution_dict = {}
+                if aws_url := run_metadata.get('AWS_url'):
+                    distribution_dict['contentUrl'] = aws_url
+                if aws_free_egress := run_metadata.get('AWS_free_egress'):
+                    output['isAccessibleForFree'] = True
+                if bool(distribution_dict) and distribution_dict not in distribution_list:
+                    distribution_list.append(distribution_dict)
 
                 # species
-                species_list = []
-                organism_taxids = metadata.get('organism_taxid')
-                organism_names = metadata.get('organism_name')
-                if organism_taxids and organism_names:
-                    for taxid, name in zip(organism_taxids, organism_names):
-                        species_dict = {}
-                        species_dict['name'] = name
-                        species_dict['identifier'] = taxid
-                        species_dict['additionalType'] = {
-                            'name': 'Species', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
-                        if species_dict not in species_list:
-                            species_list.append(species_dict)
-                elif organism_taxids:
-                    for taxid in organism_taxids:
-                        species_dict = {}
-                        species_dict['identifier'] = taxid
-                        species_dict['additionalType'] = {
-                            'name': 'Species', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
-                        if species_dict not in species_list:
-                            species_list.append(species_dict)
-                elif organism_names:
-                    for name in organism_names:
-                        species_dict = {}
-                        species_dict['name'] = name
-                        species_dict['additionalType'] = {
-                            'name': 'Species', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
-                        if species_dict not in species_list:
-                            species_list.append(species_dict)
-                output['species'] = species_list
+                species_dict = {}
+                if organism_taxid := run_metadata.get('organism_taxid'):
+                    species_dict['identifier'] = organism_taxid
+                if organism_name := run_metadata.get('organism_name'):
+                    species_dict['name'] = organism_name
+                if bool(species_dict) and species_dict not in species_list:
+                    species_dict['additionalType'] = {
+                        'name': 'Species', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
+                    species_list.append(species_dict)
 
-                # isBasedOn
-                is_based_on = []
                 # runs
-                if run_accessions := metadata.get('run_accession'):
-                    for run_accession in run_accessions:
-                        run_dict = {}
-                        run_dict['identifier'] = run_accession
-                        run_dict['additionalType'] = {
-                            'name': 'Run', 'url': 'http://purl.obolibrary.org/obo/NCIT_C47911'}
-                        run_dict_filtered = {
-                            k: v for k, v in run_dict.items() if v is not None}
-
-                        if run_dict_filtered not in is_based_on:
-                            is_based_on.append(run_dict_filtered)
-                # bioproject
-                if bio_project := metadata.get('BioProject'):
-                    bio_project_dict = {}
-                    bio_project_dict['identifier'] = bio_project
-                    bio_project_dict['additionalType'] = {
-                        'name': 'BioProject', 'url': 'http://purl.obolibrary.org/obo/NCIT_C45293'}
-                    bio_project_dict_filtered = {
-                        k: v for k, v in bio_project_dict.items() if v is not None}
-
-                    if bio_project_dict_filtered not in is_based_on:
-                        is_based_on.append(bio_project_dict_filtered)
+                run_dict = {}
+                if run_accession := run_metadata.get('run'):
+                    run_dict['identifier'] = run_accession
+                    run_dict['additionalType'] = {
+                        'name': 'Run', 'url': 'http://purl.obolibrary.org/obo/NCIT_C47911'}
+                    run_dict['url'] = 'https://www.ncbi.nlm.nih.gov/sra/' + \
+                        run_accession
+                if published := run_metadata.get('published'):
+                    run_dict['datePublished'] = datetime.datetime.strptime(
+                        published, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
+                if bool(run_dict) and run_dict not in is_based_on:
+                    is_based_on.append(run_dict)
 
                 # experiments
-                if experiment_accessions := metadata.get('experiment_accession'):
-                    if experiment_title := metadata.get('experiment_title'):
-                        if experiment_desc := metadata.get('experiment_desc'):
-                            for experiment_accession, experiment_title, experiment_desc in zip(experiment_accessions, experiment_title, experiment_desc):
-                                experiment_dict = {}
-                                experiment_dict['identifier'] = experiment_accession
-                                experiment_dict['name'] = experiment_title
-                                experiment_dict['description'] = experiment_desc
-                                experiment_dict['additionalType'] = {
-                                    'name': 'Experiment', 'url': 'http://purl.obolibrary.org/obo/NCIT_C42790'}
-                                experiment_dict_filtered = {
-                                    k: v for k, v in experiment_dict.items() if v is not None}
+                experiment_dict = {}
+                if experiment_accession := run_metadata.get('experiment_accession'):
+                    experiment_dict['identifier'] = experiment_accession
+                    experiment_dict['url'] = 'https://www.ncbi.nlm.nih.gov/sra/' + \
+                        experiment_accession
+                if experiment_title := run_metadata.get('experiment_title'):
+                    experiment_dict['name'] = experiment_title
+                if experiment_desc := run_metadata.get('experiment_desc'):
+                    experiment_dict['description'] = experiment_desc
+                if bool(experiment_dict) and experiment_dict not in is_based_on:
+                    experiment_dict['additionalType'] = {
+                        'name': 'Experiment', 'url': 'http://purl.obolibrary.org/obo/NCIT_C42790'}
+                    is_based_on.append(experiment_dict)
 
-                                if experiment_dict_filtered not in is_based_on:
-                                    is_based_on.append(
-                                        experiment_dict_filtered)
-                # samples
-                if sample_accessions := metadata.get('sample_accession'):
-                    if sample_title := metadata.get('sample_title'):
-                        if sample_comment := metadata.get('sample comment'):
-                            for sample_accession, sample_title, sample_comment in zip(sample_accessions, sample_title, sample_comment):
-                                sample_dict = {}
-                                sample_dict['identifier'] = sample_accession
-                                sample_dict['name'] = sample_title
-                                sample_dict['description'] = sample_comment
-                                sample_dict['additionalType'] = {
-                                    'name': 'Sample', 'url': 'http://purl.obolibrary.org/obo/NCIT_C70699'}
-                                sample_dict_filtered = {
-                                    k: v for k, v in sample_dict.items() if v is not None}
+                sample_dict = {}
+                if sample_accession := run_metadata.get('sample_accession'):
+                    sample_dict['identifier'] = sample_accession
+                    sample_dict['url'] = 'https://www.ncbi.nlm.nih.gov/sra/' + \
+                        sample_accession
+                if sample_comment := run_metadata.get('sample comment'):
+                    sample_dict['description'] = sample_comment
+                if sample_title := run_metadata.get('sample_title'):
+                    sample_dict['name'] = sample_title
+                if bool(sample_dict) and sample_dict not in is_based_on:
+                    sample_dict['additionalType'] = {
+                        'name': 'Sample', 'url': 'http://purl.obolibrary.org/obo/NCIT_C70699'}
+                    is_based_on.append(sample_dict)
 
-                                if sample_dict_filtered not in is_based_on:
-                                    is_based_on.append(sample_dict_filtered)
                 # instruments
-                if instruments := metadata.get('instrument'):
-                    if instrument_models := metadata.get('instrument_model'):
-                        if instrument_model_descriptions := metadata.get('instrument_model_desc'):
-                            for instrument, instrument_model, instrument_model_desc in zip(instruments, instrument_models, instrument_model_descriptions):
-                                instrument_dict = {}
-                                instrument_dict['name'] = instrument
-                                if instrument != instrument_model:
-                                    instrument_dict['identifier'] = instrument_model
-                                instrument_dict['description'] = instrument_model_desc
-                                instrument_dict['additionalType'] = {
-                                    'name': 'Instrument', 'url': 'http://purl.obolibrary.org/obo/NCIT_C16742'}
-                                instrument_dict_filtered = {
-                                    k: v for k, v in instrument_dict.items() if v is not None}
+                instrument_dict = {}
+                if instrument := run_metadata.get('instrument'):
+                    instrument_dict['name'] = instrument
+                if instrument_model := run_metadata.get('instrument_model'):
+                    instrument_dict['identifier'] = instrument_model
+                if instrument_model_description := run_metadata.get('instrument_model_desc'):
+                    instrument_dict['description'] = instrument_model_description
+                if bool(instrument_dict) and instrument_dict not in is_based_on:
+                    instrument_dict['additionalType'] = {
+                        'name': 'Instrument', 'url': 'http://purl.obolibrary.org/obo/NCIT_C16742'}
 
-                                if instrument_dict_filtered not in is_based_on:
-                                    is_based_on.append(
-                                        instrument_dict_filtered)
                 # cells
-                if cell_lines := metadata.get('cell line'):
-                    if cell_strain := metadata.get('strain'):
-                        if cell_type := metadata.get('cell type'):
-                            if cell_line_name := metadata.get('cell line name'):
-                                for cell_line, cell_strain, cell_type, cell_line_name in zip(cell_lines, cell_strain, cell_type, cell_line_name):
-                                    cell_dict = {}
-                                    cell_dict['name'] = cell_line
-                                    cell_dict['name'] = cell_line_name
-                                    cell_dict['identifier'] = cell_strain
-                                    cell_dict['additionalType'] = {
-                                        'name': 'Cell', 'url': 'http://purl.obolibrary.org/obo/NCIT_C12508'}
-                                cell_dict_filtered = {
-                                    k: v for k, v in cell_dict.items() if v is not None}
+                cell_dict = {}
+                if cell_line := run_metadata.get('cell line'):
+                    cell_dict['name'] = cell_line
+                if cell_line_name := run_metadata.get('cell line name'):
+                    cell_dict['name'] = cell_line_name
+                if cell_strain := run_metadata.get('strain'):
+                    cell_dict['identifier'] = cell_strain
+                if bool(cell_dict) and cell_dict not in is_based_on:
+                    cell_dict['additionalType'] = {
+                        'name': 'Cell', 'url': 'http://purl.obolibrary.org/obo/NCIT_C12508'}
+                    is_based_on.append(cell_dict)
 
-                                if cell_dict_filtered not in is_based_on:
-                                    is_based_on.append(cell_dict_filtered)
                 # hapmap
-                if hapmap_ids := metadata.get('HapMap sample ID'):
-                    if cell_lines := metadata.get('Cell line'):
-                        if sexes := metadata.get('sex'):
-                            for hapmap_id, cell_line, sex in zip(hapmap_ids, cell_lines, sexes):
-                                hapmap_dict = {}
-                                hapmap_dict['identifier'] = hapmap_id
-                                hapmap_dict['name'] = cell_line
-                                hapmap_dict['gender'] = sex
-                                hapmap_dict['additionalType'] = {
-                                    'name': 'HapMap', 'url': 'http://purl.obolibrary.org/obo/NCIT_C70979'}
-                                hapmap_dict_filtered = {
-                                    k: v for k, v in hapmap_dict.items() if v is not None}
+                hapmap_dict = {}
+                if hapmap_id := run_metadata.get('HapMap sample ID'):
+                    hapmap_dict['identifier'] = hapmap_id
+                if cell_line := run_metadata.get('Cell line'):
+                    hapmap_dict['name'] = cell_line
+                if sex := run_metadata.get('sex'):
+                    hapmap_dict['gender'] = sex
+                if bool(hapmap_dict) and hapmap_dict not in is_based_on:
+                    hapmap_dict['additionalType'] = {
+                        'name': 'HapMap', 'url': 'http://purl.obolibrary.org/obo/NCIT_C70979'}
+                    is_based_on.append(hapmap_dict)
 
-                                if hapmap_dict_filtered not in is_based_on:
-                                    is_based_on.append(hapmap_dict_filtered)
+            if len(is_based_on):
+                output['isBasedOn'] = is_based_on
+            if len(species_list):
+                output['species'] = species_list
+            if len(distribution_list):
+                output['distribution'] = distribution_list
 
-                if len(is_based_on):
-                    output['isBasedOn'] = is_based_on
-
-                yield output
+            yield output
+            logger.info(f'Yielded: {study[0]}')
 
         logger.info(f'Finished Parsing {count} Studies')
+        logger.info(f'Total large documents: {too_big}')
 
     def update_cache(self):
         RETRIEVE_METHOD = False
         start = time.time()
 
-        last_record = self.retrieve_last_record()
         last_updated = self.retreive_last_updated()
 
-
-        logger.info(f"Last Record: {last_record}")
-
-        logger.info('Starting FTP Download')
-
         fileloc = 'https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab'
-        wget.download(fileloc, out='SRA_Accessions.tab')
+        retry_count = 0
+        while True:
+            try:
+                logger.info('Starting FTP Download')
+                wget.download(fileloc, out='SRA_Accessions.tab')
+                break
+            except ContentTooShortError as e:
+                retry_count += 1
+                if retry_count > 10:
+                    raise e
+                else:
+                    logger.error(
+                        'Error downloading file. %s. Retrying...', e)
+                    logger.info('Try count: %s of 10', retry_count)
+                    sleep(retry_count * 2)
 
         logger.info('FTP Download Complete')
 
@@ -362,21 +356,25 @@ class NCBI_SRA(NDEDatabase):
                          usecols=['Accession', 'Type', 'Status', 'Updated', 'Published', 'Experiment', 'Sample', 'BioProject', 'ReplacedBy'])
         only_live = df[df['Status'] == 'live']
         filtered = only_live[only_live['Type'] == 'STUDY']
+
         if RETRIEVE_METHOD == True:
+            last_record = self.retrieve_last_record()
+            logger.info(f"Last Record: {last_record}")
             accession_list = filtered[['Accession', 'Type', 'Status', 'Updated', 'Published',
-                                    'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
+                                       'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
             # ignore studies before last_record
             for i, study in enumerate(accession_list):
                 if study[0] == last_record:
+                    logger.info(
+                        f"Found last record at {i} out of {len(accession_list)}")
                     accession_list = accession_list[i:]
                     break
         else:
             new_studies = filtered[filtered['Updated'] > last_updated]
             accession_list = new_studies[['Accession', 'Type', 'Status', 'Updated', 'Published',
-                                        'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
+                                          'Experiment', 'Sample', 'BioProject', 'ReplacedBy']].values.tolist()
+            logger.info('Total Studies Found: {}'.format(len(accession_list)))
 
-
-        logger.info('Total Studies Found: {}'.format(len(accession_list)))
         count = 0
 
         logger.info('Retrieving Individual Study Metadata from API')
@@ -384,6 +382,7 @@ class NCBI_SRA(NDEDatabase):
         with ThreadPoolExecutor(max_workers=3) as pool:
             data = pool.map(self.query_sra, accession_list)
             for item in data:
+                logger.info(f"Yielding {item[0]}")
                 yield item
                 count += 1
                 if count % 1000 == 0:
