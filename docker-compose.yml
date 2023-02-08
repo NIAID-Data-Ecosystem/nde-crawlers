@@ -310,8 +310,9 @@ volumes:
       o: bind
       device: /opt/nde/data
   cache:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/nde/cache
+    data:
+      driver: local
+      driver_opts:
+        type: none
+        o: bind
+        device: /opt/nde/data
