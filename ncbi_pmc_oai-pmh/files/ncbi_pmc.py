@@ -167,6 +167,7 @@ class NCBI_PMC(NDEDatabase):
             break
 
     def parse(self, records):
+        no_supplementary_material_count = 0
         for record in records:
             data = json.loads(record[1])
             try:
@@ -270,6 +271,11 @@ class NCBI_PMC(NDEDatabase):
                     distribuiton_list.append(distribution_obj)
             if len(distribuiton_list):
                 output['distribution'] = distribuiton_list
+            else:
+                logger.info(
+                    f'No supplemental data found for {output["identifier"]}, skipping')
+                no_supplementary_material_count += 1
+                continue
 
             if journal_title := metadata.get('journal-title'):
                 citation_dict['journalName'] = journal_title[0]
@@ -360,7 +366,7 @@ class NCBI_PMC(NDEDatabase):
                         './/article-title')
                     if article_title is not None:
                         article_name = ''.join(article_title.itertext())
-                        if article_name != '':
+                        if article_name != '' or article_name != ' ':
                             output['name'] = 'Supplementary materials in ' + \
                                 '"'+article_name+'"'
                             citation_dict['name'] = article_name
@@ -501,12 +507,13 @@ class NCBI_PMC(NDEDatabase):
 
             if 'name' not in output:
                 logger.info(f'no name for {output["identifier"]}')
-            if output['name'] == 'Supplementary materials in " "':
-                logger.info(f'name exists, but no title for {output["identifier"]}')
+
             if 'description' not in output:
                 logger.info(f'no description for {output["identifier"]}')
 
             yield output
+        logger.info(
+            f'Articles not containing supplementary materials: {no_supplementary_material_count}')
 
     def update_cache(self):
         """If cache is not expired get the new records to add to the cache since last_updated"""

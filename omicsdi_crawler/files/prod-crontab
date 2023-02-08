@@ -13,5 +13,5 @@
 #               parameter is the spider name
 0 0 1,15 * * root /home/biothings/run-spider.sh -s omicsdi
 0 0 30 1,4,7,10 * root /home/biothings/delete-cache.sh omicsdi
-@reboot root /home/biothings/run-spider.sh -s omicsdi
+# @reboot root /home/biothings/run-spider.sh -s omicsdi
 # remember the newline at the end
