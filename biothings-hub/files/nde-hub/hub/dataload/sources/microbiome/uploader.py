@@ -7,11 +7,13 @@ class Microbiomedb_Uploader(NDESourceUploader):
 
     __metadata__ = {
     "src_meta": {
-        "description": "MicrobiomeDB was developed as a discovery tool that empowers researchers to fully leverage their experimental metadata to construct queries that interrogate microbiome datasets.",
-        "name": "MicrobiomeDB",
-        "identifier":"MicrobiomeDB",
-        "schema": "get_source_data(name)",
-        "url": "https://beta.microbiomedb.org/mbio.beta/app/"}
+        "sourceInfo": {
+            "description": "MicrobiomeDB was developed as a discovery tool that empowers researchers to fully leverage their experimental metadata to construct queries that interrogate microbiome datasets.",
+            "name": "MicrobiomeDB",
+            "identifier":"MicrobiomeDB",
+            "schema": get_source_data(name),
+            "url": "https://beta.microbiomedb.org/mbio.beta/app/"}
+        }
     }
 
     def load_data(self, data_folder):
