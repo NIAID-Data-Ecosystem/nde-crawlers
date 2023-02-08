@@ -1,4 +1,5 @@
 import datetime
+from re import L
 from sqlite3 import DataError
 import time
 import json
@@ -223,8 +224,8 @@ class Dataverse(NDEDatabase):
                     dataset=json.loads(record[1])
                     dataset['url'] = dataset['identifier']
                     dataset['doi'] = dataset.pop('identifier')
-                    dataset['identifier'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse_')
-                    dataset['_id'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse_')
+                    dataset['identifier'] = dataset['doi'].strip('https://doi.org')
+                    dataset['_id'] = dataset['doi'].replace('https://doi.org','Dataverse').replace("/","_")
                     dataset['dateModified'] = datetime.datetime.strptime(dataset['dateModified'] , "%Y-%m-%d").date().isoformat()
 
                     if 'datePublished' in dataset:
@@ -290,12 +291,16 @@ class Dataverse(NDEDatabase):
 
                     if "distribution" in dataset:
                         for data_dict in dataset["distribution"]:
-                            if "fileFormat" in data_dict.keys():
+                            if "@id" in data_dict:
+                                data_dict["@id"] = data_dict['@id'].strip("https://doi.org/")
+                            if "fileFormat" in data_dict:
                                 data_dict["encodingFormat"] = data_dict.pop("fileFormat")
-                            if "identifier" in data_dict.keys():
+                            if "identifier" in data_dict:
                                 data_dict["contentUrl"] = data_dict.pop("identifier")
-                            if "contentSize" in  data_dict.keys():
+                            if "contentSize" in  data_dict:
                                 data_dict.pop("contentSize")
+                            if "description" in data_dict and "https://" in data_dict['description']:
+                                data_dict.pop("description")
 
                     if "citation" in dataset:
                         cit_list = []
@@ -321,7 +326,6 @@ class Dataverse(NDEDatabase):
 
                 else:
                     # here is where the non-exported metadata is parsed
-
                     # add schema source info variables
                     dataset["@context"] = "http://schema.org"
                     if 'type' in dataset: 
@@ -329,11 +333,11 @@ class Dataverse(NDEDatabase):
                     else:
                         dataset['@type'] = 'dataset'
                     dataset['doi'] = dataset.pop('global_id')
-                    dataset['identifier'] = dataset['doi'].replace("/","_").replace('https:__doi.org','Dataverse_')
-                    dataset['_id'] = dataset['doi'].replace("/","_").replace('doi:','Dataverse_')
+                    dataset['identifier'] = dataset['doi'].strip('https://doi.org')
+                    dataset['_id'] = dataset['doi'].replace('doi:','Dataverse_').replace("/","_")
                     dataset['includedInDataCatalog'] = {
                         '@type': 'dataset',
-                        'name': 'Dataverse',
+                        'name': 'Harvard Dataverse',
                         'url': 'https://dataverse.harvard.edu/',
                         'versionDate': datetime.datetime.today().strftime('%Y-%m-%d')
                     }
