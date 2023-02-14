@@ -25,8 +25,8 @@ class NDEFileSystemDumper(BaseDumper):
 
     This will create hard links for files from a given source
     """
-    SCHEDULE = "0 * * * *"  # hourly
-
+    SCHEDULE = "0 5,17 * * *"  # 5am, 5pm
+    
     @property
     def SRC_ROOT_FOLDER(self):
         if not self.SRC_NAME:
