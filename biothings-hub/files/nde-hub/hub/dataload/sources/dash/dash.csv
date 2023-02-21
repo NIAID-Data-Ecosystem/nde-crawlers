@@ -1,0 +1,24 @@
+source_property,nde_property
+Study Name,name
+Study Abbreviation,alternateName
+citation,citation.name
+DOI,citation.doi
+Publication URLs,citation.url
+NICHD Division/Branch/Center,funding.funder.name
+Study Description,description
+Clinical Research Network Name,author.name
+Principal Investigator(s),author.name
+Keywords,keywords
+Topic,keywords
+Requires IRB approval to obtain data,conditionsOfAccess
+Additional Approval Entity,conditionsOfAccess
+Study Type,measurementTechnique.name
+ClinicalTrials.gov URL,mainEntityOfPage
+StudyCollectionStartDate,temporalCoverage.startDate
+StudyCollectionEndDate,temporalCoverage.endDate
+approvalDate,datePublished
+Population Description,description
+descriptiveDocuments,"hasPart,isBasedOn"
+datasetTitle,name
+datasetDescription,description
+datasetFormat,encodingFormat
