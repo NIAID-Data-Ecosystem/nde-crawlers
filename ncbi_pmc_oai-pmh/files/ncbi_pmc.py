@@ -147,6 +147,14 @@ class NCBI_PMC(NDEDatabase):
                     doc = {'metadata': metadata_dict,
                            'xml': record_xml_string}
 
+                    # Supplemental Data
+                    supplemental_data_arr = root.findall(
+                        './/supplementary-material')
+                    if len(supplemental_data_arr) == 0:
+                        logger.info(
+                            f"No supplemental data found for {xml_filepath.split('/')[1].replace('.xml', '')}, skipping")
+                        continue
+
                     yield (xml_filepath.split('/')[1].replace('.xml', ''), json.dumps(doc))
                     # logger.info('Yielded %s', xml_filepath)
 
@@ -325,6 +333,8 @@ class NCBI_PMC(NDEDatabase):
             funder_list = []
             for funder in funding_group:
                 if funder.text is not None:
+                    if funder.text.strip() == '':
+                        continue
                     funder_list.append(
                         {'funder': {'name': funder.text}})
                 else:
@@ -333,6 +343,8 @@ class NCBI_PMC(NDEDatabase):
                     # institution_id = funder.find(
                     #     './/institution-id')
                     if name is not None:
+                        if name.text.strip() == '':
+                            continue
                         funder_list.append(
                             {'funder': {'name': name.text}})
             if len(funder_list):
@@ -367,8 +379,7 @@ class NCBI_PMC(NDEDatabase):
                     if article_title is not None:
                         article_name = ''.join(article_title.itertext())
                         if article_name != '' or article_name != ' ':
-                            output['name'] = 'Supplementary materials in ' + \
-                                '"'+article_name+'"'
+                            output['name'] = f'Supplementary materials in "{article_name}"'
                             citation_dict['name'] = article_name
 
             pmid = root.find(

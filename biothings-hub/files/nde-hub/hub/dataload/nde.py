@@ -359,6 +359,12 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "additionalType": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
+                    },
                     "encodingFormat": {"type": "text"},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
