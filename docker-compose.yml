@@ -323,4 +323,4 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /opt/nde/data
+      device: /opt/nde/cache
