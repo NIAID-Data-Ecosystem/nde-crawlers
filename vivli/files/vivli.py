@@ -77,6 +77,7 @@ def parse():
                     'url': 'https://vivli.org/',
                     'versionDate': datetime.date.today().isoformat()
                 },
+                "@context": "http://schema.org/",
                 '@type': 'Dataset',
                 'identifier': [],
                 '_id': "VIVLI_" + request.get('id')

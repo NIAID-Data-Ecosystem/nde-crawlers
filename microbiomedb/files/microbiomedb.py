@@ -38,6 +38,7 @@ def parse():
                 'url': 'https://beta.microbiomedb.org/mbio.beta/app/',
                 'versionDate': datetime.date.today().isoformat()
             },
+            "@context": "http://schema.org/",
             '@type': 'Dataset',
             '_id': "MICROBIOME_" + record['attributes'].get('dataset_id')
         }

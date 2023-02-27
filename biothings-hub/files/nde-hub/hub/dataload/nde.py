@@ -264,7 +264,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "conditionsOfAccess": {"type": "text"},
+            "conditionsOfAccess": {"type": "keyword"},
             "contentSize": {"type": "text"},
             "contentUrl": {
                 "type": "text",
