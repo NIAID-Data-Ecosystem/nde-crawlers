@@ -142,6 +142,11 @@ config_local.py
 config.yml
 
 # macos settings
-.DS_Store
 *.ipynb
 *.json
+
+# PyCharm
+.idea
+
+# VSCode
+.DS_Store
