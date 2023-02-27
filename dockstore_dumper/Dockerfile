@@ -1,5 +1,5 @@
 # when running in a development environment instead of a production environment specify crontab buildarg
-# docker build --build-arg CRONTAB=dev-crontab .
+# docker build --build-arg CRONTAB=dev-crontab -t dockstore_dumper .
 FROM python:3.10 AS builder
 WORKDIR /build/wheels
 RUN apt-get -y -qq update && \
