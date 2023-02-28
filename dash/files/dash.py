@@ -3,6 +3,8 @@ import json
 import logging
 import datetime
 import validators
+import re
+import urllib.parse
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
@@ -14,6 +16,9 @@ logger = logging.getLogger('nde-logger')
 def get_dataset_ids(study_name):
     dataset_ids = []
     page = 1
+    if "'" not in study_name:
+        # trying to encode single quotes break the url, even after converting to %27
+        study_name = urllib.parse.quote(study_name)
     while True:
         facets = [{"name": "study name", "filters": [f"{study_name}"]}]
         url = f'https://dash.nichd.nih.gov/search/dataset?q=&facets={facets}&page={page}&sortBy=title&asc=true&size=1000'
@@ -116,12 +121,28 @@ def parse_study_info(study_info):
         if obj['propertyName'] == 'Publication URLs':
             if obj['storedValue'] is not None and validators.url(obj['storedValue']):
                 citation_dict['url'] = obj['storedValue']
+            pmids = []
+            pmcids = []
             for url in obj['storedArray']:
                 if url is not None and validators.url(url):
                     if 'pubmed' in url:
-                        study_dict['pmid'] = url.split('/')[-1]
+                        pmids.append(url.split('/')[-1])
+                    elif 'PMC' in url:
+                        pmc_regex = re.compile(r'PMC\d+')
+                        pmcids.append(pmc_regex.search(url).group(0))
                     else:
                         citation_dict['url'] = url
+            if len(pmcids) > 0:
+                url = f'https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={",".join(pmcids)}&format=json'
+                try:
+                    data = requests.get(url).json()
+                    pmcids = [obj['pmid'] for obj in data['records']]
+                except:
+                    logger.error(
+                        f'PMC ID conversion failed for {study_dict["name"]}')
+                pmids.extend(pmcids)
+            if len(pmids) > 0:
+                study_dict['pmids'] = ','.join(pmids)
 
     if bool(citation_dict):
         study_dict['citation'] = citation_dict
@@ -156,11 +177,13 @@ def parse_study_info(study_info):
         for obj in descriptive_documents:
             if obj['documentType'] == 'Codebook/Variable Dictionary':
                 study_dict['hasPart'] = {
+                    'additionalType': {'name': obj['documentType']},
                     'name': obj['filename'],
                     'url': f'https://dash.nichd.nih.gov/download-api/descriptive/file?id={obj["id"]}'
                 }
             else:
                 study_dict['isBasedOn'] = {
+                    'additionalType': {'name': obj['documentType']},
                     'name': obj['filename'],
                     'url': f'https://dash.nichd.nih.gov/download-api/descriptive/file?id={obj["id"]}'
                 }
@@ -196,7 +219,8 @@ def parse():
         parsed_study = info[0]
 
         if info == None:
-            logger.info(f"Failed to get study info for {study_id}, skipping.")
+            logger.info(
+                f"Failed to get study info for study id:{study_id}, skipping.")
             continue
 
         dataset_ids = info[1]
@@ -204,7 +228,8 @@ def parse():
             logger.info(f"No datasets found for study id: {study_id}")
             continue
         else:
-            logger.info(f"Found {len(dataset_ids)} datasets for {study_id}")
+            logger.info(
+                f"Found {len(dataset_ids)} datasets for study id: {study_id}")
 
         logger.info("Retrieving individual dataset info...")
         related_datasets = []
@@ -233,7 +258,8 @@ def parse():
 
             output['_id'] = 'NICHD_DASH_Dataset_' + dataset_id
             output['url'] = f'https://dash.nichd.nih.gov/dataset/{dataset_id}'
-            output['distribution'] = {'contentUrl': output['url']}
+            distribution_dict = {}
+            distribution_dict['contentUrl'] = output['url']
 
             if dataset_title := dataset_info.get('datasetTitle'):
                 output['name'] = f'{dataset_title} in {output["name"]}'
@@ -242,7 +268,9 @@ def parse():
                 output['description'] = f'{dataset_description}\nStudy Description\n{output["description"]}'
 
             if dataset_format := dataset_info.get('datasetFormat'):
-                output['encodingFormat'] = dataset_format
+                distribution_dict['encodingFormat'] = dataset_format
+            output['distribution'] = distribution_dict
+
             related_datasets.append(output)
 
         for dataset in related_datasets:
@@ -263,3 +291,4 @@ def parse():
                     f"Parsed {dataset_count} datasets")
 
             yield dataset
+    logger.info(f"Finished parsing. Total datasets: {dataset_count}")
