@@ -151,7 +151,10 @@ class DryadItemProcessorPipeline:
             output['isAccessibleForFree'] = is_accessible
 
         if coa := item.pop('visibility', None):
-            output['conditionsOfAccess'] = coa
+            if coa.casefold() == "open":
+                output['conditionsOfAccess'] = "Public"
+            else:
+                output['conditionsOfAccess'] = coa
 
         if funding := item.pop('funders', None):
             fds = []
