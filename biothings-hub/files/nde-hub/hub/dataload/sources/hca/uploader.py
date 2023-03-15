@@ -24,7 +24,7 @@ class HCA_Uploader(NDESourceUploader):
                 "identifier": "HCA",
                 "name": "Human Cell Atlas",
                 "schema": get_source_data(name),
-                "url": "https://hca.eu/"
+                "url": "https://www.humancellatlas.org/"
             }
         }
     }
