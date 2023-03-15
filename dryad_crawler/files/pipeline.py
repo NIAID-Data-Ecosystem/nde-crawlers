@@ -24,7 +24,7 @@ class DryadItemProcessorPipeline:
         """ Formats python and military datetime into an isoformat date
 
         Args:
-            da  te_string: a date string
+            date_string: a date string
         Returns: An isoformatted date if there is a datetime if not then return None
         """
         if re.match("\d+-\d+-\d+", date_string):

@@ -1,0 +1,17 @@
+source_property,nde_property
+Repository ID:,identifier
+Experiment Name:,name
+Primary researcher:,author.name
+PI/manager:,author.name
+Uploaded by:,author.name
+Experiment dates:,"temporalCoverage.startDate,temporalCoverage.endDate"
+Dataset uploaded:,datePublished
+Last updated:,dateModified
+Keywords:,keywords
+Manuscripts:,"citation,funding"
+Organizations:,author.affiliation.name
+Purpose:,description
+Conclusion:,description
+Comments:,description
+Funding:,funding.description
+Quality control:,description

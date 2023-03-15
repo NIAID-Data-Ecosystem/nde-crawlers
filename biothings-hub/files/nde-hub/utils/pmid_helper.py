@@ -5,21 +5,38 @@
 # https://www.nlm.nih.gov/bsd/mms/medlineelements.html
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
 import os
+import time
+import requests
 import orjson
 import yaml
-import time
-import traceback
 
 from .date import add_date
+from .utils import retry
 from Bio import Entrez
 from Bio import Medline
+from copy import deepcopy
 from datetime import datetime
 from typing import Optional, List, Iterable, Dict
 from itertools import islice
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
+# retry 3 times sleep 5 seconds between each retry
+@retry(3, 5)
+def _convert_pmc(pmc_list, pmc_dict):
+    base_url = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&format=json&"
+    # convert all unique pmcs into a comma separated string
+    request_url = "ids=" + ",".join(list(set(pmc_list)))
+    # make the request
+    request_url = base_url + request_url
+    request = requests.get(request_url).json()
+    # key pmcid value pmid
+    for record in request.get('records'):
+        pmc_dict[record.get('pmcid')] = record.get('pmid')
+    # reset the list
+    pmc_list.clear()
+    time.sleep(0.5)
 
-def get_pub_date(date: str):
+def _get_pub_date(date: str):
     """helper method to solve the problem transforming dates such as "2000 Spring" into date().isoformat dates
 
         https://www.nlm.nih.gov/bsd/mms/medlineelements.html#dp
@@ -68,8 +85,8 @@ def get_pub_date(date: str):
         logger.warning("Need to update isoformat transformation: %s", date)
         return None
 
-
-# TODO add retry decorator to this function if getting too many imcompleteread errors
+# retry 3 times sleep 5 seconds between each retry
+@retry(3,5)
 def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
     """Use pmid to retrieve both citation and funding info in batch
     :param pmids: A list of PubMed PMIDs
@@ -91,7 +108,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
 
     records = Medline.parse(handle)
-    # TODO: this can get an incompleteread error need implementation to rerun api query if this happens
+    # This can get an incompleteread error we rerun this at the top layer
     records = list(records)
     for record in records:
         citation = {}
@@ -105,7 +122,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
         if journal_name := record.get('JT'):
             citation['journalName'] = journal_name
         if date_published := record.get('DP'):
-            if date := get_pub_date(date_published):
+            if date := _get_pub_date(date_published):
                 citation['datePublished'] = date
 
         # make an empty list if there is some kind of author
@@ -131,7 +148,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     handle = Entrez.efetch(db="pubmed", id=pmids, retmode="xml")
 
     # Have to use Entrez.read() instead of Entrez.parse(). The problem is discussed here: https://github.com/biopython/biopython/issues/1027
-    # TODO: this can get an incompleteread error need implementation to rerun api query if this happens
+    # This can get an incompleteread error we rerun this at the top layer
     records = Entrez.read(handle)
     records = records['PubmedArticle']
 
@@ -169,6 +186,10 @@ def load_pmid_ctfd(data_folder):
 
     with open(os.path.join(data_folder, 'data.ndjson'), 'rb') as f:
         while True:
+            # dict to convert pmcs to pmids
+            pmc_pmid = {}
+            # pmc list for batch query
+            pmc_list = []
             # pmid list for batch query
             pmid_list = []
             # docs to yield for each batch query
@@ -181,37 +202,49 @@ def load_pmid_ctfd(data_folder):
             for line in next_n_lines:
                 doc = orjson.loads(line)
                 doc_list.append(doc)
+                if pmcs := doc.get('pmcs'):
+                    pmcs = [pmc.strip() for pmc in pmcs.split(',')]
+                    # limit reached need to make request to pmc convertor
+                    if (len(pmc_list) + len(pmcs)) >= 200:
+                        _convert_pmc(pmc_list, pmc_pmid)
+                    pmc_list += pmcs
+
+            # make request to pmc convertor
+            if pmc_list:
+                _convert_pmc(pmc_list, pmc_pmid)
+
+            # loop through doc_list and convert
+            for loc, doc in enumerate(doc_list):
+                if pmcs := doc.pop('pmcs', None):
+                    pmcs = [pmc.strip() for pmc in pmcs.split(',')]
+                    for pmc in pmcs:
+                        if pmid := pmc_pmid.get(pmc):
+                            doc['pmids'] = doc.get('pmids') + "," + pmid if doc.get('pmids') else pmid
+                        else:
+                            logger.info("There is an issue with this PMCID. PMCID: %s, rec_id: %s", pmc, doc['_id'])
+                    doc_list[loc] = doc
                 if pmids := doc.get('pmids'):
                     pmid_list += [pmid.strip() for pmid in pmids.split(',')]
 
             # check if there are any pmids before requesting
             if pmid_list:
+                # same thing as list(set(pmid_list))
+                pmid_list = [*set(pmid_list)]
                 # batch request retry up to 3 times
-                tries = 3
-                for i in range(tries):
-                    try:
-                        eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
-                    except Exception as e:
-                        if i < tries - 1: # i is zero indexed
-                            logger.error("Error occurred while making batch API request. Retrying...")
-                            time.sleep(1)
-                            continue
-                        else:
-                            logger.error(traceback.format_exc())
-                            raise e
-                    break
+                eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
                 # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
                 if api_key:
                     time.sleep(0.1)
                 else:
                     time.sleep(0.35)
-
+            
             # add in the citation and funding to each doc in doc_list and yield
             for rec in doc_list:
                 if pmids := rec.pop('pmids', None):
                     pmids = [pmid.strip() for pmid in pmids.split(',')]
                     # fixes issue where pmid numbers under 10 is read as 04 instead of 4
-                    pmids = [ele.lstrip('0') for ele in pmids]
+                    pmids = [pmid.lstrip('0') for pmid in pmids]
+                    pmids = [*set(pmids)]
                     for pmid in pmids:
                         if not eutils_info.get(pmid):
                             logger.info('There is an issue with this pmid. PMID: %s, rec_id: %s', pmid, rec['_id'])
@@ -233,7 +266,7 @@ def load_pmid_ctfd(data_folder):
                                         rec['funding'] = [rec_funding]
                                     rec['funding'] += funding
                                 else:
-                                    rec['funding'] = funding
+                                    rec['funding'] = deepcopy(funding)
                 # add the date tranformation before yielding
                 rec = add_date(rec)
                 yield rec
