@@ -4,6 +4,7 @@
 # https://biopython.org/docs/1.76/api/Bio.Entrez.html
 # https://www.nlm.nih.gov/bsd/mms/medlineelements.html
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
+# https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
 import os
 import time
 import requests
