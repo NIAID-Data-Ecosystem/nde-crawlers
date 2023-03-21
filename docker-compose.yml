@@ -132,7 +132,7 @@ services:
       - data:/data
   immport-crawler:
     build:
-      context: immport_crawler
+      context: immport
       dockerfile: Dockerfile
       # uncomment to run development crontab
       # args:
@@ -280,6 +280,16 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  # LEGACY CRAWLERS
+  # immport-crawler:
+  #   build:
+  #     context: immport_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     # args:
+  #     #   CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
   mongodb:
     image: mongo:4.4
     ports:
