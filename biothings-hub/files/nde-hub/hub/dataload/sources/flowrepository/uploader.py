@@ -1,9 +1,7 @@
-import os
-import orjson
-from config import logger
 from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
 from utils.pmid_helper import load_pmid_ctfd
+from utils.utils import check_schema
 
 # Example __metadata__ dictionary:
 # <SOURCE_NAME> = https://api.data.niaid.nih.gov/v1/metadata
@@ -34,4 +32,6 @@ class FlowRepositoryUploader(NDESourceUploader):
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
         for doc in docs:
+            # check schema
+            check_schema(doc)
             yield doc

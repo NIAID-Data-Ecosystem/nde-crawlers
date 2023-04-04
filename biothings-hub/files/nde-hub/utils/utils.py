@@ -29,3 +29,17 @@ def retry(retry_num, retry_sleep_sec):
         return wrapper
 
     return decorator
+
+def check_schema(record):
+    """
+    check record before inserting into MongoDb
+    :param record: record to be checked
+    """
+    
+    assert isinstance(record, dict), "record is not a dict"
+    assert record.get("_id"), "_id is None"
+    assert record.get("@type"), "@type is None"
+    assert record.get("includedInDataCategory"), "includedInDataCategory is None"
+    if coa := record.get("conditionsOfAccess"):
+        enum = ["Open", "Restricted", "Closed", "Embargoed"]
+        assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)

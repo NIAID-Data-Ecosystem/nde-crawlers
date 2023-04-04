@@ -15,7 +15,7 @@ from .date import add_date
 from .utils import retry
 from Bio import Entrez
 from Bio import Medline
-from copy import deepcopy
+from copy import copy
 from datetime import datetime
 from typing import Optional, List, Iterable, Dict
 from itertools import islice
@@ -268,7 +268,7 @@ def load_pmid_ctfd(data_folder):
                                         rec['funding'] = [rec_funding]
                                     rec['funding'] += funding
                                 else:
-                                    rec['funding'] = deepcopy(funding)
+                                    rec['funding'] = copy(funding)
                 # add the date tranformation before yielding
                 rec = add_date(rec)
                 yield rec
