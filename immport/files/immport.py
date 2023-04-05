@@ -59,7 +59,14 @@ def map_schema_json(schema_json):
     if identifier := schema_json.pop('identifiers', None):
         schema_json['identifier'] = identifier
     if species := schema_json.pop('species', None):
-        schema_json['species'] = {'name': species}
+        if isinstance(species, list):
+            species_list = []
+            for single_species in species:
+                species_list.append({'name': single_species})
+            if len(species_list):
+                schema_json['species'] = species_list
+        else:
+            schema_json['species'] = {'name': species}
     if measurement_technique := schema_json.pop('measurementTechnique', None):
         schema_json['measurementTechnique'] = {'name': measurement_technique}
     if health_conditions := schema_json.pop('keywords', None):

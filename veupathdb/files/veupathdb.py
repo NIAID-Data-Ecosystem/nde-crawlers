@@ -95,8 +95,8 @@ def record_generator():
                     "[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s" % published_dates)
 
         if _record_dict['tables']['Version']:
-            _record_dict['species'] = {'name': [hit['organism']
-                                                for hit in _record_dict['tables']['Version']]}
+            _record_dict['species'] = [{'name': hit['organism']}
+                                       for hit in _record_dict['tables']['Version']]
 
         # tables.HyperLinks
         if _record_dict['tables']['HyperLinks']:
