@@ -1,4 +1,5 @@
 from hub.dataload.nde import NDESourceUploader
+from utils.pubtator import standardize_data
 
 
 class DDEUploader(NDESourceUploader):
@@ -10,3 +11,8 @@ class DDEUploader(NDESourceUploader):
             "license": "Creative Commons Attribution 4.0 International"
         }
     }
+
+    def load_data(self, data_folder):
+        pubtator_docs = standardize_data(data_folder)
+        for doc in pubtator_docs:
+            yield doc
