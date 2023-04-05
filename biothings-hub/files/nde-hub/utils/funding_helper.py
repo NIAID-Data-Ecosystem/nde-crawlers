@@ -6,7 +6,7 @@ import re
 
 from config import logger
 
-DB_PATH = '/cache/funding_lookup/funding_lookup.db'
+DB_PATH = '/standardizers/funding_lookup/funding_lookup.db'
 
 
 def create_sqlite_db(DB_PATH):

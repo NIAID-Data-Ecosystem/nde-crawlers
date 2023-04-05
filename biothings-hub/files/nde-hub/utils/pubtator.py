@@ -13,7 +13,7 @@ from config import GEO_EMAIL, logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('nde-logger')
 
-DB_PATH = '/cache/pubtator_lookup/pubtator_lookup.db'
+DB_PATH = '/standardizers/pubtator_lookup/pubtator_lookup.db'
 
 
 MANUAL_HEALTH_CONDITIONS = [
