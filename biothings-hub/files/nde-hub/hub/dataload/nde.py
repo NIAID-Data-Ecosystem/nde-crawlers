@@ -10,6 +10,7 @@ from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
 
 from utils.date import add_date
+from utils.utils import check_schema
 from config import DATA_ARCHIVE_ROOT, CRAWLER_OUTPUT_DATA_ROOT
 
 
@@ -148,6 +149,8 @@ class NDESourceUploader(BaseSourceUploader):
                 doc = orjson.loads(line)
                 # add date transformation here and have the most recent date of all of the dates
                 doc = add_date(doc)
+                # check schema
+                check_schema(doc)
                 yield doc
 
     @classmethod
