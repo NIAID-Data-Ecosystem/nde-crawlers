@@ -126,7 +126,7 @@ class FlowRepositoryItemProcessorPipeline:
             # Long year length
             if len(date_pub.split()[1]) == 4:
                 date_iso = datetime.datetime.strptime(date_pub, '%b %Y').date().isoformat()
-                output['datePublished'] = date_pub
+                output['datePublished'] = date_iso
             # Short Year length
             elif len(date_pub.split()[1]) == 2:
                 date_iso = datetime.datetime.strptime(date_pub, '%b %y').date().isoformat()
@@ -136,8 +136,19 @@ class FlowRepositoryItemProcessorPipeline:
                 output['datePublished'] = date_iso
 
         if date_mod := item.pop('Last updated:', None):
-            date_mod = datetime.datetime.strptime(date_mod, '%b %Y').date().isoformat()
-            output['dateModified'] = date_mod
+            date_iso = ''
+            # This is to cover weird exception cases. Does not cover this execption case http://flowrepository.org/id/FR-FCM-Z3L9 "11:45AM"
+            # Long year length
+            if len(date_mod.split()[1]) == 4:
+                date_iso = datetime.datetime.strptime(date_mod, '%b %Y').date().isoformat()
+                output['dateModified'] = date_iso
+            # Short Year length
+            elif len(date_pub.split()[1]) == 2:
+                date_iso = datetime.datetime.strptime(date_pub, '%b %y').date().isoformat()
+            else:
+                logger.warning("Date Uploaded has not been parsed. URL: %s", output["url"])
+            if date_iso:
+                output['dateModified'] = date_iso
 
         if keywords := item.pop('Keywords:', None):
             keywords = keywords.strip('[]').split('] [')

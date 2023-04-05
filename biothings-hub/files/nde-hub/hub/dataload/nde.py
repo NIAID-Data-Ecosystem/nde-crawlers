@@ -337,19 +337,36 @@ class NDESourceUploader(BaseSourceUploader):
             "featureList": {"type": "text", "copy_to": ["all"]},
             "funding": {
                 "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "description": {"type": "text", "copy_to": ["all"]},
+                    "endDate": {"type": "date"},
+                    "startDate": {"type": "date"},
+                    "keywords": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "isBasedOn": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
                     "funder": {
                         "properties": {
                             "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
+                            "description": {"type": "text", "copy_to": ["all"]},
                             "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                             "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                             "role": {"type": "keyword"},
                             "url": {"type": "text", "copy_to": ["all"]},
-                        }
+                            "employee": {
+                                "properties": {
+                                    "givenName": {"type": "text", "copy_to": ["all"]},
+                                    "familyName": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                                }
+                            },
+                        },
                     },
-                    "identifier": {"type": "text", "copy_to": ["all"]},
-                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "hasPart": {
@@ -375,8 +392,20 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "healthCondition": {
                 "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                    "alternateName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "originalName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "isCurated": {"type": "boolean"},
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"}
+                        }
+                    }
                 }
             },
             "identifier": {"type": "text", "copy_to": ["all"]},
@@ -415,8 +444,20 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "infectiousAgent": {
                 "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                    "alternateName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "originalName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "isCurated": {"type": "boolean"},
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"}
+                        }
+                    }
                 }
             },
             "interactionStatistic": {
@@ -629,8 +670,19 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                    "alternateName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "originalName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "isCurated": {"type": "boolean"},
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"}
+                        }
+                    }
                 }
             },
             "temporalCoverage": {
