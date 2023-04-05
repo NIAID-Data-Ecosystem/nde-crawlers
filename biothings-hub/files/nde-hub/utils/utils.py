@@ -39,7 +39,7 @@ def check_schema(record):
     assert isinstance(record, dict), "record is not a dict"
     assert record.get("_id"), "_id is None"
     assert record.get("@type"), "@type is None"
-    assert record.get("includedInDataCategory"), "includedInDataCategory is None"
+    assert record.get("includedInDataCatalog"), "includedInDataCatalog is None"
     if coa := record.get("conditionsOfAccess"):
         enum = ["Open", "Restricted", "Closed", "Embargoed"]
         assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
