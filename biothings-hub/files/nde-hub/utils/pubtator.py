@@ -371,11 +371,21 @@ def get_new_health_conditions(health_conditions, sql_data):
             'https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/submit/disease', data=data)
         logger.info(f'Waiting for response, {submit_response.text}')
         timeout = 0
+        retries = 0
         while True:
             time.sleep(10)
             timeout += 10
             if timeout > 100:
-                raise Exception('Timeout')
+                retries += 1
+                if retries > 3:
+                    raise Exception('Attempted 3 times, giving up')
+                logger.info('Timeout, retrying...')
+                try:
+                    os.remove(f'{submit_response.text}_response.csv')
+                except FileNotFoundError:
+                    logger.info('Issue removing file: %s_response.csv',
+                                submit_response.text)
+                get_new_health_conditions(health_conditions, sql_data)
             retrieve_response = requests.get(
                 f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/retrieve/{submit_response.text}")
             if retrieve_response.status_code == 200:
@@ -388,16 +398,16 @@ def get_new_health_conditions(health_conditions, sql_data):
         if len(result.split('\n')) == 1:
             result = result + '\n' + result
 
-        with open(f'response.csv', 'a') as f:
+        with open(f'{submit_response.text}_response.csv', 'a') as f:
             for line in result.split('\n'):
                 if 'MESH' in line:
                     f.write(line + '\n')
                 else:
                     logger.info(f'Removed {line}')
-        with open('response.csv', 'r') as f:
+        with open(f'{submit_response.text}_response.csv', 'r') as f:
             lines = f.readlines()
 
-        with open('response.csv', 'w') as f:
+        with open(f'{submit_response.text}_response.csv', 'w') as f:
             for line in lines:
                 if line.strip():
                     f.write(line)
@@ -405,8 +415,8 @@ def get_new_health_conditions(health_conditions, sql_data):
             f.seek(0, 0)
             f.write('\n')
 
-    if os.stat(f'response.csv').st_size != 0:
-        result = tab2dict('response.csv', cols=[3, 4, 5],
+    if os.stat(f'{submit_response.text}_response.csv').st_size != 0:
+        result = tab2dict(f'{submit_response.text}_response.csv', cols=[3, 4, 5],
                           key=0, sep='\t', alwayslist=True)
 
         remove_dupes = {}
@@ -432,7 +442,11 @@ def get_new_health_conditions(health_conditions, sql_data):
         difference = list(set([x.lower().strip()
                                for x in health_conditions]) - set(remove_dupes.keys()))
         logger.info(f'New health conditions: {difference}')
-        os.remove('response.csv')
+        try:
+            os.remove(f'{submit_response.text}_response.csv')
+        except FileNotFoundError:
+            logger.info('Issue removing file: %s_response.csv',
+                        submit_response.text)
         not_found = []
         for submitted_health_condition in health_conditions:
             if submitted_health_condition.lower() not in remove_dupes.keys():
@@ -440,7 +454,12 @@ def get_new_health_conditions(health_conditions, sql_data):
 
         return (difference, not_found)
     else:
-        os.remove('response.csv')
+        try:
+            os.remove(f'{submit_response.text}_response.csv')
+        except FileNotFoundError:
+            logger.info('Issue removing file: %s_response.csv',
+                        submit_response.text)
+
         logger.info("No new health conditions found")
         return None
 
@@ -458,11 +477,21 @@ def get_new_species(species, sql_data):
             'https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/submit/species', data=data)
         logger.info(f'Waiting for response, {submit_response.text}')
         timeout = 0
+        retries = 0
         while True:
             time.sleep(10)
             timeout += 10
             if timeout > 100:
-                raise Exception('Timeout')
+                retries += 1
+                if retries > 3:
+                    raise Exception('Attempted 3 times, giving up')
+                logger.info('Timeout, retrying...')
+                try:
+                    os.remove(f'{submit_response.text}_response.csv')
+                except FileNotFoundError:
+                    logger.info('Issue removing file: %s_response.csv',
+                                submit_response.text)
+                get_new_species(species, sql_data)
             retrieve_response = requests.get(
                 f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/retrieve/{submit_response.text}")
             if retrieve_response.status_code == 200:
@@ -475,17 +504,17 @@ def get_new_species(species, sql_data):
         if len(result.split('\n')) == 1:
             result = result + '\n' + result
 
-        with open(f'response.csv', 'w') as f:
+        with open(f'{submit_response.text}_response.csv', 'a') as f:
             for line in result.split('\n'):
                 if 'Species' in line:
                     f.write(line + '\n')
                 else:
                     logger.info(f'Removed {line}')
 
-        with open('response.csv', 'r') as f:
+        with open(f'{submit_response.text}_response.csv', 'r') as f:
             lines = f.readlines()
 
-        with open('response.csv', 'w') as f:
+        with open(f'{submit_response.text}_response.csv', 'w') as f:
             for line in lines:
                 if line.strip():
                     f.write(line)
@@ -493,8 +522,8 @@ def get_new_species(species, sql_data):
             f.seek(0, 0)
             f.write('\n')
 
-    if os.stat(f'response.csv').st_size != 0:
-        result = tab2dict('response.csv', cols=[3, 4, 5],
+    if os.stat(f'{submit_response.text}_response.csv').st_size != 0:
+        result = tab2dict(f'{submit_response.text}_response.csv', cols=[3, 4, 5],
                           key=0, sep='\t', alwayslist=True)
 
         remove_dupes = {}
@@ -517,7 +546,11 @@ def get_new_species(species, sql_data):
 
         difference = list(set([x.lower().strip()
                                for x in species]) - set(remove_dupes.keys()))
-        os.remove('response.csv')
+        try:
+            os.remove(f'{submit_response.text}_response.csv')
+        except FileNotFoundError:
+            logger.info('Issue removing file: %s_response.csv',
+                        submit_response.text)
         logger.info(f'New species: {difference}')
 
         not_found = []
@@ -527,7 +560,11 @@ def get_new_species(species, sql_data):
 
         return (difference, not_found)
     else:
-        os.remove('response.csv')
+        try:
+            os.remove(f'{submit_response.text}_response.csv')
+        except FileNotFoundError:
+            logger.info('Issue removing file: %s_response.csv',
+                        submit_response.text)
         logger.info("No new species found")
         return None
 
@@ -555,7 +592,7 @@ def transform(doc_list):
                             if health_condition[1] is not None:
                                 new_health_conditions_list.append(
                                     json.loads(health_condition[1]))
-                                continue
+                                break
                         if health_condition[1] is not None and 'name' in health_condition[1]:
                             scientific_name = json.loads(
                                 health_condition[1])['name']
@@ -564,57 +601,25 @@ def transform(doc_list):
                                     f'Found {original_health_condition_name} in lookup dictionary through the scientific name of {health_condition[0]}')
                                 new_health_conditions_list.append(
                                     json.loads(health_condition[1]))
-                                continue
+                                break
                         if health_condition[1] is not None and 'alternateName' in health_condition[1]:
+                            found_alternate_name = False
                             for alternate_name in json.loads(health_condition[1])['alternateName']:
                                 if original_health_condition_name.lower().strip() == alternate_name.lower().strip():
                                     logger.info(
                                         f'Found {original_health_condition_name} in lookup dictionary through an alternate name of {health_condition[0]}')
                                     new_health_conditions_list.append(
                                         json.loads(health_condition[1]))
-                                    continue
+                                    found_alternate_name = True
+                                    break
+                            if found_alternate_name:
+                                break
+
                     if len(new_health_conditions_list) < health_conditions_count:
                         logger.info(
                             f'No information found for {original_health_condition_name}')
                         new_health_conditions_list.append(
                             original_health_condition_obj)
-
-                # if original_health_condition_name := original_health_condition_obj.get('name'):
-                #     for health_condition in health_conditions_data:
-                #         if original_health_condition_name.lower().strip() == health_condition[0].lower().strip():
-                #             logger.info(
-                #                 f'Found {original_health_condition_name} in lookup dictionary')
-                #             if health_condition[1] is not None:
-                #                 new_health_conditions_list.append(
-                #                     json.loads(health_condition[1]))
-                #             else:
-                #                 logger.info(
-                #                     f'No information found for {original_health_condition_name}')
-                #                 new_health_conditions_list.append(
-                #                     original_health_condition_obj)
-
-                #         elif health_condition[1] is not None and 'name' in health_condition[1]:
-                #             scientific_name = json.loads(
-                #                 health_condition[1])['name']
-                #             if original_health_condition_name.lower().strip() == scientific_name.lower().strip():
-                #                 logger.info(
-                #                     f'Found {original_health_condition_name} in lookup dictionary through the scientific name of {health_condition[0]}')
-                #                 new_health_conditions_list.append(
-                #                     json.loads(health_condition[1]))
-
-                #         elif health_condition[1] is not None and 'alternateName' in health_condition[1]:
-                #             for alternate_name in json.loads(health_condition[1])['alternateName']:
-                #                 if original_health_condition_name.lower().strip() == alternate_name.lower().strip():
-                #                     logger.info(
-                #                         f'Found {original_health_condition_name} in lookup dictionary through an alternate name of {health_condition[0]}')
-                #                     new_health_conditions_list.append(
-                #                         json.loads(health_condition[1]))
-                #     if len(new_health_conditions_list) < health_conditions_count:
-                #         logger.info(
-                #             f'No information found for {original_health_condition_name}')
-                #         new_health_conditions_list.append(
-                #             original_health_condition_obj)
-
         elif original_health_condition_name := doc.get('healthCondition', {}).get('name'):
             for health_condition in health_conditions_data:
                 if original_health_condition_name.lower().strip() == health_condition[0].lower().strip():
@@ -623,7 +628,7 @@ def transform(doc_list):
                     if health_condition[1] is not None:
                         new_health_conditions_list.append(
                             json.loads(health_condition[1]))
-                        continue
+                        break
                 if health_condition[1] is not None and 'name' in health_condition[1]:
                     scientific_name = json.loads(
                         health_condition[1])['name']
@@ -632,52 +637,23 @@ def transform(doc_list):
                             f'Found {original_health_condition_name} in lookup dictionary through the scientific name of {health_condition[0]}')
                         new_health_conditions_list.append(
                             json.loads(health_condition[1]))
-                        continue
+                        break
                 if health_condition[1] is not None and 'alternateName' in health_condition[1]:
+                    found_alternate_name = False
                     for alternate_name in json.loads(health_condition[1])['alternateName']:
                         if original_health_condition_name.lower().strip() == alternate_name.lower().strip():
                             logger.info(
                                 f'Found {original_health_condition_name} in lookup dictionary through an alternate name of {health_condition[0]}')
                             new_health_conditions_list.append(
                                 json.loads(health_condition[1]))
-                            continue
+                            found_alternate_name = True
+                            break
+                    if found_alternate_name:
+                        break
             if not len(new_health_conditions_list):
                 logger.info(
                     f'No information found for {original_health_condition_name}')
                 new_health_conditions_list.append(doc['healthCondition'])
-
-            #     if original_health_condition_name.lower().strip() == health_condition[0].lower().strip():
-            #         logger.info(
-            #             f'Found {original_health_condition_name} in lookup dictionary')
-            #         if health_condition[1] is not None:
-            #             new_health_conditions_list.append(
-            #                 json.loads(health_condition[1]))
-            #         else:
-            #             logger.info(
-            #                 f'No information found for {original_health_condition_name}')
-            #             new_health_conditions_list.append(
-            #                 doc['healthCondition'])
-
-            #     elif health_condition[1] is not None and 'name' in health_condition[1]:
-            #         scientific_name = json.loads(
-            #             health_condition[1])['name']
-            #         if original_health_condition_name.lower().strip() == scientific_name.lower().strip():
-            #             logger.info(
-            #                 f'Found {original_health_condition_name} in lookup dictionary through the scientific name of {health_condition[0]}')
-            #             new_health_conditions_list.append(
-            #                 json.loads(health_condition[1]))
-
-            #     elif health_condition[1] is not None and 'alternateName' in health_condition[1]:
-            #         for alternate_name in json.loads(health_condition[1])['alternateName']:
-            #             if original_health_condition_name.lower().strip() == alternate_name.lower().strip():
-            #                 logger.info(
-            #                     f'Found {original_health_condition_name} in lookup dictionary through an alternate name of {health_condition[0]}')
-            #                 new_health_conditions_list.append(
-            #                     json.loads(health_condition[1]))
-            # if not len(new_health_conditions_list):
-            #     logger.info(
-            #         f'No information found for {original_health_condition_name}')
-            #     new_health_conditions_list.append(doc['healthCondition'])
 
         new_species_list = []
         if isinstance(doc.get('species', {}), list):
@@ -692,7 +668,7 @@ def transform(doc_list):
                                     f'Found {original_species_name} in lookup dictionary')
                                 new_species_list.append(
                                     json.loads(species[1]))
-                                continue
+                                break
                         if species[1] is not None and 'name' in species[1]:
                             scientific_name = json.loads(
                                 species[1])['name']
@@ -701,15 +677,19 @@ def transform(doc_list):
                                     f'Found {original_species_name} in lookup dictionary through the scientific name of {species[0]}')
                                 new_species_list.append(
                                     json.loads(species[1]))
-                                continue
+                                break
                         if species[1] is not None and 'alternateName' in species[1]:
+                            found_alternate_name = False
                             for alternate_name in json.loads(species[1])['alternateName']:
                                 if original_species_name.lower().strip() == alternate_name.lower().strip():
                                     logger.info(
                                         f'Found {original_species_name} in lookup dictionary through an alternate name of {species[0]}')
                                     new_species_list.append(
                                         json.loads(species[1]))
-                                    continue
+                                    found_alternate_name = True
+                                    break
+                            if found_alternate_name:
+                                break
                     if len(new_species_list) < species_count:
                         logger.info(
                             f'No information found for {original_species_name}')
@@ -724,7 +704,7 @@ def transform(doc_list):
                     if species[1] is not None:
                         new_species_list.append(
                             json.loads(species[1]))
-                        continue
+                        break
                 if species[1] is not None and 'name' in species[1]:
                     scientific_name = json.loads(
                         species[1])['name']
@@ -733,15 +713,19 @@ def transform(doc_list):
                             f'Found {original_species_name} in lookup dictionary through the scientific name of {species[0]}')
                         new_species_list.append(
                             json.loads(species[1]))
-                        continue
+                        break
                 if species[1] is not None and 'alternateName' in species[1]:
+                    found_alternate_name = False
                     for alternate_name in json.loads(species[1])['alternateName']:
                         if original_species_name.lower().strip() == alternate_name.lower().strip():
                             logger.info(
                                 f'Found {original_species_name} in lookup dictionary through an alternate name of {species[0]}')
                             new_species_list.append(
                                 json.loads(species[1]))
-                            continue
+                            found_alternate_name = True
+                            break
+                    if found_alternate_name:
+                        break
             if not len(new_species_list):
                 logger.info(
                     f'No information found for {original_species_name}')
@@ -758,30 +742,34 @@ def transform(doc_list):
                             logger.info(
                                 f'Found {original_species_name} in lookup dictionary')
                             if species[1] is not None:
-                                new_species_list.append(
+                                new_infectious_agent_list.append(
                                     json.loads(species[1]))
-                                continue
+                                break
                         if species[1] is not None and 'name' in species[1]:
                             scientific_name = json.loads(
                                 species[1])['name']
                             if original_species_name.lower().strip() == scientific_name.lower().strip():
                                 logger.info(
                                     f'Found {original_species_name} in lookup dictionary through the scientific name of {species[0]}')
-                                new_species_list.append(
+                                new_infectious_agent_list.append(
                                     json.loads(species[1]))
-                                continue
+                                break
                         if species[1] is not None and 'alternateName' in species[1]:
                             for alternate_name in json.loads(species[1])['alternateName']:
+                                found_alternate_name = False
                                 if original_species_name.lower().strip() == alternate_name.lower().strip():
                                     logger.info(
                                         f'Found {original_species_name} in lookup dictionary through an alternate name of {species[0]}')
-                                    new_species_list.append(
+                                    new_infectious_agent_list.append(
                                         json.loads(species[1]))
-                                    continue
-                    if len(new_species_list) < species_count:
+                                    found_alternate_name = True
+                                    break
+                            if found_alternate_name:
+                                break
+                    if len(new_infectious_agent_list) < species_count:
                         logger.info(
                             f'No information found for {original_species_name}')
-                        new_species_list.append(
+                        new_infectious_agent_list.append(
                             original_species_obj)
 
         elif original_species_name := doc.get('infectiousAgent', {}).get('name'):
@@ -790,30 +778,34 @@ def transform(doc_list):
                     logger.info(
                         f'Found {original_species_name} in lookup dictionary')
                     if species[1] is not None:
-                        new_species_list.append(
+                        new_infectious_agent_list.append(
                             json.loads(species[1]))
-                        continue
+                        break
                 if species[1] is not None and 'name' in species[1]:
                     scientific_name = json.loads(
                         species[1])['name']
                     if original_species_name.lower().strip() == scientific_name.lower().strip():
                         logger.info(
                             f'Found {original_species_name} in lookup dictionary through the scientific name of {species[0]}')
-                        new_species_list.append(
+                        new_infectious_agent_list.append(
                             json.loads(species[1]))
-                        continue
+                        break
                 if species[1] is not None and 'alternateName' in species[1]:
+                    found_alternate_name = False
                     for alternate_name in json.loads(species[1])['alternateName']:
                         if original_species_name.lower().strip() == alternate_name.lower().strip():
                             logger.info(
                                 f'Found {original_species_name} in lookup dictionary through an alternate name of {species[0]}')
-                            new_species_list.append(
+                            new_infectious_agent_list.append(
                                 json.loads(species[1]))
-                            continue
-            if not len(new_species_list):
+                            found_alternate_name = True
+                            break
+                    if found_alternate_name:
+                        break
+            if not len(new_infectious_agent_list):
                 logger.info(
                     f'No information found for {original_species_name}')
-                new_species_list.append(doc['infectiousAgent'])
+                new_infectious_agent_list.append(doc['infectiousAgent'])
 
         if new_health_conditions_list:
             doc['healthCondition'] = new_health_conditions_list
