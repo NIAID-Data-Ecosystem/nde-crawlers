@@ -1,0 +1,93 @@
+name: Source Suggestion
+description: Suggest a source for inclusion in the NIAID Discovery Ecosystem
+title: "[Source]: "
+labels: ["source"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hello! Thank you for your interest in submitting a new source and contributing to our efforts to maximize data discoverability. Please fill out all of the following information and submit so we can evaluate this new source. You will need the name and url of source       
+  - type: input
+    id: repoName
+    attributes:
+      label: Source Name
+      description: What is the name of the source?
+      placeholder: ex. Zenodo
+    validations:
+      required: True
+  - type: input
+    id: repoUrl
+    attributes:
+      label: Source URL
+      description: What is the url of the source?
+      placeholder: ex. https://zenodo.org/
+    validations:
+      required: true
+  - type: textarea
+    id: repoDescription
+    attributes:
+      label: Source Description
+      description: What is the url of the source?
+      placeholder: ex. Zenodo helps researchers receive credit by making the research results citable and through OpenAIRE integrates them into existing reporting lines to funding agencies like the European Commission. Citation information is also passed to DataCite and onto the scholarly aggregators.
+    validations:
+      required: true
+  - type: dropdown
+    id: repoAccess
+    attributes:
+      label: Source Access
+      description: Does this source require a user account login? Y/N
+      options:
+        - Yes
+        - No
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: repoFunding
+    attributes:
+      label: Source Funding
+      description: If you know information about the funder behind this source, please share it below
+      placeholder: ex. CERN
+    validations:
+      required: false
+  - type: textarea
+    id: repoRelevance
+    attributes:
+      label: Source Relevance
+      description: Explain in couple sentences how adding structured metadata to this new source could benefit the biomedical community.
+      placeholder: The rationale for including this source is...
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Additional Notes for internal use only: Submitter, ignore everything below this point 
+  - type: checkboxes
+    id: issueStatus
+    attributes:
+      label: Status
+      description: For internal use only: the status of this issue
+      options:
+        - Not yet started
+        - In process
+        - Blocked
+        - Will not include
+     validations:
+       required: false
+   - type: checkboxes
+     id: issueTaskList
+     attributes:
+       label: Source to-do list
+       options:
+         - License check- Can this source be included?
+         - Class check- Does this source have the right class of research output for inclusions?
+         - NIAID Review- Does NIAID approve of the inclusion of this source?
+         - Data access check- Have data access issues been resolved?
+         - Mapping check- Has the properties from this source been mapped to the schema?
+         - Parser check- Has the parser been written?
+         - Parsed data check- Has a sanity check on the data obtained from this source been performed?
+         - Merge data- Has the crawler/plugin been successfully integrated with the system?
+     validations:
+       required: false 
+     
