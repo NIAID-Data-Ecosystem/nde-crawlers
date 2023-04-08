@@ -78,6 +78,13 @@ body:
         - Will not include
     validations:
       required: false
+  - type: textarea
+    id: repoStatusDescription
+    attributes:
+      label: Status Description
+      description: If the status of this issue is BLOCKED or WILL NOT INCLUDE, please provide more details.
+    validations:
+      required: false
   - type: checkboxes
     id: issueTaskList
     attributes:
