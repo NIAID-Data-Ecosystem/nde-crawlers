@@ -62,7 +62,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Additional Notes for internal use only: Submitter, ignore everything below this point 
+        Additional Notes for internal use only. Submitter, ignore everything below this point 
   - type: checkboxes
     id: issueStatus
     attributes:
