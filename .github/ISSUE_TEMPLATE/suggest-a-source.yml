@@ -76,8 +76,8 @@ body:
         - In process
         - Blocked
         - Will not include
-     validations:
-       required: false
+      validations:
+        required: false
    - type: checkboxes
      id: issueTaskList
      attributes:
