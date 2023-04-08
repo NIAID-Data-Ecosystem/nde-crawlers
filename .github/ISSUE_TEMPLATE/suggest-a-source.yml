@@ -1,5 +1,5 @@
-name: Source Suggestion
-description: Suggest a source for inclusion in the NIAID Discovery Ecosystem
+name: "Source Suggestion"
+description: "Suggest a source for inclusion in the NIAID Discovery Ecosystem"
 title: "[Source]: "
 labels: ["source"]
 
@@ -12,31 +12,31 @@ body:
   id: repoName
   attributes:
     label: Source Name
-    description: What is the name of the source?
-    placeholder: ex. Zenodo
+    description: "What is the name of the source?"
+    placeholder: "ex. Zenodo"
   validations:
     required: True
 - type: input
   id: repoUrl
   attributes:
     label: Source URL
-    description: What is the url of the source?
-    placeholder: ex. https://zenodo.org/
+    description: "What is the url of the source?"
+    placeholder: "ex. https://zenodo.org/"
   validations:
     required: true
 - type: textarea
   id: repoDescription
   attributes:
     label: Source Description
-    description: What is the url of the source?
-    placeholder: ex. Zenodo helps researchers receive credit by making the research results citable and through OpenAIRE integrates them into existing reporting lines to funding agencies like the European Commission. Citation information is also passed to DataCite and onto the scholarly aggregators.
+    description: "What is the url of the source?"
+    placeholder: "ex. Zenodo helps researchers receive credit by making the research results citable and through OpenAIRE integrates them into existing reporting lines to funding agencies like the European Commission. Citation information is also passed to DataCite and onto the scholarly aggregators."
   validations:
     required: true
 - type: dropdown
   id: repoAccess
   attributes:
     label: Source Access
-    description: Does this source require a user account login? Y/N
+    description: "Does this source require a user account login? Y/N"
     options:
       - Yes
       - No
@@ -47,16 +47,16 @@ body:
   id: repoFunding
   attributes:
     label: Source Funding
-    description: If you know information about the funder behind this source, please share it below
-    placeholder: ex. CERN
+    description: "If you know information about the funder behind this source, please share it below"
+    placeholder: "ex. CERN"
   validations:
     required: false
 - type: textarea
   id: repoRelevance
   attributes:
     label: Source Relevance
-    description: Explain in couple sentences how adding structured metadata to this new source could benefit the biomedical community.
-    placeholder: The rationale for including this source is...
+    description: "Explain in couple sentences how adding structured metadata to this new source could benefit the biomedical community."
+    placeholder: "The rationale for including this source is..."
   validations:
     required: true
 - type: markdown
@@ -82,7 +82,7 @@ body:
    id: issueTaskList
    attributes:
      label: Source to-do list
-     description: For internal use only. Assignee, check off the tasks as you complete them
+     description: "For internal use only. Assignee, check off the tasks as you complete them"
      options:
        - label: License check- Can this source be included?
        - label: Class check- Does this source have the right class of research output for inclusions?
