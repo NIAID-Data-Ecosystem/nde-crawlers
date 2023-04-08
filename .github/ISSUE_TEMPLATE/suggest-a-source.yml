@@ -63,7 +63,7 @@ body:
     attributes:
       value: |
         Additional Notes for internal use only. Submitter, ignore everything below this point 
-  - type: checkboxes
+  - type: dropdown
     id: issueStatus
     attributes:
       label: Status
@@ -81,14 +81,12 @@ body:
        label: Source to-do list
        description: For internal use only. Assignee, check off the tasks as you complete them
        options:
-         - License check- Can this source be included?
-         - Class check- Does this source have the right class of research output for inclusions?
-         - NIAID Review- Does NIAID approve of the inclusion of this source?
-         - Data access check- Have data access issues been resolved?
-         - Mapping check- Has the properties from this source been mapped to the schema?
-         - Parser check- Has the parser been written?
-         - Parsed data check- Has a sanity check on the data obtained from this source been performed?
-         - Merge data- Has the crawler/plugin been successfully integrated with the system?
-     validations:
-       required: false 
+         - label: License check- Can this source be included?
+         - label: Class check- Does this source have the right class of research output for inclusions?
+         - label: NIAID Review- Does NIAID approve of the inclusion of this source?
+         - label: Data access check- Have data access issues been resolved?
+         - label: Mapping check- Has the properties from this source been mapped to the schema?
+         - label: Parser check- Has the parser been written?
+         - label: Parsed data check- Has a sanity check on the data obtained from this source been performed?
+         - label: Merge data- Has the crawler/plugin been successfully integrated with the system?
      
