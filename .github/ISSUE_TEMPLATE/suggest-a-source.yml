@@ -66,12 +66,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        Submitter, ignore everything below this point 
+        "#### Submitter, ignore everything below this point" 
   - type: dropdown
     id: issueStatus
     attributes:
-      label: Source Status
-      description: For internal use only. Assignee, please select the status of this issue
+      label: For internal use only. Assignee, please select the status of this issue
       options:
         - Not yet started
         - In process
