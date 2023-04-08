@@ -62,11 +62,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        Additional Notes for internal use only. Submitter, ignore everything below this point 
+        "## Additional Notes for internal use only. Submitter, ignore everything below this point" 
+  - type: markdown
+    attributes:
+      value: |
+        Submitter, ignore everything below this point 
   - type: dropdown
     id: issueStatus
     attributes:
-      label: Status
+      label: Source Status
       description: For internal use only. Assignee, please select the status of this issue
       options:
         - Not yet started
