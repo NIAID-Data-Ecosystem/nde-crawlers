@@ -67,7 +67,7 @@ body:
     id: issueStatus
     attributes:
       label: Status
-      description: For internal use only: the status of this issue
+      description: For internal use only. Assignee, please select the status of this issue
       options:
         - Not yet started
         - In process
@@ -79,6 +79,7 @@ body:
      id: issueTaskList
      attributes:
        label: Source to-do list
+       description: For internal use only. Assignee, check off the tasks as you complete them
        options:
          - License check- Can this source be included?
          - Class check- Does this source have the right class of research output for inclusions?
