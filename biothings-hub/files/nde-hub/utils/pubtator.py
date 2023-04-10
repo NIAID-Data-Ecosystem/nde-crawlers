@@ -7,6 +7,7 @@ import sqlite3
 import logging
 import datetime
 
+from .date import add_date
 from Bio import Entrez
 from biothings.utils.dataload import tab2dict
 from config import GEO_EMAIL, logger
@@ -113,7 +114,7 @@ MANUAL_HEALTH_CONDITIONS = [
     }
 ]
 
-
+@add_date
 def standardize_data(data):
     logger.info('Standardizing data...')
     if isinstance(data, str):

@@ -5,6 +5,7 @@ import sqlite3
 import re
 
 from config import logger
+from .date import add_date
 
 DB_PATH = 'data/nde-hub/standardizers/funding_lookup/funding_lookup.db'
 
@@ -81,7 +82,7 @@ def sqlite_lookup(funding_id):
         logger.info(f'No funding information found for {funding_id}.')
         return None
 
-
+@add_date
 def standardize_funding(data):
     """
     Standardize funding information for all documents in a data source.

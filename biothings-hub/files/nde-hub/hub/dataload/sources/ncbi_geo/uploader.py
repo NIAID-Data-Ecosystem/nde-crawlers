@@ -13,9 +13,8 @@ class NCBI_Geo_Uploader(NDESourceUploader):
         }
     }
 
+    @check_schema
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
         for doc in docs:
-            # check schema
-            check_schema(doc)
             yield doc

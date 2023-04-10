@@ -7,11 +7,10 @@ from utils.pubtator import standardize_data
 class VEuPathDB_Uploader(NDESourceUploader):
     name = "veupathdb"
 
+    @check_schema
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
 
         pubtator_docs = standardize_data(docs)
         for doc in pubtator_docs:
-            # check schema
-            check_schema(doc)
             yield doc

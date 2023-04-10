@@ -1,6 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.pubtator import standardize_data
 from utils.funding_helper import standardize_funding
+from utils.utils import check_schema
 
 
 class ImmPortUploader(NDESourceUploader):
@@ -12,6 +13,7 @@ class ImmPortUploader(NDESourceUploader):
         }
     }
 
+    @check_schema
     def load_data(self, data_folder):
         pubtator_docs = standardize_data(data_folder)
         funding_docs = standardize_funding(pubtator_docs)

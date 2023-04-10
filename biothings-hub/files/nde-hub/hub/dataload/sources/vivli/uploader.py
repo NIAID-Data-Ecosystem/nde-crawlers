@@ -1,5 +1,6 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.pubtator import standardize_data
+from utils.utils import check_schema
 
 
 class VivliUploader(NDESourceUploader):
@@ -11,6 +12,7 @@ class VivliUploader(NDESourceUploader):
         }
     }
 
+    @check_schema
     def load_data(self, data_folder):
         pubtator_docs = standardize_data(data_folder)
         for doc in pubtator_docs:

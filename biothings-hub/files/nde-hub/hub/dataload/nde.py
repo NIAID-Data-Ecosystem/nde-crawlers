@@ -143,14 +143,12 @@ class NDEFileSystemDumper(BaseDumper):
 class NDESourceUploader(BaseSourceUploader):
     storage_class = IgnoreDuplicatedStorage
 
+    @check_schema
+    @add_date
     def load_data(self, data_folder):
         with open(os.path.join(data_folder, 'data.ndjson'), 'rb') as f:
             for line in f:
                 doc = orjson.loads(line)
-                # add date transformation here and have the most recent date of all of the dates
-                doc = add_date(doc)
-                # check schema
-                check_schema(doc)
                 yield doc
 
     @classmethod

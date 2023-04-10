@@ -1,7 +1,9 @@
 import functools
 import time
 import traceback
+from typing import Generator
 from config import logger
+
 
 def retry(retry_num, retry_sleep_sec):
     """
@@ -30,16 +32,22 @@ def retry(retry_num, retry_sleep_sec):
 
     return decorator
 
-def check_schema(record):
+
+def check_schema(func: Generator[dict]) -> Generator[dict]:
     """
-    check record before inserting into MongoDb
-    :param record: record to be checked
+    check doc before inserting into MongoDb
+    :param func: a generator function that yields documents
     """
-    
-    assert isinstance(record, dict), "record is not a dict"
-    assert record.get("_id"), "_id is None"
-    assert record.get("@type"), "@type is None"
-    assert record.get("includedInDataCatalog"), "includedInDataCatalog is None"
-    if coa := record.get("conditionsOfAccess"):
-        enum = ["Open", "Restricted", "Closed", "Embargoed"]
-        assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        gen = func(*args, **kwargs)
+        for doc in gen:
+            assert isinstance(doc, dict), "doc is not a dict"
+            assert doc.get("_id"), "_id is None"
+            assert doc.get("@type"), "@type is None"
+            assert doc.get("includedInDataCatalog"), "includedInDataCatalog is None"
+            if coa := doc.get("conditionsOfAccess"):
+                enum = ["Open", "Restricted", "Closed", "Embargoed"]
+                assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
+            yield doc
+    return wrapper
