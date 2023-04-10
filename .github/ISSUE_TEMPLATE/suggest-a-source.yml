@@ -28,7 +28,7 @@ body:
     id: repoDescription
     attributes:
       label: Source Description
-      description: What is the url of the source?
+      description: Please provide a description of the source.
       placeholder: ex. Zenodo helps researchers receive credit by making the research results citable and through OpenAIRE integrates them into existing reporting lines to funding agencies like the European Commission. Citation information is also passed to DataCite and onto the scholarly aggregators."
     validations:
       required: true
