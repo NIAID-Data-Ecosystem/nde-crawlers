@@ -67,15 +67,15 @@ body:
     attributes:
       value: |
         Submitter, ignore everything below this point.
-  - type: dropdown
+  - type: checkboxes
     id: issueStatus
     attributes:
       label: For internal use only. Assignee, please select the status of this issue
       options:
-        - Not yet started
-        - In process
-        - Blocked
-        - Will not include
+        - label: Not yet started
+        - label: In process
+        - label: Blocked
+        - label: Will not include
     validations:
       required: false
   - type: textarea
