@@ -1,7 +1,7 @@
 import functools
 import time
 import traceback
-from typing import Generator
+from typing import Generator, Iterable, Dict
 from config import logger
 
 
@@ -33,7 +33,7 @@ def retry(retry_num, retry_sleep_sec):
     return decorator
 
 
-def check_schema(func: Generator[dict]) -> Generator[dict]:
+def check_schema(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
     """
     check doc before inserting into MongoDb
     :param func: a generator function that yields documents

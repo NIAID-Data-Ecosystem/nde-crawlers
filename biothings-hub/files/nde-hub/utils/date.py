@@ -1,10 +1,10 @@
 import datetime
 import functools
-from typing import Generator
+from typing import Generator, Iterable, Dict
 from biothings import config
 
 
-def add_date(func: Generator[dict]) -> Generator[dict]:
+def add_date(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
     """ Decorator to add a date field to a document.
         The date field is the latest date from the following fields:
         date, dateCreated, dateModified, datePublished
