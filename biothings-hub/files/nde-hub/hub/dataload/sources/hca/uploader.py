@@ -1,6 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
-from utils.pmid_helper import load_pmid_ctfd
+from utils.pubtator import standardize_data
+from utils.utils import check_schema
 
 # Example __metadata__ dictionary:
 # <SOURCE_NAME> = https://api.data.niaid.nih.gov/v1/metadata
@@ -28,3 +29,8 @@ class HCA_Uploader(NDESourceUploader):
             }
         }
     }
+    @check_schema
+    def load_data(self, data_folder):
+        pubtator_docs = standardize_data(data_folder)
+        for doc in pubtator_docs:
+            yield doc
