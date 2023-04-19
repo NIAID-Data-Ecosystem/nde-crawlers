@@ -111,8 +111,129 @@ MANUAL_HEALTH_CONDITIONS = [
             "Malignant Pleural Mesothelioma",
             "Mesothelioma, Malignant Pleural"
         ]
+    },
+    {
+        "identifier": "D003863",
+        "inDefinedTermSet": "MESH",
+        "url": "http://id.nlm.nih.gov/mesh/D003863",
+        "originalName": "depression",
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": "2023-04-02"
+        },
+        "name": "Depression",
+        "alternateName": [
+            "Depressive Symptoms",
+            "Emotional Depression"
+        ]
+    },
+    {
+        "identifier": "D000074285",
+        "inDefinedTermSet": "MESH",
+        "url": "http://id.nlm.nih.gov/mesh/D000074285",
+        "originalName": "Smoker",
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": "2023-04-02"
+        },
+        "name": "Smokers",
+        "alternateName": [
+            "Smokers, Non-Tobacco Products",
+            "Smokers, Tobacco",
+            "Vapers",
+        ]
+    },
+    {
+        "identifier": "D013167",
+        "inDefinedTermSet": "MESH",
+        "url": "http://id.nlm.nih.gov/mesh/D013167",
+        "originalName": "axial spondyloarthritis",
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": "2023-04-12",
+        },
+        "name": "Spondylitis, Ankylosing",
+        "alternateName": [
+            "Ankylosing Spondylarthritis",
+            "Ankylosing Spondylitis",
+            "Ankylosing Spondyloarthritis",
+            "Bechterew Disease",
+            "Bechterew''s Disease",
+            "Marie-Struempell Disease",
+            "Rheumatoid Spondylitis",
+            "Spondylarthritis Ankylopoietica",
+            "Spondylitis Ankylopoietica",
+            "Spondyloarthritis Ankylopoietica",
+        ],
+    },
+    {
+        "identifier": "D003924",
+        "inDefinedTermSet": "MESH",
+        "url": "http://id.nlm.nih.gov/mesh/D003924",
+        "originalName": "Type 2 Diabetes Mellitus",
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": "2023-04-12",
+        },
+        "name": "Diabetes Mellitus, Type 2",
+        "alternateName": [
+            "Diabetes Mellitus, Adult-Onset",
+            "Diabetes Mellitus, Ketosis-Resistant",
+            "Diabetes Mellitus, Maturity-Onset",
+            "Diabetes Mellitus, Non Insulin Dependent",
+            "Diabetes Mellitus, Non-Insulin-Dependent",
+            "Diabetes Mellitus, Noninsulin Dependent",
+            "Diabetes Mellitus, Noninsulin-Dependent",
+            "Diabetes Mellitus, Slow-Onset",
+            "Diabetes Mellitus, Stable",
+            "Diabetes Mellitus, Type II",
+            "MODY",
+            "Maturity-Onset Diabetes Mellitus",
+            "Maturity-Onset Diabetes",
+            "NIDDM",
+            "Noninsulin-Dependent Diabetes Mellitus",
+            "Type 2 Diabetes",
+            "Type 2 Diabetes Mellitus",
+        ],
+    },
+    {
+        "identifier": "D000078822",
+        "inDefinedTermSet": "MESH",
+        "url": "http://id.nlm.nih.gov/mesh/D000078822",
+        "originalName": "Ex-smoker",
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": "2023-04-12",
+        },
+        "name": "Ex-Smokers",
+        "alternateName": ["Exsmokers"],
+    },
+    {
+        "identifier": "D006967",
+        "inDefinedTermSet": "MESH",
+        "url": "http://id.nlm.nih.gov/mesh/D006967",
+        "originalName": "allergy",
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": "2023-04-12",
+        },
+        "name": "Hypersensitivity",
+        "alternateName": ["Allergic Reaction", "Allergy"],
     }
 ]
+
 
 @add_date
 def standardize_data(data):
@@ -231,8 +352,8 @@ def get_details(original_name, type, identifier):
             identifier = 'MESH:D006262'
         elif 'asthma' in original_name.lower():
             info = requests.get(
-                'https://id.nlm.nih.gov/mesh/lookup/details?descriptor=D004802')
-            identifier = 'MESH:D004802'
+                'https://id.nlm.nih.gov/mesh/lookup/details?descriptor=D001249')
+            identifier = 'MESH:D001249'
         else:
             info = requests.get(
                 f'https://id.nlm.nih.gov/mesh/lookup/details?descriptor={identifier.split(":")[1]}')
