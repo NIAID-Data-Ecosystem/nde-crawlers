@@ -23,4 +23,5 @@ size,distribution.contentSize
 datasetgroup,isRelatedTo
 toollink,isBasedOn
 tool,isBasedOn
+protocol,isBasedOn.url
 protein,keywords
