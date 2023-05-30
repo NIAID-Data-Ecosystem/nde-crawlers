@@ -1,3 +1,2 @@
--e git+https://github.com/biothings/biothings.api@0.11.x#egg=biothings[hub]    #remember to change to python 3.8 when using this branch
-#-e git+https://github.com/newgene/biothings.api.git@add-docker-container-dumper#egg=biothings[hub] #remember to change to python 3.10 when using this branch
+-e git+https://github.com/biothings/biothings.api@0.12.x#egg=biothings[hub,docker] 
 biopython>=1.79     # for pmids to make citation/funding in utils (ncbi_geo crawler)

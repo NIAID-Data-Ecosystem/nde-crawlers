@@ -303,18 +303,40 @@ services:
       - xpack.security.transport.ssl.enabled=false
     ports:
       - "9200:9200"
+  # socat is used to expose the docker socket from local to the hub container
+  # Container has no permission to access local docker socket so we need to create a tcp port to expose it
+  # https://forums.docker.com/t/mounting-using-var-run-docker-sock-in-a-container-not-running-as-root/34390/7
+  socat:
+    image: alpine/socat
+    # command: tcp-listen:2375,fork,reuseaddr,keepalive=1,keepidle=60,keepintvl=10,keepcnt=3 unix-connect:/var/run/docker.sock
+    command: tcp4-listen:2375,fork,reuseaddr unix-client:/var/run/docker.sock
+    user: root
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    ports:
+      - "2375:2375"
   nde-hub:
     build:
       context: biothings-hub
       dockerfile: Dockerfile
       args:
-        PYTHON_VERSION: "3.8"
+        PYTHON_VERSION: "3.10"
+    # May need to configure this if you get timeout errors after 2 hours. 
+    # sysctls:
+    #   net.ipv4.tcp_keepalive_intvl: '45'
+    #   net.ipv4.tcp_keepalive_probes: '15'
+    #   net.ipv4.tcp_keepalive_time: '7200'
+    # privileged: true
     depends_on:
       - "mongodb"
       - "elasticsearch"
+      - "socat"
     environment:
       - ES_HOST=elasticsearch:9200
       - MONGO_HOST=mongodb:27017
+      - DOCKER_HOST=socat:2375
     volumes:
       # Update this to wherever you want VS Code to mount the folder of your project
       - data:/data
