@@ -11,7 +11,7 @@ class LINCSUploader(NDESourceUploader):
                 "identifier": "LINCS",
                 "name": "BD2K-LINCS DCIC",
                 "schema": get_source_data(name),
-                "url": "https://lincsportal.ccs.miami.edu/"
+                "url": "https://lincsportal.ccs.miami.edu/",
             }
         }
     }

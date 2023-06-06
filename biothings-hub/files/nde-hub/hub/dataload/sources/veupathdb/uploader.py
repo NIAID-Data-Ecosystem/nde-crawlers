@@ -1,7 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.pmid_helper import load_pmid_ctfd
-from utils.utils import check_schema
 from utils.pubtator import standardize_data
+from utils.utils import check_schema
 
 
 class VEuPathDB_Uploader(NDESourceUploader):

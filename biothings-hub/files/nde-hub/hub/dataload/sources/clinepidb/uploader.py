@@ -1,8 +1,9 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.pmid_helper import load_pmid_ctfd
 from utils.csv_helper import get_source_data
-from utils.utils import check_schema
+from utils.pmid_helper import load_pmid_ctfd
 from utils.pubtator import standardize_data
+from utils.utils import check_schema
+
 
 class ClinEpiDB_Uploader(NDESourceUploader):
     name = "clinepidb"
@@ -13,7 +14,7 @@ class ClinEpiDB_Uploader(NDESourceUploader):
                 "identifier": "ClinEpiDB",
                 "name": "ClinEpiDB",
                 "schema": get_source_data(name),
-                "url": "https://clinepidb.org/ce/app"
+                "url": "https://clinepidb.org/ce/app",
             }
         }
     }

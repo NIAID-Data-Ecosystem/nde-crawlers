@@ -268,10 +268,7 @@ def parse():
         trial["_id"] = "accessclinicaldata_" + trial["identifier"][0]
         trial["includedInDataCatalog"] = {"name": "AccessClinicalData@NIAID"}
         trial["@type"] = "Dataset"
-        trial["url"] = (
-            "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/"
-            + trial["identifier"][0]
-        )
+        trial["url"] = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + trial["identifier"][0]
 
         # getting rid of None values
         result = {k: v for k, v in trial.items() if v is not None}
@@ -284,9 +281,7 @@ def parse():
         count += 1
 
         if len(missing_properties.keys()) > 0:
-            logger.warning(
-                "Missing type transformation: {}".format(str(missing_properties.keys()))
-            )
+            logger.warning("Missing type transformation: {}".format(str(missing_properties.keys())))
         logger.info("Parsed %s records", count)
 
     logger.info("Finished Parsing. Total Records: %s", count)

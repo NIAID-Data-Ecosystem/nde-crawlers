@@ -25,7 +25,7 @@ class VDJ_Uploader(NDESourceUploader):
                 "identifier": "VDJServer",
                 "name": "vdj",
                 "schema": get_source_data(name),
-                "url": "https://vdj-staging.tacc.utexas.edu/community/"
+                "url": "https://vdj-staging.tacc.utexas.edu/community/",
             }
         }
     }

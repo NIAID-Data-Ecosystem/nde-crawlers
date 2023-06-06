@@ -1,22 +1,23 @@
+import datetime
 import json
+
 # import time
 import logging
-import datetime
 
-# from sickle import Sickle
-from sql_database import NDEDatabase
 # from xml.etree import ElementTree
 from oai_helper import oai_helper
 
+# from sickle import Sickle
+from sql_database import NDEDatabase
+
 logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
-logger = logging.getLogger('nde-logger')
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("nde-logger")
 
 
 class Figshare(NDEDatabase):
-    SQL_DB = 'figshare.db'
+    SQL_DB = "figshare.db"
     EXPIRE = datetime.timedelta(days=90)
 
     # sickle = Sickle('https://api.figshare.com/v2/oai',
@@ -68,7 +69,7 @@ class Figshare(NDEDatabase):
         count = 0
         for record in records:
             data = json.loads(record[1])
-            metadata = data['metadata']
+            metadata = data["metadata"]
 
             # testing for missing properties
             # for key in metadata:
@@ -83,95 +84,96 @@ class Figshare(NDEDatabase):
                 #     logger.info(f'Missing {missing}')
 
             output = {
-                "includedInDataCatalog": {"name": "Figshare", 'versionDate': datetime.date.today().isoformat(), 'url': "https://figshare.com"},
+                "includedInDataCatalog": {
+                    "name": "Figshare",
+                    "versionDate": datetime.date.today().isoformat(),
+                    "url": "https://figshare.com",
+                },
             }
-            if title := metadata.get('title'):
-                output['name'] = title[0]
+            if title := metadata.get("title"):
+                output["name"] = title[0]
 
-            if creators := metadata.get('creator'):
+            if creators := metadata.get("creator"):
                 creator_list = []
                 for creator in creators:
                     creator_list.append({"name": creator})
-                output['author'] = creator_list
+                output["author"] = creator_list
 
             # TODO
             # checking if covid related article for outbreak api
-                #     for keyword in subject:
-                #         if keyword.lower() in covid_keywords:
-                #             output['outbreakapi'] = True
-                #         else:
-                #             output['outbreakapi'] = False
-            if subject := metadata.get('subject'):
-                output['keywords'] = subject
+            #     for keyword in subject:
+            #         if keyword.lower() in covid_keywords:
+            #             output['outbreakapi'] = True
+            #         else:
+            #             output['outbreakapi'] = False
+            if subject := metadata.get("subject"):
+                output["keywords"] = subject
 
-            if description := metadata.get('description'):
-                output['description'] = description[0]
+            if description := metadata.get("description"):
+                output["description"] = description[0]
             if description == None:
-                if abstract := metadata.get('abstract'):
-                    output['description'] = abstract
+                if abstract := metadata.get("abstract"):
+                    output["description"] = abstract
 
-            if date := metadata.get('date'):
-                output['dateModified'] = datetime.datetime.strptime(
-                    date[0], '%Y-%m-%dT%H:%M:%S%z').strftime('%Y-%m-%d')
+            if date := metadata.get("date"):
+                output["dateModified"] = datetime.datetime.strptime(date[0], "%Y-%m-%dT%H:%M:%S%z").strftime("%Y-%m-%d")
 
             # sdPublsher = publisher > instituion/department > figshare
-            if publisher := metadata.get('publisher'):
-                output['sdPublisher'] = {'name': publisher[0]}
+            if publisher := metadata.get("publisher"):
+                output["sdPublisher"] = {"name": publisher[0]}
             if publisher == None:
-                institution = metadata.get('institution')
-                department = metadata.get('department')
+                institution = metadata.get("institution")
+                department = metadata.get("department")
                 if institution and department:
                     if institution[0] != department[0]:
-                        output['sdPublisher'] = {
-                            'name': institution[0] + '/' + department[0]}
+                        output["sdPublisher"] = {"name": institution[0] + "/" + department[0]}
                     else:
-                        output['sdPublisher'] = {'name': institution[0]}
+                        output["sdPublisher"] = {"name": institution[0]}
                 else:
-                    output['sdPublisher'] = {'name': 'figshare'}
+                    output["sdPublisher"] = {"name": "figshare"}
 
-            if type := metadata.get('type'):
+            if type := metadata.get("type"):
                 if len(type) > 1:
                     if type[0] == type[1]:
-                        if type[0] == 'Software':
-                            output['@type'] = 'ComputationalTool'
+                        if type[0] == "Software":
+                            output["@type"] = "ComputationalTool"
                         else:
-                            output['@type'] = type[0]
+                            output["@type"] = type[0]
                     else:
-                        output['@type'] = 'Collection'
-                        output['hasPart'] = {'@type': type}
+                        output["@type"] = "Collection"
+                        output["hasPart"] = {"@type": type}
                 else:
-                    output['@type'] = 'Collection'
-                    output['hasPart'] = {'@type': type[0]}
+                    output["@type"] = "Collection"
+                    output["hasPart"] = {"@type": type[0]}
 
-            if identifier := metadata.get('identifier'):
+            if identifier := metadata.get("identifier"):
                 for el in identifier:
                     # [None, 'https://ndownloader.figshare.com/files/35101450']
                     if el is not None:
-                        if 'ndownloader' in el:
-                            output['distribution'] = {'url': el}
-                        elif '10.' in el:
-                            output['doi'] = el
+                        if "ndownloader" in el:
+                            output["distribution"] = {"url": el}
+                        elif "10." in el:
+                            output["doi"] = el
             if identifier == None:
-                if reference := metadata.get('isReferencedBy'):
-                    output['doi'] = reference[0]
+                if reference := metadata.get("isReferencedBy"):
+                    output["doi"] = reference[0]
 
-            if language := metadata.get('language'):
-                output['language'] = language[0]
-            if relation := metadata.get('relation'):
-                output['url'] = relation[0]
-                output['_id'] = 'Figshare_' + relation[0].split('/')[-1]
-                output['identifier'] = relation[0].split('/')[-1]
-            if license := metadata.get('license'):
-                output['license'] = license[0]
-            if issued := metadata.get('issued'):
-                output['datePublished'] = issued[0]
-            if sponsor := metadata.get('sponsor'):
-                grantnumber = metadata.get('grantnumber')
+            if language := metadata.get("language"):
+                output["language"] = language[0]
+            if relation := metadata.get("relation"):
+                output["url"] = relation[0]
+                output["_id"] = "Figshare_" + relation[0].split("/")[-1]
+                output["identifier"] = relation[0].split("/")[-1]
+            if license := metadata.get("license"):
+                output["license"] = license[0]
+            if issued := metadata.get("issued"):
+                output["datePublished"] = issued[0]
+            if sponsor := metadata.get("sponsor"):
+                grantnumber = metadata.get("grantnumber")
                 if grantnumber:
-                    output['funding'] = {'funder': {
-                        'name': sponsor[0], 'identifier': grantnumber[0]}}
+                    output["funding"] = {"funder": {"name": sponsor[0], "identifier": grantnumber[0]}}
                 else:
-                    output['funding'] = {'funder': {'name': sponsor[0]}}
+                    output["funding"] = {"funder": {"name": sponsor[0]}}
 
             yield output
 

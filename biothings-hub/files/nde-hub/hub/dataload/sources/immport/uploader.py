@@ -1,6 +1,6 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.pubtator import standardize_data
 from utils.funding_helper import standardize_funding
+from utils.pubtator import standardize_data
 from utils.utils import check_schema
 
 
@@ -9,7 +9,7 @@ class ImmPortUploader(NDESourceUploader):
     __metadata__ = {
         "src_meta": {
             "url": "https://www.immport.org/shared/home",
-            "license_url": "https://docs.immport.org/home/agreement/"
+            "license_url": "https://docs.immport.org/home/agreement/",
         }
     }
 

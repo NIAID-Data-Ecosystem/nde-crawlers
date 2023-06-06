@@ -1,6 +1,0 @@
-requests
-scrapy>=2.5.0
-selenium
-scrapy-selenium
-orjson
-extruct

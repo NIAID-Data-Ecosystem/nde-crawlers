@@ -25,7 +25,7 @@ class Qiita_Uploader(NDESourceUploader):
                 "identifier": "Qiita",
                 "name": "Qiita",
                 "schema": get_source_data(name),
-                "url": "https://qiita.ucsd.edu/"
+                "url": "https://qiita.ucsd.edu/",
             }
         }
     }

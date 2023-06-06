@@ -25,10 +25,11 @@ class HCA_Uploader(NDESourceUploader):
                 "identifier": "HCA",
                 "name": "Human Cell Atlas",
                 "schema": get_source_data(name),
-                "url": "https://www.humancellatlas.org/"
+                "url": "https://www.humancellatlas.org/",
             }
         }
     }
+
     @check_schema
     def load_data(self, data_folder):
         pubtator_docs = standardize_data(data_folder)

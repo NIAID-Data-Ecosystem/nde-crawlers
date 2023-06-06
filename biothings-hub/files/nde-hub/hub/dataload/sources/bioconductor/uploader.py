@@ -23,7 +23,7 @@ class Bioconductor_Uploader(NDESourceUploader):
                 "identifier": "Bioconductor",
                 "name": "Bioconductor",
                 "schema": get_source_data(name),
-                "url": "https://bioconductor.org/"
+                "url": "https://bioconductor.org/",
             }
         }
     }

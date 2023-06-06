@@ -1,6 +1,6 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.pmid_helper import load_pmid_ctfd
 from utils.csv_helper import get_source_data
+from utils.pmid_helper import load_pmid_ctfd
 from utils.utils import check_schema
 
 # Example __metadata__ dictionary:
@@ -25,7 +25,7 @@ class dashUploader(NDESourceUploader):
                 "identifier": "NICHD DASH",
                 "name": "NICHD Data and Specimen Hub (DASH)",
                 "schema": get_source_data(name),
-                "url": "https://dash.nichd.nih.gov/"
+                "url": "https://dash.nichd.nih.gov/",
             }
         }
     }

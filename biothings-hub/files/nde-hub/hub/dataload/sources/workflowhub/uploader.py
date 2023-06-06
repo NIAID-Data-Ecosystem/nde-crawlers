@@ -24,7 +24,7 @@ class WorkflowHub_Uploader(NDESourceUploader):
                 "identifier": "WorkflowHub",
                 "name": "WorkflowHub",
                 "schema": get_source_data(name),
-                "url": "https://workflowhub.eu/"
+                "url": "https://workflowhub.eu/",
             }
         }
     }

@@ -1,7 +1,8 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.pmid_helper import load_pmid_ctfd
-from utils.utils import check_schema
 from utils.pubtator import standardize_data
+from utils.utils import check_schema
+
 
 class NCBI_Geo_Uploader(NDESourceUploader):
     name = "ncbi_geo"
@@ -9,7 +10,7 @@ class NCBI_Geo_Uploader(NDESourceUploader):
     __metadata__ = {
         "src_meta": {
             "url": "https://www.ncbi.nlm.nih.gov/geo/browse/",
-            "license_url": "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+            "license_url": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         }
     }
 

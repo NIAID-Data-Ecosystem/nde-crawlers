@@ -25,7 +25,7 @@ class Biocontainers_Uploader(NDESourceUploader):
                 "identifier": "BioContainers",
                 "name": "BioContainers",
                 "schema": get_source_data(name),
-                "url": "https://biocontainers.pro/"
+                "url": "https://biocontainers.pro/",
             }
         }
     }

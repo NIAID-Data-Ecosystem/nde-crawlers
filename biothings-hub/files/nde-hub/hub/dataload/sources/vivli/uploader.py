@@ -8,7 +8,7 @@ class VivliUploader(NDESourceUploader):
     __metadata__ = {
         "src_meta": {
             "url": "https://search.vivli.org/",
-            "license_url": "https://vivli.org/resources/vivli-data-use-agreement/"
+            "license_url": "https://vivli.org/resources/vivli-data-use-agreement/",
         }
     }
 

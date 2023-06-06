@@ -1,13 +1,12 @@
-import sqlite3
 import datetime
 import logging
 import os
+import sqlite3
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(name)s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
-logger = logging.getLogger('nde-logger')
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("nde-logger")
 
 
 class NDEDatabase:
@@ -23,33 +22,31 @@ class NDEDatabase:
         # database name example: zenodo.db
         self.SQL_DB = self.SQL_DB or sql_db
         # parses directory name from database name
-        self.DIR_NAME = self.SQL_DB.split('.')[0]
+        self.DIR_NAME = self.SQL_DB.split(".")[0]
         # puts directory into cache folder
-        self.path = os.path.join('/cache/', self.DIR_NAME)
+        self.path = os.path.join("/cache/", self.DIR_NAME)
         # make the directory
         os.makedirs(self.path, exist_ok=True)
 
     def is_cache_expired(self):
-        """ Uses the SQL_DB to connect to a sqlite db to check if the cache is expired in metadata table
-            Returns:
-                True: if cache does not exist or is expired, False otherwise
+        """Uses the SQL_DB to connect to a sqlite db to check if the cache is expired in metadata table
+        Returns:
+            True: if cache does not exist or is expired, False otherwise
         """
 
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
         c = con.cursor()
 
         # SQLite table names are case insensitive, but comparison is case sensitive by default.
         # To make this work properly in all cases you need to add COLLATE NOCASE.
-        c.execute(
-            """SELECT name FROM sqlite_master WHERE type='table' AND name='metadata' COLLATE NOCASE""")
+        c.execute("""SELECT name FROM sqlite_master WHERE type='table' AND name='metadata' COLLATE NOCASE""")
 
         # if the table exists check date_created if not return True
         if c.fetchone():
             c.execute("""SELECT date FROM metadata WHERE name='date_created'""")
             date_created = c.fetchall()
-            assert len(
-                date_created) <= 1, "There is more than one date_created."
+            assert len(date_created) <= 1, "There is more than one date_created."
             date_created = datetime.date.fromisoformat(date_created[0][0])
             today = datetime.date.today()
             # compare if date is expired
@@ -63,15 +60,17 @@ class NDEDatabase:
         """Creates a new tables: metadata and cache. Upserts two entries: date_created, date_updated in metadata table"""
 
         # Read comments in base class for the first part
-        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
         c = con.cursor()
 
         logger.info("Cache does not exist or is expired. Creating new cache.")
 
-        c.execute("""CREATE TABLE IF NOT EXISTS metadata (
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS metadata (
                 name text NOT NULL PRIMARY KEY,
                 date text NOT NULL
-                )""")
+                )"""
+        )
 
         today = datetime.date.today().isoformat()
 
@@ -80,21 +79,29 @@ class NDEDatabase:
 
         # upserting in sqlite https://www.sqlite.org/lang_UPSERT.html
         # https://stackoverflow.com/questions/62274285/sqlite3-programmingerror-incorrect-number-of-bindings-supplied-the-current-stat
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
+        c.execute(
+            """INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_created', today))
+                  """,
+            ("date_created", today),
+        )
 
         # add date_updated
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
+        c.execute(
+            """INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_updated', today))
+                  """,
+            ("date_updated", today),
+        )
         con.commit()
 
         c.execute("DROP TABLE IF EXISTS cache")
-        c.execute("""CREATE TABLE cache (
+        c.execute(
+            """CREATE TABLE cache (
                       _id text NOT NULL PRIMARY KEY,
                       data text NOT NULL
-                     )""")
+                     )"""
+        )
         con.commit()
 
         con.close()
@@ -111,7 +118,7 @@ class NDEDatabase:
         """Helper method for update_cache. Gets the date_updated value from metadata table."""
 
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
         c = con.cursor()
 
         # checks date_updated
@@ -128,13 +135,11 @@ class NDEDatabase:
         """Helper method for update_cache. Gets the last record from cache table."""
 
         # connect to database
-        con = sqlite3.connect(self.path +
-                              '/' + self.SQL_DB)
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
         c = con.cursor()
 
         # checks last record
-        c.execute(
-            "SELECT * FROM cache WHERE _id=(SELECT max(_id) FROM cache)")
+        c.execute("SELECT * FROM cache WHERE _id=(SELECT max(_id) FROM cache)")
 
         last_record = c.fetchall()
         last_record_id = last_record[0][0]
@@ -144,14 +149,17 @@ class NDEDatabase:
     def insert_last_updated(self):
         """Helper method for update_cache. Changes the date_updated in the metadata table to today"""
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
         c = con.cursor()
 
         today = datetime.date.today().isoformat()
         # upsert date_updated to today
-        c.execute("""INSERT INTO metadata VALUES(?, ?)
+        c.execute(
+            """INSERT INTO metadata VALUES(?, ?)
                         ON CONFLICT(name) DO UPDATE SET date=excluded.date
-                  """, ('date_updated', today))
+                  """,
+            ("date_updated", today),
+        )
 
         logger.info("Cache last_updated on: %s", today)
         con.commit()
@@ -162,7 +170,7 @@ class NDEDatabase:
         """Stores raw data from a list or generator into the cache table. Each value of the list contains (_id, data)"""
 
         # connect to database
-        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
         c = con.cursor()
 
         logger.info("Dumping records...")
@@ -173,9 +181,12 @@ class NDEDatabase:
                 raise TypeError("_id and data must be a string")
             # insert doc into cache table _id first column second column data as a json string
             # we upsert here in case there is repeat ids from existing cache
-            c.execute("""INSERT INTO cache VALUES(?, ?)
+            c.execute(
+                """INSERT INTO cache VALUES(?, ?)
                             ON CONFLICT(_id) DO UPDATE SET data=excluded.data
-                        """, (_id, data))
+                        """,
+                (_id, data),
+            )
             con.commit()
 
         logger.info("Finished dumping records.")
@@ -183,16 +194,15 @@ class NDEDatabase:
         con.close()
 
     def retreive_cache(self):
-        con = sqlite3.connect(self.path + '/' + self.SQL_DB)
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
         c = con.cursor()
-        logger.info('Retrieving dumped records from cache...')
+        logger.info("Retrieving dumped records from cache...")
         c.execute("SELECT * from cache")
         count = 0
         for record in c:
             count += 1
             if count % 10000 == 0:
-                logger.info(
-                    "Retrieving and parsing cache. Parsed %s records", count)
+                logger.info("Retrieving and parsing cache. Parsed %s records", count)
             yield record
         logger.info("Finished Parsing. Total Records: %s", count)
         con.close()

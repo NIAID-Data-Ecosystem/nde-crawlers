@@ -1,4 +1,5 @@
 # this file is more or less just copied over from other projects
+import logging
 import os
 import os.path
 
@@ -6,7 +7,6 @@ import biothings
 from biothings.hub import HubServer
 from biothings.utils.version import set_versions
 
-import logging
 # shut some mouths
 logging.getLogger("botocore").setLevel(logging.ERROR)
 logging.getLogger("boto3").setLevel(logging.ERROR)
@@ -16,11 +16,11 @@ logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 app_folder, _src = os.path.split(os.path.split(os.path.abspath(__file__))[0])
 import config
+
 set_versions(config, app_folder)
 biothings.config_for_app(config)
 logging = config.logger
 import hub.dataload.sources
-
 
 server = HubServer(hub.dataload.sources, name="BioThings Studio for NDE")
 
@@ -34,10 +34,10 @@ server = HubServer(hub.dataload.sources, name="BioThings Studio for NDE")
 
 if __name__ == "__main__":
     # vanilla or as a launcher of an API
-    from optparse import OptionParser
-    import sys
     import glob
     import re
+    import sys
+    from optparse import OptionParser
 
     parser = OptionParser()
     parser.add_option("-a", "--api-folder", help="API folder to run", dest="api_folder")
@@ -58,14 +58,18 @@ if __name__ == "__main__":
             if "bin/hub.py" in scripts:
                 startup = scripts[scripts.index("bin/hub.py")]
             else:
-                logging.error("Found more than one startup scripts, none of them named hub.py, "
-                              "don't know which to choose: %s", scripts)
+                logging.error(
+                    "Found more than one startup scripts, none of them named hub.py, " "don't know which to choose: %s",
+                    scripts,
+                )
                 sys.exit(1)
         logging.info("Found startup script '%s'", startup)
         strmod = re.sub(".py$", "", startup).replace("/", ".")
         import importlib
+
         mod = importlib.import_module(strmod)
         from biothings.hub import HubServer
+
         # try to locate a hub server instance
         for name in dir(mod):
             server = getattr(mod, name)
@@ -77,7 +81,8 @@ if __name__ == "__main__":
                     logging.info("Auto-discovering sources in 'hub/dataload/sources'")
                 else:
                     logging.warning(
-                        "Couldn't locate sources folder (expecting 'hub/dataload/sources'), keep those defined by the API")
+                        "Couldn't locate sources folder (expecting 'hub/dataload/sources'), keep those defined by the API"
+                    )
                 break
     else:
         logging.info("Runing vanilla studio")
