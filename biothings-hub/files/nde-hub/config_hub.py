@@ -348,5 +348,5 @@ AUTO_ARCHIVE_CONFIG = {
 # Docker config
 DOCKER_CONFIG = {"localhost": {"client_url": "http://" + os.environ.get("DOCKER_HOST", "localhost:2375")}}
 
-# docker client to use from DOCKER_CONFIG
-DOCKER_HOST = "localhost"
+# docker client to use from DOCKER_CONFIG. Add this as localhost in config_local to override.
+DOCKER_HOST = None
