@@ -2,7 +2,7 @@
 version: '3'
 
 services:
-  # when updating changes to code: "docker-compose -f docker-compose-crawlers.yml build dde-crawler"
+  # when updating changes to code: "docker-compose -f docker-compose-crawlers.yml build --no-cache dde-crawler"
   # MAKE SURE WHEN YOU NAME YOUR CRAWLER SERVICE THAT IT MATCHES SRC_NAME IN YOUR DUMPER CLASS BIOTHINGS_HUB. Example: "SRC_NAME-crawler"
   acd_niaid-crawler:
     build:
