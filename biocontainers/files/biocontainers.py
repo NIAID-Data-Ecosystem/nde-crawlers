@@ -66,7 +66,7 @@ def parse():
             output["url"] = f"https://biocontainers.pro/tools/{name}"
             output["_id"] = "biocontainers_" + name
 
-            versions_response = requests.get(f"https://api.biocontainers.pro//ga4gh/trs/v2/tools/{name}/versions")
+            versions_response = s.get(f"https://api.biocontainers.pro//ga4gh/trs/v2/tools/{name}/versions")
 
             # similars_response = requests.get(
             #     f"https://api.biocontainers.pro//ga4gh/trs/v2/tools/{name}/similars")
