@@ -115,6 +115,7 @@ class Dataverse(NDEDatabase):
                 response = req.json()
             except ValueError:
                 logger.error(f"Failed to get a JSON response from {url}")
+                response = None
             if response:
                 try:
                     total = response.get("data").get("total_count")

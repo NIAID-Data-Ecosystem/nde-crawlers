@@ -9,8 +9,7 @@ from biothings.hub.dataload.dumper import BaseDumper
 from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
 from config import CRAWLER_OUTPUT_DATA_ROOT, DATA_ARCHIVE_ROOT
-from utils.date import add_date
-from utils.utils import check_schema
+from utils.utils import nde_upload_wrapper
 
 __all__ = [
     "NDEFileSystemDumper",
@@ -117,8 +116,7 @@ class NDEFileSystemDumper(BaseDumper):
 class NDESourceUploader(BaseSourceUploader):
     storage_class = IgnoreDuplicatedStorage
 
-    @check_schema
-    @add_date
+    @nde_upload_wrapper
     def load_data(self, data_folder):
         with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
             for line in f:

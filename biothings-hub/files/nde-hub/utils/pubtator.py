@@ -11,8 +11,6 @@ from Bio import Entrez
 from biothings.utils.dataload import tab2dict
 from config import GEO_EMAIL, logger
 
-from .date import add_date
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
@@ -47,7 +45,7 @@ def extract_values(doc_list, key):
     return list(dict.fromkeys([x.lower().strip() for x in values_list]))
 
 
-@add_date
+
 def standardize_data(data):
     logger.info("Standardizing data...")
     # Check if data is a file path (str)

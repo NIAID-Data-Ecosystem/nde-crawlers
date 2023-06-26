@@ -2,7 +2,7 @@ from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
 from utils.pmid_helper import load_pmid_ctfd
 from utils.pubtator import standardize_data
-from utils.utils import check_schema
+from utils.utils import nde_upload_wrapper
 
 
 class ClinEpiDB_Uploader(NDESourceUploader):
@@ -19,7 +19,7 @@ class ClinEpiDB_Uploader(NDESourceUploader):
         }
     }
 
-    @check_schema
+    @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
         pubtator_docs = standardize_data(docs)
