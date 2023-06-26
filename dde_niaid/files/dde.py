@@ -72,9 +72,9 @@ def parse():
                     if affiliation := authors.get("affiliation"):
                         authors["affiliation"] = {"name": affiliation}
                 hit["author"] = authors
-            hit["_id"] = "DDE_" + hit["_id"]
-
+            
             hit["url"] = "https://discovery.biothings.io/dataset/" + hit["_id"]
+            hit["_id"] = "DDE_" + hit["_id"]
 
             # adjust date values
             if dates := hit.pop("_ts", None):
