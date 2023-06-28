@@ -63,10 +63,15 @@ def record_generator():
             {
                 "_id": "clinepidb_" + record["identifier"],
                 "@type": "Dataset",
-                "includedInDataCatalog": {"name": "ClinEpiDB"},
+                "includedInDataCatalog": {
+                    "name": "ClinEpiDB",
+                    "url": "https://clinepidb.org/ce/app/",
+                    "versionDate": datetime.date.today().isoformat(),
+                },
                 "url": "https://clinepidb.org/ce/app/record/dataset/" + record["identifier"],
             }
         )
+
         try:
             # attributes
             record["measurementTechnique"] = {"name": record["attributes"].pop("Study_Design")}
