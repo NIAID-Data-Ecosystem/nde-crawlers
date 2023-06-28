@@ -70,7 +70,7 @@ def check_schema(doc: Dict) -> Dict:
     if coa := doc.get("conditionsOfAccess"):
         enum = ["Open", "Restricted", "Closed", "Embargoed"]
         assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
-    yield doc
+    return doc
 
 def add_date(doc: Dict) -> Dict:
     """
@@ -93,7 +93,7 @@ def add_date(doc: Dict) -> Dict:
         date = datetime.datetime.fromisoformat(dates[-1]).date().isoformat()
         doc["date"] = date
 
-    yield doc
+    return doc
 
 
 
@@ -106,7 +106,7 @@ def merge_duplicates(doc: Dict) -> Dict:
             assert isinstance(_id, str), "Doi is not a string %s" % _id
             doc["_id"] = _id
 
-    yield doc
+    return doc
 
 
 def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict,dict,Generator]:
