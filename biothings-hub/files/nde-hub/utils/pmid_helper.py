@@ -179,7 +179,6 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     return ct_fd
 
 
-
 def load_pmid_ctfd(data_folder):
     """Takes 1000 documents at a time and batch queries all of the pmids in the documents to improve runtime.
     If there are any pmcids, convert all of them into pmids before running the batch query.

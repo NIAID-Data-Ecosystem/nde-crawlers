@@ -80,7 +80,6 @@ def sqlite_lookup(funding_id):
         return None
 
 
-
 def standardize_funding(data):
     """
     Standardize funding information for all documents in a data source.

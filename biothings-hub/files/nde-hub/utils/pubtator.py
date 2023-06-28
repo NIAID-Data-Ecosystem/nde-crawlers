@@ -45,7 +45,6 @@ def extract_values(doc_list, key):
     return list(dict.fromkeys([x.lower().strip() for x in values_list]))
 
 
-
 def standardize_data(data):
     logger.info("Standardizing data...")
     # Check if data is a file path (str)

@@ -72,7 +72,7 @@ def parse():
                     if affiliation := authors.get("affiliation"):
                         authors["affiliation"] = {"name": affiliation}
                 hit["author"] = authors
-            
+
             hit["url"] = "https://discovery.biothings.io/dataset/" + hit["_id"]
             hit["_id"] = "DDE_" + hit["_id"]
 

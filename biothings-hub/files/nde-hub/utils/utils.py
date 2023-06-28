@@ -16,6 +16,7 @@ def retry(retry_num, retry_sleep_sec):
 
     def decorator(func):
         """decorator"""
+
         # preserve information about the original function, or the func name will be "wrapper" not "func"
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -36,33 +37,11 @@ def retry(retry_num, retry_sleep_sec):
     return decorator
 
 
-# def check_schema(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
-#     """
-#     check doc before inserting into MongoDb
-#     :param func: a generator function that yields documents
-#     """
-
-#     @functools.wraps(func)
-#     def wrapper(*args, **kwargs):
-#         gen = func(*args, **kwargs)
-#         for doc in gen:
-#             assert isinstance(doc, dict), "doc is not a dict"
-#             assert doc.get("_id"), "_id is None"
-#             assert doc.get("@type"), "@type is None"
-#             assert doc.get("includedInDataCatalog"), "includedInDataCatalog is None"
-#             if coa := doc.get("conditionsOfAccess"):
-#                 enum = ["Open", "Restricted", "Closed", "Embargoed"]
-#                 assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
-#             yield doc
-
-#     return wrapper
-
-
 def check_schema(doc: Dict) -> Dict:
     """
     check doc before inserting into MongoDb
     """
-    
+
     assert isinstance(doc, dict), "doc is not a dict"
     assert doc.get("_id"), "_id is None"
     assert doc.get("@type"), "@type is None"
@@ -71,6 +50,7 @@ def check_schema(doc: Dict) -> Dict:
         enum = ["Open", "Restricted", "Closed", "Embargoed"]
         assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
     return doc
+
 
 def add_date(doc: Dict) -> Dict:
     """
@@ -96,7 +76,6 @@ def add_date(doc: Dict) -> Dict:
     return doc
 
 
-
 def merge_duplicates(doc: Dict) -> Dict:
     if _id := doc.get("doi"):
         if isinstance(_id, list):
@@ -109,7 +88,7 @@ def merge_duplicates(doc: Dict) -> Dict:
     return doc
 
 
-def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict,dict,Generator]:
+def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         gen = func(*args, **kwargs)
