@@ -8,15 +8,13 @@ import orjson
 from biothings.hub.dataload.dumper import BaseDumper
 from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
-
+from config import CRAWLER_OUTPUT_DATA_ROOT, DATA_ARCHIVE_ROOT
 from utils.date import add_date
 from utils.utils import check_schema
-from config import DATA_ARCHIVE_ROOT, CRAWLER_OUTPUT_DATA_ROOT
-
 
 __all__ = [
-    'NDEFileSystemDumper',
-    'NDESourceUploader',
+    "NDEFileSystemDumper",
+    "NDESourceUploader",
 ]
 
 
@@ -26,6 +24,7 @@ class NDEFileSystemDumper(BaseDumper):
 
     This will create hard links for files from a given source
     """
+
     SCHEDULE = "0 5,17 * * *"  # 5am, 5pm
 
     @property
@@ -40,72 +39,50 @@ class NDEFileSystemDumper(BaseDumper):
         """
         # source location in same shared volume
         src_name = self.SRC_NAME
-        release_filename = os.path.join(
-            CRAWLER_OUTPUT_DATA_ROOT, f'{src_name}_crawled', 'release.txt'
-        )
+        release_filename = os.path.join(CRAWLER_OUTPUT_DATA_ROOT, f"{src_name}_crawled", "release.txt")
         if not os.path.exists(release_filename):
             # probably not crawled yet
             self.to_dump = []
             return
-        data_filename = os.path.join(
-            os.path.dirname(release_filename), 'data.ndjson'
-        )
+        data_filename = os.path.join(os.path.dirname(release_filename), "data.ndjson")
         # cat file and delay 5 seconds to sync release.txt issue with mnt from su07
         os.system("cat " + release_filename)
         time.sleep(5)
 
         # read crawled release string
-        with open(release_filename, 'r') as fh:
+        with open(release_filename, "r") as fh:
             next_release = fh.readline(63)
         # if a current dump exist, check release newer
         if not force and self.current_data_folder:
-            existing_release_fn = os.path.join(
-                self.current_data_folder, 'release.txt'
-            )
-            with open(existing_release_fn, 'r') as fh:
+            existing_release_fn = os.path.join(self.current_data_folder, "release.txt")
+            with open(existing_release_fn, "r") as fh:
                 existing_release = fh.readline(63)
-            ex_rl_dt = datetime.datetime.fromisoformat(
-                existing_release.replace('Z', '+00:00')
-            )
-            nxt_rl_dt = datetime.datetime.fromisoformat(
-                next_release.replace('Z', '+00:00')
-            )
+            ex_rl_dt = datetime.datetime.fromisoformat(existing_release.replace("Z", "+00:00"))
+            nxt_rl_dt = datetime.datetime.fromisoformat(next_release.replace("Z", "+00:00"))
             # same release
             if ex_rl_dt == nxt_rl_dt:
                 self.to_dump = []
                 return
             elif ex_rl_dt > nxt_rl_dt:
-                raise RuntimeError(
-                    "Crawled release is older than dumped release")
+                raise RuntimeError("Crawled release is older than dumped release")
             elif ex_rl_dt < nxt_rl_dt:
                 pass
             else:
                 raise RuntimeError("???")
         # either current dump does not exist or release is older
         self.release = next_release
-        local_release_fn = os.path.join(
-            self.new_data_folder, 'release.txt'
-        )
-        local_data_fn = os.path.join(
-            self.new_data_folder, 'data.ndjson'
-        )
+        local_release_fn = os.path.join(self.new_data_folder, "release.txt")
+        local_data_fn = os.path.join(self.new_data_folder, "data.ndjson")
         self.to_dump = [
-            {
-                'remote': release_filename,
-                'local': os.path.abspath(local_release_fn)
-            },
-            {
-                'remote': data_filename,
-                'local': os.path.abspath(local_data_fn)
-            }
+            {"remote": release_filename, "local": os.path.abspath(local_release_fn)},
+            {"remote": data_filename, "local": os.path.abspath(local_data_fn)},
         ]
 
     def remote_is_better(self, remotefile, localfile):
         """
         If there is a simple method to check whether remote is better
         """
-        raise RuntimeError(
-            "remote_is_better is not available in NDEFileSystemDumper")
+        raise RuntimeError("remote_is_better is not available in NDEFileSystemDumper")
 
     def download(self, remotefile, localfile):
         """
@@ -125,19 +102,16 @@ class NDEFileSystemDumper(BaseDumper):
         return None
 
     def prepare_client(self):
-        raise RuntimeError("prepare_client method of NDEFileSystemDumper and its "
-                           "descendents must not be called")
+        raise RuntimeError("prepare_client method of NDEFileSystemDumper and its " "descendents must not be called")
 
     def release_client(self):
         # dump will always call this method so we have to allow it
-        if inspect.stack()[1].function == 'dump':
+        if inspect.stack()[1].function == "dump":
             return
-        raise RuntimeError("release_client method of NDEFileSystemDumper and its "
-                           "descendents must not be called")
+        raise RuntimeError("release_client method of NDEFileSystemDumper and its " "descendents must not be called")
 
     def need_prepare(self):
-        raise RuntimeError("need_prepare method of NDEFileSystemDumper and its "
-                           "descendents must not be called")
+        raise RuntimeError("need_prepare method of NDEFileSystemDumper and its " "descendents must not be called")
 
 
 class NDESourceUploader(BaseSourceUploader):
@@ -146,7 +120,7 @@ class NDESourceUploader(BaseSourceUploader):
     @check_schema
     @add_date
     def load_data(self, data_folder):
-        with open(os.path.join(data_folder, 'data.ndjson'), 'rb') as f:
+        with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
             for line in f:
                 doc = orjson.loads(line)
                 yield doc
@@ -171,11 +145,15 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "text"},
                     "ratingCount": {"type": "unsigned_long"},
                     "ratingValue": {"type": "double"},
-                    "reviewAspect": {"type": "text"}
+                    "reviewAspect": {"type": "text"},
                 }
             },
             "alternateName": {"type": "text", "copy_to": ["all"]},
-            "applicationCategory": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+            "applicationCategory": {
+                "type": "keyword",
+                "normalizer": "keyword_lowercase_normalizer",
+                "copy_to": ["all"],
+            },
             "applicationSubCategory": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -326,7 +304,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "keyword"},
                 }
             },
-            "doi": {"type": "text", "copy_to": ["all"]},
+            "doi": {"type": "text", "copy_to": ["all"], "fields": {"keyword": {"type": "keyword"}}},
             "downloadUrl": {
                 "properties": {
                     "name": {"type": "text", "copy_to": ["all"]},
@@ -352,7 +330,11 @@ class NDESourceUploader(BaseSourceUploader):
                             "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
                             "description": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                            },
                             "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                             "role": {"type": "keyword"},
                             "url": {"type": "text", "copy_to": ["all"]},
@@ -360,7 +342,11 @@ class NDESourceUploader(BaseSourceUploader):
                                 "properties": {
                                     "givenName": {"type": "text", "copy_to": ["all"]},
                                     "familyName": {"type": "text", "copy_to": ["all"]},
-                                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                                    "name": {
+                                        "type": "keyword",
+                                        "normalizer": "keyword_lowercase_normalizer",
+                                        "copy_to": ["all"],
+                                    },
                                 }
                             },
                         },
@@ -394,16 +380,24 @@ class NDESourceUploader(BaseSourceUploader):
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
-                    "alternateName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "originalName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "isCurated": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
-                            "dateModified": {"type": "date"}
+                            "dateModified": {"type": "date"},
                         }
-                    }
+                    },
                 }
             },
             "identifier": {"type": "text", "copy_to": ["all"]},
@@ -446,25 +440,37 @@ class NDESourceUploader(BaseSourceUploader):
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
-                    "alternateName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "originalName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "commonName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "displayName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "displayName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "isCurated": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
-                            "dateModified": {"type": "date"}
+                            "dateModified": {"type": "date"},
                         }
-                    }
+                    },
                 }
             },
             "interactionStatistic": {
                 "properties": {
                     "@type": {"type": "text"},
                     "interactionType": {"type": "text"},
-                    "userInteractionCount": {"type": "unsigned_long"}
+                    "userInteractionCount": {"type": "unsigned_long"},
                 }
             },
             "isAccessibleForFree": {"type": "boolean"},
@@ -559,7 +565,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "versionDate": {"type": "date"},
                         }
                     },
-                    "relationship": {"type": "keyword", "copy_to": ["all"]}
+                    "relationship": {"type": "keyword", "copy_to": ["all"]},
                 }
             },
             "keywords": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
@@ -578,14 +584,9 @@ class NDESourceUploader(BaseSourceUploader):
                 "analyzer": "nde_analyzer",
                 "copy_to": ["all"],
                 "fields": {
-                    "phrase_suggester": {
-                        "type": "text",
-                        "analyzer": "phrase_suggester"
-                    },
-                    "raw": {
-                        "type": "keyword"
-                    }
-                }
+                    "phrase_suggester": {"type": "text", "analyzer": "phrase_suggester"},
+                    "raw": {"type": "keyword"},
+                },
             },
             "nctid": {"type": "keyword", "copy_to": ["all"]},
             "output": {
@@ -597,7 +598,11 @@ class NDESourceUploader(BaseSourceUploader):
                 },
             },
             "processorRequirements": {"type": "text", "copy_to": ["all"]},
-            "programmingLanguage": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+            "programmingLanguage": {
+                "type": "keyword",
+                "normalizer": "keyword_lowercase_normalizer",
+                "copy_to": ["all"],
+            },
             "relationship": {"type": "text", "copy_to": ["all"]},
             "sameAs": {
                 "type": "text",
@@ -643,9 +648,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "properties": {
                             "@type": {
                                 "type": "text",
-                                "fields": {
-                                    "keyword": {"type": "keyword", "ignore_above": 256}
-                                },
+                                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                             },
                             "latitude": {"type": "float"},
                             "longitude": {"type": "float"},
@@ -673,18 +676,30 @@ class NDESourceUploader(BaseSourceUploader):
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
-                    "alternateName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "originalName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "commonName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "displayName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "displayName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "isCurated": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
-                            "dateModified": {"type": "date"}
+                            "dateModified": {"type": "date"},
                         }
-                    }
+                    },
                 }
             },
             "temporalCoverage": {
@@ -714,7 +729,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "name": {"type": "text", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
-                    }
+                    },
                 }
             },
             "url": {"type": "text", "copy_to": ["all"]},
@@ -729,7 +744,7 @@ class NDESourceUploader(BaseSourceUploader):
             "version": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
-            }
+            },
         }
 
         return mapping
