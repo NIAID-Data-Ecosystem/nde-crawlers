@@ -302,7 +302,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "keyword"},
                 }
             },
-            "doi": {"type": "text", "copy_to": ["all"]},
+            "doi": {"type": "text", "copy_to": ["all"], "fields": {"keyword": {"type": "keyword"}}},
             "downloadUrl": {
                 "properties": {
                     "name": {"type": "text", "copy_to": ["all"]},
