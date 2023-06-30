@@ -13,11 +13,14 @@ logger = logging.getLogger("nde-logger")
 def parse():
     # mapping https://docs.google.com/spreadsheets/d/1uz1puYgLiiud2zuncXv43S1BkQvDNAeyl8pRiXgT14Y/edit?usp=sharing
 
-    url = 'https://microbiomedb.org/mbio/service/record-types/dataset/searches/AllDatasets/reports/standard? \
-            reportConfig={"attributes":[acknowledgement,pmids,study_categories,description,type,institution,card_headline,contact, \
-            project_availability,study_access,email,is_species_scope,summary,card_points,dataset_id,build_number_introduced,short_display_name, \
-            display_name,dataset_name,primary_key,version,pmids_download,bulk_download_url,eda_study_id,short_attribution, \
-            is_public,eupath_release,caveat],"tables":[Contacts,DownloadVersion,Publications,AssociatedDatasets,HyperLinks],"attributeFormat":"text"}'
+    url = (
+        "https://microbiomedb.org/mbio/service/record-types/dataset/searches/AllDatasets/reports/standard?"
+        'reportConfig={"attributes":[acknowledgement,pmids,study_categories,description,type,institution,card_headline,'
+        "contact,project_availability,study_access,email,is_species_scope,summary,card_points,dataset_id,build_number_introduced,"
+        "short_display_name,display_name,dataset_name,primary_key,version,pmids_download,bulk_download_url,eda_study_id,"
+        'short_attribution,is_public,eupath_release,caveat],"tables":[Contacts,DownloadVersion,Publications,'
+        'AssociatedDatasets,HyperLinks],"attributeFormat":"text"}'
+    )
 
     logger.info("Making request...")
     request = requests.get(url)
