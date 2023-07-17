@@ -80,10 +80,14 @@ def merge_duplicates(doc: Dict) -> Dict:
     if _id := doc.get("doi"):
         if isinstance(_id, list):
             if len(_id) == 1:
+                assert isinstance(_id[0], str), "Doi is not a string %s" % _id
                 doc["_id"] = _id[0]
         else:
             assert isinstance(_id, str), "Doi is not a string %s" % _id
-            doc["_id"] = _id
+            if _id == "None":
+                doc.pop("doi")
+            else:    
+                doc["_id"] = _id
 
     return doc
 
@@ -93,9 +97,24 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
     def wrapper(*args, **kwargs):
         gen = func(*args, **kwargs)
         for doc in gen:
+            # dictionaries are mutable so we dont need to reassign
             add_date(doc)
             merge_duplicates(doc)
             check_schema(doc)
+            yield doc
+
+    return wrapper
+
+
+def zenodo_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
+    ''' REMOVE THIS WHEN WE CAN GET A SUCCESSFUL RUN OF ZENODO
+    '''
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        gen = func(*args, **kwargs)
+        for doc in gen:
+            add_date(doc)
+            merge_duplicates(doc)
             yield doc
 
     return wrapper

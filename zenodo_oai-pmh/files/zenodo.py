@@ -266,8 +266,9 @@ class Zenodo(NDEDatabase):
             * 	https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:1135290&metadataPrefix=oai_datacite
                     <relatedIdentifier relatedIdentifierType="URL" relationType="IsSupplementTo" >https://github.com/ljcohen/planets/tree/v0.1</relatedIdentifier>
             """
-
-            yield output
+            # every doc has to have a type
+            if output.get("@type"):
+                yield output
 
         # output the missing transformations for @type
         if len(missing_types.keys()) > 0:
