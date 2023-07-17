@@ -8,7 +8,6 @@ from scrapy.spiders import SitemapSpider
 
 
 class OmicsdiSpider(SitemapSpider):
-
     name = "omicsdi"
     custom_settings = {
         "ITEM_PIPELINES": {
@@ -23,7 +22,7 @@ class OmicsdiSpider(SitemapSpider):
     sitemap_rules = [("/dataset/", "extract_from_jsonld")]
 
     def extract_from_jsonld(self, response, **kwargs):
-        jslds = JsonLdExtractor().extract(response.body)
+        jslds = JsonLdExtractor().extract(response.body.decode("utf-8"))
 
         for jsld in jslds:
             out = jsld["mainEntity"]
