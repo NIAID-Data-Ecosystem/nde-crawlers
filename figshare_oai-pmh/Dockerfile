@@ -61,6 +61,6 @@ RUN mv docker-entrypoint.sh / && \
     mv ${CRONTAB} /etc/crontab
 RUN mkdir -p /data && chown -R biothings:biothings /data
 ENV PYTHONPATH="."
-VOLUME [ "/data" ]
+VOLUME [ "/data", "/cache" ]
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/docker-entrypoint.sh"]
