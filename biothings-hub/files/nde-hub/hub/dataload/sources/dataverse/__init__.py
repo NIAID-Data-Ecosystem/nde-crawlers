@@ -1,2 +1,2 @@
-from .dumper import DataverseDumper
-from .uploader import DataverseUploader
+from .dumper import DataverseDumper  # noqa
+from .uploader import DataverseUploader  # noqa

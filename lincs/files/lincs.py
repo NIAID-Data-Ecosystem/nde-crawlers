@@ -1,7 +1,5 @@
 import datetime
-import json
 import logging
-from cgi import test
 
 import requests
 

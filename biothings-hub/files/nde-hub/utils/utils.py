@@ -86,7 +86,7 @@ def merge_duplicates(doc: Dict) -> Dict:
             assert isinstance(_id, str), "Doi is not a string %s" % _id
             if _id == "None":
                 doc.pop("doi")
-            else:    
+            else:
                 doc["_id"] = _id
 
     return doc
@@ -107,8 +107,8 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
 
 
 def zenodo_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
-    ''' REMOVE THIS WHEN WE CAN GET A SUCCESSFUL RUN OF ZENODO
-    '''
+    """REMOVE THIS WHEN WE CAN GET A SUCCESSFUL RUN OF ZENODO"""
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         gen = func(*args, **kwargs)

@@ -10,11 +10,10 @@ import time
 from copy import copy
 from datetime import datetime
 from itertools import islice
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, Optional
 
 import orjson
 import requests
-import yaml
 from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 

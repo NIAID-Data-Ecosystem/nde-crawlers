@@ -50,7 +50,7 @@ class NDJsonWriterPipeline:
             # because NDE Dumper uses hardlinks
             os.rename(self.tmp_filename, self.final_data_filename)
             os.rename(self.rl_tmp_filename, self.release_filename)
-        except:
+        except Exception:
             # cleanup the mess by attempting to remove everything
             # so that bad data does not propagate
             spider.logger.error("Error updating data/release, will remove corrupt files")

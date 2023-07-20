@@ -9,9 +9,8 @@ logger = logging.getLogger("nde-logger")
 
 
 def parse():
-
     # retrieve entire list of assays with min details
-    assay_list_url = f"https://reframedb.org/api/assay_list"
+    assay_list_url = "https://reframedb.org/api/assay_list"
     response = requests.get(assay_list_url)
     assays = json.loads(response.text)
 
@@ -105,7 +104,6 @@ def parse():
         response = requests.get(individual_assay_url)
         # transform the response
         if response.status_code == 200:
-
             count += 1
             if count % 25 == 0:
                 logger.info("Parsed %s records", count)

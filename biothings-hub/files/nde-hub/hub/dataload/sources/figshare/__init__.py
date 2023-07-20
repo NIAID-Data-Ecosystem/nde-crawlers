@@ -1,2 +1,2 @@
-from .dumper import FigshareDumper
-from .uploader import FigshareUploader
+from .dumper import FigshareDumper  # noqa
+from .uploader import FigshareUploader  # noqa

@@ -1,7 +1,6 @@
 import datetime
 import logging
 import time
-from pprint import pprint
 
 import requests
 
@@ -23,14 +22,12 @@ total = 0
 
 
 def get_ids():
-
     # we need to create a session to keep-alive the http connection
     # vivli throttles requests (76 seconds!) when starting a new HTTPs connection
     # https://stackoverflow.com/questions/45783655/first-https-request-takes-much-more-time-than-the-rest
     # https://stackoverflow.com/questions/10115126/python-requests-close-http-connection
 
     with requests.Session() as session:
-
         url = (
             "https://vivli-prod-cus-srch.search.windows.net/indexes/studies/docs?api-version=2016-09-01&"
             "api-key=C8237BFE70B9CC48489DC7DD84D88379&search=*&$orderby=nctId%20desc,%20sponsorProtocolId%20desc&$count=true"

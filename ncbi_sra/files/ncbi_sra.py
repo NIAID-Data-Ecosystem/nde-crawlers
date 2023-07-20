@@ -4,6 +4,8 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from time import sleep
+from urllib.error import ContentTooShortError
 
 import pandas as pd
 import wget
@@ -147,7 +149,6 @@ class NCBI_SRA(NDEDatabase):
         too_big = 0
 
         for study in studies:
-
             count += 1
             if count % 1000 == 0:
                 logger.info(f"Studies Parsed: {count}")
@@ -226,7 +227,7 @@ class NCBI_SRA(NDEDatabase):
                 distribution_dict = {}
                 if gcp_url := run_metadata.get("GCP_url"):
                     distribution_dict["contentUrl"] = gcp_url
-                if gcp_free_egress := run_metadata.get("GCP_free_egress"):
+                if run_metadata.get("GCP_free_egress"):
                     output["isAccessibleForFree"] = True
                 if bool(distribution_dict) and distribution_dict not in distribution_list:
                     distribution_list.append(distribution_dict)
@@ -234,7 +235,7 @@ class NCBI_SRA(NDEDatabase):
                 distribution_dict = {}
                 if aws_url := run_metadata.get("AWS_url"):
                     distribution_dict["contentUrl"] = aws_url
-                if aws_free_egress := run_metadata.get("AWS_free_egress"):
+                if run_metadata.get("AWS_free_egress"):
                     output["isAccessibleForFree"] = True
                 if bool(distribution_dict) and distribution_dict not in distribution_list:
                     distribution_list.append(distribution_dict)

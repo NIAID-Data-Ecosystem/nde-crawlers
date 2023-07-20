@@ -26,7 +26,7 @@ class DryadItemProcessorPipeline:
             date_string: a date string
         Returns: An isoformatted date if there is a datetime if not then return None
         """
-        if re.match("\d+-\d+-\d+", date_string):
+        if re.match(r"\d+-\d+-\d+", date_string):
             if "T" in date_string:
                 date = datetime.datetime.fromisoformat(date_string.split("T")[0]).date().isoformat()
             else:

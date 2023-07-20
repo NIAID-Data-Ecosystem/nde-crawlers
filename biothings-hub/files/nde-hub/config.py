@@ -4,7 +4,7 @@ import os
 import urllib.parse
 
 from biothings.utils.loggers import setup_default_log
-from config_hub import *
+from config_hub import *  # noqa
 
 mongo_host = os.environ.get("MONGO_HOST", "localhost:27017")
 mongo_parsed = urllib.parse.urlparse(f"mongodb://{mongo_host}")
@@ -101,6 +101,6 @@ CRAWLER_OUTPUT_DATA_ROOT = "/data"
 
 # Allow to override any default settings with a config_local.py file
 try:
-    from config_local import *
+    from config_local import *  # noqa
 except ImportError:
     pass

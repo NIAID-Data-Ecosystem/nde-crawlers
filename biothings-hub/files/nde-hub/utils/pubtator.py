@@ -9,7 +9,7 @@ import orjson
 import requests
 from Bio import Entrez
 from biothings.utils.dataload import tab2dict
-from config import GEO_EMAIL, logger
+from config import GEO_EMAIL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -135,10 +135,11 @@ def get_species_details(original_name, identifier):
         return standard_dict
 
     except requests.exceptions.HTTPError as e:
+        logger.info(f"HTTP Error: {e}")
         logger.info(f"No Uniprot information found for {original_name}, {identifier}. Trying NCBI...")
     except requests.exceptions.SSLError as e:
         logger.info(f"SSL Error: {e}")
-        logger.info(f"Retrying in 5 seconds...")
+        logger.info("Retrying in 5 seconds...")
         time.sleep(5)
         get_species_details(original_name, identifier)
 
@@ -152,7 +153,7 @@ def get_species_details(original_name, identifier):
             break
         except Exception as e:
             logger.info(f"Error: {e}")
-            logger.info(f"Retrying in 5 seconds...")
+            logger.info("Retrying in 5 seconds...")
             time.sleep(5)
             get_species_details(original_name, identifier)
 

@@ -110,7 +110,7 @@ def parse():
 
         author_list = []
         if authors := metadata.get("Author"):
-            authors = re.sub("[\(\[].*?[\)\]]", "", authors)
+            authors = re.sub(r"[\(\[].*?[\)\]]", "", authors)
             authors = [d.replace("\n", "").strip().replace("    ", "") for d in authors.split(",") if d]
             for author in authors:
                 if " and " in author:
@@ -143,7 +143,7 @@ def parse():
                         author_list.append({"name": author})
 
         if maintainers := metadata.get("Maintainer"):
-            maintainers = re.sub("[\(\[].*?[\)\]]", "", maintainers)
+            maintainers = re.sub(r"[\(\[].*?[\)\]]", "", maintainers)
             maintainers = [d.replace("\n", "").strip().replace("    ", "") for d in maintainers.split(",") if d]
             for author in maintainers:
                 if " and " in author:
@@ -256,6 +256,7 @@ def parse():
             output["softwareAddOn"] = is_enhanced_by
 
         is_dependent_on = []
+        is_related_to = []
         if depends_on_me := metadata.get("dependsOnMe"):
             depends_on_me = [d.replace("\n", "").strip().replace("    ", "") for d in depends_on_me.split(",") if d]
             for pkg_dependency in depends_on_me:
@@ -289,7 +290,6 @@ def parse():
         if len(is_dependent_on):
             output["isBasisFor"] = is_dependent_on
 
-        is_related_to = []
         if suggests := metadata.get("Suggests"):
             suggests = [d.replace("\n", "").strip().replace("    ", "") for d in suggests.split(",") if d]
             for pkg_suggest in suggests:

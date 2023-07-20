@@ -1,5 +1,4 @@
 import datetime
-import json
 import logging
 
 import requests
@@ -9,7 +8,6 @@ logger = logging.getLogger("nde-logger")
 
 
 def record_generator():
-
     # API call that returns a list of all available data records
     api_command = 'https://veupathdb.org/veupathdb/service/record-types/dataset/searches/AllDatasets/reports/standard?reportConfig={"attributes":["primary_key","organism_prefix","project_id","eupath_release","newcategory","summary","contact","wdk_weight","version","institution","build_number_introduced","pmids_download","release_policy","short_attribution","type","genecount"],"tables":["Publications","Contacts","GenomeHistory","DatasetHistory","Version","References","HyperLinks","GeneTypeCounts","TranscriptTypeCounts"],"attributeFormat":"text"}'
     # send and retrieve request call
@@ -55,7 +53,7 @@ def record_generator():
                 date_modified = _record_dict["attributes"]["version"]
                 date_modified = datetime.datetime.strptime(date_modified, "%Y-%m-%d").date().isoformat()
                 _record_dict["dateModified"] = date_modified
-            except:
+            except Exception:
                 logging.debug(
                     "[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"
                     % _record_dict["attributes"]["version"]
@@ -74,7 +72,7 @@ def record_generator():
                 iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates]
                 date_updated = sorted(iso_list)[0]
                 _record_dict["dateUpdated"] = date_updated
-            except:
+            except Exception:
                 logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s" % release_dates)
 
         # tables.Version
@@ -84,7 +82,7 @@ def record_generator():
                 _iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in published_dates]
                 date_published = sorted(_iso_list)[0]
                 _record_dict["datePublished"] = date_published
-            except:
+            except Exception:
                 logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s" % published_dates)
 
         if _record_dict["tables"]["Version"]:
@@ -97,7 +95,8 @@ def record_generator():
             ]
 
         # table.GeneTypeCounts
-        gene_counts = [hit["gene_count"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
+        # TODO DO WE NEED THIS?
+        # gene_counts = [hit["gene_count"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         gene_refs = [hit["gene_type"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         if gene_refs:
             _record_dict["variableMeasured"] = gene_refs[0]

@@ -16,20 +16,21 @@ import scrapy
 import json
 url = "http://flowrepository.org/ajax/list_public_ds"
 payload = {'pg':'2'}
-req = scrapy.Request( url, method='POST', body=json.dumps(payload), headers={'Content-Type':'application/json'}) 
+req = scrapy.Request( url, method='POST', body=json.dumps(payload), headers={'Content-Type':'application/json'})
 fetch(req)
 response.xpath('//td[@class="repid"]/a/@href').extract()
 response.xpath('//a[@href="#"]/text()').getall()
 
 
 
-scrapy shell "http://flowrepository.org/id/FR-FCM-ZY4P"  
+scrapy shell "http://flowrepository.org/id/FR-FCM-ZY4P"
 keys = response.xpath('//table[@class="information-table"]//b/text()').extract()
 for key in keys:
     " ".join(response.xpath(f"//td[*='{key}']/following-sibling::td[1]/text()").extract_first().split())
     response.xpath(f"//td[*='{key}']/following-sibling::td[1]/descendant-or-self::text()").extract()
 
 """
+
 
 # may take some time to start up as getting the ids takes a while
 class FlowRepositorySpider(scrapy.Spider):

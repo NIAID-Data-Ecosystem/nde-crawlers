@@ -47,7 +47,7 @@ def parse_defined_terms(definedtermlist):
         termdf["termCode"] = termdf["@id"]
         cleandf = termdf[["@type", "@id", "inDefinedTermSet", "termCode", "url", "name"]]
         termjson = cleandf.to_dict(orient="records")
-    except:
+    except Exception:
         termjson = -1
     return termjson
 
@@ -148,11 +148,11 @@ class cleandoc:
 
         try:
             cleanjson["dateModified"] = biotooljsonhit["lastUpdate"].split("T")[0]
-        except:
+        except Exception:
             cleanjson["dateModified"] = biotooljsonhit["lastUpdate"]
         try:
             cleanjson["dateCreated"] = biotooljsonhit["additionDate"].split("T")[0]
-        except:
+        except Exception:
             cleanjson["dateCreated"] = biotooljsonhit["additionDate"]
 
         # temp fix for outbreak.info
@@ -168,7 +168,7 @@ class cleandoc:
             # if topicjson != -1:
             topics = [x["term"] for x in alltopics]
             cleanjson["keywords"] = topics
-        except:
+        except Exception:
             pass
         return cleanjson
 
@@ -285,7 +285,7 @@ class cleandoc:
             tmppub["@type"] = "Publication"
             try:
                 tmppub["name"] = tmppub["metadata"]["title"]
-            except:
+            except Exception:
                 tmppub["name"] = None
             tmppub.pop("type")
             tmppub.pop("version")

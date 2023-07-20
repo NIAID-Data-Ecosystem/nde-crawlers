@@ -94,11 +94,11 @@ def str2list(value):
 def convertAuthor(authorObj):
     try:
         given = authorObj["given"]
-    except:
+    except Exception:
         given = None
     try:
         family = authorObj["family"]
-    except:
+    except Exception:
         family = None
     return {"givenName": given, "familyName": family}
 
@@ -131,17 +131,17 @@ def getCitation(pmid, isPMID=True):
                 # reformat to schema.org format.
                 try:
                     citation["doi"] = citation_raw["DOI"]
-                except:
+                except Exception:
                     pass
                 citation["@type"] = "ScholarlyArticle"
                 citation["pmid"] = citation_raw["PMID"]
                 try:
                     citation["pmcid"] = citation_raw["PMCID"]
-                except:
+                except Exception:
                     pass
                 try:
                     citation["doi"] = citation_raw["DOI"]
-                except:
+                except Exception:
                     pass
                 citation["identifier"] = citation_raw["id"]
                 citation["issn"] = citation_raw["ISSN"]
@@ -151,7 +151,7 @@ def getCitation(pmid, isPMID=True):
 
                 try:
                     citation["issueNumber"] = citation_raw["issue"]
-                except:
+                except Exception:
                     pass
                 citation["journalName"] = citation_raw["container-title"]
                 citation["journalNameAbbrev"] = citation_raw["container-title-short"]
@@ -160,7 +160,7 @@ def getCitation(pmid, isPMID=True):
                 citation["pagination"] = citation_raw["page"]
                 try:
                     citation["volumeNumber"] = citation_raw["volume"]
-                except:
+                except Exception:
                     pass
                 citation["url"] = "https://www.ncbi.nlm.nih.gov/pubmed/?term=" + citation["pmid"]
                 return citation
@@ -232,7 +232,7 @@ def schemaizeMetadata(df, output_name="NIAID-SysBio-Datasets", chunk_size=100):
         print(f"\n\n{len(dupes)} duplicate identifiers found:")
         print(list(dupes.id_str))
         print("\n")
-        raise Exception(f"Duplicate identifiers found")
+        raise Exception("Duplicate identifiers found")
 
     print("\n")
     print(f"{len(df)} rows exported")

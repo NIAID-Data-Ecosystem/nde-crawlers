@@ -11,7 +11,6 @@ from biothings.hub.dataload.uploader import BaseSourceUploader
 from config import CRAWLER_OUTPUT_DATA_ROOT, DATA_ARCHIVE_ROOT
 from utils.utils import nde_upload_wrapper
 
-
 __all__ = [
     "NDEFileSystemDumper",
     "NDESourceUploader",
@@ -177,7 +176,6 @@ class NDESourceUploader(BaseSourceUploader):
                     "givenName": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
-                    "email": {"type": "text"},
                     "role": {"type": "keyword"},
                     "title": {"type": "text"},
                     "url": {"type": "keyword"},

@@ -1,2 +1,2 @@
-from .dumper import ReframedbDumper
-from .uploader import ReframedbUploader
+from .dumper import ReframedbDumper  # noqa
+from .uploader import ReframedbUploader  # noqa

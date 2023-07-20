@@ -58,8 +58,8 @@ class FlowRepositoryItemProcessorPipeline:
             },
         }
         """ These are the keys:
-            ['Repository ID:', 'Experiment name:', 'MIFlowCyt score:', 'Primary researcher:', 'PI/manager:', 
-            'Uploaded by:', 'Experiment dates:', 'Dataset uploaded:', 'Last updated:', 'Keywords:', 'Manuscripts:', 
+            ['Repository ID:', 'Experiment name:', 'MIFlowCyt score:', 'Primary researcher:', 'PI/manager:',
+            'Uploaded by:', 'Experiment dates:', 'Dataset uploaded:', 'Last updated:', 'Keywords:', 'Manuscripts:',
             'Organizations:', 'Purpose:', 'Conclusion:', 'Comments:', 'Funding:', 'Quality control:']
             Organizations and manuscripts can be more than one.
         """
@@ -99,7 +99,7 @@ class FlowRepositoryItemProcessorPipeline:
 
         if temp_dates := item.pop("Experiment dates:", None):
             # All dates should be in this date pattern
-            if dates := re.findall("\d+-\d+-\d+", temp_dates):
+            if dates := re.findall(r"\d+-\d+-\d+", temp_dates):
                 dates = [datetime.datetime.fromisoformat(date_string).date().isoformat() for date_string in dates]
             else:
                 logger.error("Could not parse dates. URL: %s", output["url"])
@@ -110,7 +110,7 @@ class FlowRepositoryItemProcessorPipeline:
             if len(dates) > 1:
                 end_date = datetime.datetime.strptime(dates[1], "%Y-%m-%d").date().isoformat()
                 output["temporalCoverage"] = {"temporalInterval": {"startDate": date, "endDate": end_date}}
-            elif re.findall("\d+-\d+-\d+.*-", temp_dates):
+            elif re.findall(r"\d+-\d+-\d+.*-", temp_dates):
                 output["temporalCoverage"] = {"temporalInterval": {"startDate": date}}
             else:
                 output["temporalCoverage"] = {"temporalInterval": {"endDate": date}}

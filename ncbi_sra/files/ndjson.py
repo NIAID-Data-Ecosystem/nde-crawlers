@@ -38,7 +38,7 @@ try:
         fd.write(line)
     is_parsed = True
 # parser failed
-except Exception as e:
+except Exception:
     logger.error("Errors occurred while running, so not saving potentially corrupt data.")
     logger.error(traceback.format_exc())
 
@@ -56,7 +56,7 @@ if is_parsed:
         # because NDE Dumper uses hardlinks
         os.rename(tmp_filename, final_data_filename)
         os.rename(rl_tmp_filename, release_filename)
-    except:
+    except Exception:
         # cleanup the mess by attempting to remove everything
         # so that bad data does not propagate
         logger.error("Error updating data/release, will remove corrupt files")

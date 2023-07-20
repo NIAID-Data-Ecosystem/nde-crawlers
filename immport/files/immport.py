@@ -83,12 +83,12 @@ def map_schema_json(schema_json):
         date = datetime.datetime.strptime(date, "%m/%d/%Y")  # mm/dd/YYYY is my guess
         if distribution := schema_json.pop("distribution", None):
             schema_json["distribution"] = _set_single_element_or_all_in_list(distribution, "dateModified", date)
-        if curated_by := schema_json.pop("curatedBy", None):
+            # if curated_by := schema_json.pop("curatedBy", None):
             # remove curatedBy
             # schema_json['curatedBy'] = _set_single_element_or_all_in_list(
             #     curated_by, 'curationDate', date
             # )
-            pass
+            # pass
         if schema_json.get("includedInDataCatalog"):
             schema_json["includedInDataCatalog"]["versionDate"] = date
             schema_json["includedInDataCatalog"]["name"] = "ImmPort"

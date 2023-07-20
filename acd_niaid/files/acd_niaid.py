@@ -274,7 +274,7 @@ def parse():
         result = {k: v for k, v in trial.items() if v is not None}
 
         # list properties that weren't in trial
-        missing_properties = {k: v for k, v in trial.items() if v == None}
+        missing_properties = {k: v for k, v in trial.items() if v is None}
 
         yield result
 

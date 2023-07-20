@@ -22,7 +22,7 @@ def query_ols(iri):
     if pattern.match(iri):
         params = {
             # isnt the best way but good enough to get http: https://stackoverflow.com/questions/9760588/how-do-you-extract-a-url-from-a-string-using-python
-            "iri": re.search("(?P<url>http?://[^\s]+)", iri).group("url")
+            "iri": re.search(r"(?P<url>http?://[^\s]+)", iri).group("url")
         }
 
         request = requests.get(url, params).json()

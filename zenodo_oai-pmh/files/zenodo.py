@@ -4,10 +4,7 @@
 import datetime
 import json
 import logging
-import shelve
-import sqlite3
 import time
-from pprint import pprint
 from xml.etree import ElementTree
 
 from sickle import Sickle
@@ -258,9 +255,9 @@ class Zenodo(NDEDatabase):
             if funding:
                 output["funding"] = funding
 
-            """ TODO try to get the codeRepository field. Not confident how to get it. 
+            """ TODO try to get the codeRepository field. Not confident how to get it.
             "if this resource is a 'software' @type and has a relatedIdentifier with the isSupplementTo field".
-            Examples: 
+            Examples:
             * 	https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:5680920&metadataPrefix=oai_datacite
                     <relatedIdentifier relatedIdentifierType="URL" relationType="IsDerivedFrom" >https://gitlab.com/astron-idg/idg-fpga/</relatedIdentifier>
             * 	https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:1135290&metadataPrefix=oai_datacite

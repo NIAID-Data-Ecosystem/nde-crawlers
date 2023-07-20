@@ -1,2 +1,2 @@
-from .dumper import Dockstore_Dumper
-from .uploader import Dockstore_Uploader
+from .dumper import Dockstore_Dumper  # noqa
+from .uploader import Dockstore_Uploader  # noqa

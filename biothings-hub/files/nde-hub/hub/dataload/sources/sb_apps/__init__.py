@@ -1,2 +1,2 @@
-from .dumper import SBAppsDumper
-from .uploader import SBAppsUploader
+from .dumper import SBAppsDumper  # noqa
+from .uploader import SBAppsUploader  # noqa

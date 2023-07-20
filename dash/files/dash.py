@@ -26,7 +26,7 @@ def get_dataset_ids(study_name):
         )
         try:
             data = requests.get(url).json()
-        except:
+        except Exception:
             logger.error(f"Could not get dataset ids for {study_name}")
             break
         if len(data["hits"]["hits"]) == 0:
@@ -139,7 +139,7 @@ def parse_study_info(study_info):
                 try:
                     data = requests.get(url).json()
                     pmcids = [obj["pmid"] for obj in data["records"]]
-                except:
+                except Exception:
                     logger.error(f'PMC ID conversion failed for {study_dict["name"]}')
                 pmids.extend(pmcids)
             if len(pmids) > 0:
