@@ -1,11 +1,11 @@
-import requests
-import time
-import logging
 import datetime
-from pprint import pprint
+import logging
+import time
+
+import requests
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('nde-logger')
+logger = logging.getLogger("nde-logger")
 
 # for debugging
 # import http.client
@@ -22,16 +22,16 @@ total = 0
 
 
 def get_ids():
-
     # we need to create a session to keep-alive the http connection
     # vivli throttles requests (76 seconds!) when starting a new HTTPs connection
     # https://stackoverflow.com/questions/45783655/first-https-request-takes-much-more-time-than-the-rest
     # https://stackoverflow.com/questions/10115126/python-requests-close-http-connection
 
     with requests.Session() as session:
-
-        url = "https://vivli-prod-cus-srch.search.windows.net/indexes/studies/docs?api-version=2016-09-01&" \
-              "api-key=C8237BFE70B9CC48489DC7DD84D88379&search=*&$orderby=nctId%20desc,%20sponsorProtocolId%20desc&$count=true"
+        url = (
+            "https://vivli-prod-cus-srch.search.windows.net/indexes/studies/docs?api-version=2016-09-01&"
+            "api-key=C8237BFE70B9CC48489DC7DD84D88379&search=*&$orderby=nctId%20desc,%20sponsorProtocolId%20desc&$count=true"
+        )
 
         request = session.get(url).json()
         global total
@@ -71,87 +71,91 @@ def parse():
                 logger.info("Number of Records Parsed: %s", count)
 
             output = {
-                'includedInDataCatalog': {
-                    '@type': 'Dataset',
-                    'name': 'Vivli',
-                    'url': 'https://vivli.org/',
-                    'versionDate': datetime.date.today().isoformat()
+                "includedInDataCatalog": {
+                    "@type": "Dataset",
+                    "name": "Vivli",
+                    "url": "https://vivli.org/",
+                    "versionDate": datetime.date.today().isoformat(),
                 },
                 "@context": "http://schema.org/",
-                '@type': 'Dataset',
-                'identifier': [],
-                '_id': "VIVLI_" + request.get('id')
+                "@type": "Dataset",
+                "identifier": [],
+                "_id": "VIVLI_" + request.get("id"),
             }
 
-            if identifier := request.get('nctId'):
-                output['identifier'].append(identifier)
-            if identifiers := request.get('secondaryIds'):
-                output['identifier'] += identifiers
+            if identifier := request.get("nctId"):
+                output["identifier"].append(identifier)
+            if identifiers := request.get("secondaryIds"):
+                output["identifier"] += identifiers
 
-            if sdPublishers := request['registryInfo']:
-                output['sdPublisher'] = []
+            if sdPublishers := request["registryInfo"]:
+                output["sdPublisher"] = []
                 for sdPublisher in sdPublishers:
                     sd = {}
-                    if name := sdPublisher['registryName']:
-                        sd['name'] = name
-                    if identifier := sdPublisher['registryId']:
-                        sd['identifier'] = identifier
-                    output['sdPublisher'].append(sd)
+                    if name := sdPublisher["registryName"]:
+                        sd["name"] = name
+                    if identifier := sdPublisher["registryId"]:
+                        sd["identifier"] = identifier
+                    output["sdPublisher"].append(sd)
 
-            if author := request.get('principalInvestigator'):
-                au = {'author': {}}
-                if given_name := author.get('firstName'):
-                    au['author']['givenName'] = given_name
-                if family_name := author.get('lastName'):
-                    au['author']['familyName'] = family_name
-                if identifier := author.get('orcidId'):
-                    au['author']['identifier'] = identifier
-                if au['author']:
-                    output['author'] = au
+            if author := request.get("principalInvestigator"):
+                au = {"author": {}}
+                if given_name := author.get("firstName"):
+                    au["author"]["givenName"] = given_name
+                if family_name := author.get("lastName"):
+                    au["author"]["familyName"] = family_name
+                if identifier := author.get("orcidId"):
+                    au["author"]["identifier"] = identifier
+                if au["author"]:
+                    output["author"] = au
 
-            if name := request.get('studyTitle'):
-                output['name'] = "Dataset from " + name
+            if name := request.get("studyTitle"):
+                output["name"] = "Dataset from " + name
 
             funding = []
-            if funder := request.get('leadSponsor'):
-                if name := funder.get('agency'):
-                    funder_name = {'funder': {'name': name}}
+            if funder := request.get("leadSponsor"):
+                if name := funder.get("agency"):
+                    funder_name = {"funder": {"name": name}}
                     funding.append(funder_name)
 
-            if funders := request.get('collaborators'):
+            if funders := request.get("collaborators"):
                 for funder in funders:
-                    if name := funder.get('agency'):
-                        funder_name = {'funder': {'name': name}}
+                    if name := funder.get("agency"):
+                        funder_name = {"funder": {"name": name}}
                         funding.append(funder_name)
             if funding:
-                output['funding'] = funding
+                output["funding"] = funding
 
-            temporal_coverage = {'temporalInterval': {}}
-            if start_date := request.get('studyStartDate'):
-                temporal_coverage['temporalInterval']['startDate'] = datetime.datetime.fromisoformat(start_date).date().isoformat()
+            temporal_coverage = {"temporalInterval": {}}
+            if start_date := request.get("studyStartDate"):
+                temporal_coverage["temporalInterval"]["startDate"] = (
+                    datetime.datetime.fromisoformat(start_date).date().isoformat()
+                )
 
-            if end_date := request.get('actualStudyCompletionDate'):
-                temporal_coverage['temporalInterval']['endDate'] = datetime.datetime.fromisoformat(end_date).date().isoformat()
+            if end_date := request.get("actualStudyCompletionDate"):
+                temporal_coverage["temporalInterval"]["endDate"] = (
+                    datetime.datetime.fromisoformat(end_date).date().isoformat()
+                )
 
-            if temporal_coverage['temporalInterval']:
-                output['temporalCoverage'] = temporal_coverage
+            if temporal_coverage["temporalInterval"]:
+                output["temporalCoverage"] = temporal_coverage
 
-            if locations := request.get('locationsOfStudySites'):
-                output['spatialCoverage'] = []
+            if locations := request.get("locationsOfStudySites"):
+                output["spatialCoverage"] = []
                 for location in locations:
                     sc = {}
-                    if name := location.get('name'):
-                        sc['name'] = name
-                    if identifier := location.get('code'):
-                        sc['identifier'] = identifier
+                    if name := location.get("name"):
+                        sc["name"] = name
+                    if identifier := location.get("code"):
+                        sc["identifier"] = identifier
                     if sc:
-                        output['spatialCoverage'].append(sc)
+                        output["spatialCoverage"].append(sc)
 
             keywords = []
-            if keyword := request.get('phase'):
+            if keyword := request.get("phase"):
                 keywords.append(keyword)
 
-            if keyword := request.get('studyType'):
+            if keyword := request.get("studyType"):
                 keywords.append(keyword)
 
             # This should be equivalent to intervention names
@@ -161,42 +165,42 @@ def parse():
             #             for intervention in interventions:
             #                 if keyword := intervention.get('interventionName'):
             #                     keywords.append(keyword)
-            if intervention_names := request.get('interventionNames'):
+            if intervention_names := request.get("interventionNames"):
                 keywords = keywords + intervention_names
 
-            if pop_items := request.get('populationVocabularyItems'):
+            if pop_items := request.get("populationVocabularyItems"):
                 for pop_item in pop_items:
-                    if keyword := pop_item.get('term'):
+                    if keyword := pop_item.get("term"):
                         keywords.append(keyword)
 
-            if int_items := request.get('interventionVocabularyItems'):
+            if int_items := request.get("interventionVocabularyItems"):
                 for int_item in int_items:
-                    if keyword := int_item.get('term'):
+                    if keyword := int_item.get("term"):
                         keywords.append(keyword)
 
             if keywords:
-                output['keywords'] = list(set(keywords))
+                output["keywords"] = list(set(keywords))
 
-            if conditions := request.get('conditions'):
-                output['healthCondition'] = []
+            if conditions := request.get("conditions"):
+                output["healthCondition"] = []
                 for condition in conditions:
-                    output['healthCondition'].append({'name': condition})
+                    output["healthCondition"].append({"name": condition})
 
             vm = []
-            if variable_measured := request.get('outcomeNames'):
+            if variable_measured := request.get("outcomeNames"):
                 vm = vm + variable_measured
 
-            if outcomes := request.get('outcomes'):
+            if outcomes := request.get("outcomes"):
                 for outcome in outcomes:
-                    if variable_measured := outcome.get('specificMeasurement'):
+                    if variable_measured := outcome.get("specificMeasurement"):
                         vm.append(variable_measured)
 
             if vm:
-                output['variableMeasured'] = vm
+                output["variableMeasured"] = vm
 
-            if doi := request.get('digitalObjectId'):
+            if doi := request.get("digitalObjectId"):
                 output["doi"] = doi
-            elif doi := request.get('studyMetadataDoi'):
+            elif doi := request.get("studyMetadataDoi"):
                 output["doi"] = doi
             else:
                 pass
@@ -204,37 +208,41 @@ def parse():
             if url := output.get("doi"):
                 output["url"] = doi
 
-            if description := request.get('description'):
-                output['description'] = description
-            elif description := request.get('extractedBriefSummary'):
-                output['description'] = description
+            if description := request.get("description"):
+                output["description"] = description
+            elif description := request.get("extractedBriefSummary"):
+                output["description"] = description
             else:
                 pass
 
-            if date_created := request.get('draftCreatedDate'):
-                output['dateCreated'] = datetime.datetime.fromisoformat(date_created.split('.')[0]).date().isoformat()
-            elif date_created := request.get('submittedDate'):
-                output['dateCreated'] = datetime.datetime.fromisoformat(date_created.split('.')[0]).date().isoformat()
+            if date_created := request.get("draftCreatedDate"):
+                output["dateCreated"] = datetime.datetime.fromisoformat(date_created.split(".")[0]).date().isoformat()
+            elif date_created := request.get("submittedDate"):
+                output["dateCreated"] = datetime.datetime.fromisoformat(date_created.split(".")[0]).date().isoformat()
             else:
                 pass
 
-            if date_published := request.get('postedDate'):
-                output['datePublished'] = datetime.datetime.fromisoformat(date_published.split('.')[0]).date().isoformat()
+            if date_published := request.get("postedDate"):
+                output["datePublished"] = (
+                    datetime.datetime.fromisoformat(date_published.split(".")[0]).date().isoformat()
+                )
 
-            if grant := request.get('grant'):
-                logger.info('Grant Exists: %s. ID is: %s', (grant, output['_id']))
+            if grant := request.get("grant"):
+                logger.info("Grant Exists: %s. ID is: %s", (grant, output["_id"]))
 
-            if funding := request.get('funder'):
-                logger.info('Funding Exists: %s. ID is: %s', (funding, output['_id']))
+            if funding := request.get("funder"):
+                logger.info("Funding Exists: %s. ID is: %s", (funding, output["_id"]))
 
-            if date_modified := request.get('updatedDate'):
-                output['dateModified'] = datetime.datetime.fromisoformat(date_modified.split('.')[0]).date().isoformat()
+            if date_modified := request.get("updatedDate"):
+                output["dateModified"] = datetime.datetime.fromisoformat(date_modified.split(".")[0]).date().isoformat()
 
             yield output
 
         if count == total:
             logger.info("Total number of documents parsed: %s", count)
         else:
-            logger.warning("Did not parse all the records \n"
-                           "Total number parsed: %s \n Total number of documents: %s", count, total)
-
+            logger.warning(
+                "Did not parse all the records \n" "Total number parsed: %s \n Total number of documents: %s",
+                count,
+                total,
+            )

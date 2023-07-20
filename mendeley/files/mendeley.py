@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -38,7 +37,7 @@ def parse():
     sickle = Sickle("https://data.mendeley.com/oai", max_retries=3)
     records = sickle.ListRecords(metadataPrefix="oai_dc", ignore_deleted=True)
 
-    logger.info(f"Retrieving Dataset ids")
+    logger.info("Retrieving Dataset ids")
 
     urls = []
     count = 0
@@ -62,7 +61,7 @@ def parse():
             # if StopIteration is raised, break from loop
             break
 
-    logger.info(f"Retrieving Metadata Sources")
+    logger.info("Retrieving Metadata Sources")
 
     # After we have the ids we use the function declared above and map the list of ids we've obtained from the OAI-PMH and ping their api for metadata.
     with ThreadPoolExecutor(max_workers=10) as pool:
@@ -71,7 +70,7 @@ def parse():
 
     logger.info("Finished Retrieving Metadata Sources. Total Metadata Sources: %s", url_count)
 
-    logger.info(f"Parsing records")
+    logger.info("Parsing records")
 
     # Finally we handle the transformations after retrieving all the metadata.
     for response in response_list:

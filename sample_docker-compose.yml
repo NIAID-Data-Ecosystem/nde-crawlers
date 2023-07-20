@@ -1,16 +1,8 @@
+# docker-compose -f sample_docker-compose.yml up --detach --build
 version: '3'
 
 services:
-  # when updating changes to code: "docker-compose up --detach --build dde-crawler"
-  dde-crawler:
-    build:
-      context: dde_niaid
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
-    volumes:
-      - data:/data
+  # when updating changes to code: "docker-compose -f sample_docker-compose.yml up --detach --build nde-hub"
   mongodb:
     image: mongo:5.0
     ports:

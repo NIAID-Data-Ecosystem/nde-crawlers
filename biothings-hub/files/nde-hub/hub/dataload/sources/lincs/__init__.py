@@ -1,2 +1,2 @@
-from .dumper import LINCSDumper
-from .uploader import LINCSUploader
+from .dumper import LINCSDumper  # noqa
+from .uploader import LINCSUploader  # noqa

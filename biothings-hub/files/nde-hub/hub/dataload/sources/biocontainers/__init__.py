@@ -1,2 +1,2 @@
-from .dumper import Biocontainers_Dumper
-from .uploader import Biocontainers_Uploader
+from .dumper import Biocontainers_Dumper  # noqa
+from .uploader import Biocontainers_Uploader  # noqa

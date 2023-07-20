@@ -11,7 +11,7 @@ class NCBI_SRA_Uploader(NDESourceUploader):
                 "identifier": "NCBI SRA",
                 "name": "NCBI SRA",
                 "schema": get_source_data(name),
-                "url": "https://www.ncbi.nlm.nih.gov/sra"
+                "url": "https://www.ncbi.nlm.nih.gov/sra",
             }
         }
     }

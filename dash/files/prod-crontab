@@ -10,6 +10,6 @@
 # |  |  |  |  |
 # *  *  *  *  * user-name command to be executed
 #               we have to use root in order to write to stdout and stderr
-0 0 * * 0 root /home/biothings/run-dash.sh
-# @reboot root /home/biothings/run-dash.sh
+# 0 0 * * 0 root /home/biothings/run-api-crawler.sh
+# @reboot root /home/biothings/run-api-crawler.sh
 # remember the newline at the end

@@ -220,7 +220,6 @@ biothings.utils.jsondiff.UNORDERED_LIST = True
 # any other variables in this file as required. Variables defined as ValueError() exceptions
 # *must* be defined
 #
-from biothings.utils.configuration import ConfigurationDefault, ConfigurationError, ConfigurationValue
 
 # * 7. Hub Internals *#
 DATA_SRC_SERVER = ConfigurationError("Define hostname for source database")
@@ -318,7 +317,7 @@ LOG_FOLDER = ConfigurationDefault(
 # LOG_FOLDER = os.path.join(DATA_ARCHIVE_ROOT,'logs')
 
 # default hub logger
-from biothings.utils.loggers import setup_default_log
+from biothings.utils.loggers import setup_default_log  # noqa
 
 logger = ConfigurationDefault(
     default=logging, desc="Provide a default hub logger instance (use setup_default_log(name,log_folder)"
@@ -347,3 +346,6 @@ AUTO_ARCHIVE_CONFIG = {
 
 # Docker config
 DOCKER_CONFIG = {"localhost": {"client_url": "http://" + os.environ.get("DOCKER_HOST", "localhost:2375")}}
+
+# docker client to use from DOCKER_CONFIG. Add this as localhost in config_local to override.
+DOCKER_HOST = None

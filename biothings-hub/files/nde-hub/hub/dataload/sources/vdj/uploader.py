@@ -1,7 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
 from utils.pmid_helper import load_pmid_ctfd
-from utils.utils import check_schema
+from utils.utils import nde_upload_wrapper
 
 # Example __metadata__ dictionary:
 # <SOURCE_NAME> = https://api.data.niaid.nih.gov/v1/metadata
@@ -25,12 +25,12 @@ class VDJ_Uploader(NDESourceUploader):
                 "identifier": "VDJServer",
                 "name": "vdj",
                 "schema": get_source_data(name),
-                "url": "https://vdj-staging.tacc.utexas.edu/community/"
+                "url": "https://vdj-staging.tacc.utexas.edu/community/",
             }
         }
     }
 
-    @check_schema
+    @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
         for doc in docs:

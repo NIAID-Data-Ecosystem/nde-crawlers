@@ -1,2 +1,2 @@
-from .dumper import VivliDumper
-from .uploader import VivliUploader
+from .dumper import VivliDumper  # noqa
+from .uploader import VivliUploader  # noqa

@@ -1,2 +1,2 @@
-from .dumper import ImmPortDumper
-from .uploader import ImmPortUploader
+from .dumper import ImmPortDumper  # noqa
+from .uploader import ImmPortUploader  # noqa

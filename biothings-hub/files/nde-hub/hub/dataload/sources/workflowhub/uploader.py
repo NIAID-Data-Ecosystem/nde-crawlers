@@ -1,6 +1,5 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
-from utils.pmid_helper import load_pmid_ctfd
 
 # Example __metadata__ dictionary:
 # <SOURCE_NAME> = https://api.data.niaid.nih.gov/v1/metadata
@@ -24,7 +23,7 @@ class WorkflowHub_Uploader(NDESourceUploader):
                 "identifier": "WorkflowHub",
                 "name": "WorkflowHub",
                 "schema": get_source_data(name),
-                "url": "https://workflowhub.eu/"
+                "url": "https://workflowhub.eu/",
             }
         }
     }

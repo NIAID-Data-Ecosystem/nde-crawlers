@@ -1,2 +1,2 @@
-from .dumper import ZenodoDumper
-from .uploader import ZenodoUploader
+from .dumper import ZenodoDumper  # noqa
+from .uploader import ZenodoUploader  # noqa

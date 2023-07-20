@@ -23,7 +23,7 @@ class Dockstore_Uploader(NDESourceUploader):
                 "identifier": "Dockstore",
                 "name": "Dockstore",
                 "schema": get_source_data(name),
-                "url": "https://dockstore.org/"
+                "url": "https://dockstore.org/",
             }
         }
     }

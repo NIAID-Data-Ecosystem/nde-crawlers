@@ -23,7 +23,7 @@ class Biotools_Uploader(NDESourceUploader):
                 "identifier": "biotools",
                 "name": "biotools",
                 "schema": get_source_data(name),
-                "url": "https://bio.tools/"
+                "url": "https://bio.tools/",
             }
         }
     }

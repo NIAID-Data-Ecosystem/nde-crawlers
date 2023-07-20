@@ -1,2 +1,2 @@
-from .dumper import NCBI_Geo_Dumper
-from .uploader import NCBI_Geo_Uploader
+from .dumper import NCBI_Geo_Dumper  # noqa
+from .uploader import NCBI_Geo_Uploader  # noqa

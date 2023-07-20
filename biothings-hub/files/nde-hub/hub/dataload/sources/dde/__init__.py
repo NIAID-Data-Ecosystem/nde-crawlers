@@ -1,2 +1,2 @@
-from .dumper import DDEDumper
-from .uploader import DDEUploader
+from .dumper import DDEDumper  # noqa
+from .uploader import DDEUploader  # noqa

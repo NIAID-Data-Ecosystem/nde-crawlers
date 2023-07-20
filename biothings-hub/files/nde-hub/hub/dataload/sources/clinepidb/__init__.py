@@ -1,2 +1,2 @@
-from .dumper import ClinEpiDB_Dumper
-from .uploader import ClinEpiDB_Uploader
+from .dumper import ClinEpiDB_Dumper  # noqa
+from .uploader import ClinEpiDB_Uploader  # noqa

@@ -1,5 +1,4 @@
 import datetime
-import json
 import logging
 
 import requests
@@ -157,7 +156,9 @@ def record_generator():
             # tables.HyperLinks
             hl_list = []
             for dict_ in record["tables"]["HyperLinks"]:
-                url_ = dict_.pop("url")
+                # TODO DO WE NEED TO CAPTURE THE URL?
+                # url_ = dict_.pop("url")
+                dict_.pop("url")
                 hl_url = dict_["hyper_link"].pop("url")
                 if "NCT" in hl_url:
                     hl_list.append({"identifier": hl_url.split("/")[-1], "url": hl_url})

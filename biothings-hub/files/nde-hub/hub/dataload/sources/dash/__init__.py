@@ -1,2 +1,2 @@
-from .dumper import dashDumper
-from .uploader import dashUploader
+from .dumper import dashDumper  # noqa
+from .uploader import dashUploader  # noqa

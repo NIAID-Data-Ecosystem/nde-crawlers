@@ -1,7 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.pubtator import standardize_data
 from utils.funding_helper import standardize_funding
-from utils.utils import check_schema
+from utils.pubtator import standardize_data
+from utils.utils import nde_upload_wrapper
 
 
 class ImmPortUploader(NDESourceUploader):
@@ -9,11 +9,11 @@ class ImmPortUploader(NDESourceUploader):
     __metadata__ = {
         "src_meta": {
             "url": "https://www.immport.org/shared/home",
-            "license_url": "https://docs.immport.org/home/agreement/"
+            "license_url": "https://docs.immport.org/home/agreement/",
         }
     }
 
-    @check_schema
+    @nde_upload_wrapper
     def load_data(self, data_folder):
         pubtator_docs = standardize_data(data_folder)
         funding_docs = standardize_funding(pubtator_docs)

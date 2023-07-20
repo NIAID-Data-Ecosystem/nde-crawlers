@@ -1,6 +1,8 @@
 from hub.dataload.nde import NDESourceUploader
+
 # from utils.pmid_helper import load_pmid_ctfd
 from utils.csv_helper import get_source_data
+
 
 class DataverseUploader(NDESourceUploader):
     name = "dataverse"
@@ -11,7 +13,7 @@ class DataverseUploader(NDESourceUploader):
                 "identifier": "Harvard Dataverse",
                 "name": "Dataverse",
                 "schema": get_source_data(name),
-                "url": "https://dataverse.harvard.edu/"
+                "url": "https://dataverse.harvard.edu/",
             }
         }
     }

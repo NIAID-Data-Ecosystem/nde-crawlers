@@ -1,2 +1,2 @@
-from .dumper import MendeleyDumper
-from .uploader import MendeleyUploader
+from .dumper import MendeleyDumper  # noqa
+from .uploader import MendeleyUploader  # noqa

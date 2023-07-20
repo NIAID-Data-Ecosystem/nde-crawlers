@@ -1,0 +1,184 @@
+# Quick way to be able to build all the images with the command below. Do not use docker-compose up.
+# docker-compose -f docker-compose-crawlers.yml build --no-cache
+# MAKE SURE WHEN YOU NAME YOUR CRAWLER SERVICE THAT IT MATCHES SRC_NAME IN YOUR DUMPER CLASS BIOTHINGS_HUB. Example: "SRC_NAME-crawler"
+version: '3'
+
+services:
+  # when updating changes to code: "docker-compose -f docker-compose-crawlers.yml build --no-cache dde-crawler"
+  acd_niaid-crawler:
+    build:
+      context: acd_niaid
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  bioconductor-crawler:
+    build:
+      context: bioconductor
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  biocontainers-crawler:
+    build:
+      context: biocontainers
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  biotools-crawler:
+    build:
+      context: biotools
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  clinepidb-crawler:
+    build:
+      context: clinepidb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  dash-crawler:
+    build:
+      context: dash
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  dataverse-crawler:
+    build:
+      context: dataverse
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
+  dde-crawler:
+    build:
+      context: dde_niaid
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  dockstore-crawler:
+    build:
+      context: dockstore
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  dryad-crawler:
+    build:
+      context: dryad_crawler
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  figshare-crawler:
+    build:
+      context: figshare_oai-pmh
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
+  flowrepository-crawler:
+    build:
+      context: flowrepository_crawler
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  hca-crawler:
+    build:
+      context: hca
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  hubmap-crawler:
+    build:
+      context: hubmap
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  immport-crawler:
+    build:
+      context: immport
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  lincs-crawler:
+    build:
+      context: lincs
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  mendeley-crawler:
+    build:
+      context: mendeley
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
+  microbiomedb-crawler:
+    build:
+      context: microbiomedb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  ncbi_pmc-crawler:
+    build:
+      context: ncbi_pmc_oai-pmh
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
+  ncbi_sra-crawler:
+    build:
+      context: ncbi_sra
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
+  qiita-crawler:
+    build:
+      context: qiita
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  reframedb-crawler:
+    build:
+      context: reframedb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  sb_apps-crawler:
+    build:
+      context: sb_apps
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  vdj-crawler:
+    build:
+      context: vdj
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  veupathdb-crawler:
+    build:
+      context: veupathdb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  vivli-crawler:
+    build:
+      context: vivli
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  workflowhub-crawler:
+    build:
+      context: workflowhub
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  zenodo-crawler:
+    build:
+      context: zenodo_oai-pmh
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
+volumes:
+  data:
+  cache:
