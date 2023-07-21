@@ -99,7 +99,8 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
         for doc in gen:
             # dictionaries are mutable so we dont need to reassign
             add_date(doc)
-            merge_duplicates(doc)
+            # TODO FOR TESTING
+            # merge_duplicates(doc)
             check_schema(doc)
             yield doc
 
@@ -114,7 +115,8 @@ def zenodo_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generat
         gen = func(*args, **kwargs)
         for doc in gen:
             add_date(doc)
-            merge_duplicates(doc)
+            # TODO FOR TESTING
+            # merge_duplicates(doc)
             yield doc
 
     return wrapper
