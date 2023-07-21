@@ -44,7 +44,7 @@ def record_generator():
                 "HH_count","Variable_count","approved", "Part_count","percent_approved","total","total_number","Obser_count","Samp_count","Country","Years","AdditionalData","WHO", \
                 "ProjectName","contact","institution","description","eupath_release","email","summary"], \
                 "primaryKey":[{"name":"dataset_id","value":%s}], \
-                "tables":["StudyCharacteristicTable","Publications","DownloadVersion","Contacts","AccessRequestStats","AccessRequest","References","HyperLinks"]}'
+                "tables":["StudyCharacteristicTable","Publications","DownloadVersion","Contacts","AccessRequestStats","AccessRequest","HyperLinks"]}'
             % dataset_id
         )
 
