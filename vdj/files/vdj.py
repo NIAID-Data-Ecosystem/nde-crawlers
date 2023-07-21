@@ -31,6 +31,10 @@ def retrieve_study_metadata():
             logger.error("Error retrieving studies from %s", url)
             logger.error(e)
             continue
+        except requests.exceptions.SSLError as e:
+            logger.error("SSL issue from %s", url)
+            logger.error(e)
+            continue
         data = r.json()["Repertoire"]
         for study_dict in data:
             id = study_dict["study"]["study_id"]
