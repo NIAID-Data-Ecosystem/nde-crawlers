@@ -8,8 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
-COOKIE = 'user="2|1:0|10:1686938036|4:user|32:ImR5bGFud2VsemVsQGdtYWlsLmNvbSI=|d7188492a3cc441525def3d51159f5b6416a8026e09acd462f5c1edc9906a78d"'
-
+COOKIE = 'user="2|1:0|10:1689981126|4:user|32:ImR5bGFud2VsemVsQGdtYWlsLmNvbSI=|6d393a07cfecb7c40f9ed51043ebf0e688301a0aa3ee20de5aa32e48b5f1b6d1"'
 
 def retrieve_study_metadata():
     logger.info("Retrieving study metadata from Qiita")
