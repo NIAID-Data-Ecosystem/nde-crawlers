@@ -55,7 +55,7 @@ services:
       dockerfile: Dockerfile
       args:
         PYTHON_VERSION: "3.10"
-    # May need to configure this if you get timeout errors after 2 hours. 
+    # May need to configure this if you get timeout errors after 2 hours.
     # sysctls:
     #   net.ipv4.tcp_keepalive_intvl: '45'
     #   net.ipv4.tcp_keepalive_probes: '15'
