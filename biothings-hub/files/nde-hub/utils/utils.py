@@ -84,7 +84,7 @@ def merge_duplicates(doc: Dict) -> Dict:
                 doc["_id"] = _id[0]
         else:
             assert isinstance(_id, str), "Doi is not a string %s" % _id
-            if _id == "None":
+            if _id.casefold() == "none":
                 doc.pop("doi")
             else:
                 doc["_id"] = _id
