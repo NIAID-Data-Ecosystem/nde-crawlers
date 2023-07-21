@@ -11,7 +11,7 @@ class DataverseUploader(NDESourceUploader):
             "sourceInfo": {
                 "description": "The Harvard Dataverse Repository is a free data repository open to all researchers from any discipline, both inside and outside of the Harvard community, where you can share, archive, cite, access, and explore research data. Each individual Dataverse collection is a customizable collection of datasets (or a virtual repository) for organizing, managing, and showcasing datasets.",
                 "identifier": "Harvard Dataverse",
-                "name": "Dataverse",
+                "name": "Harvard Dataverse",
                 "schema": get_source_data(name),
                 "url": "https://dataverse.harvard.edu/",
             }
