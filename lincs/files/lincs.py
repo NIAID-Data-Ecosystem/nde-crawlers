@@ -46,7 +46,7 @@ class LINCS:
                 document["funding"] = {"identifier": document.pop("funding")}
 
             if "datemodified" in document:
-                document["dateUpdated"] = document.pop("datemodified")
+                document["dateModified"] = document.pop("datemodified")
 
             if "screeninglabinvestigator" in document:
                 if len(document["screeninglabinvestigator"].split(",  ")) > 1:
