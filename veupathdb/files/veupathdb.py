@@ -71,7 +71,7 @@ def record_generator():
             try:
                 iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates]
                 date_updated = sorted(iso_list)[0]
-                _record_dict["dateUpdated"] = date_updated
+                _record_dict["dateModified"] = date_updated
             except Exception:
                 logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s" % release_dates)
 
