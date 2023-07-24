@@ -48,32 +48,38 @@ def record_generator():
         if _record_dict["attributes"]["release_policy"]:
             _record_dict["conditionOfAccess"] = _record_dict["attributes"].pop("release_policy")
 
-        if _record_dict["attributes"]["version"]:
-            try:
-                date_modified = _record_dict["attributes"]["version"]
-                date_modified = datetime.datetime.strptime(date_modified, "%Y-%m-%d").date().isoformat()
-                _record_dict["dateModified"] = date_modified
-            except Exception:
-                logging.debug(
-                    "[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"
-                    % _record_dict["attributes"]["version"]
-                )
 
         # tablexs.Contacts
         _record_dict["author"] = [
             {"name": _dict.pop("contact_name"), "affiliation": {"name": str(_dict.pop("affiliation"))}}
             for _dict in _record_dict["tables"]["Contacts"]
         ]
+
+        if _record_dict["attributes"]["version"]:
+            try:
+                date_updated = _record_dict["attributes"]["version"]
+                date_updated = datetime.datetime.strptime(date_updated, "%Y-%m-%d").date().isoformat()
+            except Exception:
+                logging.debug(
+                    "[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"
+                    % _record_dict["attributes"]["version"]
+                )
+
         # tables.GenomeHistory
         release_dates = [hit["release_date"] for hit in _record_dict["tables"]["GenomeHistory"]]
         # if multiple dates passed, keep the most recent date
         if release_dates:
             try:
-                iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates]
-                date_updated = sorted(iso_list)[0]
-                _record_dict["dateModified"] = date_updated
+                if date_updated:
+                    iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates].append(date_updated)
+                else:
+                    iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates]
+                date_updated = sorted(iso_list)[-1]
             except Exception:
                 logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s" % release_dates)
+
+        if date_updated:
+            _record_dict["dateModified"] = date_updated
 
         # tables.Version
         published_dates = [hit["version"] for hit in _record_dict["tables"]["Version"]]
