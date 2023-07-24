@@ -170,8 +170,9 @@ def parse():
             for link in links:
                 if url := link.get("url"):
                     link_list.append(url)
-            if link_list:
-                assert len(link_list) == 1, "There is more than one url"
+            if link_list != 1:
+                logger.info("There is more than one url. ID is %s" % output["_id"] )
+            else:
                 output["url"] = link_list[0]
 
         yield output
