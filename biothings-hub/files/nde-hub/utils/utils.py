@@ -91,6 +91,94 @@ def merge_duplicates(doc: Dict) -> Dict:
 
     return doc
 
+MAPPING_SCORES = {
+    "abstract": 0.4,
+    "alternateName": 0.4,
+    "author": {
+        "familyName": 0.2,
+        "givenName": 0.2,
+        "name": 0.4,
+    },
+    "citation": {
+        "author": {
+            "familyName": 0.1,
+            "givenName": 0.1,
+            "name": 0.2,
+        },
+        "doi": 0.2,
+        "name": 0.1,
+        "pmid": 0.1,
+        "url": 0.1,
+    },
+    "citedBy": {
+        "doi": 0.1,
+        "name": 0.1,
+        "pmid": 0.1,
+        "url": 0.1,
+    },
+    "contentUrl": 0.2,
+    "dateCreated": 0.2,
+    "dateModified": 0.2,
+    "datePublished": 0.2,
+    "distribution": {
+        "contentUrl": 0.1,
+    },
+    "doi": 0.3,
+    "funding": {
+        "url": 0.3,
+        "name": 0.1,
+        "funder": {
+            "name": 0.1,
+            "url": 0.3,
+        },
+    },
+    "healthCondition": {
+        "name": 0.3,
+        "isCurated": 0.3,
+    },
+    "infectiousAgent": {
+        "name": 0.3,
+        "isCurated": 0.3,
+    },
+    "isBasedOn": {
+        "doi": 0.3,
+        "name": 0.1,
+        "pmid": 0.3,
+        "url": 0.1,
+    },
+    "keywords": 0.1,
+    "measurementTechnique": {
+        "name": 0.1,
+    },
+    "sdPublisher": {
+        "name": 0.3,
+        "url": 0.3,
+    },
+    "species": {
+        "name": 0.3,
+        "isCurated": 0.3,
+    },
+}
+def calculate_score(data, mapping):
+    score = 0
+    for key, value in data.items():
+        if key == "description":
+            score += 0.5 * min(1, len(value) / 500)  # Normalized based on an arbitrary max length of 500
+        elif key in mapping:
+            if isinstance(value, dict):
+                score += calculate_score(value, mapping[key])
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        score += calculate_score(item, mapping[key])
+            else:
+                score += mapping[key]
+    return score
+
+def add_metadata_score(document, mapping):
+    document["metadata_score"] = calculate_score(document, mapping)
+    return document
+
 
 def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
     @functools.wraps(func)
@@ -102,6 +190,7 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             # TODO FOR TESTING
             # merge_duplicates(doc)
             check_schema(doc)
+            add_metadata_score(doc, MAPPING_SCORES)
             yield doc
 
     return wrapper
