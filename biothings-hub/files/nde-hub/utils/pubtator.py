@@ -9,7 +9,9 @@ import orjson
 import requests
 from Bio import Entrez
 from biothings.utils.dataload import tab2dict
-from config import GEO_EMAIL
+from config import GEO_EMAIL, logger
+
+from .date import add_date
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -45,6 +47,7 @@ def extract_values(doc_list, key):
     return list(dict.fromkeys([x.lower().strip() for x in values_list]))
 
 
+@add_date
 def standardize_data(data):
     logger.info("Standardizing data...")
     # Check if data is a file path (str)
@@ -135,11 +138,10 @@ def get_species_details(original_name, identifier):
         return standard_dict
 
     except requests.exceptions.HTTPError as e:
-        logger.info(f"HTTP Error: {e}")
         logger.info(f"No Uniprot information found for {original_name}, {identifier}. Trying NCBI...")
     except requests.exceptions.SSLError as e:
         logger.info(f"SSL Error: {e}")
-        logger.info("Retrying in 5 seconds...")
+        logger.info(f"Retrying in 5 seconds...")
         time.sleep(5)
         get_species_details(original_name, identifier)
 
@@ -153,7 +155,7 @@ def get_species_details(original_name, identifier):
             break
         except Exception as e:
             logger.info(f"Error: {e}")
-            logger.info("Retrying in 5 seconds...")
+            logger.info(f"Retrying in 5 seconds...")
             time.sleep(5)
             get_species_details(original_name, identifier)
 
@@ -192,27 +194,175 @@ def get_species_details(original_name, identifier):
     return standard_dict
 
 
+def load_json_response(response):
+    try:
+        return response.json()
+    except json.decoder.JSONDecodeError:
+        return None
+
+
+def retry_request(url, retries=7):
+    for _ in range(retries):
+        response = requests.get(url)
+        data = load_json_response(response)
+        if data is not None:
+            return data
+        logger.info("Retrying...")
+    logger.info("Failed to decode JSON")
+    return None
+
+
+def handle_response(data, condition, base_url):
+    if "hits" in data:
+        for hit in data["hits"]:
+            alternate_names = process_synonyms(hit.get("synonym", {}))
+            if hit["name"].lower().strip() == condition.lower().strip() or any(
+                name.lower().strip() == condition.lower().strip() for name in alternate_names
+            ):
+                logger.info(f"Found {condition} in ontology: {base_url.split('/')[-1]}")
+                return create_return_object(hit, alternate_names, condition)
+    return None
+
+
+def query_condition(health_condition):
+    BASE_URLS = [
+        "https://biothings.ncats.io/mondo",
+        "https://biothings.ncats.io/hpo",
+        "https://biothings.ncats.io/doid",
+        "https://biothings.ncats.io/ncit",
+    ]
+    logger.info(f'Querying for "{health_condition}"...')
+    for base_url in BASE_URLS:
+        try:
+            url = f'{base_url}/query?q=name:("{health_condition}")&limit=1000'
+            data = retry_request(url)
+            result = handle_response(data, health_condition, base_url)
+            if result is not None:
+                return result
+
+            # if not found in name, search in synonyms
+            url = (
+                f'{base_url}/query?q=synonym.exact:"{health_condition}"&limit=1000'
+                if "hpo" in base_url
+                else f'{base_url}/query?q=synonym:"{health_condition}"&limit=1000'
+            )
+            data = retry_request(url)
+            result = handle_response(data, health_condition, base_url)
+            if result is not None:
+                return result
+        except Exception as e:
+            logger.info(f"An error occurred while querying {base_url}: {e}")
+    logger.info(f"Unable to find {health_condition}")
+    return None
+
+
+def process_synonyms(synonym_field):
+    if isinstance(synonym_field, dict):
+        # If the synonym field is a dictionary, return the exact synonyms.
+        return synonym_field.get("exact", [])
+    else:
+        # If the synonym field is a list, filter it by 'EXACT'.
+        return [syn.split('"')[1] for syn in synonym_field if "EXACT" in syn]
+
+
+def get_xref_name(xref_ontology, xref_identifier):
+    # Dictionary mapping each ontology to its API endpoint
+    api_endpoints = {
+        "ICD9": "https://clinicaltables.nlm.nih.gov/api/icd9cm_dx/v3/search?terms=",
+        "MESH": "https://id.nlm.nih.gov/mesh/lookup/label?resource=",
+        "SCTID": "https://www.ebi.ac.uk/ols4/api/v2/ontologies/snomed/classes/http%253A%252F%252Fsnomed.info%252Fid%252F",
+        "EFO": "https://www.ebi.ac.uk/ols4/api/v2/ontologies/efo/classes/http%253A%252F%252Fwww.ebi.ac.uk%252Fefo%252FEFO_",
+        "ICD10CM": "https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?terms=",
+    }
+
+    # Check if the provided ontology is in our list of endpoints
+    if xref_ontology not in api_endpoints:
+        return None
+
+    # Form the URL for the request
+    url = api_endpoints[xref_ontology] + xref_identifier
+
+    response = requests.get(url)
+
+    response.raise_for_status()
+
+    # Parse the JSON response and return the name
+    try:
+        if xref_ontology == "ICD9":
+            return response.json()[4][1]
+        elif xref_ontology == "MESH":
+            return response.json()[0]
+        elif xref_ontology == "SCTID" or xref_ontology == "EFO" or xref_ontology == "ICD10CM":
+            return response.json()["label"]
+    except KeyError:
+        logger.info(f"Check the response from {url}")
+        return None
+
+    return response.json()["name"]  # This assumes that the response is a JSON object with a 'name' field
+
+
+def create_return_object(hit, alternate_names, original_name):
+    ontology = hit["_id"].split(":")[0]
+    identifier = hit["_id"].split(":")[1]
+    sameas_list = []
+    if hit.get("xrefs"):
+        for xref_ontology, xref_identifier in hit["xrefs"].items():
+            sameas = {}
+            sameas["identifier"] = f"{xref_ontology}:{xref_identifier}"
+            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
+            # TODO - add name through api call
+            sameas_list.append(sameas)
+    elif hit.get("xref"):
+        for xref in hit["xref"]:
+            xref_ontology = xref.split(":")[0]
+            xref_identifier = xref.split(":")[1]
+            sameas = {}
+            sameas["identifier"] = xref
+            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
+            sameas_name = get_xref_name(xref_ontology, xref_identifier)
+            if sameas_name:
+                sameas["name"] = sameas_name
+            sameas_list.append(sameas)
+
+    standard_dict = {
+        "identifier": hit["_id"],
+        "inDefinedTermSet": ontology,
+        "isCurated": True,
+        "name": hit["name"],
+        "originalName": original_name,
+        "url": f"http://purl.obolibrary.org/obo/{ontology}_{identifier}",
+        "curatedBy": {
+            "name": "NCATS Biomedical Data Translator Program",
+            "url": "https://biothings.ncats.io/",
+            "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
+        },
+    }
+    if sameas_list:
+        standard_dict["sameas"] = sameas_list
+    if alternate_names:
+        standard_dict["alternateName"] = alternate_names
+    return standard_dict
+
+
 def get_new_health_conditions(health_conditions):
     logger.info("Getting new health conditions...")
     found_health_conditions = []
     not_found_health_conditions = []
     for health_condition in health_conditions:
-        logger.info(f"Checking {health_condition}...")
-        result = check_health_condition(health_condition, "mondo.label")
-        if result is None:
-            result = check_health_condition(health_condition, "mondo.synonym.exact")
-        if result is None:
-            result = check_health_condition(health_condition, "mondo.synonym.related")
+        logger.info(
+            f"Processed {health_conditions.index(health_condition) + 1} / {len(health_conditions)} health conditions"
+        )
+        result = query_condition(health_condition)
         if result is not None:
             logger.info(f"Found {health_condition} details")
             found_health_conditions.append(health_condition)
             logger.info(f"Adding {health_condition} to database...")
-            result_dict = get_health_condition_details(result, health_condition)
+            # result_dict = get_health_condition_details(result, health_condition)
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute(
                 "INSERT INTO health_conditions VALUES (?, ?)",
-                (health_condition.lower().strip(), json.dumps(result_dict)),
+                (health_condition.lower().strip(), json.dumps(result)),
             )
             logger.info(f"Added {health_condition}")
             conn.commit()
@@ -223,67 +373,6 @@ def get_new_health_conditions(health_conditions):
     return (found_health_conditions, not_found_health_conditions)
 
 
-def get_health_condition_details(result, health_condition):
-    standard_dict = {
-        "identifier": result["id"].split(":")[1],
-        "inDefinedTermSet": "MONDO",
-        "isCurated": True,
-        "name": result["name"],
-        "originalName": health_condition,
-        "url": result["url"],
-        "curatedBy": {
-            "name": "MyDisease.info",
-            "url": "https://mydisease.info/",
-            "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
-        },
-    }
-    if result.get("alternate_names"):
-        standard_dict["alternateName"] = result["alternate_names"]
-
-    return standard_dict
-
-
-def check_health_condition(health_condition, parameter):
-    API_URL = "https://mydisease.info/v1/query"
-    params = {"q": f'{parameter}:"{health_condition}"', "fields": "mondo", "limit": 1000}
-    response = requests.get(API_URL, params=params)
-    data = response.json()
-
-    def create_result(hit, health_condition):
-        # Create URL from _id
-        url = f"https://monarchinitiative.org/disease/{hit['_id']}"
-        synonyms = hit["mondo"].get("synonym", {})
-        # list comprehension for appending synonyms
-        alternate_names = [
-            synonym
-            for key in ["exact", "related"]
-            for synonym in synonyms.get(key, [])
-            if synonym.lower().strip() != health_condition.lower().strip()
-        ]
-        return {
-            "name": hit["mondo"]["label"],
-            "url": url,
-            "type": "disease",
-            "id": hit["_id"],
-            "alternate_names": alternate_names,
-        }
-
-    for hit in data["hits"]:
-        # Check if health_condition matches mondo label
-        if hit["mondo"]["label"].lower().strip() == health_condition.lower().strip():
-            return create_result(hit, health_condition)
-
-        # Check if health_condition matches mondo synonym exact or related
-        synonyms = hit["mondo"].get("synonym", {})
-        if any(synonym.lower().strip() == health_condition.lower().strip() for synonym in synonyms.get("exact", [])):
-            return create_result(hit, health_condition)
-
-        if any(synonym.lower().strip() == health_condition.lower().strip() for synonym in synonyms.get("related", [])):
-            return create_result(hit, health_condition)
-
-    return None
-
-
 def get_new_species(species):
     # Split the species list into chunks of 1000
     chunks = [species[x : x + 1000] for x in range(0, len(species), 1000)]
@@ -291,47 +380,53 @@ def get_new_species(species):
 
     chunk_count = 0
     for chunk in chunks:
-        chunk_count += 1
-        logger.info(f"Processing chunk {chunk_count}")
-
-        # Convert the chunk to a JSON string
-        data = json.dumps(".    ".join(chunk))
-
-        # Submit the data to the PubTator API for annotation
-        submit_response = requests.post(
-            "https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/submit/species",
-            data=data,
-        )
-
-        logger.info(f"Waiting for response, {submit_response.text}")
-        timeout = 0
-        retries = 0
-
         while True:
-            # Wait for 10 seconds before checking the response
-            time.sleep(10)
-            timeout += 10
+            chunk_count += 1
+            logger.info(f"Processing chunk {chunk_count}")
 
-            # Retry the request if the timeout exceeds 100 seconds
-            if timeout > 100:
-                retries += 1
-                # if retries > 3:
-                #     raise Exception("Attempted 3 times, giving up")
-                logger.info("Timeout, retrying...")
-                try:
-                    os.remove(f"{submit_response.text}_response.csv")
-                except FileNotFoundError:
-                    logger.info("Issue removing file: %s_response.csv", submit_response.text)
-                get_new_species(species)
+            # Convert the chunk to a JSON string
+            data = json.dumps(".    ".join(chunk))
 
-            # Check the response from the PubTator API
-            retrieve_response = requests.get(
-                f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/retrieve/{submit_response.text}"
+            # Submit the data to the PubTator API for annotation
+            submit_response = requests.post(
+                "https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/submit/species",
+                data=data,
             )
 
-            # If the response is successful, break the loop
-            if retrieve_response.status_code == 200:
-                logger.info("Got response")
+            logger.info(f"Waiting for response, {submit_response.text}")
+            timeout = 0
+            retries = 0
+            response_recieved = False
+
+            while True:
+                # Wait for 10 seconds before checking the response
+                time.sleep(10)
+                timeout += 10
+
+                # Retry the request if the timeout exceeds 100 seconds
+                if timeout > 120:
+                    retries += 1
+                    if retries > 5:
+                        raise Exception("Attempted 5 times, giving up")
+                    logger.info("Timeout, retrying...")
+                    try:
+                        os.remove(f"{submit_response.text}_response.csv")
+                    except FileNotFoundError:
+                        logger.info("Issue removing file: %s_response.csv", submit_response.text)
+                    # get_new_species(species)
+                    break
+
+                # Check the response from the PubTator API
+                retrieve_response = requests.get(
+                    f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/retrieve/{submit_response.text}"
+                )
+
+                # If the response is successful, break the loop
+                if retrieve_response.status_code == 200:
+                    logger.info("Got response")
+                    response_recieved = True
+                    break
+            if response_recieved:
                 break
 
         # Process the retrieved result
