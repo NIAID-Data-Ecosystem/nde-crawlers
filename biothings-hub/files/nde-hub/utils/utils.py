@@ -189,8 +189,9 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             add_date(doc)
             # TODO FOR TESTING
             # merge_duplicates(doc)
-            check_schema(doc)
             add_metadata_score(doc, MAPPING_SCORES)
+            # This will always be last
+            check_schema(doc)
             yield doc
 
     return wrapper
