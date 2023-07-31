@@ -24,8 +24,8 @@ def retrieve_study_metadata():
     response_data = {}
     for url in study_urls:
         logger.info("Retrieving studies from %s", url)
-        r = requests.post(url)
         try:
+            r = requests.post(url)
             r.raise_for_status()
         except requests.exceptions.HTTPError as e:
             logger.error("Error retrieving studies from %s", url)
@@ -48,11 +48,15 @@ def retrieve_study_metadata():
                 response_data[id] = study_dict
 
     download_url = "https://vdj-staging.tacc.utexas.edu/api/v2/adc/cache/study"
-    r = requests.get(download_url)
-    data = r.json()["result"]
-    for result in data:
-        if result["study_id"] in response_data:
-            response_data[result["study_id"]]["study"]["download_info"] = result
+    try:
+        r = requests.get(download_url)
+        data = r.json()["result"]
+        for result in data:
+            if result["study_id"] in response_data:
+                response_data[result["study_id"]]["study"]["download_info"] = result
+    except requests.exceptions.SSLError as e:
+        logger.error("SSL issue from %s when getting download_info", url)
+        logger.error(e)
 
     logger.info("Total number of studies: %s", len(response_data))
 
