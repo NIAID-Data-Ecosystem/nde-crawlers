@@ -10,6 +10,49 @@ logger = logging.getLogger("nde-logger")
 
 
 class LINCS:
+    def parse_authors(self, authors_string):
+        # If there is only one author
+        if ',' not in authors_string:
+            # Check for initials without periods and add periods if needed
+            authors_string = ' '.join([name+'.' if len(name)==1 else name for name in authors_string.split()])
+            return [authors_string]
+
+        # If there are multiple authors
+        else:
+            # First, handle the semicolon-separated authors
+            if ';' in authors_string:
+                authors_string = authors_string.replace(';', ',')
+
+            # Split the authors_string into potential authors
+            potential_authors = authors_string.split(',')
+
+            # Initialize a list to hold the actual authors
+            authors = []
+
+            i = 0
+            while i < len(potential_authors):
+                potential_author = potential_authors[i].strip()  # Remove leading and trailing whitespace
+
+                # If the potential_author contains a space or it's the last part, it's a single author name.
+                # Otherwise, it's a part of multiple author name.
+                if ' ' in potential_author or i+1 == len(potential_authors):
+                    authors.append(potential_author)
+                else:
+                    # If it's a multiple author name, concatenate it with the next part and add to the authors list
+                    author = potential_author + ', ' + potential_authors[i+1].strip()
+                    authors.append(author)
+                    i += 1  # skip next part because it's already included in the author name
+
+                i += 1
+
+            # Now check for initials without periods and add periods if needed
+            authors = [' '.join([name+'.' if len(name)==1 else name for name in author.split()]) for author in authors]
+
+            # Remove duplicates
+            authors = list(set(authors))
+
+        return authors
+
     def parser(self):
         lincsportal_url = "https://lincsportal.ccs.miami.edu/dcic/api/fetchdata?limit=1000&searchTerm=*"
         lincsportal_res = requests.get(lincsportal_url)
@@ -35,29 +78,16 @@ class LINCS:
             if "assayoverview" in document:
                 document["description"] = document.pop("assayoverview")
 
+            author_list = []
             if "centerurl" in document:
-                if ";" in document["principalinvestigator"]:
-                    authors = [author.strip() for author in document["principalinvestigator"].split(";")]
-                else:
-                    authors = [author.strip() for author in document["principalinvestigator"].split(",")]
-
-                if len(authors) > 1:
-                    author_list = []
+                if "principalinvestigator" in document:
+                    authors = self.parse_authors(document["principalinvestigator"])
                     for author in authors:
-                        author_list.append(
-                            {
-                                "name": author,
-                                "url": document["centerurl"],
-                                "affiliation": {"name": document["centerfullname"]},
-                            }
-                        )
-                    document["author"] = author_list
-                else:
-                    document["author"] = {
-                        "name": authors[0],
-                        "url": document["centerurl"],
-                        "affiliation": {"name": document["centerfullname"]},
-                    }
+                        author_list.append({
+                            "name": author,
+                            "affiliation": document["centerfullname"],
+                            "url": document["centerurl"],
+                        })
                 document.pop("principalinvestigator")
                 document.pop("centerurl")
                 document.pop("centerfullname")
@@ -66,37 +96,34 @@ class LINCS:
                 document["funding"] = {"identifier": document.pop("funding")}
 
             if "datemodified" in document:
-                document["dateModified"] = document.pop("datemodified")
+                try:
+                    date = datetime.datetime.strptime(document["datemodified"], '%Y-%m-%d')
+                    document["dateModified"] = date.strftime('%Y-%m-%d')
+                except ValueError:
+                    logger.warning('Invalid date format in datemodified: ' + document["datemodified"])
+
+                document.pop("datemodified")
 
             if "screeninglabinvestigator" in document:
-                if ";" in document["screeninglabinvestigator"]:
-                    authors = [author.strip() for author in document["screeninglabinvestigator"].split(";")]
-                else:
-                    authors = [author.strip() for author in document["screeninglabinvestigator"].split(",")]
-
-                screening_authors_list = []
+                authors = self.parse_authors(document["screeninglabinvestigator"])
                 for author in authors:
-                    screening_authors_list.append({"name": author})
-
-                # Check if document["author"] exists and it's a list
-                if "author" in document and isinstance(document["author"], list):
-                    existing_author_names = [
-                        author["name"] for author in document["author"]
-                    ]  # Get the existing author names
-                    for author in screening_authors_list:
-                        if author["name"] not in existing_author_names:  # check if the author is not already present
-                            document["author"].append(author)
-                # Check if document["author"] exists and it's a dict (single author)
-                elif "author" in document and isinstance(document["author"], dict):
-                    if document["author"]["name"] not in [
-                        author["name"] for author in screening_authors_list
-                    ]:  # if the existing author is not in the new authors list
-                        screening_authors_list.insert(0, document["author"])
-                    document["author"] = screening_authors_list
-                else:
-                    document["author"] = screening_authors_list
-
+                    author_list.append({
+                        "name": author,
+                    })
                 document.pop("screeninglabinvestigator")
+
+            # remove duplicate authors
+            no_dupes = []
+            name_dict = {}
+
+            if author_list:
+                for author_obj in author_list:
+                    if author_obj['name'] not in name_dict:
+                        no_dupes.append(author_obj)
+                        name_dict[author_obj['name']] = author_obj
+
+            document['author'] = no_dupes
+
 
             if "datasetname" in document:
                 document["name"] = document.pop("datasetname")
@@ -106,7 +133,13 @@ class LINCS:
                 document["_id"] = "LINCS_" + document["identifier"]
 
             if "datereleased" in document:
-                document["datePublished"] = document.pop("datereleased")
+                try:
+                    date = datetime.datetime.strptime(document["datereleased"], '%Y-%m-%d')
+                    document["datePublished"] = date.strftime('%Y-%m-%d')
+                except ValueError:
+                    logger.warning('Invalid date format in datereleased: ' + document["datereleased"])
+
+                document.pop("datereleased")
 
             if "assayname" in document:
                 assayname = document.pop("assayname")
