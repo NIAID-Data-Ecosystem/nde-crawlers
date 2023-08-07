@@ -36,11 +36,31 @@ class LINCS:
                 document["description"] = document.pop("assayoverview")
 
             if "centerurl" in document:
-                document["author"] = {
-                    "name": document.pop("principalinvestigator"),
-                    "url": document.pop("centerurl"),
-                    "affiliation": {"name": document.pop("centerfullname")},
-                }
+                if ";" in document["principalinvestigator"]:
+                    authors = [author.strip() for author in document["principalinvestigator"].split(";")]
+                else:
+                    authors = [author.strip() for author in document["principalinvestigator"].split(",")]
+
+                if len(authors) > 1:
+                    author_list = []
+                    for author in authors:
+                        author_list.append(
+                            {
+                                "name": author,
+                                "url": document["centerurl"],
+                                "affiliation": {"name": document["centerfullname"]},
+                            }
+                        )
+                    document["author"] = author_list
+                else:
+                    document["author"] = {
+                        "name": authors[0],
+                        "url": document["centerurl"],
+                        "affiliation": {"name": document["centerfullname"]},
+                    }
+                document.pop("principalinvestigator")
+                document.pop("centerurl")
+                document.pop("centerfullname")
 
             if "funding" in document:
                 document["funding"] = {"identifier": document.pop("funding")}
@@ -49,14 +69,34 @@ class LINCS:
                 document["dateModified"] = document.pop("datemodified")
 
             if "screeninglabinvestigator" in document:
-                if len(document["screeninglabinvestigator"].split(",  ")) > 1:
-                    author_list = []
-                    for author in document["screeninglabinvestigator"].split(",  "):
-                        author_list.append({"name": author})
-                    document["author"] = author_list
-                    document.pop("screeninglabinvestigator")
+                if ";" in document["screeninglabinvestigator"]:
+                    authors = [author.strip() for author in document["screeninglabinvestigator"].split(";")]
                 else:
-                    document["author"] = {"name": document.pop("screeninglabinvestigator")}
+                    authors = [author.strip() for author in document["screeninglabinvestigator"].split(",")]
+
+                screening_authors_list = []
+                for author in authors:
+                    screening_authors_list.append({"name": author})
+
+                # Check if document["author"] exists and it's a list
+                if "author" in document and isinstance(document["author"], list):
+                    existing_author_names = [
+                        author["name"] for author in document["author"]
+                    ]  # Get the existing author names
+                    for author in screening_authors_list:
+                        if author["name"] not in existing_author_names:  # check if the author is not already present
+                            document["author"].append(author)
+                # Check if document["author"] exists and it's a dict (single author)
+                elif "author" in document and isinstance(document["author"], dict):
+                    if document["author"]["name"] not in [
+                        author["name"] for author in screening_authors_list
+                    ]:  # if the existing author is not in the new authors list
+                        screening_authors_list.insert(0, document["author"])
+                    document["author"] = screening_authors_list
+                else:
+                    document["author"] = screening_authors_list
+
+                document.pop("screeninglabinvestigator")
 
             if "datasetname" in document:
                 document["name"] = document.pop("datasetname")
