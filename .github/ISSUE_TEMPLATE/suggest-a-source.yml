@@ -38,8 +38,8 @@ body:
       label: Source Access
       description: Does this source require a user account login? Y/N
       options:
-        - "Yes"
-        - "No"
+        - "Yes, account needed"
+        - "No access issue, no account needed"
         - "Unknown"
     validations:
       required: true
