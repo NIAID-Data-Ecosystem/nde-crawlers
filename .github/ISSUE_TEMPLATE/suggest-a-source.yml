@@ -95,6 +95,7 @@ body:
          - label: Class check- Does this source have the right class of research output for inclusions?
          - label: NIAID Review- Does NIAID approve of the inclusion of this source?
          - label: Data access check- Have data access issues been resolved?
+         - label: Structured data check- Does this source have structured data?
          - label: Mapping check- Has the properties from this source been mapped to the schema?
          - label: Parser check- Has the parser been written?
          - label: Parsed data check- Has a sanity check on the data obtained from this source been performed?
