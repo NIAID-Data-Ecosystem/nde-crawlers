@@ -57,9 +57,10 @@ def record_generator():
 
         if _record_dict["attributes"]["version"]:
             try:
-                date_updated = _record_dict["attributes"]["version"]
-                date_updated = datetime.datetime.strptime(date_updated, "%Y-%m-%d").date().isoformat()
+                version_date = _record_dict["attributes"]["version"]
+                date_updated = datetime.datetime.strptime(version_date, "%Y-%m-%d").date().isoformat()
             except Exception:
+                date_updated = None
                 logging.debug(
                     "[INFO] BAD DATE FROM _record_dict['attributes']['version']: %s"
                     % _record_dict["attributes"]["version"]

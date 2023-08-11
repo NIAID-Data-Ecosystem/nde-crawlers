@@ -277,13 +277,13 @@ class Dataverse(NDEDatabase):
                         if dataset["creator"]:
                             dataset["author"] = dataset.pop("creator")
                             for data_dict in dataset["author"]:
-                                if "affiliation" in data_dict.keys():
+                                if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
                                     data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
                         else:
                             dataset.pop("creator")
                     else:
                         for data_dict in dataset["author"]:
-                            if "affiliation" in data_dict.keys():
+                            if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
                                 data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
                         dataset.pop("creator")
 
