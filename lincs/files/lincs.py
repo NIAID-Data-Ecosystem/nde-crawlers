@@ -85,7 +85,7 @@ class LINCS:
                     for author in authors:
                         author_list.append({
                             "name": author,
-                            "affiliation": document["centerfullname"],
+                            "affiliation": {"name": document["centerfullname"]},
                             "url": document["centerurl"],
                         })
                 document.pop("principalinvestigator")
