@@ -22,7 +22,20 @@ biothings.config_for_app(config)
 logging = config.logger
 import hub.dataload.sources
 
-server = HubServer(hub.dataload.sources, name="BioThings Studio for NDE")
+
+class NDEHubServer(HubServer):
+    def configure_build_manager(self):
+        import biothings.hub.databuild.builder as builder
+        from hub.databuild.builder import NDEDataBuilder
+
+        # set specific managers
+        build_manager = builder.BuilderManager(builder_class=NDEDataBuilder, job_manager=self.managers["job_manager"])
+        build_manager.configure()
+        self.managers["build_manager"] = build_manager
+        self.logger.info("Using custom builder %s" % NDEDataBuilder)
+
+
+server = NDEHubServer(hub.dataload.sources, name="BioThings Studio for NDE")
 
 # import ptvsd
 
