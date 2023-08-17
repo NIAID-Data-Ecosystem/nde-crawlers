@@ -329,8 +329,8 @@ def create_return_object(hit, alternate_names, original_name):
         "originalName": original_name,
         "url": f"http://purl.obolibrary.org/obo/{ontology}_{identifier}",
         "curatedBy": {
-            "name": "NCATS Biomedical Data Translator Program",
-            "url": "https://biothings.ncats.io/",
+            "name": "Biothings API",
+            "url": "https://biothings.io/",
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
         },
     }
