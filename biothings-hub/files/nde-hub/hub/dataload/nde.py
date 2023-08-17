@@ -576,6 +576,7 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "mainEntityOfPage": {"type": "text"},
+            "metadata_score": {"type": "float"},
             "name": {
                 "type": "text",
                 "analyzer": "nde_analyzer",
