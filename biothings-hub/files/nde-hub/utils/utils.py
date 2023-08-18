@@ -163,7 +163,8 @@ def calculate_score(data, mapping):
     score = 0
     for key, value in data.items():
         if key == "description":
-            score += 0.5 * min(1, len(value) / 500)  # Normalized based on an arbitrary max length of 500
+            if value is not None:
+                score += 0.5 * min(1, len(value) / 500)  # Normalized based on an arbitrary max length of 500
         elif key in mapping:
             if isinstance(value, dict):
                 score += calculate_score(value, mapping[key])
