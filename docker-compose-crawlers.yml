@@ -179,6 +179,13 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  zenododupe-crawler:
+    build:
+      context: zenodo_oai-pmh_dupe
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
 volumes:
   data:
   cache:
