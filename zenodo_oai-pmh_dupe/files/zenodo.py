@@ -39,8 +39,8 @@ class Zenodo(NDEDatabase):
         # print(type(record.header))
         # print(vars(record.header))
 
-        # no version part of another doi, no version, one version, multiple version, newer version of the previous, older version of the previous
-        identifiers = [237793, 1702333, 8200679, 7492646, 8221703, 6638745]
+        # no version part of another doi, no version, one version, multiple version, newer version of the previous, older version of the previous, exception
+        identifiers = [237793, 1702333, 8200679, 7492646, 8221703, 6638745, 7204451]
 
         for identifier in identifiers:
             # used to test individual records
@@ -269,7 +269,28 @@ class Zenodo(NDEDatabase):
                 ):
                     version_id.append(related_id.text)
             if version_id:
-                assert len(version_id) == 1, "There is more than one version recordID: %s" % output["_id"]
+                if len(version_id) > 1:
+                    logger.info(
+                        "There is more than one version recordID in %s. Querying datacite to find correct version"
+                        % output["_id"]
+                    )
+                    # reset version_id and use datacite query to find correct version
+                    version_id = []
+                    record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="datacite")
+                    versions = record.xml
+                    versions = versions.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
+                    time.sleep(0.5)
+                    for version in versions:
+                        if (
+                            version.get("relatedIdentifierType") == "DOI"
+                            and version.get("relationType") == "IsVersionOf"
+                            and "zenodo" in version.text
+                        ):
+                            version_id.append(version.text)
+                assert len(version_id) == 1, "There should only be one version per recordID: %s. Versions: %s" % (
+                    output["_id"],
+                    version_id,
+                )
                 output["versionId"] = version_id[0]
                 output["sameAs"] = [url]
                 output["doi"] = version_id[0]
