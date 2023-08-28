@@ -40,43 +40,43 @@ class Zenodo(NDEDatabase):
         # print(vars(record.header))
 
         # no version part of another doi, no version, one version, multiple version, newer version of the previous, older version of the previous, exception
-        identifiers = [237793, 1702333, 8200679, 7492646, 8221703, 6638745, 7204451]
+        # identifiers = [237793, 1702333, 8200679, 7492646, 8221703, 6638745, 7204451]
 
-        for identifier in identifiers:
-            # used to test individual records
-            record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="oai_datacite")
-            # in each doc we want record.identifier and record stored
-            doc = {
-                "header": dict(record.header),
-                "metadata": record.metadata,
-                "xml": ElementTree.tostring(record.xml, encoding="unicode"),
-            }
+        # for identifier in identifiers:
+        #     # used to test individual records
+        #     record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="oai_datacite")
+        #     # in each doc we want record.identifier and record stored
+        #     doc = {
+        #         "header": dict(record.header),
+        #         "metadata": record.metadata,
+        #         "xml": ElementTree.tostring(record.xml, encoding="unicode"),
+        #     }
 
-            yield (record.header.identifier, json.dumps(doc))
+        #     yield (record.header.identifier, json.dumps(doc))
 
-        # count = 0
-        # while True:
-        #     try:
-        #         # get the next item
-        #         record = records.next()
-        #         count += 1
-        #         if count % 100 == 0:
-        #             time.sleep(0.5)
-        #             logger.info("Loading cache. Loaded %s records", count)
+        count = 0
+        while True:
+            try:
+                # get the next item
+                record = records.next()
+                count += 1
+                if count % 100 == 0:
+                    time.sleep(0.5)
+                    logger.info("Loading cache. Loaded %s records", count)
 
-        #         # in each doc we want record.identifier and record stored
-        #         doc = {
-        #             "header": dict(record.header),
-        #             "metadata": record.metadata,
-        #             "xml": ElementTree.tostring(record.xml, encoding="unicode"),
-        #         }
+                # in each doc we want record.identifier and record stored
+                doc = {
+                    "header": dict(record.header),
+                    "metadata": record.metadata,
+                    "xml": ElementTree.tostring(record.xml, encoding="unicode"),
+                }
 
-        #         yield (record.header.identifier, json.dumps(doc))
+                yield (record.header.identifier, json.dumps(doc))
 
-        #     except StopIteration:
-        #         logger.info("Finished Loading. Total Records: %s", count)
-        #         # if StopIteration is raised, break from loop
-        #         break
+            except StopIteration:
+                logger.info("Finished Loading. Total Records: %s", count)
+                # if StopIteration is raised, break from loop
+                break
 
     def parse(self, records):
         """Transforms/pipeline data to the nde schema before writing the information into the ndson file"""
