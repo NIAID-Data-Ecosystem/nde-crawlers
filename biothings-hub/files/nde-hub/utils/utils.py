@@ -91,6 +91,7 @@ def merge_duplicates(doc: Dict) -> Dict:
 
     return doc
 
+
 MAPPING_SCORES = {
     "abstract": 0.4,
     "alternateName": 0.4,
@@ -159,6 +160,8 @@ MAPPING_SCORES = {
         "isCurated": 0.3,
     },
 }
+
+
 def calculate_score(data, mapping):
     score = 0
     for key, value in data.items():
@@ -169,12 +172,15 @@ def calculate_score(data, mapping):
             if isinstance(value, dict):
                 score += calculate_score(value, mapping[key])
             elif isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict):
-                        score += calculate_score(item, mapping[key])
+                # Only take the maximum score from the list items, not the sum
+                scores = [
+                    calculate_score(item, mapping[key]) if isinstance(item, dict) else mapping[key] for item in value
+                ]
+                score += max(scores) if scores else 0  # add the highest score from list items
             else:
                 score += mapping[key]
     return score
+
 
 def add_metadata_score(document, mapping):
     document["metadata_score"] = calculate_score(document, mapping)
