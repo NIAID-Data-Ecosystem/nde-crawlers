@@ -2,9 +2,11 @@
 # to query all documents: https://zenodo.org/oai2d?verb=ListRecords&metadataPrefix=oai_datacite
 # import re
 import datetime
+import functools
 import json
 import logging
 import time
+import traceback
 from xml.etree import ElementTree
 
 from sickle import Sickle
@@ -12,6 +14,36 @@ from sql_database import NDEDatabase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
+
+
+def retry(retry_num, retry_sleep_sec):
+    """
+    retry help decorator.
+    :param retry_num: the retry num; retry sleep sec
+    :return: decorator
+    """
+
+    def decorator(func):
+        """decorator"""
+
+        # preserve information about the original function, or the func name will be "wrapper" not "func"
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            """wrapper"""
+            for attempt in range(retry_num):
+                try:
+                    return func(*args, **kwargs)  # should return the raw function's return value
+                except Exception as err:
+                    logger.error(err)
+                    logger.error(traceback.format_exc())
+                    time.sleep(retry_sleep_sec)
+                logger.info("Retrying failed func %s. Trying attempt %s of %s.", func, attempt + 1, retry_num)
+            logger.error("func %s retry failed", func)
+            raise Exception("Exceed max retry num: {} failed".format(retry_num))
+
+        return wrapper
+
+    return decorator
 
 
 class Zenodo(NDEDatabase):
@@ -22,6 +54,7 @@ class Zenodo(NDEDatabase):
     # connect to the website
     sickle = Sickle("https://zenodo.org/oai2d", max_retries=4, default_retry_after=10)
 
+    @retry(10, 10)
     def load_cache(self):
         """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
         Returns:
@@ -78,6 +111,7 @@ class Zenodo(NDEDatabase):
                 # if StopIteration is raised, break from loop
                 break
 
+    @retry(5, 10)
     def get_version_id(self, output, related_ids, url, identifier):
         version_id = []
         for related_id in related_ids:
@@ -118,9 +152,9 @@ class Zenodo(NDEDatabase):
             output["_id"] = "ZENODO_" + output["identifier"].rsplit(".", 1)[-1]
             output["url"] = "https://zenodo.org/record/" + output["identifier"]
 
+        return output
 
     def parse_xml(self, xml, output, gen_type, missing_types, url, identifier):
-
         # used for testing to print out xml tags
         # for element in root.iter():
         #     print("%s - %s" % (element.tag, element.text))
@@ -196,9 +230,7 @@ class Zenodo(NDEDatabase):
         output = self.get_version_id(output, related_ids, url, identifier)
 
         # use xml to find funding
-        contributors = root.findall(
-            ".//{http://datacite.org/schema/kernel-3}contributor[@contributorType='Funder']"
-        )
+        contributors = root.findall(".//{http://datacite.org/schema/kernel-3}contributor[@contributorType='Funder']")
         funding = []
         for contributor in contributors:
             name = contributor.find("./{http://datacite.org/schema/kernel-3}contributorName")
