@@ -60,7 +60,7 @@ class Zenodo(NDEDatabase):
                 # get the next item
                 record = records.next()
                 count += 1
-                if count % 100 == 0:
+                if count % 1000 == 0:
                     time.sleep(0.5)
                     logger.info("Loading cache. Loaded %s records", count)
 
@@ -77,6 +77,145 @@ class Zenodo(NDEDatabase):
                 logger.info("Finished Loading. Total Records: %s", count)
                 # if StopIteration is raised, break from loop
                 break
+
+    def get_version_id(self, output, related_ids, url, identifier):
+        version_id = []
+        for related_id in related_ids:
+            # note for oai_datacite it should use IsPartOf some other metadataprefixes may use related_id.get("relationType") == "IsVersionOf")
+            if (
+                related_id.get("relatedIdentifierType") == "DOI"
+                and related_id.get("relationType") == "IsPartOf"
+                and "zenodo" in related_id.text
+            ):
+                version_id.append(related_id.text)
+        if version_id:
+            if len(version_id) > 1:
+                logger.info(
+                    "There is more than one version recordID in %s. Querying datacite to find correct version"
+                    % output["_id"]
+                )
+                # reset version_id and use datacite query to find correct version
+                version_id = []
+                record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="datacite")
+                versions = record.xml
+                versions = versions.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
+                time.sleep(0.5)
+                for version in versions:
+                    if (
+                        version.get("relatedIdentifierType") == "DOI"
+                        and version.get("relationType") == "IsVersionOf"
+                        and "zenodo" in version.text
+                    ):
+                        version_id.append(version.text)
+            assert len(version_id) == 1, "There should only be one version per recordID: %s. Versions: %s" % (
+                output["_id"],
+                version_id,
+            )
+            output["versionId"] = version_id[0]
+            output["sameAs"] = [url]
+            output["doi"] = version_id[0]
+            output["identifier"] = version_id[0].rsplit("/", 1)[-1]
+            output["_id"] = "ZENODO_" + output["identifier"].rsplit(".", 1)[-1]
+            output["url"] = "https://zenodo.org/record/" + output["identifier"]
+
+
+    def parse_xml(self, xml, output, gen_type, missing_types, url, identifier):
+
+        # used for testing to print out xml tags
+        # for element in root.iter():
+        #     print("%s - %s" % (element.tag, element.text))
+
+        # use xml to query doi
+        root = ElementTree.fromstring(xml)
+
+        doi = root.find(".//{http://datacite.org/schema/kernel-3}identifier[@identifierType='DOI']")
+        if doi is not None:
+            output["doi"] = doi.text
+
+        # use xml to get the type
+        zenodo_type = root.find(".//{http://datacite.org/schema/kernel-3}resourceType[@resourceTypeGeneral]").get(
+            "resourceTypeGeneral"
+        )
+        zenodo_type2 = root.find(".//{http://datacite.org/schema/kernel-3}resourceType[@resourceTypeGeneral]").text
+
+        # format the types to be case insensitive and query the dictionary for the transformation
+        zenodo_type = zenodo_type.lower()
+        if zenodo_type2:
+            zenodo_type2 = zenodo_type2.lower()
+            zenodo_type2 = zenodo_type2.replace(" ", "")
+
+        if zenodo_type is not None:
+            if zenodo_type in gen_type.keys():
+                output["@type"] = gen_type[zenodo_type]
+            elif zenodo_type2 in gen_type.keys():
+                output["@type"] = gen_type[zenodo_type2]
+            else:
+                missing_types[(zenodo_type, zenodo_type2)] = (zenodo_type, zenodo_type2)
+
+        # xml to find all the authors and format them
+        # we cannot use metadata to format due to creator and affiliation being in separate lists
+        creators = root.findall(".//{http://datacite.org/schema/kernel-3}creator")
+        for creator in creators:
+            author = {}
+            name = creator.find("./{http://datacite.org/schema/kernel-3}creatorName")
+            affiliation = creator.find("./{http://datacite.org/schema/kernel-3}affiliation")
+            orcid_id = creator.find(
+                "./{http://datacite.org/schema/kernel-3}nameIdentifier[@nameIdentifierScheme='ORCID']"
+            )
+            if name is not None:
+                author["name"] = name.text
+            if affiliation is not None:
+                # elasticsearch cannot index strings greater than 32766. Someone mistakenly put a WHOLE ARTICLE into the affiliation
+                # https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:4675716&metadataPrefix=oai_datacite
+                if len(affiliation.text) < 30000:
+                    author["affiliation"] = {"name": affiliation.text}
+            if orcid_id is not None:
+                author["identifier"] = orcid_id.get("schemeURI") + orcid_id.text
+            if author:
+                output["author"].append(author)
+
+        # use xml to find the license and conditionOfAccess
+        rights = root.findall(".//{http://datacite.org/schema/kernel-3}rights")
+        for right in rights:
+            if "access" in right.text.lower():
+                output["conditionsOfAccess"] = right.text.split(" ", 1)[0]
+            else:
+                output["license"] = right.get("rightsURI")
+
+        # use xml to find citedBy field
+        related_ids = root.findall(".//{http://datacite.org/schema/kernel-3}relatedIdentifier")
+        cited_by = []
+        for related_id in related_ids:
+            if related_id.get("relationType") == "IsCitedBy" and related_id.get("relatedIdentifierType") == "URL":
+                cited_by.append({"url": related_id.text})
+        if cited_by:
+            output["citedBy"] = cited_by
+
+        # use xml to find versioning
+        related_ids = root.findall(".//{http://datacite.org/schema/kernel-3}relatedIdentifier")
+        output = self.get_version_id(output, related_ids, url, identifier)
+
+        # use xml to find funding
+        contributors = root.findall(
+            ".//{http://datacite.org/schema/kernel-3}contributor[@contributorType='Funder']"
+        )
+        funding = []
+        for contributor in contributors:
+            name = contributor.find("./{http://datacite.org/schema/kernel-3}contributorName")
+            if name is not None:
+                funding.append({"funder": {"name": name.text}})
+        if funding:
+            output["funding"] = funding
+
+        """ TODO try to get the codeRepository field. Not confident how to get it.
+        "if this resource is a 'software' @type and has a relatedIdentifier with the isSupplementTo field".
+        Examples:
+        * 	https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:5680920&metadataPrefix=oai_datacite
+                <relatedIdentifier relatedIdentifierType="URL" relationType="IsDerivedFrom" >https://gitlab.com/astron-idg/idg-fpga/</relatedIdentifier>
+        * 	https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:1135290&metadataPrefix=oai_datacite
+                <relatedIdentifier relatedIdentifierType="URL" relationType="IsSupplementTo" >https://github.com/ljcohen/planets/tree/v0.1</relatedIdentifier>
+        """
+        return output, missing_types
 
     def parse(self, records):
         """Transforms/pipeline data to the nde schema before writing the information into the ndson file"""
@@ -187,137 +326,8 @@ class Zenodo(NDEDatabase):
             if cb_outbreak := output.get("includedInDataCatalog"):
                 output["curatedBy"] = cb_outbreak
 
-            # used for testing to print out xml tags
-            # for element in root.iter():
-            #     print("%s - %s" % (element.tag, element.text))
+            output, missing_types = self.parse_xml(data["xml"], output, gen_type, missing_types, url, identifier)
 
-            # use xml to query doi
-            root = ElementTree.fromstring(data["xml"])
-
-            doi = root.find(".//{http://datacite.org/schema/kernel-3}identifier[@identifierType='DOI']")
-            if doi is not None:
-                output["doi"] = doi.text
-
-            # use xml to get the type
-            zenodo_type = root.find(".//{http://datacite.org/schema/kernel-3}resourceType[@resourceTypeGeneral]").get(
-                "resourceTypeGeneral"
-            )
-            zenodo_type2 = root.find(".//{http://datacite.org/schema/kernel-3}resourceType[@resourceTypeGeneral]").text
-
-            # format the types to be case insensitive and query the dictionary for the transformation
-            zenodo_type = zenodo_type.lower()
-            if zenodo_type2:
-                zenodo_type2 = zenodo_type2.lower()
-                zenodo_type2 = zenodo_type2.replace(" ", "")
-
-            if zenodo_type is not None:
-                if zenodo_type in gen_type.keys():
-                    output["@type"] = gen_type[zenodo_type]
-                elif zenodo_type2 in gen_type.keys():
-                    output["@type"] = gen_type[zenodo_type2]
-                else:
-                    missing_types[(zenodo_type, zenodo_type2)] = (zenodo_type, zenodo_type2)
-
-            # xml to find all the authors and format them
-            # we cannot use metadata to format due to creator and affiliation being in separate lists
-            creators = root.findall(".//{http://datacite.org/schema/kernel-3}creator")
-            for creator in creators:
-                author = {}
-                name = creator.find("./{http://datacite.org/schema/kernel-3}creatorName")
-                affiliation = creator.find("./{http://datacite.org/schema/kernel-3}affiliation")
-                orcid_id = creator.find(
-                    "./{http://datacite.org/schema/kernel-3}nameIdentifier[@nameIdentifierScheme='ORCID']"
-                )
-                if name is not None:
-                    author["name"] = name.text
-                if affiliation is not None:
-                    # elasticsearch cannot index strings greater than 32766. Someone mistakenly put a WHOLE ARTICLE into the affiliation
-                    # https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:4675716&metadataPrefix=oai_datacite
-                    if len(affiliation.text) < 30000:
-                        author["affiliation"] = {"name": affiliation.text}
-                if orcid_id is not None:
-                    author["identifier"] = orcid_id.get("schemeURI") + orcid_id.text
-                if author:
-                    output["author"].append(author)
-
-            # use xml to find the license and conditionOfAccess
-            rights = root.findall(".//{http://datacite.org/schema/kernel-3}rights")
-            for right in rights:
-                if "access" in right.text.lower():
-                    output["conditionsOfAccess"] = right.text.split(" ", 1)[0]
-                else:
-                    output["license"] = right.get("rightsURI")
-
-            # use xml to find citedBy field
-            related_ids = root.findall(".//{http://datacite.org/schema/kernel-3}relatedIdentifier")
-            cited_by = []
-            for related_id in related_ids:
-                if related_id.get("relationType") == "IsCitedBy" and related_id.get("relatedIdentifierType") == "URL":
-                    cited_by.append({"url": related_id.text})
-            if cited_by:
-                output["citedBy"] = cited_by
-
-            # use xml to find versioning
-            related_ids = root.findall(".//{http://datacite.org/schema/kernel-3}relatedIdentifier")
-            version_id = []
-            for related_id in related_ids:
-                # note for oai_datacite it should use IsPartOf some other metadataprefixes may use related_id.get("relationType") == "IsVersionOf")
-                if (
-                    related_id.get("relatedIdentifierType") == "DOI"
-                    and related_id.get("relationType") == "IsPartOf"
-                    and "zenodo" in related_id.text
-                ):
-                    version_id.append(related_id.text)
-            if version_id:
-                if len(version_id) > 1:
-                    logger.info(
-                        "There is more than one version recordID in %s. Querying datacite to find correct version"
-                        % output["_id"]
-                    )
-                    # reset version_id and use datacite query to find correct version
-                    version_id = []
-                    record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="datacite")
-                    versions = record.xml
-                    versions = versions.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
-                    time.sleep(0.5)
-                    for version in versions:
-                        if (
-                            version.get("relatedIdentifierType") == "DOI"
-                            and version.get("relationType") == "IsVersionOf"
-                            and "zenodo" in version.text
-                        ):
-                            version_id.append(version.text)
-                assert len(version_id) == 1, "There should only be one version per recordID: %s. Versions: %s" % (
-                    output["_id"],
-                    version_id,
-                )
-                output["versionId"] = version_id[0]
-                output["sameAs"] = [url]
-                output["doi"] = version_id[0]
-                output["identifier"] = version_id[0].rsplit("/", 1)[-1]
-                output["_id"] = "ZENODO_" + output["identifier"].rsplit(".", 1)[-1]
-                output["url"] = "https://zenodo.org/record/" + output["identifier"]
-
-            # use xml to find funding
-            contributors = root.findall(
-                ".//{http://datacite.org/schema/kernel-3}contributor[@contributorType='Funder']"
-            )
-            funding = []
-            for contributor in contributors:
-                name = contributor.find("./{http://datacite.org/schema/kernel-3}contributorName")
-                if name is not None:
-                    funding.append({"funder": {"name": name.text}})
-            if funding:
-                output["funding"] = funding
-
-            """ TODO try to get the codeRepository field. Not confident how to get it.
-            "if this resource is a 'software' @type and has a relatedIdentifier with the isSupplementTo field".
-            Examples:
-            * 	https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:5680920&metadataPrefix=oai_datacite
-                    <relatedIdentifier relatedIdentifierType="URL" relationType="IsDerivedFrom" >https://gitlab.com/astron-idg/idg-fpga/</relatedIdentifier>
-            * 	https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:1135290&metadataPrefix=oai_datacite
-                    <relatedIdentifier relatedIdentifierType="URL" relationType="IsSupplementTo" >https://github.com/ljcohen/planets/tree/v0.1</relatedIdentifier>
-            """
             # every doc has to have a type
             if output.get("@type"):
                 yield output
