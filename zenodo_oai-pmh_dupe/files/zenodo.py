@@ -141,16 +141,18 @@ class Zenodo(NDEDatabase):
                         and "zenodo" in version.text
                     ):
                         version_id.append(version.text)
-            assert len(version_id) == 1, "There should only be one version per recordID: %s. Versions: %s" % (
+            assert len(version_id) > 1, "There is more than one version per recordID: %s. Versions: %s" % (
                 output["_id"],
                 version_id,
             )
-            output["versionId"] = version_id[0]
-            output["sameAs"] = [url]
-            output["doi"] = version_id[0]
-            output["identifier"] = version_id[0].rsplit("/", 1)[-1]
-            output["_id"] = "ZENODO_" + output["identifier"].rsplit(".", 1)[-1]
-            output["url"] = "https://zenodo.org/record/" + output["identifier"]
+            # have to check version_id again in case version_id was reset and none were found
+            if version_id:
+                output["versionId"] = version_id[0]
+                output["sameAs"] = [url]
+                output["doi"] = version_id[0]
+                output["identifier"] = version_id[0].rsplit("/", 1)[-1]
+                output["_id"] = "ZENODO_" + output["identifier"].rsplit(".", 1)[-1]
+                output["url"] = "https://zenodo.org/record/" + output["identifier"]
 
         return output
 
