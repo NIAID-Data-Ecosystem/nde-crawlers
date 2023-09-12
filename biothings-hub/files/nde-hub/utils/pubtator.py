@@ -92,74 +92,45 @@ def standardize_data(data):
         return update_lookup_dict(health_conditions_list, species_list, infectious_agents_list, doc_list)
 
 
+def classify_as_host_or_agent(lineage):
+    # Extracting scientific names for easy processing
+    scientific_names = [item["scientificName"] for item in lineage]
+
+    # Check for host species conditions
+    if "Deuterostomia" in scientific_names:
+        new_classification = "host"
+    elif "Embryophyta" in scientific_names and not any(
+        parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
+    ):
+        new_classification = "host"
+    elif "Arthropoda" in scientific_names:
+        if "Acari" in scientific_names:
+            if "Ixodida" in scientific_names:
+                new_classification = "host"
+            else:
+                new_classification = "infectiousAgent"
+        else:
+            new_classification = "host"
+    else:
+        # If not falling under the above host conditions, classify as infectiousAgent
+        new_classification = "infectiousAgent"
+
+    return new_classification
+
+
 def get_species_details(original_name, identifier):
     logger.info(f"Getting details for {original_name}")
 
-    # Fetch details from the UniProt API or the NCBI Taxonomy API
+    # Fetch details from the UniProt API
     identifier = identifier.split("*")[-1]
-
-    try:
-        species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
-        species_info.raise_for_status()
-        species_info = species_info.json()
-        standard_dict = {
-            "identifier": identifier,
-            "inDefinedTermSet": "UniProt",
-            "url": f"https://www.uniprot.org/taxonomy/{identifier}",
-            "originalName": original_name,
-            "isCurated": True,
-            "curatedBy": {
-                "name": "PubTator",
-                "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
-                "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
-            },
-        }
-        if scientific_name := species_info.get("scientificName"):
-            standard_dict["name"] = scientific_name
-        else:
-            standard_dict["name"] = original_name
-
-        alternative_names = []
-        if common_name := species_info.get("commonName"):
-            standard_dict["commonName"] = common_name
-            alternative_names.append(common_name)
-
-            standard_dict["displayName"] = f"{common_name} | {scientific_name}"
-
-        if other_names := species_info.get("otherNames"):
-            alternative_names.extend(other_names)
-
-        if alternative_names:
-            standard_dict["alternateName"] = alternative_names
-
-        return standard_dict
-
-    except requests.exceptions.HTTPError as e:
-        logger.info(f"No Uniprot information found for {original_name}, {identifier}. Trying NCBI...")
-    except requests.exceptions.SSLError as e:
-        logger.info(f"SSL Error: {e}")
-        logger.info(f"Retrying in 5 seconds...")
-        time.sleep(5)
-        get_species_details(original_name, identifier)
-
-    Entrez.email = GEO_EMAIL
-
-    while True:
-        try:
-            handle = Entrez.efetch(db="taxonomy", id=identifier, retmode="xml", max_tries=10)
-            record = Entrez.read(handle, validate=False)
-            handle.close()
-            break
-        except Exception as e:
-            logger.info(f"Error: {e}")
-            logger.info(f"Retrying in 5 seconds...")
-            time.sleep(5)
-            get_species_details(original_name, identifier)
-
+    # try:
+    species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
+    species_info.raise_for_status()
+    species_info = species_info.json()
     standard_dict = {
         "identifier": identifier,
-        "inDefinedTermSet": "NCBI Taxonomy",
-        "url": f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id={identifier}",
+        "inDefinedTermSet": "UniProt",
+        "url": f"https://www.uniprot.org/taxonomy/{identifier}",
         "originalName": original_name,
         "isCurated": True,
         "curatedBy": {
@@ -168,25 +139,28 @@ def get_species_details(original_name, identifier):
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
         },
     }
-    if scientific_name := record[0].get("ScientificName"):
+    if scientific_name := species_info.get("scientificName"):
         standard_dict["name"] = scientific_name
     else:
         standard_dict["name"] = original_name
 
     alternative_names = []
-    if common_name := record[0].get("OtherNames", {}).get("GenbankCommonName"):
+    if common_name := species_info.get("commonName"):
         standard_dict["commonName"] = common_name
         alternative_names.append(common_name)
 
         standard_dict["displayName"] = f"{common_name} | {scientific_name}"
 
-    if other_names := record[0].get("OtherNames", {}).get("Name"):
-        for name_obj in other_names:
-            if name_obj["ClassCDE"] == "authority":
-                if name_obj["DispName"] not in alternative_names:
-                    alternative_names.append(name_obj["DispName"])
+    if other_names := species_info.get("otherNames"):
+        alternative_names.extend(other_names)
+
     if alternative_names:
         standard_dict["alternateName"] = alternative_names
+
+    if lineage := species_info.get("lineage"):
+        standard_dict["classification"] = classify_as_host_or_agent(lineage)
+    else:
+        logger.warning(f"No lineage found for {identifier}")
 
     return standard_dict
 
@@ -379,16 +353,21 @@ def get_new_species(species):
     for chunk in chunks:
         while True:
             chunk_count += 1
-            logger.info(f"Processing chunk {chunk_count}")
+            logger.info(f"Processing chunk {chunk_count} ")
 
             # Convert the chunk to a JSON string
             data = json.dumps(".    ".join(chunk))
 
             # Submit the data to the PubTator API for annotation
-            submit_response = requests.post(
-                "https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/submit/species",
-                data=data,
-            )
+            try:
+                submit_response = requests.post(
+                    "https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/submit/species",
+                    data=data,
+                )
+            except requests.exceptions.ConnectionError as e:
+                logger.info(f"Connection error: {e}")
+                logger.info("Retrying...")
+                continue
 
             logger.info(f"Waiting for response, {submit_response.text}")
             timeout = 0
@@ -403,8 +382,8 @@ def get_new_species(species):
                 # Retry the request if the timeout exceeds 100 seconds
                 if timeout > 120:
                     retries += 1
-                    if retries > 5:
-                        raise Exception("Attempted 5 times, giving up")
+                    # if retries > 5:
+                    #     raise Exception("Attempted 5 times, giving up")
                     logger.info("Timeout, retrying...")
                     try:
                         os.remove(f"{submit_response.text}_response.csv")
@@ -414,9 +393,14 @@ def get_new_species(species):
                     break
 
                 # Check the response from the PubTator API
-                retrieve_response = requests.get(
-                    f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/retrieve/{submit_response.text}"
-                )
+                try:
+                    retrieve_response = requests.get(
+                        f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/annotations/annotate/retrieve/{submit_response.text}"
+                    )
+                except requests.exceptions.ConnectionError as e:
+                    logger.info(f"Connection error: {e}")
+                    logger.info("Retrying...")
+                    continue
 
                 # If the response is successful, break the loop
                 if retrieve_response.status_code == 200:
@@ -482,7 +466,6 @@ def get_new_species(species):
             )
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
-            # Update the database with new species
             c.execute(
                 "INSERT INTO species VALUES (?, ?)",
                 (pubtator_species_name.lower(), json.dumps(result_dict)),
@@ -553,22 +536,34 @@ def transform(doc_list):
     species_cursor = c.fetchall()
     conn.close()
 
-    def process_section(section, cursor, lookup_fn):
+    def process_section_health_conditions(section, cursor):
+        return process_general_section(section, cursor, lookup_item)
+
+    def process_section_species_and_infectious_agents(section, cursor):
+        new_section_list = process_general_section(section, cursor, lookup_item)
+
+        species, infectious_agents = [], []
+
+        for item in new_section_list:
+            classification = item.pop("classification", None)
+            if classification == "infectiousAgent":
+                infectious_agents.append(item)
+            else:  # 'species' or no classification
+                species.append(item)
+
+        return species, infectious_agents
+
+    def process_general_section(section, cursor, lookup_fn):
         new_section_list = []
 
         # If the section is a list, iterate through its items
         if isinstance(section, list):
-            count = 0
             for original_obj in section:
-                count += 1
                 if original_name := original_obj.get("name"):
-                    # Look up the object in the database using the provided lookup function
                     new_obj = lookup_fn(original_name, cursor)
-                    # If the object is found, append it to the new_section_list
                     if new_obj:
                         logger.info(f"Found {original_name} in database")
                         new_section_list.append(new_obj)
-                    # Otherwise, append the original object to the new_section_list
                     else:
                         logger.info(f"Could not find {original_name} in database")
                         new_section_list.append(original_obj)
@@ -582,16 +577,21 @@ def transform(doc_list):
 
         return new_section_list
 
-    # Iterate through the documents in the doc_list
     for doc in doc_list:
         health_conditions_list = doc.get("healthCondition", {})
         species_list = doc.get("species", {})
         infectious_agent_list = doc.get("infectiousAgent", {})
+        if isinstance(species_list, dict):
+            species_list = [species_list]
+        if isinstance(infectious_agent_list, dict):
+            infectious_agent_list = [infectious_agent_list]
 
         # Process each section in the document using the appropriate lookup function
-        new_health_conditions_list = process_section(health_conditions_list, hc_cursor, lookup_item)
-        new_species_list = process_section(species_list, species_cursor, lookup_item)
-        new_infectious_agent_list = process_section(infectious_agent_list, species_cursor, lookup_item)
+        new_health_conditions_list = process_section_health_conditions(health_conditions_list, hc_cursor)
+        new_species_list, new_infectious_agent_list = process_section_species_and_infectious_agents(
+            species_list + infectious_agent_list, species_cursor
+        )
+
 
         # Update the document with the new lists
         if new_health_conditions_list:
@@ -601,7 +601,6 @@ def transform(doc_list):
         if new_infectious_agent_list:
             doc["infectiousAgent"] = new_infectious_agent_list
 
-        # Yield the transformed document
         yield doc
 
 
