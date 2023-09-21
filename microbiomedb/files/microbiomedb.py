@@ -56,8 +56,24 @@ def parse():
         if k:
             output["keywords"] = k
 
+        output_description = []
+
         if description := record["attributes"].get("description"):
-            output["description"] = description
+            if isinstance(description, str):
+                output_description.append(description)
+            else:
+                output_description.extend(description)
+
+        if description := record["attributes"].get("card_points"):
+            description = json.loads(description)
+            if isinstance(description, str):
+                output_description.append(description)
+            else:
+                output_description.extend(description)
+
+        # Join all descriptions into one string
+        if output_description:
+            output["description"] = "\n".join(output_description)
 
         # set up contributor field
         contributor = {}
@@ -80,10 +96,6 @@ def parse():
 
         if abstract := record["attributes"].get("summary"):
             output["abstract"] = abstract
-
-        if description := record["attributes"].get("card_points"):
-            description = json.loads(description)
-            output["description"] = description
 
         if alternate_name := record["attributes"].get("dataset_name"):
             output["alternateName"] = alternate_name
