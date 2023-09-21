@@ -5,19 +5,73 @@
 # https://www.nlm.nih.gov/bsd/mms/medlineelements.html
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
 # https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
+import csv
 import os
 import time
 from copy import copy
 from datetime import datetime
 from itertools import islice
 from typing import Dict, Iterable, Optional
-
 import orjson
 import requests
 from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
 from .utils import retry
+
+@retry(3, 5)
+def get_species_from_pubtator(pmids):
+    """
+    Retrieves species data from PubTator for a given list of PMIDs.
+
+    Parameters:
+    - pmids (list): List of PMIDs to retrieve species data for.
+    """
+    url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=species"
+    response = requests.get(url)
+    lines = response.text.split("\n")
+
+    species_info = {}
+    for line in lines:
+        parts = line.split("\t")
+        if len(parts) >= 6 and parts[4] == "Species":
+            species_name = parts[3].lower()
+            species_id = parts[5]
+            if species_id not in species_info:
+                species_info[species_id] = species_name
+                logger.info(f"Species found: {species_name} with ID: {species_id}")
+
+    return species_info
+
+
+def update_record_species(rec, species_data):
+    """
+    Updates the species in a given record based on abstract, description, and title.
+
+    Parameters:
+    - rec (dict): The record to be updated.
+    - species_data (dict): Dictionary containing species data, with species name as key and ID as value.
+    """
+
+    # Convert single species dictionary to a list if needed
+    if isinstance(rec.get("species"), dict):
+        rec["species"] = [rec["species"]]
+
+    existing_species = {spec["name"]: spec for spec in rec.get("species", [])}
+
+    # Fetch the abstract, description, and title for current record
+    abstract = rec.get("abstract", "").lower()
+    description = rec.get("description", "").lower()
+    title = rec.get("name", "").lower()
+
+    # Iterate over new species data and update the record
+    for id, name in species_data.items():
+        if name.upper() in rec.get("abstract", "") or name.upper() in rec.get("description", "") or name.upper() in rec.get("name", ""):
+            # avoid acronyms ex. PERCH (Pneumonia Etiology Research for Child Health) not a species
+            continue
+        # If species name is in abstract, description or title and not in existing species, add it to the record
+        if (name in abstract or name in description or name in title) and name not in existing_species:
+            rec["species"] = rec.get("species", []) + [{"name": name, "id": id, "fromPMID": True}]
 
 
 # retry 3 times sleep 5 seconds between each retry
@@ -255,6 +309,11 @@ def load_pmid_ctfd(data_folder):
                     # fixes issue where pmid numbers under 10 is read as 04 instead of 4
                     pmids = [pmid.lstrip("0") for pmid in pmids]
                     pmids = [*set(pmids)]
+                    # get species names from pubtator
+                    species_data = get_species_from_pubtator(pmids)
+                    if species_data:
+                        # Update the species field in the record
+                        update_record_species(rec, species_data)
                     for pmid in pmids:
                         if not eutils_info.get(pmid):
                             logger.info("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
