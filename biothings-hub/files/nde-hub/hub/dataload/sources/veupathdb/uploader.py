@@ -10,7 +10,6 @@ class VEuPathDB_Uploader(NDESourceUploader):
     @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
-
         pubtator_docs = standardize_data(docs)
         for doc in pubtator_docs:
             yield doc
