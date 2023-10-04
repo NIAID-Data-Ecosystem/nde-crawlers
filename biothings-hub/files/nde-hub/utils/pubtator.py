@@ -7,9 +7,9 @@ import time
 
 import orjson
 import requests
-from Bio import Entrez
+
 from biothings.utils.dataload import tab2dict
-from config import GEO_EMAIL, logger
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -562,7 +562,7 @@ def transform(doc_list):
                 if original_name := original_obj.get("name"):
                     new_obj = lookup_fn(original_name, cursor)
                     if new_obj:
-                        if from_pmid := original_obj.get("fromPMID"):
+                        if original_obj.get("fromPMID"):
                             new_obj.pop("fromPMID", None)
                             new_obj.pop("originalName", None)
                         logger.info(f"Found {original_name} in database")
@@ -574,7 +574,7 @@ def transform(doc_list):
         elif original_name := section.get("name"):
             new_obj = lookup_fn(original_name, cursor)
             if new_obj:
-                if from_pmid := section.get("fromPMID"):
+                if section.get("fromPMID"):
                     new_obj.pop("fromPMID", None)
                     new_obj.pop("originalName", None)
                 logger.info(f"Found {original_name} in database")
@@ -599,7 +599,6 @@ def transform(doc_list):
         new_species_list, new_infectious_agent_list = process_section_species_and_infectious_agents(
             species_list + infectious_agent_list, species_cursor
         )
-
 
         # Update the document with the new lists
         if new_health_conditions_list:
