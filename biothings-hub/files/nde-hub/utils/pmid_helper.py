@@ -5,19 +5,99 @@
 # https://www.nlm.nih.gov/bsd/mms/medlineelements.html
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
 # https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
-import csv
 import os
 import time
 from copy import copy
 from datetime import datetime
 from itertools import islice
 from typing import Dict, Iterable, Optional
+
 import orjson
 import requests
 from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
 from .utils import retry
+
+SPECIES_CACHE = {}
+
+
+def classify_as_host_or_agent(lineage):
+    # Extracting scientific names for easy processing
+    scientific_names = [item["scientificName"] for item in lineage]
+
+    # Check for host species conditions
+    if "Deuterostomia" in scientific_names:
+        new_classification = "host"
+    elif "Embryophyta" in scientific_names and not any(
+        parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
+    ):
+        new_classification = "host"
+    elif "Arthropoda" in scientific_names:
+        if "Acari" in scientific_names:
+            if "Ixodida" in scientific_names:
+                new_classification = "host"
+            else:
+                new_classification = "infectiousAgent"
+        else:
+            new_classification = "host"
+    else:
+        # If not falling under the above host conditions, classify as infectiousAgent
+        new_classification = "infectiousAgent"
+
+    return new_classification
+
+
+def get_species_details(original_name, identifier):
+    if identifier in SPECIES_CACHE:
+        logger.info(f"Fetching details from cache for {original_name}")
+        return SPECIES_CACHE[identifier]
+
+    logger.info(f"Getting details for {original_name}")
+    # Fetch details from the UniProt API
+    identifier = identifier.split("*")[-1]
+
+    species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
+    species_info.raise_for_status()
+    species_info = species_info.json()
+    standard_dict = {
+        "identifier": identifier,
+        "inDefinedTermSet": "UniProt",
+        "url": f"https://www.uniprot.org/taxonomy/{identifier}",
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": datetime.now().strftime("%Y-%m-%d"),
+        },
+    }
+    if scientific_name := species_info.get("scientificName"):
+        standard_dict["name"] = scientific_name
+    else:
+        standard_dict["name"] = original_name
+
+    alternative_names = []
+    if common_name := species_info.get("commonName"):
+        standard_dict["commonName"] = common_name
+        alternative_names.append(common_name)
+
+        standard_dict["displayName"] = f"{common_name} | {scientific_name}"
+
+    if other_names := species_info.get("otherNames"):
+        alternative_names.extend(other_names)
+
+    if alternative_names:
+        standard_dict["alternateName"] = alternative_names
+
+    if lineage := species_info.get("lineage"):
+        standard_dict["classification"] = classify_as_host_or_agent(lineage, identifier)
+    else:
+        logger.warning(f"No lineage found for {original_name} {identifier}")
+        standard_dict["classification"] = "host"
+
+    SPECIES_CACHE[identifier] = standard_dict
+    return standard_dict
+
 
 @retry(3, 5)
 def get_species_from_pubtator(pmids):
@@ -30,7 +110,6 @@ def get_species_from_pubtator(pmids):
     url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=species"
     response = requests.get(url)
     lines = response.text.split("\n")
-
     species_info = {}
     for line in lines:
         parts = line.split("\t")
@@ -53,25 +132,43 @@ def update_record_species(rec, species_data):
     - species_data (dict): Dictionary containing species data, with species name as key and ID as value.
     """
 
-    # Convert single species dictionary to a list if needed
+    # Convert species and infectiousAgent to lists if they are not already
     if isinstance(rec.get("species"), dict):
         rec["species"] = [rec["species"]]
+    if isinstance(rec.get("infectiousAgent"), dict):
+        rec["infectiousAgent"] = [rec["infectiousAgent"]]
 
     existing_species = {spec["name"]: spec for spec in rec.get("species", [])}
+    existing_infectious_agents = {spec["name"]: spec for spec in rec.get("infectiousAgent", [])}
 
     # Fetch the abstract, description, and title for current record
-    abstract = rec.get("abstract", "").lower()
-    description = rec.get("description", "").lower()
-    title = rec.get("name", "").lower()
+    abstract = rec.get("abstract", "")
+    description = rec.get("description", "")
+    title = rec.get("name", "")
 
     # Iterate over new species data and update the record
     for id, name in species_data.items():
-        if name.upper() in rec.get("abstract", "") or name.upper() in rec.get("description", "") or name.upper() in rec.get("name", ""):
+        if name.upper() in abstract or name.upper() in description or name.upper() in title:
             # avoid acronyms ex. PERCH (Pneumonia Etiology Research for Child Health) not a species
             continue
         # If species name is in abstract, description or title and not in existing species, add it to the record
-        if (name in abstract or name in description or name in title) and name not in existing_species:
-            rec["species"] = rec.get("species", []) + [{"name": name, "id": id, "fromPMID": True}]
+        if (
+            (name in abstract.lower() or name in description.lower() or name in title.lower())
+            and name not in existing_species
+            and name not in existing_infectious_agents
+        ):
+            standardized_dict = get_species_details(name, id)
+
+            if standardized_dict["classification"] == "host":
+                rec["species"] = rec.get("species", []) + [standardized_dict]
+                logger.info(f"Added species {name} to record {rec['_id']}")
+
+            elif standardized_dict["classification"] == "infectiousAgent":
+                rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
+                logger.info(f"Added infectious agent {name} to record {rec['_id']}")
+
+            else:
+                logger.warning(f"Unknown classification: {standardized_dict['classification']}")
 
 
 # retry 3 times sleep 5 seconds between each retry
