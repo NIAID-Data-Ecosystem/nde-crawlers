@@ -32,7 +32,7 @@ DATA_TARGET_MASTER_COLLECTION = "db_master"
 HUB_MAX_MEM_USAGE = None
 
 # Max number of *processes* hub can access to run jobs
-HUB_MAX_WORKERS = int(os.cpu_count() / 4)
+HUB_MAX_WORKERS = 14
 # Max number of *processes* used when syncing data
 # (applygin diff/incremental data)
 MAX_SYNC_WORKERS = HUB_MAX_WORKERS
