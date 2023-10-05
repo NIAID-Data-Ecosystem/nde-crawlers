@@ -5,10 +5,15 @@
 # https://www.nlm.nih.gov/bsd/mms/medlineelements.html
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
 # https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
+import gzip
 import os
+import os.path
+import shutil
 import time
+import urllib.request
 from copy import copy
 from datetime import datetime
+from ftplib import FTP
 from itertools import islice
 from typing import Dict, Iterable, Optional
 
@@ -22,33 +27,155 @@ from .utils import retry
 SPECIES_CACHE = {}
 
 
+def get_remote_file_time(url):
+    """
+    Gets the last modified time of a remote file.
+
+    Parameters:
+    - url (str): The URL of the remote file.
+
+    Returns:
+    - timestamp (float): The timestamp of the last modified time.
+    """
+    with urllib.request.urlopen(url) as response:
+        # Extract the 'Last-Modified' header and parse it
+        last_modified = response.headers["Last-Modified"]
+        # Convert it into a timestamp
+        t = time.strptime(last_modified, "%a, %d %b %Y %H:%M:%S GMT")
+        return time.mktime(t)
+
+
+def download_and_extract_ftp():
+    """
+    Downloads the species file from PubTator and extracts it.
+
+    Returns:
+    - extracted_file_path (str): The path to the extracted species file.
+    """
+    # Define URLs and file paths
+    url = "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTatorCentral/species2pubtatorcentral.gz"
+    gz_file_path = "species2pubtatorcentral.gz"
+    extracted_file_path = "species2pubtatorcentral.txt"
+
+    # Get remote file time
+    remote_time = get_remote_file_time(url)
+
+    # Check local file time
+    if os.path.exists(gz_file_path):
+        local_time = os.path.getmtime(gz_file_path)
+    else:
+        local_time = 0
+
+    # If remote file is newer, download it
+    if remote_time > local_time:
+        urllib.request.urlretrieve(url, gz_file_path)
+
+    # Check if the extracted file already exists
+    if not os.path.exists(extracted_file_path):
+        # Extract GZ file
+        with gzip.open(gz_file_path, "rb") as f_in:
+            with open(extracted_file_path, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+
+    return extracted_file_path
+
+
+def parse_species_file(file_path):
+    """
+    Parses the species file from PubTator.
+
+    Parameters:
+    - file_path (str): The path to the species file.
+
+    Returns:
+    - data (dict): Dictionary containing species data, with PMID as key and list of species as value.
+    """
+    with open(file_path, "r") as file:
+        data = {}
+        for line in file:
+            parts = line.strip().split("\t")
+            if len(parts) >= 5 and parts[1] == "Species":
+                pmid, _, species_id, species_name, _ = parts
+                if pmid not in data:
+                    data[pmid] = []
+                data[pmid].append({"species_id": species_id, "species_name": species_name.lower()})
+        return data
+
+
+def get_species_from_file(pubtator_data, pmids):
+    """
+    Retrieves species data from PubTator for a given list of PMIDs.
+
+    Parameters:
+    - pubtator_data (dict): Dictionary containing species data.
+    - pmids (list): List of PMIDs to retrieve species data for.
+
+    Returns:
+    - species_info (dict): Dictionary containing species data, with species ID as key and name as value.
+    """
+    species_info = {}
+    for pmid in pmids:
+        if pmid in pubtator_data:
+            for species in pubtator_data[pmid]:
+                species_id = species["species_id"]
+                species_name = species["species_name"]
+                species_info[species_id] = species_name
+    return species_info
+
+
 def classify_as_host_or_agent(lineage):
+    """
+    Classifies a species as either host or infectious agent based on its lineage.
+
+    Parameters:
+    - lineage (list): The lineage of the species.
+
+    Returns:
+    - new_classification (str): The classification of the species.
+    """
     # Extracting scientific names for easy processing
     scientific_names = [item["scientificName"] for item in lineage]
 
     # Check for host species conditions
     if "Deuterostomia" in scientific_names:
+        logger.info(f"Found Deuterostomia in {scientific_names}, classifying as host")
         new_classification = "host"
     elif "Embryophyta" in scientific_names and not any(
         parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
     ):
+        logger.info(f"Found Embryophyta in {scientific_names}, classifying as host")
         new_classification = "host"
     elif "Arthropoda" in scientific_names:
         if "Acari" in scientific_names:
             if "Ixodida" in scientific_names:
+                logger.info(f"Found Ixodida in {scientific_names}, classifying as host")
                 new_classification = "host"
             else:
+                logger.info(f"Found Acari in {scientific_names}, classifying as infectiousAgent")
                 new_classification = "infectiousAgent"
         else:
+            logger.info(f"Found Arthropoda in {scientific_names}, classifying as host")
             new_classification = "host"
     else:
         # If not falling under the above host conditions, classify as infectiousAgent
+        logger.info(f"Found {scientific_names}, classifying as infectiousAgent")
         new_classification = "infectiousAgent"
 
     return new_classification
 
 
+@retry(3, 5)
 def get_species_details(original_name, identifier):
+    """
+    Retrieves species details from UniProt for a given species name.
+
+    Parameters:
+    - original_name (str): The original species name.
+    - identifier (str): The UniProt identifier for the species.
+
+    Returns:
+    - standard_dict (dict): The standardized species dictionary.
+    """
     if identifier in SPECIES_CACHE:
         logger.info(f"Fetching details from cache for {original_name}")
         return SPECIES_CACHE[identifier]
@@ -64,6 +191,7 @@ def get_species_details(original_name, identifier):
         "identifier": identifier,
         "inDefinedTermSet": "UniProt",
         "url": f"https://www.uniprot.org/taxonomy/{identifier}",
+        "fromPMID": True,
         "isCurated": True,
         "curatedBy": {
             "name": "PubTator",
@@ -90,37 +218,13 @@ def get_species_details(original_name, identifier):
         standard_dict["alternateName"] = alternative_names
 
     if lineage := species_info.get("lineage"):
-        standard_dict["classification"] = classify_as_host_or_agent(lineage, identifier)
+        standard_dict["classification"] = classify_as_host_or_agent(lineage)
     else:
         logger.warning(f"No lineage found for {original_name} {identifier}")
         standard_dict["classification"] = "host"
 
     SPECIES_CACHE[identifier] = standard_dict
     return standard_dict
-
-
-@retry(3, 5)
-def get_species_from_pubtator(pmids):
-    """
-    Retrieves species data from PubTator for a given list of PMIDs.
-
-    Parameters:
-    - pmids (list): List of PMIDs to retrieve species data for.
-    """
-    url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=species"
-    response = requests.get(url)
-    lines = response.text.split("\n")
-    species_info = {}
-    for line in lines:
-        parts = line.split("\t")
-        if len(parts) >= 6 and parts[4] == "Species":
-            species_name = parts[3].lower()
-            species_id = parts[5]
-            if species_id not in species_info:
-                species_info[species_id] = species_name
-                logger.info(f"Species found: {species_name} with ID: {species_id}")
-
-    return species_info
 
 
 def update_record_species(rec, species_data):
@@ -146,29 +250,49 @@ def update_record_species(rec, species_data):
     description = rec.get("description", "")
     title = rec.get("name", "")
 
+    added_taxonomy_ids = set()
+
     # Iterate over new species data and update the record
     for id, name in species_data.items():
-        if name.upper() in abstract or name.upper() in description or name.upper() in title:
-            # avoid acronyms ex. PERCH (Pneumonia Etiology Research for Child Health) not a species
+        # Skip if taxonomy ID has already been added
+        if id in added_taxonomy_ids:
             continue
-        # If species name is in abstract, description or title and not in existing species, add it to the record
-        if (
-            (name in abstract.lower() or name in description.lower() or name in title.lower())
-            and name not in existing_species
-            and name not in existing_infectious_agents
-        ):
-            standardized_dict = get_species_details(name, id)
 
-            if standardized_dict["classification"] == "host":
-                rec["species"] = rec.get("species", []) + [standardized_dict]
-                logger.info(f"Added species {name} to record {rec['_id']}")
+        # Split the names by '|'
+        individual_names = name.split("|")
 
-            elif standardized_dict["classification"] == "infectiousAgent":
-                rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
-                logger.info(f"Added infectious agent {name} to record {rec['_id']}")
+        # Check if any of the individual names are in abstract, description, or title
+        found_names = [
+            n for n in individual_names if n in abstract.lower() or n in description.lower() or n in title.lower()
+        ]
 
-            else:
-                logger.warning(f"Unknown classification: {standardized_dict['classification']}")
+        if found_names:
+            # Use the first found name
+            found_name = found_names[0]
+
+            # Avoid acronyms by checking if the name is also in uppercase in the fields
+            if found_name.upper() in abstract or found_name.upper() in description or found_name.upper() in title:
+                logger.info(f"{found_name} is an acronym, skipping")
+                continue
+
+            if found_name not in existing_species and found_name not in existing_infectious_agents:
+                logger.info(f"Adding {found_name} to record {rec['_id']}")
+                standardized_dict = get_species_details(found_name, id)
+
+                if standardized_dict["classification"] == "host":
+                    rec["species"] = rec.get("species", []) + [standardized_dict]
+                    logger.info(f"Added species {found_name} to record {rec['_id']}")
+
+                elif standardized_dict["classification"] == "infectiousAgent":
+                    rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
+                    logger.info(f"Added infectious agent {found_name} to record {rec['_id']}")
+
+                else:
+                    logger.warning(f"Unknown classification: {standardized_dict['classification']}")
+
+                added_taxonomy_ids.add(id)
+        else:
+            logger.info(f"None of the names {individual_names} are in abstract, description, or title")
 
 
 # retry 3 times sleep 5 seconds between each retry
@@ -356,6 +480,8 @@ def load_pmid_ctfd(data_folder):
             # docs to yield for each batch query
             doc_list = []
 
+            logger.info("Starting to load pmid citation and funding data")
+
             # to make batch api query take the next 1000 docs and collect all the pmids
             next_n_lines = list(islice(f, 1000))
             if not next_n_lines:
@@ -399,6 +525,14 @@ def load_pmid_ctfd(data_folder):
                 else:
                     time.sleep(0.35)
 
+            logger.info("Starting to load pubtator data")
+
+            # Download and parse the FTP file for species data
+            extracted_file_path = download_and_extract_ftp()
+            pubtator_data = parse_species_file(extracted_file_path)
+
+            logger.info("Finished loading pubtator data")
+
             # add in the citation and funding to each doc in doc_list and yield
             for rec in doc_list:
                 if pmids := rec.pop("pmids", None):
@@ -407,7 +541,7 @@ def load_pmid_ctfd(data_folder):
                     pmids = [pmid.lstrip("0") for pmid in pmids]
                     pmids = [*set(pmids)]
                     # get species names from pubtator
-                    species_data = get_species_from_pubtator(pmids)
+                    species_data = get_species_from_file(pubtator_data, pmids)
                     if species_data:
                         # Update the species field in the record
                         update_record_species(rec, species_data)
