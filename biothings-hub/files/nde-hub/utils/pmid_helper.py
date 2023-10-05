@@ -469,6 +469,14 @@ def load_pmid_ctfd(data_folder):
     # if no access to config file comment out above and enter your own email
     # email = myemail@gmail.com
 
+    logger.info("Starting to load pubtator data")
+
+    # Download and parse the FTP file for species data
+    extracted_file_path = download_and_extract_ftp()
+    pubtator_data = parse_species_file(extracted_file_path)
+
+    logger.info("Finished loading pubtator data")
+
     with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
         while True:
             # dict to convert pmcs to pmids
@@ -524,14 +532,6 @@ def load_pmid_ctfd(data_folder):
                     time.sleep(0.1)
                 else:
                     time.sleep(0.35)
-
-            logger.info("Starting to load pubtator data")
-
-            # Download and parse the FTP file for species data
-            extracted_file_path = download_and_extract_ftp()
-            pubtator_data = parse_species_file(extracted_file_path)
-
-            logger.info("Finished loading pubtator data")
 
             # add in the citation and funding to each doc in doc_list and yield
             for rec in doc_list:
