@@ -279,7 +279,12 @@ def update_record_species(rec, species_data):
                 logger.info(f"Adding {found_name} to record {rec['_id']}")
                 standardized_dict = get_species_details(found_name, id)
 
-                if standardized_dict["classification"] == "host":
+                if "classification" not in standardized_dict:
+                    logger.warning(f"Could not classify {found_name} with ID {id}")
+                    rec["species"] = rec.get("species", []) + [standardized_dict]
+                    logger.info(f"Added species {found_name} to record {rec['_id']}")
+
+                elif standardized_dict["classification"] == "host":
                     rec["species"] = rec.get("species", []) + [standardized_dict]
                     logger.info(f"Added species {found_name} to record {rec['_id']}")
 
