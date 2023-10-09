@@ -118,7 +118,7 @@ def get_species_from_file(pubtator_data, pmids):
         if pmid in pubtator_data:
             for species in pubtator_data[pmid]:
                 species_id = species["species_id"]
-                species_name = species["species_name"]
+                species_name = species["species_name"].lower()
                 species_info[species_id] = species_name
     return species_info
 
@@ -233,7 +233,7 @@ def update_record_species(rec, species_data):
 
     Parameters:
     - rec (dict): The record to be updated.
-    - species_data (dict): Dictionary containing species data, with species name as key and ID as value.
+    - species_data (dict): Dictionary containing species data, with species id as key and lowercase names separated by a "|" as the value.
     """
 
     # Convert species and infectiousAgent to lists if they are not already
@@ -242,8 +242,8 @@ def update_record_species(rec, species_data):
     if isinstance(rec.get("infectiousAgent"), dict):
         rec["infectiousAgent"] = [rec["infectiousAgent"]]
 
-    existing_species = {spec["name"]: spec for spec in rec.get("species", [])}
-    existing_infectious_agents = {spec["name"]: spec for spec in rec.get("infectiousAgent", [])}
+    existing_species = {spec["name"].lower(): spec for spec in rec.get("species", [])}
+    existing_infectious_agents = {spec["name"].lower(): spec for spec in rec.get("infectiousAgent", [])}
 
     # Fetch the abstract, description, and title for current record
     abstract = rec.get("abstract", "")
@@ -252,14 +252,17 @@ def update_record_species(rec, species_data):
 
     added_taxonomy_ids = set()
 
+    blacklist = ["PERCH", "D-FISH"]
+
     # Iterate over new species data and update the record
-    for id, name in species_data.items():
+    for id, names in species_data.items():
         # Skip if taxonomy ID has already been added
         if id in added_taxonomy_ids:
+            logger.info(f"Skipping {id} because it has already been added")
             continue
 
         # Split the names by '|'
-        individual_names = name.split("|")
+        individual_names = names.split("|")
 
         # Check if any of the individual names are in abstract, description, or title
         found_names = [
@@ -267,35 +270,33 @@ def update_record_species(rec, species_data):
         ]
 
         if found_names:
-            # Use the first found name
-            found_name = found_names[0]
+            for found_name in found_names:
+                if found_name.isupper():
+                    logger.info(f"Possible Acronym: {found_name} in record: {rec['_id']}")
+                if found_name in blacklist:
+                    logger.info(f"Blacklisted: {found_name} in record: {rec['_id']}, skipping")
+                    continue
+                if found_name.lower() not in existing_species and found_name.lower() not in existing_infectious_agents:
+                    logger.info(f"Adding {found_name} to record {rec['_id']}")
+                    standardized_dict = get_species_details(found_name, id)
 
-            # Avoid acronyms by checking if the name is also in uppercase in the fields
-            if found_name.upper() in abstract or found_name.upper() in description or found_name.upper() in title:
-                logger.info(f"{found_name} is an acronym, skipping")
-                continue
+                    if "classification" not in standardized_dict:
+                        logger.warning(f"Could not classify {found_name} with ID {id}")
+                        rec["species"] = rec.get("species", []) + [standardized_dict]
+                        logger.info(f"Added species {found_name} to record {rec['_id']}")
 
-            if found_name not in existing_species and found_name not in existing_infectious_agents:
-                logger.info(f"Adding {found_name} to record {rec['_id']}")
-                standardized_dict = get_species_details(found_name, id)
+                    elif standardized_dict["classification"] == "host":
+                        rec["species"] = rec.get("species", []) + [standardized_dict]
+                        logger.info(f"Added species {found_name} to record {rec['_id']}")
 
-                if "classification" not in standardized_dict:
-                    logger.warning(f"Could not classify {found_name} with ID {id}")
-                    rec["species"] = rec.get("species", []) + [standardized_dict]
-                    logger.info(f"Added species {found_name} to record {rec['_id']}")
+                    elif standardized_dict["classification"] == "infectiousAgent":
+                        rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
+                        logger.info(f"Added infectious agent {found_name} to record {rec['_id']}")
 
-                elif standardized_dict["classification"] == "host":
-                    rec["species"] = rec.get("species", []) + [standardized_dict]
-                    logger.info(f"Added species {found_name} to record {rec['_id']}")
-
-                elif standardized_dict["classification"] == "infectiousAgent":
-                    rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
-                    logger.info(f"Added infectious agent {found_name} to record {rec['_id']}")
-
+                    added_taxonomy_ids.add(id)
+                    break
                 else:
-                    logger.warning(f"Unknown classification: {standardized_dict['classification']}")
-
-                added_taxonomy_ids.add(id)
+                    logger.info(f"{found_name} already exists in record {rec['_id']}")
         else:
             logger.info(f"None of the names {individual_names} are in abstract, description, or title")
 
