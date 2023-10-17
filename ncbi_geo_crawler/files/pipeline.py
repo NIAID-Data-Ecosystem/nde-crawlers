@@ -60,7 +60,12 @@ class GeoItemProcessorPipeline:
             output["species"] = {"name": species}
         if measurement_technique := item.pop("Experiment type", None):
             output["measurementTechnique"] = {"name": measurement_technique}
-        if description := item.pop("Summary", None):
+        description = ""
+        if summary := item.pop("Summary", None):
+            description += summary
+        if overall_design := item.pop("Overall design", None):
+            description += "\n" + overall_design
+        if description:
             output["description"] = description
         if date_published := item.pop("Submission date", None):
             output["datePublished"] = datetime.datetime.strptime(date_published, "%b %d, %Y").date().isoformat()
