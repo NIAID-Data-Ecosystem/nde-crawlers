@@ -543,10 +543,14 @@ def transform(doc_list):
         species, infectious_agents = [], []
 
         for item in new_section_list:
-            classification = item.pop("classification", None)
+            logger.info(f"Processing {item['name']}")
+            classification = item.get("classification", None)
+            logger.info(f"Classification: {classification}")
             if classification == "infectiousAgent":
+                logger.info(f"Adding {item['name']} to infectious agents")
                 infectious_agents.append(item)
             else:  # 'species' or no classification
+                logger.info(f"Adding {item['name']} to species")
                 species.append(item)
 
         return species, infectious_agents
@@ -558,8 +562,6 @@ def transform(doc_list):
         if isinstance(section, list):
             for original_obj in section:
                 if original_obj.get("fromPMID"):
-                    original_obj.pop("fromPMID", None)
-                    original_obj.pop("originalName", None)
                     new_section_list.append(original_obj)
                     logger.info(f"Found {original_obj['name']} from PMID")
                 elif original_name := original_obj.get("name"):
@@ -574,8 +576,6 @@ def transform(doc_list):
         elif original_name := section.get("name"):
             new_obj = lookup_fn(original_name, cursor)
             if section.get("fromPMID"):
-                section.pop("fromPMID", None)
-                section.pop("originalName", None)
                 new_section_list.append(section)
                 logger.info(f"Found {section['name']} from PMID")
             elif new_obj:
@@ -602,13 +602,25 @@ def transform(doc_list):
             species_list + infectious_agent_list, species_cursor
         )
 
+        def remove_duplicates_from_list(data_list):
+            seen_identifiers = set()
+            unique_list = []
+
+            for entry in data_list:
+                identifier = entry.get('identifier')
+                if identifier not in seen_identifiers:
+                    seen_identifiers.add(identifier)
+                    unique_list.append(entry)
+
+            return unique_list
+
         # Update the document with the new lists
         if new_health_conditions_list:
-            doc["healthCondition"] = new_health_conditions_list
+            doc["healthCondition"] = remove_duplicates_from_list(new_health_conditions_list)
         if new_species_list:
-            doc["species"] = new_species_list
+            doc["species"] = remove_duplicates_from_list(new_species_list)
         if new_infectious_agent_list:
-            doc["infectiousAgent"] = new_infectious_agent_list
+            doc["infectiousAgent"] = remove_duplicates_from_list(new_infectious_agent_list)
 
         yield doc
 
