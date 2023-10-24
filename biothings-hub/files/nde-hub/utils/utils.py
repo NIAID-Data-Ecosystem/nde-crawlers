@@ -5,6 +5,7 @@ import traceback
 from typing import Dict, Generator, Iterable
 
 from config import logger
+from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -92,77 +93,15 @@ def merge_duplicates(doc: Dict) -> Dict:
     return doc
 
 
-MAPPING_SCORES = {
-    "abstract": 0.4,
-    "alternateName": 0.4,
-    "author": {
-        "familyName": 0.2,
-        "givenName": 0.2,
-        "name": 0.4,
-    },
-    "citation": {
-        "author": {
-            "familyName": 0.1,
-            "givenName": 0.1,
-            "name": 0.2,
-        },
-        "doi": 0.2,
-        "name": 0.1,
-        "pmid": 0.1,
-        "url": 0.1,
-    },
-    "citedBy": {
-        "doi": 0.1,
-        "name": 0.1,
-        "pmid": 0.1,
-        "url": 0.1,
-    },
-    "contentUrl": 0.2,
-    "dateCreated": 0.2,
-    "dateModified": 0.2,
-    "datePublished": 0.2,
-    "distribution": {
-        "contentUrl": 0.1,
-    },
-    "doi": 0.3,
-    "funding": {
-        "url": 0.3,
-        "name": 0.1,
-        "funder": {
-            "name": 0.1,
-            "url": 0.3,
-        },
-    },
-    "healthCondition": {
-        "name": 0.3,
-        "isCurated": 0.3,
-    },
-    "infectiousAgent": {
-        "name": 0.3,
-        "isCurated": 0.3,
-    },
-    "isBasedOn": {
-        "doi": 0.3,
-        "name": 0.1,
-        "pmid": 0.3,
-        "url": 0.1,
-    },
-    "keywords": 0.1,
-    "measurementTechnique": {
-        "name": 0.1,
-    },
-    "sdPublisher": {
-        "name": 0.3,
-        "url": 0.3,
-    },
-    "species": {
-        "name": 0.3,
-        "isCurated": 0.3,
-    },
-}
+def is_purely_augmented(field_content):
+    if isinstance(field_content, list):
+        return all(item.get('fromPMID', False) for item in field_content)
+    elif isinstance(field_content, dict):
+        return field_content.get('fromPMID', False)
+    return False
 
 
-def calculate_score(data, mapping):
+def calculate_weighted_score(data, mapping):
     score = 0
     for key, value in data.items():
         if key == "description":
@@ -170,20 +109,73 @@ def calculate_score(data, mapping):
                 score += 0.5 * min(1, len(value) / 500)  # Normalized based on an arbitrary max length of 500
         elif key in mapping:
             if isinstance(value, dict):
-                score += calculate_score(value, mapping[key])
+                score += calculate_weighted_score(value, mapping[key])
             elif isinstance(value, list):
                 # Only take the maximum score from the list items, not the sum
                 scores = [
-                    calculate_score(item, mapping[key]) if isinstance(item, dict) else mapping[key] for item in value
+                    calculate_weighted_score(item, mapping[key]) if isinstance(item, dict) else mapping[key] for item in value
                 ]
                 score += max(scores) if scores else 0  # add the highest score from list items
             else:
-                score += mapping[key]
+                try:
+                    score += mapping[key]
+                except TypeError:
+                    logger.info(f"Key {key} has a value of {value} which is not a dict or list")
     return score
 
 
-def add_metadata_score(document, mapping):
-    document["metadata_score"] = calculate_score(document, mapping)
+def check_augmented_fields(document, augmented_field_list):
+    augmented_fields_found = []
+
+    for field in augmented_field_list:
+        value = document.get(field, None)
+
+        if isinstance(value, dict) and value.get('fromPMID', False) == True:
+            augmented_fields_found.append(field)
+
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict) and item.get('fromPMID', False) == True:
+                    augmented_fields_found.append(field)
+                    break  # Once we find one instance in the list, we can break out
+
+    return augmented_fields_found
+
+
+def add_metadata_score(document: Dict) -> Dict:
+    weighted_score = calculate_weighted_score(document, MAPPING_SCORES)
+
+    required_score = sum(1 for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(document[field]))
+    recommended_score = sum(1 for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(document[field]))
+
+    required_augmented_fields = check_augmented_fields(document, REQUIRED_AUGMENTED_FIELDS)
+    recommended_augmented_fields = check_augmented_fields(document, RECOMMENDED_AUGMENTED_FIELDS)
+
+    total_required = len(REQUIRED_FIELDS)
+    total_recommended = len(RECOMMENDED_FIELDS)
+    total_required_augmented = len(REQUIRED_AUGMENTED_FIELDS)
+    total_recommended_augmented = len(RECOMMENDED_AUGMENTED_FIELDS)
+
+    document["_meta"] = {
+        "required_augmented_fields": required_augmented_fields,
+        "recommended_augmented_fields": recommended_augmented_fields,
+        "completeness": {
+            "total_score": required_score + recommended_score,
+            "total_max_score": total_required + total_recommended,
+            "required_score": required_score,
+            "required_ratio": round(required_score / total_required, 2) if total_required > 0 else 0,
+            "required_max_score": total_required,
+            "recommended_score": recommended_score,
+            "recommended_score_ratio": round(recommended_score / total_recommended, 2) if total_recommended > 0 else 0,
+            "recommended_max_score": total_recommended,
+            "weighted_score": weighted_score,
+            "augmented_required_ratio": round(len(required_augmented_fields) / total_required, 2) if total_required > 0 else 0,
+            "augmented_recommended_ratio": round(len(recommended_augmented_fields) / total_recommended, 2) if total_recommended > 0 else 0,
+            "total_required_augmented": total_required_augmented,
+            "total_recommended_augmented": total_recommended_augmented
+        }
+    }
+
     return document
 
 
@@ -196,7 +188,7 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             add_date(doc)
             # TODO FOR TESTING
             # merge_duplicates(doc)
-            add_metadata_score(doc, MAPPING_SCORES)
+            add_metadata_score(doc)
             # This will always be last
             check_schema(doc)
             yield doc
