@@ -327,6 +327,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
                             "description": {"type": "text", "copy_to": ["all"]},
+                            "identifier": {"type": "text", "copy_to": ["all"]},
                             "name": {
                                 "type": "keyword",
                                 "normalizer": "keyword_lowercase_normalizer",
