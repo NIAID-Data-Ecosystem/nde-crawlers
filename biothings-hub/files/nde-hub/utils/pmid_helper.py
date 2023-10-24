@@ -8,6 +8,7 @@
 import gzip
 import os
 import os.path
+import re
 import shutil
 import time
 import urllib.request
@@ -25,102 +26,45 @@ from config import GEO_API_KEY, GEO_EMAIL, logger
 from .utils import retry
 
 SPECIES_CACHE = {}
+DISEASE_CACHE = {}
 
 
-def get_remote_file_time(url):
+def standardize_funder(funder):
     """
-    Gets the last modified time of a remote file.
-
-    Parameters:
-    - url (str): The URL of the remote file.
-
-    Returns:
-    - timestamp (float): The timestamp of the last modified time.
+    Standardize the funder dictionary.
+    :param funder: the funder name
+    :return: the funder dictionary
     """
-    with urllib.request.urlopen(url) as response:
-        # Extract the 'Last-Modified' header and parse it
-        last_modified = response.headers["Last-Modified"]
-        # Convert it into a timestamp
-        t = time.strptime(last_modified, "%a, %d %b %Y %H:%M:%S GMT")
-        return time.mktime(t)
-
-
-def download_and_extract_ftp():
-    """
-    Downloads the species file from PubTator and extracts it.
-
-    Returns:
-    - extracted_file_path (str): The path to the extracted species file.
-    """
-    # Define URLs and file paths
-    url = "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTatorCentral/species2pubtatorcentral.gz"
-    gz_file_path = "species2pubtatorcentral.gz"
-    extracted_file_path = "species2pubtatorcentral.txt"
-
-    # Get remote file time
-    remote_time = get_remote_file_time(url)
-
-    # Check local file time
-    if os.path.exists(gz_file_path):
-        local_time = os.path.getmtime(gz_file_path)
+    funder_dict = {}
+    # parse the acronym and save as two variables
+    funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
+    funder_name = funder_name.replace("&", "and")
+    funder_acronym = re.findall(r"\(([^)]*)\)", funder)
+    url = f"https://api.crossref.org/funders?query={funder_name}"
+    response = requests.get(url)
+    data = response.json()
+    if len(data["message"]["items"]) == 1:
+        funder_dict["name"] = data["message"]["items"][0]["name"]
+        funder_dict["alternateName"] = data["message"]["items"][0]["alt-names"]
+        funder_dict["identifier"] = data["message"]["items"][0]["id"]
+    elif len(data["message"]["items"]) > 1:
+        for item in data["message"]["items"]:
+            if item["name"] == funder_name:
+                funder_dict["name"] = item["name"]
+                funder_dict["alternateName"] = item["alt-names"]
+                funder_dict["identifier"] = item["id"]
+                break
+            elif funder_acronym in item["alt-names"]:
+                funder_dict["name"] = item["name"]
+                funder_dict["alternateName"] = item["alt-names"]
+                funder_dict["identifier"] = item["id"]
+                break
     else:
-        local_time = 0
+        logger.info(f"NO FUNDING INFORMATION FOUND FOR {funder_name}, https://api.crossref.org/funders?query={funder_name}")
 
-    # If remote file is newer, download it
-    if remote_time > local_time:
-        urllib.request.urlretrieve(url, gz_file_path)
-
-    # Check if the extracted file already exists
-    if not os.path.exists(extracted_file_path):
-        # Extract GZ file
-        with gzip.open(gz_file_path, "rb") as f_in:
-            with open(extracted_file_path, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
-
-    return extracted_file_path
-
-
-def parse_species_file(file_path):
-    """
-    Parses the species file from PubTator.
-
-    Parameters:
-    - file_path (str): The path to the species file.
-
-    Returns:
-    - data (dict): Dictionary containing species data, with PMID as key and list of species as value.
-    """
-    with open(file_path, "r") as file:
-        data = {}
-        for line in file:
-            parts = line.strip().split("\t")
-            if len(parts) >= 5 and parts[1] == "Species":
-                pmid, _, species_id, species_name, _ = parts
-                if pmid not in data:
-                    data[pmid] = []
-                data[pmid].append({"species_id": species_id, "species_name": species_name.lower()})
-        return data
-
-
-def get_species_from_file(pubtator_data, pmids):
-    """
-    Retrieves species data from PubTator for a given list of PMIDs.
-
-    Parameters:
-    - pubtator_data (dict): Dictionary containing species data.
-    - pmids (list): List of PMIDs to retrieve species data for.
-
-    Returns:
-    - species_info (dict): Dictionary containing species data, with species ID as key and name as value.
-    """
-    species_info = {}
-    for pmid in pmids:
-        if pmid in pubtator_data:
-            for species in pubtator_data[pmid]:
-                species_id = species["species_id"]
-                species_name = species["species_name"].lower()
-                species_info[species_id] = species_name
-    return species_info
+    if funder_dict:
+        funder_dict["@type"] = "Organization"
+        return funder_dict
 
 
 def classify_as_host_or_agent(lineage):
@@ -165,7 +109,72 @@ def classify_as_host_or_agent(lineage):
 
 
 @retry(3, 5)
-def get_species_details(original_name, identifier):
+def get_disease_details(identifier, original_name):
+    """
+    Retrieves disease details from nih for a given MeSH id.
+
+    Parameters:
+    - original_name (str): The original disease name.
+    - identifier (str): The UniProt identifier for the disease.
+
+    Returns:
+    - standard_dict (dict): The standardized disease dictionary.
+    """
+    identifier = identifier.split(":")[-1]
+    if identifier in DISEASE_CACHE:
+        logger.info(f"Fetching details from cache for {original_name}")
+        return DISEASE_CACHE[identifier]
+    logger.info(f"Getting details for {original_name}")
+
+    # Fetch details from the MeSH API
+    disease_info = requests.get(f"https://id.nlm.nih.gov/mesh/{identifier}.json")
+    disease_info.raise_for_status()
+    disease_info = disease_info.json()
+    standard_dict = {
+        "identifier": identifier,
+        "inDefinedTermSet": "MeSH",
+        "url": f"https://id.nlm.nih.gov/mesh/{identifier}.html",
+        "fromPMID": True,
+        "isCurated": True,
+        "curatedBy": {
+            "name": "PubTator",
+            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+            "dateModified": datetime.now().strftime("%Y-%m-%d"),
+        },
+    }
+    if terms := disease_info.get("terms"):
+        alternative_names = []
+        for term in terms:
+            if term["preferred"] == True:
+                standard_dict["name"] = term["label"]
+            else:
+                alternative_names.append(term["label"])
+        if alternative_names:
+            standard_dict["alternateName"] = alternative_names
+    if label := disease_info.get("label"):
+        standard_dict["name"] = label["@value"]
+    if "name" not in standard_dict:
+        raise Exception(f"No name found for {identifier}")
+
+    DISEASE_CACHE[identifier] = standard_dict
+    return standard_dict
+
+
+def get_species_from_api(pmids):
+    url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=species"
+    response = requests.get(url)
+    response.raise_for_status()
+    lines = response.text.split("\n")
+    taxonomy_info = []
+    for line in lines:
+        columns = line.split("\t")
+        if len(columns) > 4 and columns[4] == "Disease":
+            taxonomy_info.append({"identifier": columns[5], "name": columns[3].lower()})
+    return taxonomy_info
+
+
+@retry(3, 5)
+def get_species_details(identifier, original_name):
     """
     Retrieves species details from UniProt for a given species name.
 
@@ -176,13 +185,13 @@ def get_species_details(original_name, identifier):
     Returns:
     - standard_dict (dict): The standardized species dictionary.
     """
+    identifier = identifier.split("*")[-1]
     if identifier in SPECIES_CACHE:
         logger.info(f"Fetching details from cache for {original_name}")
         return SPECIES_CACHE[identifier]
 
     logger.info(f"Getting details for {original_name}")
     # Fetch details from the UniProt API
-    identifier = identifier.split("*")[-1]
 
     species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
     species_info.raise_for_status()
@@ -227,6 +236,65 @@ def get_species_details(original_name, identifier):
     return standard_dict
 
 
+def get_disease_from_api(pmids):
+    url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=disease"
+    response = requests.get(url)
+    response.raise_for_status()
+    lines = response.text.split("\n")
+    mesh_info = []
+    for line in lines:
+        columns = line.split("\t")
+        if len(columns) > 4 and columns[4] == "Disease":
+            if columns[5] == "":
+                logger.warning(f"No MeSH ID found for {columns[3]}")
+                logger.info(f"url: {url}")
+                continue
+            mesh_info.append({"identifier": columns[5], "name": columns[3].lower()})
+    return mesh_info
+
+
+def update_record_disease(rec, disease_data):
+    if isinstance(rec.get("healthCondition"), dict):
+        rec["healthCondition"] = [rec["healthCondition"]]
+
+    existing_diseases = {spec["name"].lower(): i for i, spec in enumerate(rec.get("healthCondition", []))}
+
+    # Fetch the abstract, description, and title for current record
+    abstract = rec.get("abstract", "")
+    description = rec.get("description", "")
+    title = rec.get("name", "")
+
+    added_mesh_ids = set()
+
+    # Iterate over new disease data and update the record
+    for disease_dict in disease_data:
+    # for identifier, name in disease_data.items():
+        identifier = disease_dict["identifier"]
+        name = disease_dict["name"]
+        # Skip if mesh ID has already been added
+        if identifier in added_mesh_ids:
+            logger.info(f"Skipping {identifier} because it has already been added")
+            continue
+
+        if name.lower() in abstract.lower() or name.lower() in description.lower() or name.lower() in title.lower():
+            logger.info(f"Found {name} in abstract, description, or title")
+            if name.isupper():
+                logger.info(f"Possible Acronym: {name} in record: {rec['_id']}")
+            logger.info(f"Adding {name} to record {rec['_id']}")
+            standardized_dict = get_disease_details(identifier, name)
+
+            if name.lower() in existing_diseases:
+                del rec["healthCondition"][existing_diseases[name.lower()]]
+
+            rec["healthCondition"] = rec.get("healthCondition", []) + [standardized_dict]
+            logger.info(f"Added disease {name} to record {rec['_id']}")
+
+            added_mesh_ids.add(identifier)
+
+        else:
+            logger.info(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
+
+
 def update_record_species(rec, species_data):
     """
     Updates the species in a given record based on abstract, description, and title.
@@ -242,8 +310,8 @@ def update_record_species(rec, species_data):
     if isinstance(rec.get("infectiousAgent"), dict):
         rec["infectiousAgent"] = [rec["infectiousAgent"]]
 
-    existing_species = {spec["name"].lower(): spec for spec in rec.get("species", [])}
-    existing_infectious_agents = {spec["name"].lower(): spec for spec in rec.get("infectiousAgent", [])}
+    existing_species = {spec["name"].lower(): i for i, spec in enumerate(rec.get("species", []))}
+    existing_infectious_agents = {spec["name"].lower(): i for i, spec in enumerate(rec.get("infectiousAgent", []))}
 
     # Fetch the abstract, description, and title for current record
     abstract = rec.get("abstract", "")
@@ -255,50 +323,48 @@ def update_record_species(rec, species_data):
     blacklist = ["PERCH", "D-FISH"]
 
     # Iterate over new species data and update the record
-    for id, names in species_data.items():
+    for species_dict in species_data:
+        identifier = species_dict["identifier"]
+        name = species_dict["name"]
         # Skip if taxonomy ID has already been added
-        if id in added_taxonomy_ids:
-            logger.info(f"Skipping {id} because it has already been added")
+        if identifier in added_taxonomy_ids:
+            logger.info(f"Skipping {identifier} because it has already been added")
             continue
 
-        # Split the names by '|'
-        individual_names = names.split("|")
+        if name.lower() in abstract.lower() or name.lower() in description.lower() or name.lower() in title.lower():
+            logger.info(f"Found {name} in abstract, description, or title")
+            if name.isupper():
+                logger.info(f"Possible Acronym: {name} in record: {rec['_id']}")
+            if name in blacklist:
+                logger.info(f"Blacklisted: {name} in record: {rec['_id']}, skipping")
+                continue
+            logger.info(f"Adding {name} to record {rec['_id']}")
 
-        # Check if any of the individual names are in abstract, description, or title
-        found_names = [
-            n for n in individual_names if n in abstract.lower() or n in description.lower() or n in title.lower()
-        ]
+            standardized_dict = get_species_details(identifier, name)
 
-        if found_names:
-            for found_name in found_names:
-                if found_name.isupper():
-                    logger.info(f"Possible Acronym: {found_name} in record: {rec['_id']}")
-                if found_name in blacklist:
-                    logger.info(f"Blacklisted: {found_name} in record: {rec['_id']}, skipping")
-                    continue
-                if found_name.lower() not in existing_species and found_name.lower() not in existing_infectious_agents:
-                    logger.info(f"Adding {found_name} to record {rec['_id']}")
-                    standardized_dict = get_species_details(found_name, id)
+            if name.lower() in existing_species:
+                del rec["species"][existing_species[name.lower()]]
+            elif name.lower() in existing_infectious_agents:
+                del rec["infectiousAgent"][existing_infectious_agents[name.lower()]]
 
-                    if "classification" not in standardized_dict:
-                        logger.warning(f"Could not classify {found_name} with ID {id}")
-                        rec["species"] = rec.get("species", []) + [standardized_dict]
-                        logger.info(f"Added species {found_name} to record {rec['_id']}")
 
-                    elif standardized_dict["classification"] == "host":
-                        rec["species"] = rec.get("species", []) + [standardized_dict]
-                        logger.info(f"Added species {found_name} to record {rec['_id']}")
+            if "classification" not in standardized_dict:
+                logger.warning(f"Could not classify {name} with ID {identifier}")
+                rec["species"] = rec.get("species", []) + [standardized_dict]
+                logger.info(f"Added species {name} to record {rec['_id']}")
 
-                    elif standardized_dict["classification"] == "infectiousAgent":
-                        rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
-                        logger.info(f"Added infectious agent {found_name} to record {rec['_id']}")
+            elif standardized_dict["classification"] == "host":
+                rec["species"] = rec.get("species", []) + [standardized_dict]
+                logger.info(f"Added species {name} to record {rec['_id']}")
 
-                    added_taxonomy_ids.add(id)
-                    break
-                else:
-                    logger.info(f"{found_name} already exists in record {rec['_id']}")
+            elif standardized_dict["classification"] == "infectiousAgent":
+                rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
+                logger.info(f"Added infectious agent {name} to record {rec['_id']}")
+
+            added_taxonomy_ids.add(identifier)
+
         else:
-            logger.info(f"None of the names {individual_names} are in abstract, description, or title")
+            logger.info(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
 
 
 # retry 3 times sleep 5 seconds between each retry
@@ -423,6 +489,8 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
         if corp_authors := record.get("CN"):
             for corp_author in corp_authors:
                 citation["author"].append({"@type": "Organization", "name": corp_author})
+        if citation:
+            citation["fromPMID"] = True
         # put citation in dictionary
         ct_fd[pmid] = {"citation": citation}
 
@@ -449,7 +517,9 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
                 if grant_id := grant.get("GrantID"):
                     fund["identifier"] = grant_id
                 if agency := grant.get("Agency"):
-                    fund["funder"] = {"@type": "Organization", "name": agency}
+                    fund["funder"] = standardize_funder(agency)
+                if agency or grant_id:
+                    fund["fromPMID"] = True
                 funding.append(fund)
         if pmid := record["MedlineCitation"].get("PMID"):
             if funding:
@@ -475,14 +545,6 @@ def load_pmid_ctfd(data_folder):
     # if no access to config file comment out above and enter your own email
     # email = myemail@gmail.com
 
-    logger.info("Starting to load pubtator data")
-
-    # Download and parse the FTP file for species data
-    extracted_file_path = download_and_extract_ftp()
-    pubtator_data = parse_species_file(extracted_file_path)
-
-    logger.info("Finished loading pubtator data")
-
     with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
         while True:
             # dict to convert pmcs to pmids
@@ -494,7 +556,6 @@ def load_pmid_ctfd(data_folder):
             # docs to yield for each batch query
             doc_list = []
 
-            logger.info("Starting to load pmid citation and funding data")
 
             # to make batch api query take the next 1000 docs and collect all the pmids
             next_n_lines = list(islice(f, 1000))
@@ -546,11 +607,18 @@ def load_pmid_ctfd(data_folder):
                     # fixes issue where pmid numbers under 10 is read as 04 instead of 4
                     pmids = [pmid.lstrip("0") for pmid in pmids]
                     pmids = [*set(pmids)]
-                    # get species names from pubtator
-                    species_data = get_species_from_file(pubtator_data, pmids)
+
+                    # get species tax ids from pubtator
+                    species_data = get_species_from_api(pmids)
+                    # get disease mesh ids from pubtator
+                    disease_data = get_disease_from_api(pmids)
                     if species_data:
                         # Update the species field in the record
                         update_record_species(rec, species_data)
+                    if disease_data:
+                        # Update the healthCondition field in the record
+                        update_record_disease(rec, disease_data)
+
                     for pmid in pmids:
                         if not eutils_info.get(pmid):
                             logger.info("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
