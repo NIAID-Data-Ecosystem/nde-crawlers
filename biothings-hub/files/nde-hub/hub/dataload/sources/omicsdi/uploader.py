@@ -1,7 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
+from utils.funding_helper import standardize_funding
 from utils.pmid_helper import load_pmid_ctfd
 from utils.utils import nde_upload_wrapper
-from utils.funding_helper import standardize_funding
 
 
 class OmicsDIUploader(NDESourceUploader):
@@ -9,7 +9,7 @@ class OmicsDIUploader(NDESourceUploader):
     __metadata__ = {
         "src_meta": {"url": "https://www.omicsdi.org/search", "license_url": "https://www.ebi.ac.uk/licencing"},
         "merger": "merge_struct",
-        "merger_keywords": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
     }
 
     @nde_upload_wrapper

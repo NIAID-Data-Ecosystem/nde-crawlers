@@ -14,7 +14,7 @@ class NCBI_Geo_Uploader(NDESourceUploader):
             "license_url": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
         },
         "merger": "merge_struct",
-        "merger_keywords": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
     }
 
     @nde_upload_wrapper

@@ -5,7 +5,13 @@ import traceback
 from typing import Dict, Generator, Iterable
 
 from config import logger
-from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
+from scores import (
+    MAPPING_SCORES,
+    RECOMMENDED_AUGMENTED_FIELDS,
+    RECOMMENDED_FIELDS,
+    REQUIRED_AUGMENTED_FIELDS,
+    REQUIRED_FIELDS,
+)
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -95,9 +101,9 @@ def merge_duplicates(doc: Dict) -> Dict:
 
 def is_purely_augmented(field_content):
     if isinstance(field_content, list):
-        return all(item.get('fromPMID', False) for item in field_content)
+        return all(item.get("fromPMID", False) for item in field_content)
     elif isinstance(field_content, dict):
-        return field_content.get('fromPMID', False)
+        return field_content.get("fromPMID", False)
     return False
 
 
@@ -113,7 +119,8 @@ def calculate_weighted_score(data, mapping):
             elif isinstance(value, list):
                 # Only take the maximum score from the list items, not the sum
                 scores = [
-                    calculate_weighted_score(item, mapping[key]) if isinstance(item, dict) else mapping[key] for item in value
+                    calculate_weighted_score(item, mapping[key]) if isinstance(item, dict) else mapping[key]
+                    for item in value
                 ]
                 score += max(scores) if scores else 0  # add the highest score from list items
             else:
@@ -130,12 +137,12 @@ def check_augmented_fields(document, augmented_field_list):
     for field in augmented_field_list:
         value = document.get(field, None)
 
-        if isinstance(value, dict) and value.get('fromPMID', False) == True:
+        if isinstance(value, dict) and value.get("fromPMID", False) == True:
             augmented_fields_found.append(field)
 
         elif isinstance(value, list):
             for item in value:
-                if isinstance(item, dict) and item.get('fromPMID', False) == True:
+                if isinstance(item, dict) and item.get("fromPMID", False) == True:
                     augmented_fields_found.append(field)
                     break  # Once we find one instance in the list, we can break out
 
@@ -145,8 +152,12 @@ def check_augmented_fields(document, augmented_field_list):
 def add_metadata_score(document: Dict) -> Dict:
     weighted_score = calculate_weighted_score(document, MAPPING_SCORES)
 
-    required_score = sum(1 for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(document[field]))
-    recommended_score = sum(1 for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(document[field]))
+    required_score = sum(
+        1 for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(document[field])
+    )
+    recommended_score = sum(
+        1 for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(document[field])
+    )
 
     required_augmented_fields = check_augmented_fields(document, REQUIRED_AUGMENTED_FIELDS)
     recommended_augmented_fields = check_augmented_fields(document, RECOMMENDED_AUGMENTED_FIELDS)
@@ -169,11 +180,15 @@ def add_metadata_score(document: Dict) -> Dict:
             "recommended_score_ratio": round(recommended_score / total_recommended, 2) if total_recommended > 0 else 0,
             "recommended_max_score": total_recommended,
             "weighted_score": weighted_score,
-            "augmented_required_ratio": round(len(required_augmented_fields) / total_required, 2) if total_required > 0 else 0,
-            "augmented_recommended_ratio": round(len(recommended_augmented_fields) / total_recommended, 2) if total_recommended > 0 else 0,
+            "augmented_required_ratio": round(len(required_augmented_fields) / total_required, 2)
+            if total_required > 0
+            else 0,
+            "augmented_recommended_ratio": round(len(recommended_augmented_fields) / total_recommended, 2)
+            if total_recommended > 0
+            else 0,
             "total_required_augmented": total_required_augmented,
-            "total_recommended_augmented": total_recommended_augmented
-        }
+            "total_recommended_augmented": total_recommended_augmented,
+        },
     }
 
     return document
@@ -191,21 +206,6 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             add_metadata_score(doc)
             # This will always be last
             check_schema(doc)
-            yield doc
-
-    return wrapper
-
-
-def zenodo_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
-    """REMOVE THIS WHEN WE CAN GET A SUCCESSFUL RUN OF ZENODO"""
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        gen = func(*args, **kwargs)
-        for doc in gen:
-            add_date(doc)
-            # TODO FOR TESTING
-            # merge_duplicates(doc)
             yield doc
 
     return wrapper

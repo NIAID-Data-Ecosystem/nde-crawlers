@@ -17,8 +17,9 @@ class LINCSUploader(NDESourceUploader):
             }
         },
         "merger": "merge_struct",
-        "merger_keywords": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
     }
+
     @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = standardize_funding(data_folder)

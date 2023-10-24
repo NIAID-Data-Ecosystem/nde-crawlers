@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile
       args:
         PYTHON_VERSION: "3.10"
-    # May need to configure this if you get timeout errors after 2 hours. 
+    # May need to configure this if you get timeout errors after 2 hours.
     # sysctls:
     #   net.ipv4.tcp_keepalive_intvl: '45'
     #   net.ipv4.tcp_keepalive_probes: '15'
@@ -46,8 +46,13 @@ services:
       - "mongodb"
       - "elasticsearch"
       - "socat"
+    extra_hosts:
+      # If you want to access a port from local machine
+      - "host.docker.internal:host-gateway"
     environment:
       - ES_HOST=elasticsearch:9200
+      # example of using local mongodb over containerized mongodb
+      # - MONGO_HOST=host.docker.internal:27018
       - MONGO_HOST=mongodb:27017
       - DOCKER_HOST=socat:2375
     volumes:
