@@ -13,5 +13,7 @@ class LINCSUploader(NDESourceUploader):
                 "schema": get_source_data(name),
                 "url": "https://lincsportal.ccs.miami.edu/",
             }
-        }
+        },
+        "merger": "merge_struct",
+        "merger_keywords": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
     }
