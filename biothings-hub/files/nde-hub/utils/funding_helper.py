@@ -6,7 +6,7 @@ import orjson
 import requests
 from config import logger
 
-DB_PATH = "data/nde-hub/standardizers/funding_lookup/funding_lookup.db"
+DB_PATH = "/data/nde-hub/standardizers/funding_lookup/funding_lookup.db"
 
 
 def create_sqlite_db(DB_PATH):
@@ -110,8 +110,6 @@ def standardize_funding(data):
                                 if new_funding:
                                     update_sqlite_db(funding_id, new_funding)
                                     doc["funding"][i] = new_funding
-                                else:
-                                    update_sqlite_db(funding_id, None)
 
                 elif funding_id := doc.get("funding", {}).get("identifier"):
                     if sqlite_lookup(funding_id):
@@ -121,8 +119,6 @@ def standardize_funding(data):
                         if new_funding:
                             update_sqlite_db(funding_id, new_funding)
                             doc["funding"] = new_funding
-                        else:
-                            update_sqlite_db(funding_id, None)
 
                 doc_list.append(doc)
 
@@ -149,8 +145,6 @@ def standardize_funding(data):
                             if new_funding:
                                 update_sqlite_db(funding_id, new_funding)
                                 doc["funding"][i] = new_funding
-                            else:
-                                update_sqlite_db(funding_id, None)
 
             elif funding_id := doc.get("funding", {}).get("identifier"):
                 if sqlite_lookup(funding_id):
@@ -160,8 +154,6 @@ def standardize_funding(data):
                     if new_funding:
                         update_sqlite_db(funding_id, new_funding)
                         doc["funding"] = new_funding
-                    else:
-                        update_sqlite_db(funding_id, None)
 
         return doc_list
 
@@ -269,6 +261,50 @@ def update_funding(funding_id):
             logger.info(f"NO PARENT WITH APPLICATION TYPE 1 FOUND FOR {funding_id}, USING FIRST INDEX")
             return build_funding_dict(largest_amount_parents[0])
 
+def standardize_funder(funder):
+    """
+    Standardize the funder dictionary.
+    :param funder: the funder name
+    :return: the funder dictionary
+    """
+    funder_dict = {}
+    # parse the acronym and save as two variables
+    funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
+    funder_name = funder_name.replace("&", "and")
+    funder_acronym = re.findall(r"\(([^)]*)\)", funder)
+    url = f"https://api.crossref.org/funders?query={funder_name}"
+    response = requests.get(url)
+    data = response.json()
+    if "message" not in data:
+        logger.info(f"No message in response for {funder_name}, https://api.crossref.org/funders?query={funder_name}")
+        return {"name": funder, "@type": "Organization"}
+    if "items" not in data["message"]:
+        logger.info(f"No items in response for {funder_name}, https://api.crossref.org/funders?query={funder_name}")
+        return {"name": funder, "@type": "Organization"}
+    if len(data["message"]["items"]) == 1:
+        funder_dict["name"] = data["message"]["items"][0]["name"]
+        funder_dict["alternateName"] = data["message"]["items"][0]["alt-names"]
+        funder_dict["identifier"] = data["message"]["items"][0]["id"]
+    elif len(data["message"]["items"]) > 1:
+        for item in data["message"]["items"]:
+            if item["name"] == funder_name:
+                funder_dict["name"] = item["name"]
+                funder_dict["alternateName"] = item["alt-names"]
+                funder_dict["identifier"] = item["id"]
+                break
+            elif funder_acronym in item["alt-names"]:
+                funder_dict["name"] = item["name"]
+                funder_dict["alternateName"] = item["alt-names"]
+                funder_dict["identifier"] = item["id"]
+                break
+    else:
+        logger.info(f"NO FUNDING INFORMATION FOUND FOR {funder_name}, https://api.crossref.org/funders?query={funder_name}")
+
+    if funder_dict:
+        logger.info(f"FOUND FUNDING INFORMATION FOR {funder_name}")
+        return funder_dict
+    else:
+        return {"name": funder, "@type": "Organization"}
 
 def build_funding_dict(funding_info):
     """
@@ -278,35 +314,101 @@ def build_funding_dict(funding_info):
     """
 
     ic_lookup = {
-        "CC": "Clinical Center",
+        # AHRQ
+        "HS": "Agency for Health Care Research and Quality (AHRQ)",
+        # NIH
+        "AA": "National Institute on Alcohol Abuse and Alcoholism (NIAAA)",
+        "AG": "National Institute on Aging (NIA)",
+        "AI": "National Institute of Allergy and Infectious Diseases (NIAID)",
+        "AR": "National Institute of Arthritis and Musculoskeletal and Skin Diseases (NIAMS)",
+        "AT": "National Center for Complementary and Integrative Health (NCCIH)",
+        "CA": "National Cancer Institute (NCI)",
+        "DA": "National Institute on Drug Abuse (NIDA)",
+        "DC": "National Institute on Deafness and Other Communication Disorders (NIDCD)",
+        "DE": "National Institute of Dental & Craniofacial Research (NIDCR)",
+        "DK": "National Institute of Diabetes and Digestive and Kidney Diseases (NIDDK)",
+        "EB": "National Institute of Biomedical Imaging and Bioengineering (NIBIB)",
+        "ES": "National Institute of Environmental Health Sciences (NIEHS)",
+        "EY": "National Eye Institute (NEI)",
+        "GM": "National Institute of General Medical Sciences (NIGMS)",
+        "IHS": "Indian Health Service",
+        "HD": "Eunice Kennedy Shriver National Institute of Child Health and Human Development (NICHD)",
+        "HG": "National Human Genome Research Institute (NHGRI)",
+        "HL": "National Heart, Lung and Blood Institute (NHLBI)",
+        "LM": "National Library of Medicine (NLM)",
+        "MD": "National Institute on Minority Health and Health Disparities (NIMHD)",
+        "MH": "National Institute of Mental Health (NIMH)",
+        "NR": "National Institute of Nursing Research (NINR)",
+        "NS": "National Institute of Neurological Disorders and Stroke (NINDS)",
+        "RM": "Roadmap",
+        "RR": "National Center for Research Resources (dissolved 12/2011)",
+        "TR": "National Center for Advancing Translational Sciences (NCATS)",
+        "TW": "Fogarty International Center (FIC)",
+        # CDC
+        "CC": "Centers for Disease Control and Prevention (CDC)",
+        "CD": "Office of the Director, Centers for Disease Control and Prevention (ODCDC)",
+        "CE": "National Center for Injury Prevention and Control (NCIPC)",
+        "CH": "Office of Infectious Diseases (OID)",
+        "CI": "National Center for Preparedness, Detection, and Control of Infectious Diseases (NCPDCID)",
+        "CK": "National Center for Emerging and Zoonotic Infectious Diseases (NCEZID)",
+        "DD": "National Center on Birth Defects and Developmental Disabilities (NCBDD)",
+        "DP": "National Center for Chronic Disease Prevention and Health Promotion (NCCDPHP)",
+        "EH": "National Center for Environmental Health (NCEH)",
+        "EP": "Epidemiology and Analytic Methods Program Office (EAPO)",
+        "GD": "Office of Genomics and Disease Prevention (OGDP)",
+        "GH": "Center for Global Health (CGH)",
+        "HK": "Public Health Informatics and Technology Program Office (PHITPO)",
+        "HM": "National Center for Health Marketing (NCHM)",
+        "HY": "Office of Health and Safety (OHS)",
+        "IP": "National Center for Immunization and Respiratory Diseases (NCIRD)",
+        "LS": "Laboratory Science, Policy and Practice Program Office (LSPPPO)",
+        "MN": "Office of Minority Health and Health Equity (OMHHE)",
+        "ND": "Office of Non-communicable Diseases, Injury and Environmental Health (ONDIEH)",
+        "OE": "Office of Surveillance, Epidemiology and Laboratory Services (OSELS)",
+        "OH": "National Institute for Occupational Safety and Health (NIOSH)",
+        "OT": "Office for State, Tribal, and Local and Territorial Support (OSTLTS)",
+        "OW": "Office of Women's Health (OWH)",
+        "PH": "Public Health Practice Program Office (PHPPO)",
+        "PR": "Office of Chief Public Health Practice (OCPHP)",
+        "PS": "National Center for HIV, Viral Hepatitis, STDs and Tuberculosis Prevention (NCHHSTP)",
+        "SE": "Scientific Education and Professional Development Program Office (SEPDPO)",
+        "SH": "National Center for Health Statistics (NCHS)",
+        "SO": "Public Health Surveillance Program Office (PHSPO)",
+        "TP": "Office of Public Health Preparedness and Response (OPHPR)",
+        "TS": "Agency for Toxic Substances and Disease Registry (ATSDR)",
+        "WC": "Office of Workforce and Career Development (OWCD)",
+        # FDA
+        "FD": "Food and Drug Administration (FDA)",
+        "BI": "Center for Biologics Evaluation and Research - Allergenic Products and Parasitology",
+        "BJ": "Center for Biologics Evaluation and Research - Bacterial Products",
+        "BK": "Center for Biologics Evaluation and Research - Viral Products",
+        "BL": "Center for Biologics Evaluation and Research - Cytokine Biology",
+        "BM": "Center for Biologics Evaluation and Research - Cellular and Gene Therapies",
+        "BN": "Center for Biologics Evaluation and Research - Hematologic Products",
+        "BO": "Center for Biologics Evaluation and Research - Monoclonal Antibodies",
+        "BP": "Center for Biologics Evaluation and Research - Transfusion Transmitted Diseases",
+        "BQ": "Center for Biologics Evaluation and Research - Hematology",
+        "BR": "Center for Biologics Evaluation and Research - Product Quality Control",
+        "BS": "Division of Biologics Standards",
+        "BT": "Center for Biologics Evaluation and Research - Immunology and Infectious Diseases",
+        "BU": "Center for Biologics Evaluation and Research - Clinical Pharmacology and Toxicology",
+        # SAMHSA
+        "SU": "Substance Abuse and Mental Health Services Administration (SAMHSA)",
+        "OA": "Office of the Administration (SAMHSA)",
+        "SM": "Center for Mental Health Services (CMHS)",
+        "SP": "Center for Substance Abuse Prevention (CSAP)",
+        "TI": "Center for Substance Abuse Treatment (CSAT)",
+        "VA": "Veterans Health Administration",
+        "BX": "Biomedical Laboratory Research & Development (BLRD)",
+        "CU": "Cooperative Studies Program (CSP)",
+        "CX": "Clinical Science Research & Development (CSRD)",
+        "HX": "Health Services Research & Development (HSRD)",
+        "RD": "Office of Research & Development (ORD)",
+        "RX": "Rehabilitation Research & Development (RRD)",
+        # OTHER
         "RG": "Center for Scientific Review",
         "CIT": "Center for Information Technology",
-        "TW": "John E. Fogarty International Center",
-        "TR": "National Center for Advancing Translational Sciences (NCATS)",
-        "AT": "National Center for Complementary and Integrative Health",
-        "CA": "National Cancer Institute",
-        "RR": "National Center for Research Resources (dissolved 12/2011)",
-        "EY": "National Eye Institute",
-        "HG": "National Human Genome Research Institute",
-        "HL": "National Heart, Lung, and Blood Institute",
-        "AG": "National Institute on Aging",
-        "AA": "National Institute on Alcohol Abuse and Alcoholism",
-        "AI": "National Institute of Allergy and Infectious Diseases",
-        "AR": "National Institute of Arthritis and Musculoskeletal and Skin Diseases",
-        "EB": "National Institute of Biomedical Imaging and Bioengineering",
-        "HD": "Eunice Kennedy Shriver National Institute of Child Health and Human Development",
-        "DA": "National Institute on Drug Abuse",
-        "DC": "National Institute on Deafness and Other Communication Disorders",
-        "DE": "National Institute of Dental and Craniofacial Research",
-        "DK": "National Institute of Diabetes and Digestive and Kidney Diseases",
-        "ES": "National Institute of Environmental Health Sciences",
-        "GM": "National Institute of General Medical Sciences",
-        "MH": "National Institute of Mental Health",
-        "MD": "National Institute on Minority Health and Health Disparities",
-        "NS": "National Institute of Neurological Disorders and Stroke",
-        "NR": "National Institute of Nursing Research",
-        "LM": "National Library of Medicine",
-        "OD": "Office of the Director",
+        "OD": "Office of the Director"
     }
 
     funding_dict = {}
@@ -322,10 +424,9 @@ def build_funding_dict(funding_info):
         funding_dict["description"] = abstract_text
     if project_num_split := funding_info.get("project_num_split"):
         if ic_code := project_num_split.get("ic_code"):
-            try:
-                funder_dict["name"] = ic_lookup[ic_code]
-            except KeyError:
-                logger.info(f"IC CODE {ic_code} NOT FOUND IN LOOKUP")
+            standardized_funder_dict = standardize_funder(ic_lookup[ic_code])
+            if standardized_funder_dict:
+                funder_dict.update(standardized_funder_dict)
     if program_officers := funding_info.get("program_officers"):
         employees = []
         for officer in program_officers:
