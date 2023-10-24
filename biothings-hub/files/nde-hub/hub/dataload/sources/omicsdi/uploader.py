@@ -7,7 +7,9 @@ from utils.funding_helper import standardize_funding
 class OmicsDIUploader(NDESourceUploader):
     name = "omicsdi"
     __metadata__ = {
-        "src_meta": {"url": "https://www.omicsdi.org/search", "license_url": "https://www.ebi.ac.uk/licencing"}
+        "src_meta": {"url": "https://www.omicsdi.org/search", "license_url": "https://www.ebi.ac.uk/licencing"},
+        "merger": "merge_struct",
+        "merger_keywords": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
     }
 
     @nde_upload_wrapper

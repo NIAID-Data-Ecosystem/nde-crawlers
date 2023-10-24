@@ -15,7 +15,9 @@ class LINCSUploader(NDESourceUploader):
                 "schema": get_source_data(name),
                 "url": "https://lincsportal.ccs.miami.edu/",
             }
-        }
+        },
+        "merger": "merge_struct",
+        "merger_keywords": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
     }
     @nde_upload_wrapper
     def load_data(self, data_folder):
