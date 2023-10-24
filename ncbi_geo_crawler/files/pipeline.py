@@ -30,7 +30,7 @@ class GeoItemProcessorPipeline:
         output = {
             "@context": "http://schema.org/",
             "@type": "Dataset",
-            "_id": "GEO_" + _id,
+            "_id": _id,
             "identifier": _id,
             "url": url,
             "distribution": {"@type": "dataDownload", "contentUrl": url},
