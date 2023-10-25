@@ -39,22 +39,26 @@ def standardize_funder(funder):
     # parse the acronym and save as two variables
     funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
     funder_name = funder_name.replace("&", "and")
-    funder_acronym = re.findall(r"\(([^)]*)\)", funder)
+    funder_acronym_list = re.findall(r"\(([^)]*)\)", funder)
+    funder_acronym = funder_acronym_list[0] if funder_acronym_list else ''
     url = f"https://api.crossref.org/funders?query={funder_name}"
     response = requests.get(url)
     data = response.json()
+    if "message" not in data or "items" not in data["message"]:
+        logger.info(f"No message in response for {funder_name}, https://api.crossref.org/funders?query={funder_name}")
+        return {"name": funder, "@type": "Organization"}
     if len(data["message"]["items"]) == 1:
         funder_dict["name"] = data["message"]["items"][0]["name"]
         funder_dict["alternateName"] = data["message"]["items"][0]["alt-names"]
         funder_dict["identifier"] = data["message"]["items"][0]["id"]
     elif len(data["message"]["items"]) > 1:
         for item in data["message"]["items"]:
-            if item["name"] == funder_name:
+            if item["name"].lower() == funder_name.lower():
                 funder_dict["name"] = item["name"]
                 funder_dict["alternateName"] = item["alt-names"]
                 funder_dict["identifier"] = item["id"]
                 break
-            elif funder_acronym in item["alt-names"]:
+            elif funder_acronym.lower() in [alt_name.lower() for alt_name in item["alt-names"]]:
                 funder_dict["name"] = item["name"]
                 funder_dict["alternateName"] = item["alt-names"]
                 funder_dict["identifier"] = item["id"]
@@ -63,9 +67,10 @@ def standardize_funder(funder):
         logger.info(f"NO FUNDING INFORMATION FOUND FOR {funder_name}, https://api.crossref.org/funders?query={funder_name}")
 
     if funder_dict:
-        funder_dict["@type"] = "Organization"
+        logger.info(f"FOUND FUNDING INFORMATION FOR {funder_name}")
         return funder_dict
-
+    else:
+        return {"name": funder, "@type": "Organization"}
 
 def classify_as_host_or_agent(lineage):
     """
@@ -517,7 +522,11 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
                 if grant_id := grant.get("GrantID"):
                     fund["identifier"] = grant_id
                 if agency := grant.get("Agency"):
-                    fund["funder"] = standardize_funder(agency)
+                    fund_dict = standardize_funder(agency)
+                    if fund_dict:
+                        fund["funder"] = fund_dict
+                    else:
+                        fund["funder"] = {"@type": "Organization", "name": agency}
                 if agency or grant_id:
                     fund["fromPMID"] = True
                 funding.append(fund)

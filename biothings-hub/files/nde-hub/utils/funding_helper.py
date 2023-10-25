@@ -110,6 +110,8 @@ def standardize_funding(data):
                                 if new_funding:
                                     update_sqlite_db(funding_id, new_funding)
                                     doc["funding"][i] = new_funding
+                        elif funder_name := funding_dict.get("funder", {}).get("name"):
+                            doc["funding"][i]["funder"] = standardize_funder(funder_name)
 
                 elif funding_id := doc.get("funding", {}).get("identifier"):
                     if sqlite_lookup(funding_id):
@@ -119,6 +121,8 @@ def standardize_funding(data):
                         if new_funding:
                             update_sqlite_db(funding_id, new_funding)
                             doc["funding"] = new_funding
+                elif funder_name := doc.get("funding", {}).get("funder", {}).get("name"):
+                    doc["funding"]["funder"] = standardize_funder(funder_name)
 
                 doc_list.append(doc)
 
@@ -145,6 +149,13 @@ def standardize_funding(data):
                             if new_funding:
                                 update_sqlite_db(funding_id, new_funding)
                                 doc["funding"][i] = new_funding
+                    elif isinstance(funding_dict.get("funder", {}), dict):
+                        if funder_name := funding_dict.get("funder", {}).get("name"):
+                            doc["funding"][i]["funder"] = standardize_funder(funder_name)
+                    elif isinstance(funding_dict.get("funder", {}), list):
+                        for j, funder_dict in enumerate(funding_dict["funder"]):
+                            if funder_name := funder_dict.get("name"):
+                                doc["funding"][i]["funder"][j] = standardize_funder(funder_name)
 
             elif funding_id := doc.get("funding", {}).get("identifier"):
                 if sqlite_lookup(funding_id):
@@ -154,6 +165,13 @@ def standardize_funding(data):
                     if new_funding:
                         update_sqlite_db(funding_id, new_funding)
                         doc["funding"] = new_funding
+            elif isinstance(doc.get("funding", {}).get("funder", {}), dict):
+                if funder_name := doc.get("funding", {}).get("funder", {}).get("name"):
+                    doc["funding"]["funder"] = standardize_funder(funder_name)
+            elif isinstance(doc.get("funding", {}).get("funder", {}), list):
+                for i, funder_dict in enumerate(doc["funding"]["funder"]):
+                    if funder_name := funder_dict.get("name"):
+                        doc["funding"]["funder"][i] = standardize_funder(funder_name)
 
         return doc_list
 
@@ -271,15 +289,13 @@ def standardize_funder(funder):
     # parse the acronym and save as two variables
     funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
     funder_name = funder_name.replace("&", "and")
-    funder_acronym = re.findall(r"\(([^)]*)\)", funder)
+    funder_acronym_list = re.findall(r"\(([^)]*)\)", funder)
+    funder_acronym = funder_acronym_list[0] if funder_acronym_list else ''
     url = f"https://api.crossref.org/funders?query={funder_name}"
     response = requests.get(url)
     data = response.json()
-    if "message" not in data:
+    if "message" not in data or "items" not in data["message"]:
         logger.info(f"No message in response for {funder_name}, https://api.crossref.org/funders?query={funder_name}")
-        return {"name": funder, "@type": "Organization"}
-    if "items" not in data["message"]:
-        logger.info(f"No items in response for {funder_name}, https://api.crossref.org/funders?query={funder_name}")
         return {"name": funder, "@type": "Organization"}
     if len(data["message"]["items"]) == 1:
         funder_dict["name"] = data["message"]["items"][0]["name"]
@@ -287,12 +303,12 @@ def standardize_funder(funder):
         funder_dict["identifier"] = data["message"]["items"][0]["id"]
     elif len(data["message"]["items"]) > 1:
         for item in data["message"]["items"]:
-            if item["name"] == funder_name:
+            if item["name"].lower() == funder_name.lower():
                 funder_dict["name"] = item["name"]
                 funder_dict["alternateName"] = item["alt-names"]
                 funder_dict["identifier"] = item["id"]
                 break
-            elif funder_acronym in item["alt-names"]:
+            elif funder_acronym.lower() in [alt_name.lower() for alt_name in item["alt-names"]]:
                 funder_dict["name"] = item["name"]
                 funder_dict["alternateName"] = item["alt-names"]
                 funder_dict["identifier"] = item["id"]
@@ -424,7 +440,11 @@ def build_funding_dict(funding_info):
         funding_dict["description"] = abstract_text
     if project_num_split := funding_info.get("project_num_split"):
         if ic_code := project_num_split.get("ic_code"):
-            standardized_funder_dict = standardize_funder(ic_lookup[ic_code])
+            try:
+                standardized_funder_dict = standardize_funder(ic_lookup[ic_code])
+            except KeyError:
+                logger.info(f"IC code not recognized: {ic_code}")
+                standardized_funder_dict = None
             if standardized_funder_dict:
                 funder_dict.update(standardized_funder_dict)
     if program_officers := funding_info.get("program_officers"):
