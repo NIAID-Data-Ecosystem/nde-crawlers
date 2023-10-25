@@ -100,12 +100,14 @@ def merge_duplicates(doc: Dict) -> Dict:
 
 
 def is_purely_augmented(field_content):
-    if isinstance(field_content, list):
-        return all(item.get("fromPMID", False) for item in field_content)
+    if isinstance(field_content, str):
+        return False
     elif isinstance(field_content, dict):
-        return field_content.get("fromPMID", False)
-    return False
+        field_content = [field_content]
+    elif isinstance(field_content, list) and all(isinstance(item, str) for item in field_content):
+        return False
 
+    return all(item.get('fromPMID', False) for item in field_content)
 
 def calculate_weighted_score(data, mapping):
     score = 0
