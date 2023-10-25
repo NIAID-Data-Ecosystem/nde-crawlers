@@ -8,6 +8,11 @@ from utils.utils import nde_upload_wrapper
 class AccessClinicalDataUploader(NDESourceUploader):
     name = "acd_niaid"
 
+    __metadata__ = {
+        "merger": "merge_struct",
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+    }
+
     @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
