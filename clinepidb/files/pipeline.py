@@ -105,10 +105,9 @@ def record_generator():
                 }
 
             # tables.StudyCharacteriticTable -- get these variables if the variables above are missing
-            health_cond = record["attributes"].pop("disease")
-            record["healthCondition"] = {"name": health_cond}
-            if not health_cond:
-                record["healthCondition"] = {"name": record["tables"]["StudyCharacteristicTable"][0].pop("disease")}
+            health_cond = record["attributes"].pop("disease") or record["tables"]["StudyCharacteristicTable"][0].pop("disease")
+            if health_cond := record["attributes"].pop("disease"):
+                record["healthCondition"] = {"name": health_cond}
 
             # tables.Publications -- helper function to create citations
             pmid_list = [hit.pop("pmid") for hit in record["tables"]["Publications"]]
