@@ -73,13 +73,21 @@ def record_generator():
 
         try:
             # attributes
-            record["measurementTechnique"] = {"name": record["attributes"].pop("Study_Design")}
+            measurement_technique = record["attributes"].pop("Study_Design")
+            if measurement_technique:
+                record["measurementTechnique"] = {"name": measurement_technique}
             record["description"] = record["attributes"].pop("description")
             record["description"] += record["attributes"].pop("summary")
-            record["keywords"] = record["attributes"].pop("WHO")
+            keywords = []
+            if record["attributes"].get("WHO"):
+                keywords += record["attributes"].pop("WHO").split(",")
             # clinepidb removed Participant_Type from attributes
             # record["keywords"] += record["attributes"].pop("Participant_Type")
-            record["keywords"] += record["attributes"].pop("Study_Type")
+            # record["keywords"] += record["attributes"].pop("Study_Type")
+            if record["attributes"].get("Study_Type"):
+                keywords += record["attributes"].pop("Study_Type").split(",")
+            if keywords:
+                record["keywords"] = keywords
             record["spatialCoverage"] = {"name": record["attributes"].pop("Country")}
 
             ##version_date =  record['attributes'].pop('eupath_release').split(",")[0]
@@ -106,7 +114,7 @@ def record_generator():
 
             # tables.StudyCharacteriticTable -- get these variables if the variables above are missing
             health_cond = record["attributes"].pop("disease") or record["tables"]["StudyCharacteristicTable"][0].pop("disease")
-            if health_cond := record["attributes"].pop("disease"):
+            if health_cond:
                 record["healthCondition"] = {"name": health_cond}
 
             # tables.Publications -- helper function to create citations
