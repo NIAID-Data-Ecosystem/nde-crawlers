@@ -24,7 +24,7 @@ class VDJ_Uploader(NDESourceUploader):
             "sourceInfo": {
                 "description": "VDJServer is a free, scalable resource for performing immune repertoire analysis and sharing data. VDJServer Community Data Portal is part of the AIRR Data Commons. Funded by a National Institute of Allergy and Infectious Diseases research grant (#1R01A1097403), the VDJServer project is led by The University of Texas Southwestern (UTSW) Medical Center in collaboration with the J. Craig Venter Institute and Yale University. The Texas Advanced Computing Center (TACC) at The University of Texas at Austin leads the cyberinfrastructure implementation, including the high performance computing (HPC) systems, storage, and software solutions.",
                 "identifier": "VDJServer",
-                "name": "vdj",
+                "name": "VDJServer",
                 "schema": get_source_data(name),
                 "url": "https://vdj-staging.tacc.utexas.edu/community/",
             }
