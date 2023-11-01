@@ -91,29 +91,45 @@ def standardize_data(data):
 
 
 def classify_as_host_or_agent(lineage):
+    """
+    Classifies a species as either host or infectious agent based on its lineage.
+
+    Parameters:
+    - lineage (list): The lineage of the species.
+
+    Returns:
+    - new_classification (str): The classification of the species.
+    """
     # Extracting scientific names for easy processing
     scientific_names = [item["scientificName"] for item in lineage]
 
     # Check for host species conditions
     if "Deuterostomia" in scientific_names:
+        logger.info(f"Found Deuterostomia in {scientific_names}, classifying as host")
         new_classification = "host"
     elif "Embryophyta" in scientific_names and not any(
         parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
     ):
+        logger.info(f"Found Embryophyta in {scientific_names}, classifying as host")
         new_classification = "host"
     elif "Arthropoda" in scientific_names:
         if "Acari" in scientific_names:
             if "Ixodida" in scientific_names:
+                logger.info(f"Found Ixodida in {scientific_names}, classifying as host")
                 new_classification = "host"
             else:
+                logger.info(f"Found Acari in {scientific_names}, classifying as infectiousAgent")
                 new_classification = "infectiousAgent"
         else:
+            logger.info(f"Found Arthropoda in {scientific_names}, classifying as host")
             new_classification = "host"
     else:
         # If not falling under the above host conditions, classify as infectiousAgent
+        logger.info(f"Found {scientific_names}, classifying as infectiousAgent")
         new_classification = "infectiousAgent"
 
     return new_classification
+
 
 
 def get_species_details(original_name, identifier):
