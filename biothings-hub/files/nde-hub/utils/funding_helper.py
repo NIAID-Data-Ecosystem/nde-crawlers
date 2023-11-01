@@ -6,7 +6,11 @@ import orjson
 import requests
 from config import logger
 
+from .utils import retry
+
 DB_PATH = "/data/nde-hub/standardizers/funding_lookup/funding_lookup.db"
+
+FUNDER_CACHE ={}
 
 
 def create_sqlite_db(DB_PATH):
@@ -106,23 +110,54 @@ def standardize_funding(data):
                             if sqlite_lookup(funding_id):
                                 doc["funding"][i] = sqlite_lookup(funding_id)
                             else:
-                                new_funding = update_funding(funding_id)
+                                try:
+                                    new_funding = update_funding(funding_id)
+                                except Exception as e:
+                                    logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                                    logger.error(e)
+                                    continue
                                 if new_funding:
                                     update_sqlite_db(funding_id, new_funding)
                                     doc["funding"][i] = new_funding
                         elif funder_name := funding_dict.get("funder", {}).get("name"):
-                            doc["funding"][i]["funder"] = standardize_funder(funder_name)
+                            try:
+                                doc["funding"][i]["funder"] = standardize_funder(funder_name)
+                            except Exception as e:
+                                logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                                logger.error(e)
+                                continue
+
 
                 elif funding_id := doc.get("funding", {}).get("identifier"):
                     if sqlite_lookup(funding_id):
                         doc["funding"] = sqlite_lookup(funding_id)
                     else:
-                        new_funding = update_funding(funding_id)
+                        try:
+                            new_funding = update_funding(funding_id)
+                        except Exception as e:
+                            logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                            logger.error(e)
+                            continue
                         if new_funding:
                             update_sqlite_db(funding_id, new_funding)
                             doc["funding"] = new_funding
-                elif funder_name := doc.get("funding", {}).get("funder", {}).get("name"):
-                    doc["funding"]["funder"] = standardize_funder(funder_name)
+                elif isinstance(doc.get("funding", {}).get("funder", {}), dict):
+                    if funder_name := doc.get("funding", {}).get("funder", {}).get("name"):
+                        try:
+                            doc["funding"]["funder"] = standardize_funder(funder_name)
+                        except Exception as e:
+                            logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                            logger.error(e)
+                            continue
+                elif isinstance(doc.get("funding", {}).get("funder", {}), list):
+                    for i, funder_dict in enumerate(doc["funding"]["funder"]):
+                        if funder_name := funder_dict.get("name"):
+                            try:
+                                doc["funding"]["funder"][i] = standardize_funder(funder_name)
+                            except Exception as e:
+                                logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                                logger.error(e)
+                                continue
 
                 doc_list.append(doc)
 
@@ -145,37 +180,67 @@ def standardize_funding(data):
                         if sqlite_lookup(funding_id):
                             doc["funding"][i] = sqlite_lookup(funding_id)
                         else:
-                            new_funding = update_funding(funding_id)
+                            try:
+                                new_funding = update_funding(funding_id)
+                            except Exception as e:
+                                logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                                logger.error(e)
+                                continue
                             if new_funding:
                                 update_sqlite_db(funding_id, new_funding)
                                 doc["funding"][i] = new_funding
                     elif isinstance(funding_dict.get("funder", {}), dict):
                         if funder_name := funding_dict.get("funder", {}).get("name"):
-                            doc["funding"][i]["funder"] = standardize_funder(funder_name)
+                            try:
+                                doc["funding"][i]["funder"] = standardize_funder(funder_name)
+                            except Exception as e:
+                                logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                                logger.error(e)
+                                continue
                     elif isinstance(funding_dict.get("funder", {}), list):
                         for j, funder_dict in enumerate(funding_dict["funder"]):
                             if funder_name := funder_dict.get("name"):
-                                doc["funding"][i]["funder"][j] = standardize_funder(funder_name)
+                                try:
+                                    doc["funding"][i]["funder"][j] = standardize_funder(funder_name)
+                                except Exception as e:
+                                    logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                                    logger.error(e)
+                                    continue
 
             elif funding_id := doc.get("funding", {}).get("identifier"):
                 if sqlite_lookup(funding_id):
                     doc["funding"] = sqlite_lookup(funding_id)
                 else:
-                    new_funding = update_funding(funding_id)
+                    try:
+                        new_funding = update_funding(funding_id)
+                    except Exception as e:
+                        logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                        logger.error(e)
+                        continue
                     if new_funding:
                         update_sqlite_db(funding_id, new_funding)
                         doc["funding"] = new_funding
             elif isinstance(doc.get("funding", {}).get("funder", {}), dict):
                 if funder_name := doc.get("funding", {}).get("funder", {}).get("name"):
-                    doc["funding"]["funder"] = standardize_funder(funder_name)
+                    try:
+                        doc["funding"]["funder"] = standardize_funder(funder_name)
+                    except Exception as e:
+                        logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                        logger.error(e)
+                        continue
             elif isinstance(doc.get("funding", {}).get("funder", {}), list):
                 for i, funder_dict in enumerate(doc["funding"]["funder"]):
                     if funder_name := funder_dict.get("name"):
-                        doc["funding"]["funder"][i] = standardize_funder(funder_name)
+                        try:
+                            doc["funding"]["funder"][i] = standardize_funder(funder_name)
+                        except Exception as e:
+                            logger.error(f"ERROR for {doc['_id']} request, skipping...")
+                            logger.error(e)
+                            continue
 
         return doc_list
 
-
+@retry(3, 5)
 def update_funding(funding_id):
     """
     Update funding information for a given funding id.
@@ -226,7 +291,7 @@ def update_funding(funding_id):
         try:
             funding_data = response.json()
         except Exception as e:
-            logger.error(f"ERROR for #{count} request, skipping...")
+            logger.error(f"ERROR for {count} request, skipping...")
             logger.error(e)
             continue
         if funding_data == ["Invalid project number"]:
@@ -279,12 +344,17 @@ def update_funding(funding_id):
             logger.info(f"NO PARENT WITH APPLICATION TYPE 1 FOUND FOR {funding_id}, USING FIRST INDEX")
             return build_funding_dict(largest_amount_parents[0])
 
+
+@retry(3, 5)
 def standardize_funder(funder):
     """
     Standardize the funder dictionary.
     :param funder: the funder name
     :return: the funder dictionary
     """
+    if funder in FUNDER_CACHE:
+        logger.info(f"FOUND FUNDING INFORMATION FOR {funder} in cache")
+        return FUNDER_CACHE[funder]
     funder_dict = {}
     # parse the acronym and save as two variables
     funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
@@ -296,6 +366,7 @@ def standardize_funder(funder):
     data = response.json()
     if "message" not in data or "items" not in data["message"]:
         logger.info(f"No message in response for {funder_name}, https://api.crossref.org/funders?query={funder_name}")
+        FUNDER_CACHE[funder] = {"name": funder, "@type": "Organization"}
         return {"name": funder, "@type": "Organization"}
     if len(data["message"]["items"]) == 1:
         funder_dict["name"] = data["message"]["items"][0]["name"]
@@ -318,8 +389,10 @@ def standardize_funder(funder):
 
     if funder_dict:
         logger.info(f"FOUND FUNDING INFORMATION FOR {funder_name}")
+        FUNDER_CACHE[funder] = funder_dict
         return funder_dict
     else:
+        FUNDER_CACHE[funder] = {"name": funder, "@type": "Organization"}
         return {"name": funder, "@type": "Organization"}
 
 def build_funding_dict(funding_info):

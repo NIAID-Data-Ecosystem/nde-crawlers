@@ -5,13 +5,10 @@
 # https://www.nlm.nih.gov/bsd/mms/medlineelements.html
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
 # https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
-import gzip
+
 import os
 import os.path
-import re
-import shutil
 import time
-import urllib.request
 from copy import copy
 from datetime import datetime
 from ftplib import FTP
@@ -23,94 +20,12 @@ import requests
 from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
+from .funding_helper import standardize_funder
+from .pubtator import classify_as_host_or_agent
 from .utils import retry
 
 SPECIES_CACHE = {}
 DISEASE_CACHE = {}
-
-
-def standardize_funder(funder):
-    """
-    Standardize the funder dictionary.
-    :param funder: the funder name
-    :return: the funder dictionary
-    """
-    funder_dict = {}
-    # parse the acronym and save as two variables
-    funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
-    funder_name = funder_name.replace("&", "and")
-    funder_acronym_list = re.findall(r"\(([^)]*)\)", funder)
-    funder_acronym = funder_acronym_list[0] if funder_acronym_list else ''
-    url = f"https://api.crossref.org/funders?query={funder_name}"
-    response = requests.get(url)
-    data = response.json()
-    if "message" not in data or "items" not in data["message"]:
-        logger.info(f"No message in response for {funder_name}, https://api.crossref.org/funders?query={funder_name}")
-        return {"name": funder, "@type": "Organization"}
-    if len(data["message"]["items"]) == 1:
-        funder_dict["name"] = data["message"]["items"][0]["name"]
-        funder_dict["alternateName"] = data["message"]["items"][0]["alt-names"]
-        funder_dict["identifier"] = data["message"]["items"][0]["id"]
-    elif len(data["message"]["items"]) > 1:
-        for item in data["message"]["items"]:
-            if item["name"].lower() == funder_name.lower():
-                funder_dict["name"] = item["name"]
-                funder_dict["alternateName"] = item["alt-names"]
-                funder_dict["identifier"] = item["id"]
-                break
-            elif funder_acronym.lower() in [alt_name.lower() for alt_name in item["alt-names"]]:
-                funder_dict["name"] = item["name"]
-                funder_dict["alternateName"] = item["alt-names"]
-                funder_dict["identifier"] = item["id"]
-                break
-    else:
-        logger.info(f"NO FUNDING INFORMATION FOUND FOR {funder_name}, https://api.crossref.org/funders?query={funder_name}")
-
-    if funder_dict:
-        logger.info(f"FOUND FUNDING INFORMATION FOR {funder_name}")
-        return funder_dict
-    else:
-        return {"name": funder, "@type": "Organization"}
-
-def classify_as_host_or_agent(lineage):
-    """
-    Classifies a species as either host or infectious agent based on its lineage.
-
-    Parameters:
-    - lineage (list): The lineage of the species.
-
-    Returns:
-    - new_classification (str): The classification of the species.
-    """
-    # Extracting scientific names for easy processing
-    scientific_names = [item["scientificName"] for item in lineage]
-
-    # Check for host species conditions
-    if "Deuterostomia" in scientific_names:
-        logger.info(f"Found Deuterostomia in {scientific_names}, classifying as host")
-        new_classification = "host"
-    elif "Embryophyta" in scientific_names and not any(
-        parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
-    ):
-        logger.info(f"Found Embryophyta in {scientific_names}, classifying as host")
-        new_classification = "host"
-    elif "Arthropoda" in scientific_names:
-        if "Acari" in scientific_names:
-            if "Ixodida" in scientific_names:
-                logger.info(f"Found Ixodida in {scientific_names}, classifying as host")
-                new_classification = "host"
-            else:
-                logger.info(f"Found Acari in {scientific_names}, classifying as infectiousAgent")
-                new_classification = "infectiousAgent"
-        else:
-            logger.info(f"Found Arthropoda in {scientific_names}, classifying as host")
-            new_classification = "host"
-    else:
-        # If not falling under the above host conditions, classify as infectiousAgent
-        logger.info(f"Found {scientific_names}, classifying as infectiousAgent")
-        new_classification = "infectiousAgent"
-
-    return new_classification
 
 
 @retry(3, 5)
@@ -164,7 +79,7 @@ def get_disease_details(identifier, original_name):
     DISEASE_CACHE[identifier] = standard_dict
     return standard_dict
 
-
+@retry(3, 5)
 def get_species_from_api(pmids):
     url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=species"
     response = requests.get(url)
@@ -240,7 +155,7 @@ def get_species_details(identifier, original_name):
     SPECIES_CACHE[identifier] = standard_dict
     return standard_dict
 
-
+@retry(3, 5)
 def get_disease_from_api(pmids):
     url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=disease"
     response = requests.get(url)
@@ -286,7 +201,12 @@ def update_record_disease(rec, disease_data):
             if name.isupper():
                 logger.info(f"Possible Acronym: {name} in record: {rec['_id']}")
             logger.info(f"Adding {name} to record {rec['_id']}")
-            standardized_dict = get_disease_details(identifier, name)
+            try:
+                standardized_dict = get_disease_details(identifier, name)
+            except Exception as e:
+                logger.warning(f"Could not get details for {name} with ID {identifier}: {e}")
+                logger.warning(f"URL: https://id.nlm.nih.gov/mesh/{identifier}.json")
+                continue
 
             if name.lower() in existing_diseases:
                 del rec["healthCondition"][existing_diseases[name.lower()]]
@@ -345,7 +265,12 @@ def update_record_species(rec, species_data):
                 continue
             logger.info(f"Adding {name} to record {rec['_id']}")
 
-            standardized_dict = get_species_details(identifier, name)
+            try:
+                standardized_dict = get_species_details(identifier, name)
+            except Exception as e:
+                logger.warning(f"Could not get details for {name} with ID {identifier}: {e}")
+                logger.warning(f"URL: https://rest.uniprot.org/taxonomy/{identifier}")
+                continue
 
             if name.lower() in existing_species:
                 del rec["species"][existing_species[name.lower()]]
@@ -555,6 +480,7 @@ def load_pmid_ctfd(data_folder):
     # email = myemail@gmail.com
 
     with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
+        count = 0
         while True:
             # dict to convert pmcs to pmids
             pmc_pmid = {}
@@ -571,6 +497,9 @@ def load_pmid_ctfd(data_folder):
             if not next_n_lines:
                 break
             for line in next_n_lines:
+                count += 1
+                if count % 1000 == 0:
+                    logger.info("Processed %s documents", count)
                 doc = orjson.loads(line)
                 doc_list.append(doc)
                 if pmcs := doc.get("pmcs"):
@@ -618,9 +547,17 @@ def load_pmid_ctfd(data_folder):
                     pmids = [*set(pmids)]
 
                     # get species tax ids from pubtator
-                    species_data = get_species_from_api(pmids)
+                    try:
+                        species_data = get_species_from_api(pmids)
+                    except Exception as e:
+                        logger.warning(f"Could not get species data for {pmids}: {e}")
+                        species_data = []
                     # get disease mesh ids from pubtator
-                    disease_data = get_disease_from_api(pmids)
+                    try:
+                        disease_data = get_disease_from_api(pmids)
+                    except Exception as e:
+                        logger.warning(f"Could not get disease data for {pmids}: {e}")
+                        disease_data = []
                     if species_data:
                         # Update the species field in the record
                         update_record_species(rec, species_data)
