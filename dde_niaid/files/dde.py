@@ -54,13 +54,38 @@ def parse():
             if count % 100 == 0:
                 logger.info("Parsed %s records", count)
 
+            # adjust @type value to fit our schema
+            if nde_type := hit.pop("@type", None):
+                nde_type = nde_type.split(":")[-1]
+                if "Dataset" in nde_type:
+                    nde_type = "Dataset"
+                elif "ComputationalTool" in nde_type:
+                    nde_type = "ComputationalTool"
+
+                hit["@type"] = nde_type
+
             # add included in data catalog
-            hit["includedInDataCatalog"] = {
-                "@type": "Dataset",
-                "name": "Data Discovery Engine",
-                "url": "https://discovery.biothings.io/",
-                "versionDate": datetime.date.today().isoformat(),
-            }
+            if hit.get("@context") and "nde" in hit.get("@context"):
+                hit["includedInDataCatalog"] = {
+                    "@type": nde_type,
+                    "name": "Data Discovery Engine,  NIAID Data Ecosystem",
+                    "url": "https://discovery.biothings.io/",
+                    "versionDate": datetime.date.today().isoformat(),
+                }
+            elif hit.get("@context") and "niaid" in hit.get("@context"):
+                hit["includedInDataCatalog"] = {
+                    "@type": nde_type,
+                    "name": "Data Discovery Engine, NIAID Systems Biology",
+                    "url": "https://discovery.biothings.io/",
+                    "versionDate": datetime.date.today().isoformat(),
+                }
+            else:
+                hit["includedInDataCatalog"] = {
+                    "@type": nde_type,
+                    "name": "Data Discovery Engine",
+                    "url": "https://discovery.biothings.io/",
+                    "versionDate": datetime.date.today().isoformat(),
+                }
 
             # rename our id value and creator to author
             if authors := hit.pop("creator", None):
@@ -88,14 +113,6 @@ def parse():
             # for app_sub in app_subs:
             #     hit['applicationSubCategory'].append(
             #         {'name': app_sub.get('name')})
-
-            # adjust @type value to fit our schema
-            if nde_type := hit.pop("@type", None):
-                nde_type = nde_type.split(":")[-1]
-                if "Dataset" in nde_type:
-                    hit["@type"] = "Dataset"
-                else:
-                    hit["@type"] = nde_type
 
             # query the ols to get measurementTechnique, infectiousAgent, healthCondition (infectiousDisease), and species
             if mts := hit.pop("measurementTechnique", None):

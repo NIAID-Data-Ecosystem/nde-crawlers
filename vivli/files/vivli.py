@@ -109,6 +109,9 @@ def parse():
                 if au["author"]:
                     output["author"] = au
 
+            if creator := request.get("orgName"):
+                output["creator"] = {"name": creator}
+
             if name := request.get("studyTitle"):
                 output["name"] = "Dataset from " + name
 
@@ -228,10 +231,10 @@ def parse():
                 )
 
             if grant := request.get("grant"):
-                logger.info("Grant Exists: %s. ID is: %s", (grant, output["_id"]))
+                logger.info("Grant Exists: %s. ID is: %s", grant, output["_id"])
 
             if funding := request.get("funder"):
-                logger.info("Funding Exists: %s. ID is: %s", (funding, output["_id"]))
+                logger.info("Funding Exists: %s. ID is: %s", funding, output["_id"])
 
             if date_modified := request.get("updatedDate"):
                 output["dateModified"] = datetime.datetime.fromisoformat(date_modified.split(".")[0]).date().isoformat()

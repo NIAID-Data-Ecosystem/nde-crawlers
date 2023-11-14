@@ -35,12 +35,12 @@ def parse():
             "includedInDataCatalog": {
                 "@type": "Dataset",
                 "name": "MicrobiomeDB",
-                "url": "https://beta.microbiomedb.org/mbio.beta/app/",
+                "url": "https://microbiomedb.org/mbio/app",
                 "versionDate": datetime.date.today().isoformat(),
             },
             "@context": "http://schema.org/",
             "@type": "Dataset",
-            "_id": "MICROBIOME_" + record["attributes"].get("dataset_id"),
+            "_id": "MICROBIOME_" + record.get("displayName").replace(" ", "_"),
         }
 
         # set up keywords list
@@ -183,7 +183,7 @@ def parse():
                 if url := link.get("url"):
                     link_list.append(url)
             if link_list != 1:
-                logger.info("There is more than one url. ID is %s" % output["_id"] )
+                logger.info("There is more than one url. ID is %s" % output["_id"])
             else:
                 output["url"] = link_list[0]
 

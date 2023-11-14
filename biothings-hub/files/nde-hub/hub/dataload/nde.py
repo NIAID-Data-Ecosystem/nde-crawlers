@@ -270,6 +270,26 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
+            "creator": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "affiliation": {
+                        "properties": {
+                            "@type": {"type": "keyword", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "sameAs": {"type": "keyword", "copy_to": ["all"]},
+                        }
+                    },
+                    "email": {"type": "text", "copy_to": ["all"]},
+                    "familyName": {"type": "text", "copy_to": ["all"]},
+                    "givenName": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "role": {"type": "keyword"},
+                    "title": {"type": "text"},
+                    "url": {"type": "keyword"},
+                }
+            },
             "curatedBy": {
                 "properties": {
                     "@type": {"type": "text"},
