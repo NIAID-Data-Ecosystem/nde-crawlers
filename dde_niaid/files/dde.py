@@ -64,28 +64,34 @@ def parse():
 
                 hit["@type"] = nde_type
 
+            included_in_data_catalog = {
+                "@type": nde_type,
+                "name": "Data Discovery Engine",
+                "url": "https://discovery.biothings.io/",
+                "versionDate": datetime.date.today().isoformat(),
+            }
+
             # add included in data catalog
             if hit.get("@context") and "nde" in hit.get("@context"):
-                hit["includedInDataCatalog"] = {
-                    "@type": nde_type,
-                    "name": "Data Discovery Engine,  NIAID Data Ecosystem",
-                    "url": "https://discovery.biothings.io/",
-                    "versionDate": datetime.date.today().isoformat(),
-                }
+                hit["includedInDataCatalog"] = included_in_data_catalog.update(
+                    {
+                        "@type": nde_type,
+                        "name": ["Data Discovery Engine,  NIAID Data Ecosystem", "Data Discovery Engine"],
+                        "url": "https://discovery.biothings.io/",
+                        "versionDate": datetime.date.today().isoformat(),
+                    }
+                )
             elif hit.get("@context") and "niaid" in hit.get("@context"):
-                hit["includedInDataCatalog"] = {
-                    "@type": nde_type,
-                    "name": "Data Discovery Engine, NIAID Systems Biology",
-                    "url": "https://discovery.biothings.io/",
-                    "versionDate": datetime.date.today().isoformat(),
-                }
+                hit["includedInDataCatalog"] = included_in_data_catalog.update(
+                    {
+                        "@type": nde_type,
+                        "name": ["Data Discovery Engine, NIAID Systems Biology", "Data Discovery Engine"],
+                        "url": "https://discovery.biothings.io/",
+                        "versionDate": datetime.date.today().isoformat(),
+                    }
+                )
             else:
-                hit["includedInDataCatalog"] = {
-                    "@type": nde_type,
-                    "name": "Data Discovery Engine",
-                    "url": "https://discovery.biothings.io/",
-                    "versionDate": datetime.date.today().isoformat(),
-                }
+                hit["includedInDataCatalog"] = included_in_data_catalog
 
             # rename our id value and creator to author
             if authors := hit.pop("creator", None):

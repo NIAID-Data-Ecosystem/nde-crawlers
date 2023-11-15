@@ -6,6 +6,7 @@
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
 # https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
 
+import functools
 import os
 import os.path
 import time
@@ -78,6 +79,7 @@ def get_disease_details(identifier, original_name):
 
     DISEASE_CACHE[identifier] = standard_dict
     return standard_dict
+
 
 @retry(3, 5)
 def get_species_from_api(pmids):
@@ -155,6 +157,7 @@ def get_species_details(identifier, original_name):
     SPECIES_CACHE[identifier] = standard_dict
     return standard_dict
 
+
 @retry(3, 5)
 def get_disease_from_api(pmids):
     url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=disease"
@@ -188,7 +191,7 @@ def update_record_disease(rec, disease_data):
 
     # Iterate over new disease data and update the record
     for disease_dict in disease_data:
-    # for identifier, name in disease_data.items():
+        # for identifier, name in disease_data.items():
         identifier = disease_dict["identifier"]
         name = disease_dict["name"]
         # Skip if mesh ID has already been added
@@ -276,7 +279,6 @@ def update_record_species(rec, species_data):
                 del rec["species"][existing_species[name.lower()]]
             elif name.lower() in existing_infectious_agents:
                 del rec["infectiousAgent"][existing_infectious_agents[name.lower()]]
-
 
             if "classification" not in standardized_dict:
                 logger.warning(f"Could not classify {name} with ID {identifier}")
@@ -491,7 +493,6 @@ def load_pmid_ctfd(data_folder):
             # docs to yield for each batch query
             doc_list = []
 
-
             # to make batch api query take the next 1000 docs and collect all the pmids
             next_n_lines = list(islice(f, 1000))
             if not next_n_lines:
@@ -588,3 +589,134 @@ def load_pmid_ctfd(data_folder):
                                 else:
                                     rec["funding"] = copy(funding)
                 yield rec
+
+
+def load_pmid_ctfd_wrapper(func):
+    """Wrapper function that takes in a generator and yields a generator that adds citations and funding to the documents using pmids.
+    Takes 1000 documents at a time and batch queries all of the pmids in the documents to improve runtime.
+    If there are any pmcids, convert all of them into pmids before running the batch query.
+    Loads the citation and funding into the documents along with uploading the date field.
+      Returns: A generator with the completed documents
+    """
+
+    # a temporary solution to make bigger batch api call instead of multiple smaller calls in crawler to improve runtime
+    # TODO: figure out how to make a batch api call in crawler perferrably
+
+    api_key = GEO_API_KEY
+    email = GEO_EMAIL
+
+    # if no access to config file comment out above and enter your own email
+    # email = myemail@gmail.com
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        data = func(*args, **kwargs)
+        count = 0
+        while True:
+            # dict to convert pmcs to pmids
+            pmc_pmid = {}
+            # pmc list for batch query
+            pmc_list = []
+            # pmid list for batch query
+            pmid_list = []
+            # docs to yield for each batch query
+            doc_list = []
+
+            # to make batch api query take the next 1000 docs and collect all the pmids
+            next_n_lines = list(islice(data, 1000))
+            if not next_n_lines:
+                break
+            for line in next_n_lines:
+                count += 1
+                if count % 1000 == 0:
+                    logger.info("Processed %s documents", count)
+                doc = orjson.loads(line)
+                doc_list.append(doc)
+                if pmcs := doc.get("pmcs"):
+                    pmcs = [pmc.strip() for pmc in pmcs.split(",")]
+                    # limit reached need to make request to pmc convertor
+                    if (len(pmc_list) + len(pmcs)) >= 200:
+                        _convert_pmc(pmc_list, pmc_pmid)
+                    pmc_list += pmcs
+
+            # make request to pmc convertor
+            if pmc_list:
+                _convert_pmc(pmc_list, pmc_pmid)
+
+            # loop through doc_list and convert
+            for loc, doc in enumerate(doc_list):
+                if pmcs := doc.pop("pmcs", None):
+                    pmcs = [pmc.strip() for pmc in pmcs.split(",")]
+                    for pmc in pmcs:
+                        if pmid := pmc_pmid.get(pmc):
+                            doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
+                        else:
+                            logger.info("There is an issue with this PMCID. PMCID: %s, rec_id: %s", pmc, doc["_id"])
+                    doc_list[loc] = doc
+                if pmids := doc.get("pmids"):
+                    pmid_list += [pmid.strip() for pmid in pmids.split(",")]
+
+            # check if there are any pmids before requesting
+            if pmid_list:
+                # same thing as list(set(pmid_list))
+                pmid_list = [*set(pmid_list)]
+                # batch request retry up to 3 times
+                eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
+                # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
+                if api_key:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(0.35)
+
+            # add in the citation and funding to each doc in doc_list and yield
+            for rec in doc_list:
+                if pmids := rec.pop("pmids", None):
+                    pmids = [pmid.strip() for pmid in pmids.split(",")]
+                    # fixes issue where pmid numbers under 10 is read as 04 instead of 4
+                    pmids = [pmid.lstrip("0") for pmid in pmids]
+                    pmids = [*set(pmids)]
+
+                    # get species tax ids from pubtator
+                    try:
+                        species_data = get_species_from_api(pmids)
+                    except Exception as e:
+                        logger.warning(f"Could not get species data for {pmids}: {e}")
+                        species_data = []
+                    # get disease mesh ids from pubtator
+                    try:
+                        disease_data = get_disease_from_api(pmids)
+                    except Exception as e:
+                        logger.warning(f"Could not get disease data for {pmids}: {e}")
+                        disease_data = []
+                    if species_data:
+                        # Update the species field in the record
+                        update_record_species(rec, species_data)
+                    if disease_data:
+                        # Update the healthCondition field in the record
+                        update_record_disease(rec, disease_data)
+
+                    for pmid in pmids:
+                        if not eutils_info.get(pmid):
+                            logger.info("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
+                        # this fixes the error where there is no pmid
+                        # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
+                        if eutils_info.get(pmid):
+                            if citation := eutils_info[pmid].get("citation"):
+                                if rec_citation := rec.get("citation"):
+                                    # if the user originally had a citation field that is not a list change citation to list
+                                    if not isinstance(rec_citation, list):
+                                        rec["citation"] = [rec_citation]
+                                    rec["citation"].append(citation)
+                                else:
+                                    rec["citation"] = [citation]
+                            if funding := eutils_info[pmid].get("funding"):
+                                if rec_funding := rec.get("funding"):
+                                    # if the user originally had a funding field that is not a list change funding to list
+                                    if not isinstance(rec_funding, list):
+                                        rec["funding"] = [rec_funding]
+                                    rec["funding"] += funding
+                                else:
+                                    rec["funding"] = copy(funding)
+                yield rec
+
+    return wrapper
