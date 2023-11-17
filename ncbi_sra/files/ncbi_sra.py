@@ -339,6 +339,13 @@ class NCBI_SRA(NDEDatabase):
                     is_based_on.append(hapmap_dict)
 
             if len(is_based_on):
+                logger.info(f"Total isBasedOn: {len(is_based_on)}")
+                unique_based_on = {str(d) for d in is_based_on}
+                is_based_on = [json.loads(s) for s in unique_based_on]
+                logger.info(f"Total unique isBasedOn: {len(is_based_on)}")
+                if len(is_based_on) > 100:
+                    is_based_on = is_based_on[:100]
+                    logger.info(f"isBasedOn exceeds 100 for {study[0]}")
                 output["isBasedOn"] = is_based_on
             if len(species_list):
                 output["species"] = species_list
