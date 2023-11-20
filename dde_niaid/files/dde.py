@@ -73,7 +73,8 @@ def parse():
 
             # add included in data catalog
             if hit.get("@context") and "nde" in hit.get("@context"):
-                hit["includedInDataCatalog"] = included_in_data_catalog.update(
+                included_in_data_catalog = list(included_in_data_catalog)
+                included_in_data_catalog.append(
                     {
                         "@type": nde_type,
                         "name": ["Data Discovery Engine,  NIAID Data Ecosystem", "Data Discovery Engine"],
@@ -81,8 +82,10 @@ def parse():
                         "versionDate": datetime.date.today().isoformat(),
                     }
                 )
+                hit["includedInDataCatalog"] = included_in_data_catalog
             elif hit.get("@context") and "niaid" in hit.get("@context"):
-                hit["includedInDataCatalog"] = included_in_data_catalog.update(
+                included_in_data_catalog = list(included_in_data_catalog)
+                included_in_data_catalog.append(
                     {
                         "@type": nde_type,
                         "name": ["Data Discovery Engine, NIAID Systems Biology", "Data Discovery Engine"],
@@ -90,6 +93,7 @@ def parse():
                         "versionDate": datetime.date.today().isoformat(),
                     }
                 )
+                hit["includedInDataCatalog"] = included_in_data_catalog
             else:
                 hit["includedInDataCatalog"] = included_in_data_catalog
 
