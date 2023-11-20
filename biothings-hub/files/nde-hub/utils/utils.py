@@ -5,13 +5,7 @@ import traceback
 from typing import Dict, Generator, Iterable
 
 from config import logger
-from scores import (
-    MAPPING_SCORES,
-    RECOMMENDED_AUGMENTED_FIELDS,
-    RECOMMENDED_FIELDS,
-    REQUIRED_AUGMENTED_FIELDS,
-    REQUIRED_FIELDS,
-)
+from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -99,8 +93,10 @@ def merge_duplicates(doc: Dict) -> Dict:
     return doc
 
 
-def is_purely_augmented(field_content):
-    if isinstance(field_content, str):
+def is_purely_augmented(field, field_content):
+    if field == "includedInDataCatalog":
+        return False
+    elif isinstance(field_content, str):
         return False
     elif isinstance(field_content, dict):
         field_content = [field_content]
@@ -155,10 +151,10 @@ def add_metadata_score(document: Dict) -> Dict:
     weighted_score = calculate_weighted_score(document, MAPPING_SCORES)
 
     required_score = sum(
-        1 for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(document[field])
+        1 for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(field, document[field])
     )
     recommended_score = sum(
-        1 for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(document[field])
+        1 for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(field, document[field])
     )
 
     required_augmented_fields = check_augmented_fields(document, REQUIRED_AUGMENTED_FIELDS)
