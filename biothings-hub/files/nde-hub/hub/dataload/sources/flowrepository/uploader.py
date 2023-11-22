@@ -23,8 +23,8 @@ class FlowRepositoryUploader(NDESourceUploader):
         "src_meta": {
             "sourceInfo": {
                 "description": "FlowRepository is a database of flow cytometry experiments where you can query and download data collected and annotated according to the MIFlowCyt standard. It is primarily used as a data deposition place for experimental findings published in peer-reviewed journals in the flow cytometry field.",
-                "identifier": "FlowRepository",
-                "name": "FlowRepository",
+                "identifier": "Flow Repository",
+                "name": "Flow Repository",
                 "schema": get_source_data(name),
                 "url": "http://flowrepository.org/",
             }

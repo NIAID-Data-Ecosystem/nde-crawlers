@@ -22,7 +22,7 @@ class HCA_Uploader(NDESourceUploader):
         "src_meta": {
             "sourceInfo": {
                 "description": "Thanks to new single cell genomics and spatial imaging technologies developed since the late 2000s and early 2010s, it is now possible to measure gene expression profiles in individual cells. These large scale data can be used with machine learning algorithms to decipher how the cells differ from and interact with their neighbors, and how they form and function in the tissue. This now allows scientists to identify and understand cell types in unprecedented detail, resolution and breadth. The Human Cell Atlas (HCA) is an international group of researchers using a combination of these new technologies to create cellular reference maps with the position, function and characteristics of every cell type in the human body.",
-                "identifier": "HCA",
+                "identifier": "Human Cell Atlas",
                 "name": "Human Cell Atlas",
                 "schema": get_source_data(name),
                 "url": "https://www.humancellatlas.org/",
