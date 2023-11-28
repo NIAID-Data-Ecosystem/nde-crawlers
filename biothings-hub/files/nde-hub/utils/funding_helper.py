@@ -509,8 +509,6 @@ def build_funding_dict(funding_info):
         funding_dict["identifier"] = project_num
     if project_title := funding_info.get("project_title"):
         funding_dict["name"] = project_title
-    if abstract_text := funding_info.get("abstract_text"):
-        funding_dict["description"] = abstract_text
     if project_num_split := funding_info.get("project_num_split"):
         if ic_code := project_num_split.get("ic_code"):
             try:
@@ -540,10 +538,6 @@ def build_funding_dict(funding_info):
         funding_dict["startDate"] = project_start_date.split("T")[0]
     if project_end_date := funding_info.get("project_end_date"):
         funding_dict["endDate"] = project_end_date.split("T")[0]
-    if terms := funding_info.get("terms"):
-        terms = terms.replace("<", "").replace(">", " ").split()
-        funding_dict["keywords"] = terms
-
     if full_foa := funding_info.get("full_foa"):
         funding_dict["isBasedOn"] = {"identifier": full_foa}
 
