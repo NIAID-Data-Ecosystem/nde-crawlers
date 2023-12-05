@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import re
 
 import requests
 
@@ -42,6 +43,15 @@ def parse():
             "@type": "Dataset",
             "_id": "MICROBIOME_" + record.get("displayName").replace(" ", "_"),
         }
+
+        if record_id := record["id"]:
+            if len(record_id) > 1:
+                logger.warning("More than one record id found. Using first record id.")
+            record_id = record_id[0].get("value")
+            output["url"] = f"https://microbiomedb.org/mbio/app/record/dataset/{record_id}"
+
+        if record_name := record.get("displayName"):
+            output["name"] = record_name
 
         # set up keywords list
         k = []
@@ -132,6 +142,12 @@ def parse():
                     d["identifier"] = identifier
                 if name := distribution.get("dataset_name"):
                     d["name"] = name
+                if version_number_link := distribution.get("version_number_link"):
+                    match = re.search(r'"downloadUrl":\s*"([^"]+)"', version_number_link)
+                    if match:
+                        contentUrl = match.group(1)
+                        if contentUrl:
+                            d["contentUrl"] = "https://microbiomedb.org" + contentUrl
                 if d:
                     d_list.append(d)
             if d_list:
@@ -141,6 +157,7 @@ def parse():
         if ads := record["tables"].get("AssociatedDatasets"):
             # isPartOf
             ipo_list = []
+            added_ipo = set()
             # isRelatedTo
             irt_list = []
             for ad in ads:
@@ -149,8 +166,11 @@ def parse():
                     ipo["name"] = name
                 if alternate_name := ad.get("webapp_name"):
                     ipo["alternateName"] = alternate_name
-                if ipo:
+
+                ipo_key = (ipo.get("name"), ipo.get("alternateName"))
+                if ipo and ipo_key not in added_ipo:
                     ipo_list.append(ipo)
+                    added_ipo.add(ipo_key)
 
                 irt = {}
                 if cite_url := ad.get("pubmed link"):
@@ -178,14 +198,17 @@ def parse():
         # Traditionally we've been using url as the url where the source contains the dataset.
         # Should only be one url
         if links := record["tables"].get("HyperLinks"):
-            link_list = []
-            for link in links:
-                if url := link.get("url"):
-                    link_list.append(url)
-            if link_list != 1:
-                logger.info("There is more than one url. ID is %s" % output["_id"])
-            else:
-                output["url"] = link_list[0]
+            link = links[0]
+            sd_publisher = {}
+            if url := link.get("url"):
+                sd_publisher["url"] = url
+            if dataset_id := link.get("dataset_id"):
+                sd_publisher["identifier"] = dataset_id
+            if sd_publisher:
+                sd_publisher["name"] = "ClinEpiDB"
+                output["sdPublisher"] = sd_publisher
+            if len(links) > 1:
+                logger.warning("More than one link found. Using first link.")
 
         yield output
 
