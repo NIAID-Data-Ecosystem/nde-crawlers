@@ -272,8 +272,9 @@ def parse():
             output["distribution"] = distribution_dict
 
             related_datasets.append(output)
-
+        count = 0
         for dataset in related_datasets:
+            count += 1
             dataset["isRelatedTo"] = [
                 {
                     "name": x["name"],
@@ -284,7 +285,7 @@ def parse():
                     "relationship": "Datasets in the same study",
                 }
                 for x in related_datasets
-                if x != dataset
+                if x != dataset and count < 100 # limit to 100 related datasets
             ]
 
             dataset_count += 1
