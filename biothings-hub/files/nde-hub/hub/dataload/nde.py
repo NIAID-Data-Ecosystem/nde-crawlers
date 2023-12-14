@@ -126,6 +126,29 @@ class NDESourceUploader(BaseSourceUploader):
     @classmethod
     def get_mapping(cls):
         mapping = {
+            "_meta": {
+                "properties": {
+                    "completeness": {
+                        "properties": {
+                            "augmented_recommended_ratio": {"type": "float"},
+                            "augmented_required_ratio": {"type": "float"},
+                            "recommended_max_score": {"type": "integer"},
+                            "recommended_score": {"type": "integer"},
+                            "recommended_score_ratio": {"type": "float"},
+                            "required_max_score": {"type": "integer"},
+                            "required_ratio": {"type": "float"},
+                            "required_score": {"type": "integer"},
+                            "total_max_score": {"type": "integer"},
+                            "total_recommended_augmented": {"type": "integer"},
+                            "total_required_augmented": {"type": "integer"},
+                            "total_score": {"type": "integer"},
+                            "weighted_score": {"type": "float"}
+                        }
+                    },
+                    "recommended_augmented_fields": {"type": "keyword"},
+                    "required_augmented_fields": {"type": "keyword"}
+                }
+            },
             "@context": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
