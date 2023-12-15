@@ -16,6 +16,9 @@ logger = logging.getLogger("nde-logger")
 def get_dataset_ids(study_name):
     dataset_ids = []
     page = 1
+    logger.info(f"Retrieving dataset ids for study name: {study_name}...")
+    if study_name == "Environmental influences on Child Health Outcomes (ECHO)-wide Cohort":
+        study_name = "Environmental Influences on Child Health Outcomes (ECHO)-wide Cohort"
     if "'" not in study_name:
         # trying to encode single quotes break the url, even after converting to %27
         study_name = urllib.parse.quote(study_name)
