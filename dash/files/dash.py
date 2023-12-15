@@ -122,7 +122,8 @@ def parse_study_info(study_info):
             study_dict["measurementTechnique"] = {"name": obj["storedValue"]}
         if obj["propertyName"] == "ClinicalTrials.gov URL":
             study_dict["mainEntityOfPage"] = obj["storedValue"]
-            study_dict["nctid"] = obj["storedValue"].split("/")[-1]
+            base_url = obj["storedValue"].split("?")[0]
+            study_dict["nctid"] = base_url.split("/")[-1]
         if obj["propertyName"] == "Publication URLs":
             if obj["storedValue"] is not None and validators.url(obj["storedValue"]):
                 citation_dict["url"] = obj["storedValue"]
