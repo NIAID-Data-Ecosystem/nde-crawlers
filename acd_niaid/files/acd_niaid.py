@@ -178,25 +178,29 @@ def parse():
         trial["description"] = trial.pop("description")
         trial["abstract"] = trial.pop("brief_summary")
 
-        trial_query = "query ($filter: JSON) {oafile (filter: $filter, first: 10000, accessibility: accessible) {file_name,file_size,data_format,data_type,cmc_unique_id,doc_url}}"
-        trial_variables = """
-        {{
-        "filter": {{
-            "in": {{
-                "cmc_unique_id": [
-                    "{id}"
-                ]
-            }}
-        }}
-    }}
+        trial_query = """
+        query ($filter: JSON) {
+            oafile (filter: $filter, first: 10000, accessibility: accessible) {
+                file_name, file_size, data_format, data_type, cmc_unique_id, doc_url
+            }
+        }
         """
-        settings = {"id": trial["identifier"]}
 
-        test = requests.post(
+        trial_variables = {
+            "filter": {
+                "in": {
+                    "cmc_unique_id": [trial["identifier"]]
+                }
+            }
+        }
+
+        response = requests.post(
             url,
-            json={"query": trial_query, "variables": trial_variables.format(**settings)},
+            json={"query": trial_query, "variables": trial_variables},
+            headers={"Content-Type": "application/json"}
         )
-        test_json = json.loads(test.text)
+
+        test_json = json.loads(response.text)
         has_part_list = []
         for file in test_json["data"]["oafile"]:
             has_part_list.append(
