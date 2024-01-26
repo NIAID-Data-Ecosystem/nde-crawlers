@@ -1,7 +1,7 @@
 name: Source Suggestion
 description: Suggest a source for inclusion in the NIAID Discovery Ecosystem
 title: "[Source]: "
-labels: ["source"]
+labels: ["new data source"]
 
 body:
   - type: markdown
@@ -39,7 +39,7 @@ body:
       description: Does this source require a user account login? Y/N
       options:
         - "Yes, account needed"
-        - "No access issue, no account needed"
+        - "No access issue, account not needed"
         - "Unknown"
     validations:
       required: true
@@ -59,6 +59,17 @@ body:
       placeholder: The rationale for including this source is...
     validations:
       required: true
+  - type: checkboxes
+    id: WBSlink
+    attributes:
+      label: Related WBS task
+      description: Please provide links to any relevant tasks/issues in the WBS/Roadmap repository https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues). 
+      options:
+        - label: Check here if this repository is funded by NIAID (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/11)
+        - label: Check here if this repository only has IID data (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/12)
+        - label: Check here if this is a generalist repository with IID data (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/12)
+    validations:
+      required: false       
   - type: markdown
     attributes:
       value: |
@@ -100,3 +111,4 @@ body:
          - label: Parser check- Has the parser been written?
          - label: Parsed data check- Has a sanity check on the data obtained from this source been performed?
          - label: Merge data- Has the crawler/plugin been successfully integrated with the system?
+         - label: Issues could not be resolved - Add as a single record via the DDE
