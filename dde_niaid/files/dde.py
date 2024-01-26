@@ -35,7 +35,7 @@ def query_ols(iri):
 
 def parse():
     # initial request to find total number of hits
-    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated"
+    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22&sort=-_ts.last_updated"
     request = requests.get(url).json()
     # get the number of pages to paginate through
     total = request["total"]
@@ -45,7 +45,7 @@ def parse():
     # paginate through the requests
     for page in range(pages + 1):
         url = (
-            "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22&sort=-_ts.last_updated&size=1000&from="
+            "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22&sort=-_ts.last_updated&size=1000&from="
             + str(page * 1000)
         )
         request = requests.get(url).json()
@@ -77,25 +77,30 @@ def parse():
                 included_in_data_catalog.append(
                     {
                         "@type": nde_type,
-                        "name": "Data Discovery Engine,  NIAID Data Ecosystem",
+                        "name": "Data Discovery Engine, NIAID Data Ecosystem",
                         "url": "https://discovery.biothings.io/portal/niaid",
                         "versionDate": datetime.date.today().isoformat(),
                     }
                 )
-                hit["includedInDataCatalog"] = included_in_data_catalog
-            elif hit.get("@context") and "niaid" in hit.get("@context"):
+            if hit.get("@context") and "niaid" in hit.get("@context") and "nde" not in hit.get("@context"):
                 included_in_data_catalog = [included_in_data_catalog]
                 included_in_data_catalog.append(
                     {
                         "@type": nde_type,
                         "name": "Data Discovery Engine, NDE Systems Biology",
-                        "url": "hhttps://discovery.biothings.io/portal/nde",
+                        "url": "https://discovery.biothings.io/portal/nde",
                         "versionDate": datetime.date.today().isoformat(),
                     }
                 )
-                hit["includedInDataCatalog"] = included_in_data_catalog
-            else:
-                hit["includedInDataCatalog"] = included_in_data_catalog
+
+            hit["includedInDataCatalog"] = included_in_data_catalog
+
+            # remove nonetypes from distribution
+            if distribution := hit.pop("distribution", None):
+                if isinstance(distribution, list):
+                    hit["distribution"] = [{k: v for k, v in d.items() if v is not None} for d in distribution]
+                else:
+                    hit["distribution"] = {k: v for k, v in distribution.items() if v is not None}
 
             # rename our id value and creator to author
             if authors := hit.pop("creator", None):
@@ -167,10 +172,22 @@ def parse():
                 else:
                     hit["species"] = query_ols(species)
 
+            # fix temporalCoverage
+            if temporalCoverage := hit.pop("temporalCoverage", None):
+                if isinstance(temporalCoverage, list):
+                    hit["temporalCoverage"] = [{"temporalInterval": tc} for tc in temporalCoverage]
+                else:
+                    hit["temporalCoverage"] = {"temporalInterval": temporalCoverage}
+
+            # fix topicCategory
+            if topicCategory := hit.pop("topicCategory", None):
+                hit["topicCategory"] = {"url": topicCategory}
+
             # remove unnecessary values
             hit.pop("_meta", None)
             hit.pop("_score", None)
             hit.pop("@context", None)
+            hit.pop("version", None)
 
             yield hit
 

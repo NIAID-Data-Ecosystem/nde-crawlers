@@ -131,7 +131,6 @@ def classify_as_host_or_agent(lineage):
     return new_classification
 
 
-
 def get_species_details(original_name, identifier):
     logger.info(f"Getting details for {original_name}")
 
@@ -623,7 +622,7 @@ def transform(doc_list):
             unique_list = []
 
             for entry in data_list:
-                identifier = entry.get('identifier')
+                identifier = entry.get("identifier")
                 if identifier not in seen_identifiers:
                     seen_identifiers.add(identifier)
                     unique_list.append(entry)

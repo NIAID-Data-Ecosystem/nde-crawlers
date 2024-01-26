@@ -142,11 +142,11 @@ class NDESourceUploader(BaseSourceUploader):
                             "total_recommended_augmented": {"type": "integer"},
                             "total_required_augmented": {"type": "integer"},
                             "total_score": {"type": "integer"},
-                            "weighted_score": {"type": "float"}
+                            "weighted_score": {"type": "float"},
                         }
                     },
                     "recommended_augmented_fields": {"type": "keyword"},
-                    "required_augmented_fields": {"type": "keyword"}
+                    "required_augmented_fields": {"type": "keyword"},
                 }
             },
             "@context": {
@@ -263,6 +263,16 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
+            "collectionSize": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "maxValue": {"type": "integer"},
+                    "minValue": {"type": "integer"},
+                    "unitText": {"type": "text"},
+                    "value": {"type": "integer"},
+                }
+            },
+            "collectionType": {"type": "keyword"},
             "conditionsOfAccess": {"type": "keyword"},
             "contentSize": {"type": "text"},
             "contentUrl": {
