@@ -1,0 +1,100 @@
+name: Metadata Improvement
+description: Issue form for tracking metadata improvements
+title: "[Metadata Improvement]: "
+labels: ["enhancement"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form is meant for issues involving improvement of the metadata         
+  - type: input
+    id: metaIssueName
+    attributes:
+      label: Issue Name
+      description: Provide a name for the metadata improvement
+      placeholder: ex. topicCategory augmentation
+    validations:
+      required: True
+  - type: textarea
+    id: metaIssueDescription
+    attributes:
+      label: Issue Description
+      description: Please describe the metadata improvement
+      placeholder: ex- The thematic classification of dataset records by augmenting the topicCategory field using LLMs
+    validations:
+      required: true      
+  - type: textarea
+    id: metaIssueDiscussion
+    attributes:
+      label: Issue Discussion
+      description: Please provide information on when this issue was (or is expected to be) discussed between NIAID, Leidos, and Scripps
+      placeholder: ex. The improvement activity was discussed at the bi-weekly meeting dated 2023-03-14. It was included in the Technical Report dated 2023-04-10
+    validations:
+      required: false 
+  - type: checkboxes
+    id: metaIssueType
+    attributes:
+      label: Please select the type of metadata improvement
+      options:
+        - label: Standardization (normalizing free text to an ontology)
+        - label: Augmentation (adding values for metadata fields missing values)
+        - label: Clean up (addressing redundancy or messy metadata)
+        - label: Structure (changing the structuring of the metadata to support front end UI features)
+  - type: input
+    id: metaMaterialURL
+    attributes:
+      label: Meta URL
+      description: If initial data has been generated illustrating this metadata improvement, please provide the url of the spreadsheet or api call illustrating this improvement
+      placeholder: ex. https://docs.google.com/spreadsheets/[...]
+    validations:
+      required: false
+  - type: textarea
+    id: WBSlink
+    attributes:
+      label: Related WBS task
+      description: Please provide links to any relevant tasks/issues in the WBS/Roadmap repository https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues). 
+      placeholder: https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/13
+    validations:
+      required: false     
+  - type: markdown
+    attributes:
+      value: |
+        "## Additional Notes for internal use only." 
+  - type: markdown
+    attributes:
+      value: |
+        Submitter, ignore everything below this point.
+  - type: checkboxes
+    id: metaIssueStatus
+    attributes:
+      label: For internal use only. Assignee, please select the status of this issue
+      options:
+        - label: Not yet started
+        - label: In progress
+        - label: Blocked
+        - label: Will not address
+    validations:
+      required: false
+  - type: textarea
+    id: metaIssueStatusDescription
+    attributes:
+      label: Status Description
+      description: If the status of this issue is BLOCKED or WILL NOT ADDRESS, please provide more details. Update with links to related GitHub issues here or in comments.
+    validations:
+      required: false
+  - type: checkboxes
+    id: metaIssueTaskList
+    attributes:
+       label: Request status check list
+       description: For internal use only. Use the checklist to provide updates on the status of the request
+       options:
+         - label: This metadata improvement has yet to be discussed between NIAID, Scripps, Leidos
+         - label: This metadata improvement does not need to be discussed between NIAID, Scripps, Leidos  
+         - label: This metadata improvement has been discussed/reported between NIAID, Scripps, Leidos
+         - label: This metadata improvement has been implemented locally to generate data for review
+         - label: This metadata improvement has been implemented on Dev
+         - label: This metadata improvement has been implemented on Dev and the results have been reviewed and approved for staging  
+         - label: This metadata improvement has been implemented on Staging    
+         - label: This page/documentation/change has been approved for Production
+         - label: This page/documentation/change has been implemented on Production
