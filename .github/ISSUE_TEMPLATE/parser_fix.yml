@@ -31,13 +31,17 @@ body:
       placeholder: ex. https://data.niaid.nih.gov/resources?id=NCBI_SRA_SRP001886
     validations:
       required: false
-  - type: textarea
+  - type: checkboxes
     id: WBSlink
     attributes:
       label: Related WBS task
       description: Please provide links to any relevant tasks/issues in the WBS/Roadmap repository https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues). 
+      options:
+        - label: Check here if this repository is funded by NIAID (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/11)
+        - label: Check here if this repository only has IID data (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/12)
+        - label: Check here if this is a generalist repository with IID data (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/12)
     validations:
-      required: false     
+      required: false    
   - type: markdown
     attributes:
       value: |
