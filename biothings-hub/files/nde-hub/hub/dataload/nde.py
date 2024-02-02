@@ -366,10 +366,8 @@ class NDESourceUploader(BaseSourceUploader):
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "description": {"type": "text", "copy_to": ["all"]},
                     "endDate": {"type": "date"},
                     "startDate": {"type": "date"},
-                    "keywords": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "isBasedOn": {
                         "properties": {
                             "identifier": {"type": "text", "copy_to": ["all"]},
