@@ -442,6 +442,8 @@ class NDESourceUploader(BaseSourceUploader):
                         "copy_to": ["all"],
                     },
                     "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -508,6 +510,8 @@ class NDESourceUploader(BaseSourceUploader):
                         "copy_to": ["all"],
                     },
                     "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -745,6 +749,8 @@ class NDESourceUploader(BaseSourceUploader):
                         "copy_to": ["all"],
                     },
                     "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
