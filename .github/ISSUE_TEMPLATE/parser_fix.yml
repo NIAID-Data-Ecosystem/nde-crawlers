@@ -1,0 +1,70 @@
+name: Parser Fix
+description: Issue form for parser corrections/fixes
+title: "[Parser Fix]: "
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form is meant for tracking issues with existing parsers/crawlers. It is not meant for suggesting a new parser/crawler.       
+  - type: input
+    id: feedIssueName
+    attributes:
+      label: Issue Name
+      description: Provide a name for the parser fix needed
+      placeholder: ex. SRA missing name fields
+    validations:
+      required: True
+  - type: textarea
+    id: feedIssueDescription
+    attributes:
+      label: Issue Description
+      description: Please describe the parser fix that is needed
+      placeholder: ex- Some records are do not have a name field even though the value is available in the corresponding record in SRA.
+    validations:
+      required: true      
+  - type: textarea
+    id: feedIssueExample
+    attributes:
+      label: Issue Example
+      description: Please provide example records that illustrate the problematic data resulting from the issue in the parser that was described above
+      placeholder: ex. https://data.niaid.nih.gov/resources?id=NCBI_SRA_SRP001886
+    validations:
+      required: false
+  - type: checkboxes
+    id: WBSlink
+    attributes:
+      label: Related WBS task
+      description: Please provide links to any relevant tasks/issues in the WBS/Roadmap repository https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues). 
+      options:
+        - label: Check here if this repository is funded by NIAID (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/11)
+        - label: Check here if this repository only has IID data (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/12)
+        - label: Check here if this is a generalist repository with IID data (https://github.com/NIAID-Data-Ecosystem/nde-roadmap/issues/12)
+    validations:
+      required: false    
+  - type: markdown
+    attributes:
+      value: |
+        "## Additional Notes for internal use only." 
+  - type: markdown
+    attributes:
+      value: |
+        Submitter, ignore everything below this point.
+  - type: checkboxes
+    id: feedIssueStatus
+    attributes:
+      label: For internal use only. Assignee, please select the status of this issue
+      options:
+        - label: Not yet started
+        - label: In progress
+        - label: Blocked
+        - label: Will not address
+    validations:
+      required: false
+  - type: textarea
+    id: feedIssueStatusDescription
+    attributes:
+      label: Status Description
+      description: If the status of this issue is BLOCKED or WILL NOT ADDRESS, please provide more details. Update with links to related GitHub issues here or in comments.
+    validations:
+      required: false

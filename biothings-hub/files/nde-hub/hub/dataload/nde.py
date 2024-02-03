@@ -366,10 +366,8 @@ class NDESourceUploader(BaseSourceUploader):
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "description": {"type": "text", "copy_to": ["all"]},
                     "endDate": {"type": "date"},
                     "startDate": {"type": "date"},
-                    "keywords": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "isBasedOn": {
                         "properties": {
                             "identifier": {"type": "text", "copy_to": ["all"]},
@@ -442,6 +440,8 @@ class NDESourceUploader(BaseSourceUploader):
                         "copy_to": ["all"],
                     },
                     "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -508,6 +508,8 @@ class NDESourceUploader(BaseSourceUploader):
                         "copy_to": ["all"],
                     },
                     "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -745,6 +747,8 @@ class NDESourceUploader(BaseSourceUploader):
                         "copy_to": ["all"],
                     },
                     "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
