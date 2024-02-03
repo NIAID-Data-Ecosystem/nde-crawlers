@@ -98,19 +98,20 @@ def parse():
                         sd["identifier"] = identifier
                     output["sdPublisher"].append(sd)
 
-            if author := request.get("principalInvestigator"):
-                au = {"author": {}}
-                if given_name := author.get("firstName"):
-                    au["author"]["givenName"] = given_name
-                if family_name := author.get("lastName"):
-                    au["author"]["familyName"] = family_name
-                if identifier := author.get("orcidId"):
-                    au["author"]["identifier"] = identifier
-                if au["author"]:
-                    output["author"] = au
+            # DOES NOT WORK
+            # if author := request.get("principalInvestigator"):
+            #     au = {"author": {}}
+            #     if given_name := author.get("firstName"):
+            #         au["author"]["givenName"] = given_name
+            #     if family_name := author.get("lastName"):
+            #         au["author"]["familyName"] = family_name
+            #     if identifier := author.get("orcidId"):
+            #         au["author"]["identifier"] = identifier
+            #     if au["author"]:
+            #         output["author"] = au
 
-            if creator := request.get("orgName"):
-                output["creator"] = {"name": creator}
+            if author := request.get("orgName"):
+                output["author"] = {"name": author}
 
             if name := request.get("studyTitle"):
                 output["name"] = "Dataset from " + name

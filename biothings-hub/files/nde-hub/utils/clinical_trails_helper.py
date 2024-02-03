@@ -9,11 +9,11 @@ from config import logger
 from .utils import retry
 
 
-def get_authors(row: Dict) -> List:
+def get_creators(row: Dict) -> List:
     """
-    Takes a single study from the clinical trials API and returns a list of authors.
+    Takes a single study from the clinical trials API and returns a list of creators.
     """
-    authors = []
+    creators = []
     responsible_party = row.get("sponsorCollaboratorsModule", {}).get("responsibleParty")
     if responsible_party and responsible_party.get("type"):
         if responsible_party["type"].casefold() != "sponsor":
@@ -28,7 +28,7 @@ def get_authors(row: Dict) -> List:
             ]
             obj["title"] = row["sponsorCollaboratorsModule"]["responsibleParty"]["investigatorTitle"]
             obj["role"] = row["sponsorCollaboratorsModule"]["responsibleParty"]["type"]
-            authors.append(obj)
+            creators.append(obj)
     if "contactsLocationsModule" in row.keys():
         if row.get("contactsLocationsModule"):
             if "centralContacts" in row["contactsLocationsModule"].keys():
@@ -38,7 +38,7 @@ def get_authors(row: Dict) -> List:
                     obj["@type"] = "Person"
                     obj["name"] = contact["name"]
                     obj["role"] = contact["role"]
-                    authors.append(obj)
+                    creators.append(obj)
             if "overallOfficials" in row["contactsLocationsModule"].keys():
                 contacts = row["contactsLocationsModule"]["overallOfficials"]
                 for contact in contacts:
@@ -50,18 +50,18 @@ def get_authors(row: Dict) -> List:
                         obj["role"] = role
                     if "affiliation" in contact.keys():
                         obj["affiliation"] = [{"@type": "Organization", "name": contact["affiliation"]}]
-                    authors.append(obj)
+                    creators.append(obj)
 
-    return authors
+    return creators
 
 
 @retry(3, 5)
 def batch_ct(ct_ids: List[str]) -> Dict[str, List[Dict]]:
     """
-    Takes a list of clinicaltrials.gov ids and returns a dictionary of authors.
+    Takes a list of clinicaltrials.gov ids and returns a dictionary of creators.
     """
 
-    authors = {}
+    creators = {}
     string_ct_ids = ",".join(ct_ids)
     query = {"query.id": string_ct_ids, "countTotal": "true", "pageSize": 1000}
     url = "https://clinicaltrials.gov/api/v2/studies"
@@ -77,18 +77,19 @@ def batch_ct(ct_ids: List[str]) -> Dict[str, List[Dict]]:
         _id = study["identificationModule"].get("nctId")
 
         try:
-            authors[_id] = get_authors(study)
+            creators[_id] = get_creators(study)
         except Exception as e:
-            logger.error("This id: %s cannot be converted into an author", _id)
+            logger.error("This id: %s cannot be converted into an creator", _id)
             raise e
 
-    return authors
+    return creators
 
 
 def load_ct_wrapper(func: Generator) -> Generator:
     """
-    Takes a generator function and yields a generator function that adds authors from clinicaltrials.gov.
+    Takes a generator function and yields a generator function that adds creators from clinicaltrials.gov.
     Each record needs to have a sdPublisher field with a name field that contains "clinicaltrials.gov" and an identifier field that contains the clinicaltrials.gov id.
+    TODO BATCH QUERY WILL FAIL IF THERE IS EVEN 1 INCORRECT ID.
     """
 
     @functools.wraps(func)
@@ -116,24 +117,24 @@ def load_ct_wrapper(func: Generator) -> Generator:
 
             if ct_ids:
                 # make request
-                authors_lookup = batch_ct(ct_ids)
+                creators_lookup = batch_ct(ct_ids)
                 time.sleep(0.2)
 
             for doc in doc_list:
-                authors = []
+                creators = []
                 if sd_publishers := doc.get("sdPublisher"):
                     for sd_publisher in sd_publishers:
                         if sd_publisher.get("name") and "clinicaltrials.gov" in sd_publisher.get("name").casefold():
-                            author = authors_lookup.get(sd_publisher.get("identifier"))
-                            authors += author
-                if authors:
-                    if doc_author := doc.get("author"):
-                        if isinstance(doc_author, list):
-                            doc["author"] += authors
+                            creator = creators_lookup.get(sd_publisher.get("identifier"))
+                            creators += creator
+                if creators:
+                    if doc_creator := doc.get("creator"):
+                        if isinstance(doc_creator, list):
+                            doc["creator"] += creators
                         else:
-                            doc["author"] = list(doc_author) + authors
+                            doc["creator"] = list(doc_creator) + creators
                     else:
-                        doc["author"] = authors
+                        doc["creator"] = creators
 
                 count += 1
                 if count % 1000 == 0:
