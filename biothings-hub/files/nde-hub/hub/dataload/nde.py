@@ -402,6 +402,8 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
+            "hasAPI": {"type": "boolean"},
+            "hasDownload": {"type": "text"},
             "hasPart": {
                 "properties": {
                     "@id": {
