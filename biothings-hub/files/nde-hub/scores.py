@@ -75,7 +75,8 @@ REQUIRED_FIELDS = [
     "includedInDataCatalog",
     "distribution",
     "funding",
-    "date"
+    "date",
+    "collectionType"
 ]
 RECOMMENDED_FIELDS = [
     "dateCreated",
@@ -98,7 +99,10 @@ RECOMMENDED_FIELDS = [
     "topicCategory",
     "identifier",
     "usageInfo",
-    "interactionStatistic"
+    "interactionStatistic",
+    "collectionSize",
+    "hasAPI",
+    "hasDownload"
 ]
 REQUIRED_AUGMENTED_FIELDS = [
     "funding",
