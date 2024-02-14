@@ -5,13 +5,7 @@ import traceback
 from typing import Dict, Generator, Iterable
 
 from config import logger
-from scores import (
-    MAPPING_SCORES,
-    RECOMMENDED_AUGMENTED_FIELDS,
-    RECOMMENDED_FIELDS,
-    REQUIRED_AUGMENTED_FIELDS,
-    REQUIRED_FIELDS,
-)
+from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -53,7 +47,7 @@ def check_schema(doc: Dict) -> Dict:
     assert doc.get("_id"), "_id is None"
     assert doc.get("@type"), "@type is None"
     assert doc.get("includedInDataCatalog"), "includedInDataCatalog is None"
-    assert doc.get("version", None) is not None, "Remove version field"
+    assert doc.get("version", None) is None, "Remove version field"
     if coa := doc.get("conditionsOfAccess"):
         enum = ["Open", "Restricted", "Closed", "Embargoed"]
         assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
