@@ -156,20 +156,36 @@ def check_augmented_fields(document, augmented_field_list):
 
 
 def add_metadata_score(document: Dict) -> Dict:
+    local_required_fields = list(REQUIRED_FIELDS)
+    local_recommended_fields = list(RECOMMENDED_FIELDS)
+
+    # Handle ResourceCatalog types separately to add additional required and recommended fields
+    includedInDataCatalog = document.get('includedInDataCatalog')
+    if includedInDataCatalog:
+        if isinstance(includedInDataCatalog, list):
+            for catalog in includedInDataCatalog:
+                if catalog.get('@type') == 'ResourceCatalog':
+                    local_required_fields.append("collectionType")
+                    local_recommended_fields.extend(["collectionSize", "hasAPI", "hasDownload"])
+                    break
+        elif includedInDataCatalog.get('@type') == 'ResourceCatalog':
+            local_required_fields.append("collectionType")
+            local_recommended_fields.extend(["collectionSize", "hasAPI", "hasDownload"])
+
     weighted_score = calculate_weighted_score(document, MAPPING_SCORES)
 
     required_score = sum(
-        1 for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(field, document[field])
+        1 for field in local_required_fields if field in document and not is_purely_augmented(field, document[field])
     )
     recommended_score = sum(
-        1 for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(field, document[field])
+        1 for field in local_recommended_fields if field in document and not is_purely_augmented(field, document[field])
     )
 
     required_augmented_fields = check_augmented_fields(document, REQUIRED_AUGMENTED_FIELDS)
     recommended_augmented_fields = check_augmented_fields(document, RECOMMENDED_AUGMENTED_FIELDS)
 
-    total_required = len(REQUIRED_FIELDS)
-    total_recommended = len(RECOMMENDED_FIELDS)
+    total_required = len(local_required_fields)
+    total_recommended = len(local_recommended_fields)
     total_required_augmented = len(REQUIRED_AUGMENTED_FIELDS)
     total_recommended_augmented = len(RECOMMENDED_AUGMENTED_FIELDS)
 
