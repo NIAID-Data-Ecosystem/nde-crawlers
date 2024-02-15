@@ -99,6 +99,8 @@ def is_purely_augmented(field, field_content):
         return False
     elif isinstance(field_content, str):
         return False
+    elif isinstance(field_content, bool):
+        return False
     elif isinstance(field_content, dict):
         field_content = [field_content]
     elif isinstance(field_content, list) and all(isinstance(item, str) for item in field_content):
