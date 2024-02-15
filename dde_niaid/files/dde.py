@@ -78,16 +78,26 @@ def parse():
                     {
                         "@type": nde_type,
                         "name": "Data Discovery Engine, NIAID Data Ecosystem",
-                        "url": "https://discovery.biothings.io/portal/niaid",
+                        "url": "https://discovery.biothings.io/portal/nde",
                         "versionDate": datetime.date.today().isoformat(),
                     }
                 )
+            # all of niaid systems biology is a subset of niaid data ecosystem but if nde is in the context then it is not part of niaid systems biology
+            # if the above comment confuses the reader, think of it like the story of oedipus
             if hit.get("@context") and "niaid" in hit.get("@context") and "nde" not in hit.get("@context"):
                 included_in_data_catalog = [included_in_data_catalog]
                 included_in_data_catalog.append(
                     {
                         "@type": nde_type,
-                        "name": "Data Discovery Engine, NDE Systems Biology",
+                        "name": "Data Discovery Engine, NIAID Systems Biology",
+                        "url": "https://discovery.biothings.io/portal/niaid",
+                        "versionDate": datetime.date.today().isoformat(),
+                    }
+                )
+                included_in_data_catalog.append(
+                    {
+                        "@type": nde_type,
+                        "name": "Data Discovery Engine, NIAID Data Ecosystem",
                         "url": "https://discovery.biothings.io/portal/nde",
                         "versionDate": datetime.date.today().isoformat(),
                     }
