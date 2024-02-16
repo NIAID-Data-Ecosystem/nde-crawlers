@@ -10,9 +10,9 @@ logger = logging.getLogger("nde-logger")
 
 
 def query_ols(iri):
-    """Gets the name field of measurementTechnique, infectiousAgent, infectiousDisease, and species in our nde schema
+    """Gets the name field of measurementTechnique, infectiousAgent, infectiousDisease, species, and variableMeasured in our nde schema
 
-    ols api doc here: https://www.ebi.ac.uk/ols/docs/api
+    ols api doc here: https://www.ebi.ac.uk/ols4/swagger-ui/index.html
     Returns the formatted dictionary {name: ####, url: ####} if an url was given or {name: ####}
     """
 
@@ -28,9 +28,23 @@ def query_ols(iri):
         request = requests.get(url, params).json()
         # no documentation on how many requests can be made
         time.sleep(0.5)
-        return {"name": request["_embedded"]["terms"][0]["label"], "url": iri}
+        # return {"name": request["_embedded"]["terms"][0]["label"], "url": iri}
+        return request["_embedded"]["terms"][0]["label"], True
     else:
-        return {"name": iri}
+        # return {"name": iri}
+        return iri, False
+
+
+def format_query_ols(iri):
+    """
+    Formats the query_ols return value to fit our schema for measurementTechnique, infectiousAgent, infectiousDisease, and species
+    Returns the formatted dictionary {name: ####, url: ####} if an url was given or {name: ####}
+    """
+    name, is_url = query_ols(iri)
+    if is_url:
+        return {"name": name, "url": iri}
+    else:
+        return {"name": name}
 
 
 def parse():
@@ -144,25 +158,25 @@ def parse():
                 if type(mts) is list:
                     hit["measurementTechnique"] = []
                     for mt in mts:
-                        hit["measurementTechnique"].append(query_ols(mt))
+                        hit["measurementTechnique"].append(format_query_ols(mt))
                 else:
-                    hit["measurementTechnique"] = query_ols(mts)
+                    hit["measurementTechnique"] = format_query_ols(mts)
 
             if ias := hit.pop("infectiousAgent", None):
                 if type(ias) is list:
                     hit["infectiousAgent"] = []
                     for ia in ias:
-                        hit["infectiousAgent"].append(query_ols(ia))
+                        hit["infectiousAgent"].append(format_query_ols(ia))
                 else:
-                    hit["infectiousAgent"] = query_ols(ias)
+                    hit["infectiousAgent"] = format_query_ols(ias)
 
             if hcs := hit.pop("healthCondition", None):
                 hit["healthCondition"] = []
                 if type(hcs) is list:
                     for hc in hcs:
-                        hit["healthCondition"].append(query_ols(hc))
+                        hit["healthCondition"].append(format_query_ols(hc))
                 else:
-                    hit["healthCondition"].append(query_ols(hcs))
+                    hit["healthCondition"].append(format_query_ols(hcs))
 
             # infectious disease is deprecated change to healthCondition
             if ids := hit.pop("infectiousDisease", None):
@@ -170,17 +184,25 @@ def parse():
                     hit["healthCondition"] = []
                 if type(ids) is list:
                     for i_d in ids:
-                        hit["healthCondition"].append(query_ols(i_d))
+                        hit["healthCondition"].append(format_query_ols(i_d))
                 else:
-                    hit["healthCondition"].append(query_ols(ids))
+                    hit["healthCondition"].append(format_query_ols(ids))
 
             if species := hit.pop("species", None):
                 if type(species) is list:
                     hit["species"] = []
                     for a_species in species:
-                        hit["species"].append(query_ols(a_species))
+                        hit["species"].append(format_query_ols(a_species))
                 else:
-                    hit["species"] = query_ols(species)
+                    hit["species"] = format_query_ols(species)
+
+            if vms := hit.pop("variableMeasured", None):
+                if type(vms) is list:
+                    hit["variableMeasured"] = []
+                    for vm in vms:
+                        hit["variableMeasured"].append(query_ols(vm)[0])
+                else:
+                    hit["variableMeasured"] = query_ols(vms)[0]
 
             # fix temporalCoverage
             if temporalCoverage := hit.pop("temporalCoverage", None):
