@@ -21,7 +21,8 @@ def query_ols(iri):
 
     if pattern.match(iri):
         params = {
-            # isnt the best way but good enough to get http: https://stackoverflow.com/questions/9760588/how-do-you-extract-a-url-from-a-string-using-python
+            # isnt the best way but good enough to get first instance of http while ignoring https:
+            # https://stackoverflow.com/questions/9760588/how-do-you-extract-a-url-from-a-string-using-python
             "iri": re.search(r"(?P<url>http?://[^\s]+)", iri).group("url")
         }
 
@@ -40,9 +41,9 @@ def query_ols(iri):
             },
             "isCurated": True,
         }
-        if alternate_name:= request["_embedded"]["terms"][0]["annotation"].get("alternative label"):
+        if alternate_name := request["_embedded"]["terms"][0]["annotation"].get("alternative label"):
             lookup["alternateName"] = alternate_name
-        elif alternate_name:= request["_embedded"]["terms"][0].get("synonyms"):
+        elif alternate_name := request["_embedded"]["terms"][0].get("synonyms"):
             lookup["alternateName"] = alternate_name
         else:
             logger.info(f"Does not have an alternateName: {iri}")
