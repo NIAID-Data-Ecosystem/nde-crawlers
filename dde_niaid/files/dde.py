@@ -10,7 +10,7 @@ logger = logging.getLogger("nde-logger")
 
 
 def query_ols(iri):
-    """Gets the name field of measurementTechnique, infectiousAgent, infectiousDisease, species, and variableMeasured in our nde schema
+    """Gets the name field of measurementTechnique, infectiousAgent, healthCondition (infectiousDisease), species, and variableMeasured in our nde schema
 
     ols api doc here: https://www.ebi.ac.uk/ols4/swagger-ui/index.html
     Returns the formatted dictionary {name: ####, url: ####} if an url was given or {name: ####}
@@ -32,8 +32,7 @@ def query_ols(iri):
         lookup = {
             "name": request["_embedded"]["terms"][0]["label"],
             "url": iri,
-            "inDefinedTermSet": request["embedded"]["terms"][0]["ontology_prefix"],
-            "alternativeNames": request["_embedded"]["terms"][0]["annotation"]["alternative label"],
+            "inDefinedTermSet": request["_embedded"]["terms"][0]["ontology_prefix"],
             "curatedBy": {
                 "name": "Data Discovery Engine",
                 "url": "https://discovery.biothings.io/",
@@ -41,10 +40,15 @@ def query_ols(iri):
             },
             "isCurated": True,
         }
-        # return {"name": request["_embedded"]["terms"][0]["label"], "url": iri}
+        if alternate_name:= request["_embedded"]["terms"][0]["annotation"].get("alternative label"):
+            lookup["alternateName"] = alternate_name
+        elif alternate_name:= request["_embedded"]["terms"][0].get("synonyms"):
+            lookup["alternateName"] = alternate_name
+        else:
+            logger.info(f"Does not have an alternateName: {iri}")
+
         return lookup, True
     else:
-        # return {"name": iri}
         return iri, False
 
 
