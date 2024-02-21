@@ -28,8 +28,21 @@ def query_ols(iri):
         request = requests.get(url, params).json()
         # no documentation on how many requests can be made
         time.sleep(0.5)
+
+        lookup = {
+            "name": request["_embedded"]["terms"][0]["label"],
+            "url": iri,
+            "inDefinedTermSet": request["embedded"]["terms"][0]["ontology_prefix"],
+            "alternativeNames": request["_embedded"]["terms"][0]["annotation"]["alternative label"],
+            "curatedBy": {
+                "name": "Data Discovery Engine",
+                "url": "https://discovery.biothings.io/",
+                "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
+            },
+            "isCurated": True,
+        }
         # return {"name": request["_embedded"]["terms"][0]["label"], "url": iri}
-        return request["_embedded"]["terms"][0]["label"], True
+        return lookup, True
     else:
         # return {"name": iri}
         return iri, False
@@ -40,11 +53,23 @@ def format_query_ols(iri):
     Formats the query_ols return value to fit our schema for measurementTechnique, infectiousAgent, infectiousDisease, and species
     Returns the formatted dictionary {name: ####, url: ####} if an url was given or {name: ####}
     """
-    name, is_url = query_ols(iri)
+    info, is_url = query_ols(iri)
     if is_url:
-        return {"name": name, "url": iri}
+        return info
     else:
-        return {"name": name}
+        return {"name": info}
+
+
+def format_query_vm(iri):
+    """
+    Formats the query_ols return value to fit our schema for variableMeasured
+    Returns the formatted keyword
+    """
+    info, is_url = query_ols(iri)
+    if is_url:
+        return info["name"]
+    else:
+        return info
 
 
 def parse():
@@ -196,13 +221,14 @@ def parse():
                 else:
                     hit["species"] = format_query_ols(species)
 
+            # TODO update variableMeasured when we have update pubtator helper
             if vms := hit.pop("variableMeasured", None):
                 if type(vms) is list:
                     hit["variableMeasured"] = []
                     for vm in vms:
-                        hit["variableMeasured"].append(query_ols(vm)[0])
+                        hit["variableMeasured"].append(format_query_vm(vm))
                 else:
-                    hit["variableMeasured"] = query_ols(vms)[0]
+                    hit["variableMeasured"] = format_query_vm(vms)
 
             # fix temporalCoverage
             if temporalCoverage := hit.pop("temporalCoverage", None):
