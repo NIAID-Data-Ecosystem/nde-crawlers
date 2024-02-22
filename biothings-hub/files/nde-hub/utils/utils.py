@@ -5,13 +5,7 @@ import traceback
 from typing import Dict, Generator, Iterable
 
 from config import logger
-from scores import (
-    MAPPING_SCORES,
-    RECOMMENDED_AUGMENTED_FIELDS,
-    RECOMMENDED_FIELDS,
-    REQUIRED_AUGMENTED_FIELDS,
-    REQUIRED_FIELDS,
-)
+from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -51,7 +45,7 @@ def check_schema(doc: Dict) -> Dict:
 
     assert isinstance(doc, dict), "doc is not a dict"
     assert doc.get("_id"), "_id is None"
-    assert False if " " or ":" in doc.get("_id") else True, "_id contains space or colon"
+    assert False if (" " or ":") in doc.get("_id") else True, "_id contains space or colon"
     assert doc.get("@type"), "@type is None"
     assert doc.get("includedInDataCatalog"), "includedInDataCatalog is None"
     assert doc.get("version", None) is None, "Remove version field"
