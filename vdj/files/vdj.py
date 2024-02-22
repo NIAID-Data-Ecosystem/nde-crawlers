@@ -88,7 +88,7 @@ def parse():
         }
         if study_info := study.get("study"):
             if study_id := study_info.get("study_id"):
-                output["_id"] = f"VDJ_{study_id}"
+                output["_id"] = f"VDJ_{study_id}".replace(":", "_").replace(" ", "_")
 
             if study_title := study_info.get("study_title"):
                 output["name"] = study_title

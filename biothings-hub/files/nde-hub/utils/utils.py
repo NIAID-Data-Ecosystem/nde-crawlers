@@ -5,7 +5,13 @@ import traceback
 from typing import Dict, Generator, Iterable
 
 from config import logger
-from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
+from scores import (
+    MAPPING_SCORES,
+    RECOMMENDED_AUGMENTED_FIELDS,
+    RECOMMENDED_FIELDS,
+    REQUIRED_AUGMENTED_FIELDS,
+    REQUIRED_FIELDS,
+)
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -45,6 +51,7 @@ def check_schema(doc: Dict) -> Dict:
 
     assert isinstance(doc, dict), "doc is not a dict"
     assert doc.get("_id"), "_id is None"
+    assert False if " " or ":" in doc.get("_id") else True, "_id contains space or colon"
     assert doc.get("@type"), "@type is None"
     assert doc.get("includedInDataCatalog"), "includedInDataCatalog is None"
     assert doc.get("version", None) is None, "Remove version field"
@@ -156,15 +163,15 @@ def add_metadata_score(document: Dict) -> Dict:
     local_recommended_fields = list(RECOMMENDED_FIELDS)
 
     # Handle ResourceCatalog types separately to add additional required and recommended fields
-    includedInDataCatalog = document.get('includedInDataCatalog')
+    includedInDataCatalog = document.get("includedInDataCatalog")
     if includedInDataCatalog:
         if isinstance(includedInDataCatalog, list):
             for catalog in includedInDataCatalog:
-                if catalog.get('@type') == 'ResourceCatalog':
+                if catalog.get("@type") == "ResourceCatalog":
                     local_required_fields.append("collectionType")
                     local_recommended_fields.extend(["collectionSize", "hasAPI", "hasDownload"])
                     break
-        elif includedInDataCatalog.get('@type') == 'ResourceCatalog':
+        elif includedInDataCatalog.get("@type") == "ResourceCatalog":
             local_required_fields.append("collectionType")
             local_recommended_fields.extend(["collectionSize", "hasAPI", "hasDownload"])
 
@@ -198,12 +205,12 @@ def add_metadata_score(document: Dict) -> Dict:
             "recommended_score_ratio": round(recommended_score / total_recommended, 2) if total_recommended > 0 else 0,
             "recommended_max_score": total_recommended,
             "weighted_score": weighted_score,
-            "augmented_required_ratio": round(len(required_augmented_fields) / total_required, 2)
-            if total_required > 0
-            else 0,
-            "augmented_recommended_ratio": round(len(recommended_augmented_fields) / total_recommended, 2)
-            if total_recommended > 0
-            else 0,
+            "augmented_required_ratio": (
+                round(len(required_augmented_fields) / total_required, 2) if total_required > 0 else 0
+            ),
+            "augmented_recommended_ratio": (
+                round(len(recommended_augmented_fields) / total_recommended, 2) if total_recommended > 0 else 0
+            ),
             "total_required_augmented": total_required_augmented,
             "total_recommended_augmented": total_recommended_augmented,
         },
