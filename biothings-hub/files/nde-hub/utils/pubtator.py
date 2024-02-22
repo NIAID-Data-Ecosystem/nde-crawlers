@@ -579,6 +579,9 @@ def transform(doc_list):
                 if original_obj.get("fromPMID"):
                     new_section_list.append(original_obj)
                     logger.info(f"Found {original_obj['name']} from PMID")
+                elif "curatedBy" in original_obj:
+                    logger.info(f"Preserving curated item: {original_obj['name']}")
+                    new_section_list.append(original_obj)
                 elif original_name := original_obj.get("name"):
                     new_obj = lookup_fn(original_name, cursor)
                     if new_obj:
@@ -593,6 +596,9 @@ def transform(doc_list):
             if section.get("fromPMID"):
                 new_section_list.append(section)
                 logger.info(f"Found {section['name']} from PMID")
+            elif section.get("isCurated"):
+                logger.info(f"Preserving curated item: {original_name}")
+                new_section_list.append(section)
             elif new_obj:
                 logger.info(f"Found {original_name} in database")
                 new_section_list.append(new_obj)
