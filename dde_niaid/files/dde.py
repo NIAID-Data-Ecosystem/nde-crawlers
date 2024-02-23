@@ -65,9 +65,9 @@ def format_query_ols(iri):
         return {"name": info}
 
 
-def format_query_vm(iri):
+def format_query_ky(iri):
     """
-    Formats the query_ols return value to fit our schema for variableMeasured
+    Formats the query_ols return value to fit our schema for variableMeasured and keywords
     Returns the formatted keyword
     """
     info, is_url = query_ols(iri)
@@ -231,9 +231,17 @@ def parse():
                 if type(vms) is list:
                     hit["variableMeasured"] = []
                     for vm in vms:
-                        hit["variableMeasured"].append(format_query_vm(vm))
+                        hit["variableMeasured"].append(format_query_ky(vm))
                 else:
-                    hit["variableMeasured"] = format_query_vm(vms)
+                    hit["variableMeasured"] = format_query_ky(vms)
+
+            if keywords := hit.pop("keywords", None):
+                if type(keywords) is list:
+                    hit["keywords"] = []
+                    for keyword in keywords:
+                        hit["keywords"].append(format_query_ky(keyword))
+                else:
+                    hit["keywords"] = format_query_ky(keywords)
 
             # fix temporalCoverage
             if temporalCoverage := hit.pop("temporalCoverage", None):
