@@ -10,11 +10,12 @@ from utils.pubtator import get_species_details, query_condition
 
 curated_by = {
     "curatedBy": {
-                "name": "Data Discovery Engine",
-                "url": "https://discovery.biothings.io/",
-                "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
-            }
-        }
+        "name": "Data Discovery Engine",
+        "url": "https://discovery.biothings.io/",
+        "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
+    }
+}
+
 
 def process_csv_data(csv_content):
     # Prepare the CSV data for reading
@@ -51,6 +52,7 @@ def species_func(species, term_set):
         species.update(curated_by)
     return species
 
+
 def health_condition_func(health_condition, term_set):
     term_sets = ["MeSH", "DOID", "NCIT", "MONDO"]
     if term_set in term_sets:
@@ -61,7 +63,6 @@ def health_condition_func(health_condition, term_set):
     else:
         health_condition["inDefinedTermSet"] = "Other"
     return health_condition
-
 
 
 def get_term_set_helper(url, property_dict):
@@ -76,7 +77,7 @@ def de_duplicate_dicts(dict_list):
     unique_dicts = []
     seen = set()
     for d in dict_list:
-        identifier = d.get('identifier')
+        identifier = d.get("identifier")
         if identifier:
             if identifier not in seen:
                 seen.add(identifier)
@@ -84,6 +85,7 @@ def de_duplicate_dicts(dict_list):
         else:
             unique_dicts.append(d)
     return unique_dicts
+
 
 def get_in_defined_term_set(doc, properties_dict):
     nde_properties = {
@@ -94,10 +96,7 @@ def get_in_defined_term_set(doc, properties_dict):
     }
 
     # To handle species and infectiousAgent deliniation
-    temp_results = {
-        "species": [],
-        "infectiousAgent": []
-    }
+    temp_results = {"species": [], "infectiousAgent": []}
     for nde_property, func in nde_properties.items():
         if doc_property := doc.get(nde_property):
             if isinstance(doc_property, list):
@@ -124,7 +123,6 @@ def get_in_defined_term_set(doc, properties_dict):
                         if nde_property in ["species", "infectiousAgent"]:
                             temp_results[nde_property].append(item)
 
-
             else:
                 # if we find a url DDE gets curation
                 if url := doc_property.get("url"):
@@ -146,8 +144,6 @@ def get_in_defined_term_set(doc, properties_dict):
                     # if there is no url then keep as is for pubtator to curate
                     if nde_property in ["species", "infectiousAgent"]:
                         temp_results[nde_property].append(item)
-
-
 
     # Update doc with species and infectiousAgent results
     for key, value in temp_results.items():
@@ -182,6 +178,7 @@ def handle_dde_docs(data_folder):
 
     return docs
 
+
 # def get_in_defined_term_set_wrapper(func):
 #     @functools.wraps(func)
 #     def wrapper(*args, **kwargs):
@@ -195,4 +192,4 @@ def handle_dde_docs(data_folder):
 #             get_in_defined_term_set(doc, properties)
 #             yield doc
 
-    # return wrapper
+# return wrapper
