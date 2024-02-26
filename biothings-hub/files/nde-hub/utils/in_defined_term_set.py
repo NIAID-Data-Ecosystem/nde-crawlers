@@ -1,78 +1,20 @@
-# # what dde gives us https://www.ebi.ac.uk/ols/api/terms?iri=https://www.ontobee.org/ontology/NCBITaxon?iri=http://purl.obolibrary.org/obo/NCBITaxon_9554
-# def get_uniprot_details(url):
-#     logger.info(f"Getting details for {url}")
-#     # get id from url
-
-#     # Fetch details from the UniProt API
-#     identifier = identifier.split("*")[-1]
-#     # try:
-#     species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
-#     species_info.raise_for_status()
-#     species_info = species_info.json()
-#     standard_dict = {
-#         "identifier": identifier,
-#         "inDefinedTermSet": "UniProt",
-#         "url": f"https://www.uniprot.org/taxonomy/{identifier}",
-#         "originalName": original_name,
-#         "isCurated": True,
-#         "curatedBy": {
-#             "name": "PubTator",
-#             "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
-#             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
-#         },
-#     }
-#     if scientific_name := species_info.get("scientificName"):
-#         standard_dict["name"] = scientific_name
-#     else:
-#         standard_dict["name"] = original_name
-
-#     alternative_names = []
-#     if common_name := species_info.get("commonName"):
-#         standard_dict["commonName"] = common_name
-#         alternative_names.append(common_name)
-
-#         standard_dict["displayName"] = f"{common_name} | {scientific_name}"
-
-#     if other_names := species_info.get("otherNames"):
-#         alternative_names.extend(other_names)
-
-#     if alternative_names:
-#         standard_dict["alternateName"] = alternative_names
-
-#     if lineage := species_info.get("lineage"):
-#         standard_dict["classification"] = classify_as_host_or_agent(lineage)
-#     else:
-#         logger.warning(f"No lineage found for {identifier}")
-
-#     return standard_dict
-
-# {
-#     "species": {
-#         "http://purl.obolibrary.org/obo/NCBITaxon_": "UniProt"
-#     },
-#     "infectiousAgent": {
-#         "http://purl.obolibrary.org/obo/NCBITaxon_": "UniProt"
-#     },
-
-# }
-
-# import requests
-# from biothings.utils.dataload import tab2dict
-
-# https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/edit#gid=0
-
-
-# result = requests.get("https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv")
-
 import csv
+import datetime
+import logging
+import os
 from io import StringIO
 
+import orjson
 import requests
+from utils.pubtator import get_species_details, query_condition
 
-response = requests.get(
-    "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
-).text
-
+curated_by = {
+    "curatedBy": {
+                "name": "Data Discovery Engine",
+                "url": "https://discovery.biothings.io/",
+                "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
+            }
+        }
 
 def process_csv_data(csv_content):
     # Prepare the CSV data for reading
@@ -104,7 +46,22 @@ def process_csv_data(csv_content):
 
 def species_func(species, term_set):
     if term_set == "UniProt":
-        species["name"] = "WE GOT THIS WORKING"
+        identifer = species.get("url").split("_")[-1]
+        species.update(get_species_details(species.get("name"), identifer))
+        species.update(curated_by)
+    return species
+
+def health_condition_func(health_condition, term_set):
+    term_sets = ["MeSH", "DOID", "NCIT", "MONDO"]
+    if term_set in term_sets:
+        result = query_condition(health_condition.get("name"))
+        if result:
+            health_condition.update(result)
+            health_condition.update(curated_by)
+    else:
+        health_condition["inDefinedTermSet"] = "Other"
+    return health_condition
+
 
 
 def get_term_set_helper(url, property_dict):
@@ -115,31 +72,127 @@ def get_term_set_helper(url, property_dict):
         return None
 
 
-def get_in_defined_term_set(doc, properties_dict):
-    # http://purl.obolibrary.org/obo/NCBITaxon_9554
-    # https://www.geeksforgeeks.org/python-store-function-as-dictionary-value/
-    # nde_properties = {
-    #     "species": species_func,
-    #     "infectiousAgent": infectious_agent_func,
-    #     "healthCondition": health_condition_func,
-    #     "measurementTechnique": measurement_technique_func,
-    #     "variableMeasured": variable_measured_func,
-    #     "keywords": keywords_func,
-    #     "topicCategory": topic_category_func,
-    # }
+def de_duplicate_dicts(dict_list):
+    unique_dicts = []
+    seen = set()
+    for d in dict_list:
+        identifier = d.get('identifier')
+        if identifier:
+            if identifier not in seen:
+                seen.add(identifier)
+                unique_dicts.append(d)
+        else:
+            unique_dicts.append(d)
+    return unique_dicts
 
+def get_in_defined_term_set(doc, properties_dict):
     nde_properties = {
         "species": species_func,
+        "infectiousAgent": species_func,
+        "healthCondition": health_condition_func,
+        # TODO add other properties
     }
 
+    # To handle species and infectiousAgent deliniation
+    temp_results = {
+        "species": [],
+        "infectiousAgent": []
+    }
     for nde_property, func in nde_properties.items():
         if doc_property := doc.get(nde_property):
             if isinstance(doc_property, list):
                 for item in doc_property:
+                    # if we find a url DDE gets curation
                     if url := item.get("url"):
                         if term_set := get_term_set_helper(url, properties_dict[nde_property]):
-                            func(item, term_set)
+                            result = func(item, term_set)
+
+                            # Store only species and infectiousAgent results temporarily
+                            if nde_property in ["species", "infectiousAgent"]:
+                                classification = result.get("classification")
+                                if classification == "infectiousAgent":
+                                    temp_results["infectiousAgent"].append(result)
+                                else:
+                                    temp_results["species"].append(result)
+
+                            else:
+                                # Update doc directly for other properties
+                                index = doc_property.index(item)
+                                doc_property[index] = result
+                    else:
+                        # if there is no url then keep as is for pubtator to curate
+                        if nde_property in ["species", "infectiousAgent"]:
+                            temp_results[nde_property].append(item)
+
+
             else:
+                # if we find a url DDE gets curation
                 if url := doc_property.get("url"):
                     if term_set := get_term_set_helper(url, properties_dict[nde_property]):
-                        func(doc_property, term_set)
+                        result = func(doc_property, term_set)
+
+                        # Store only species and infectiousAgent results temporarily
+                        if nde_property in ["species", "infectiousAgent"]:
+                            classification = result.get("classification")
+                            if classification == "infectiousAgent":
+                                temp_results["infectiousAgent"].append(result)
+                            else:
+                                temp_results["species"].append(result)
+
+                        else:
+                            # Update doc directly for other properties
+                            doc[nde_property] = result
+                else:
+                    # if there is no url then keep as is for pubtator to curate
+                    if nde_property in ["species", "infectiousAgent"]:
+                        temp_results[nde_property].append(item)
+
+
+
+    # Update doc with species and infectiousAgent results
+    for key, value in temp_results.items():
+        if value:
+            de_duped = de_duplicate_dicts(value)
+            doc[key] = de_duped
+
+    return doc
+
+
+def handle_dde_docs(data_folder):
+    csv_url = "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
+    response = requests.get(csv_url).text
+
+    properties = process_csv_data(response)
+
+    docs = []
+    if isinstance(data_folder, str):
+        # Read data from the file and process it
+        logging.info("Reading data from file...")
+        with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
+            count = 0
+            for line in f:
+                count += 1
+                if count % 1000 == 0:
+                    logging.info(f"Processed {count} lines")
+                doc = orjson.loads(line)
+                docs.append(doc)
+
+    for doc in docs:
+        get_in_defined_term_set(doc, properties)
+
+    return docs
+
+# def get_in_defined_term_set_wrapper(func):
+#     @functools.wraps(func)
+#     def wrapper(*args, **kwargs):
+#         csv_url = "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
+#         response = requests.get(csv_url).text
+
+#         properties = process_csv_data(response)
+
+#         gen = func(*args, **kwargs)
+#         for doc in gen:
+#             get_in_defined_term_set(doc, properties)
+#             yield doc
+
+    # return wrapper
