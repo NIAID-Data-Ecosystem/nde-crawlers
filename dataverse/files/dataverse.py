@@ -167,14 +167,14 @@ class Dataverse(NDEDatabase):
 
         # Initial memory usage log
         log_memory_usage()
-        
+
         # Adjust the start parameter to skip the desired number of records
         initial_page_start = 0
         records_processed = 0
         handle_url_ct=0
         datasets_gathered_ct=0
         schemas_gathered_ct=0
-        
+
         query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
 
         # Iterate through the paginated data starting from the adjusted initial position
@@ -209,7 +209,11 @@ class Dataverse(NDEDatabase):
                         yield (data_dict["@id"],  schema_record)
                         schemas_gathered_ct += 1
 
-            # Optionally, log memory usage periodically, e.g., every 100 records
+            if datasets_gathered_ct % 1000 == 0:
+                logger.info(f"Processed {datasets_gathered_ct} datasets, going to sleep for {sleep_time} seconds to manage load...")
+                time.sleep(5)  # Sleep for 5 seconds every 1000 datasets
+
+            # Optional - log memory usage periodically, e.g., every 100 records
             if records_processed % 100 == 0:
                 log_memory_usage()
 
