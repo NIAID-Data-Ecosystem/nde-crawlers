@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 import psutil
 
 import requests
-from sql_database import NDEDatabase
+# from sql_database import NDEDatabase
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -18,7 +18,7 @@ BASE_DELAY = 2  # 2 seconds
 MAX_DELAY = 120  # 2 minutes
 
 
-class Dataverse(NDEDatabase):
+class Dataverse():#NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
     NO_CACHE = True
@@ -73,7 +73,7 @@ class Dataverse(NDEDatabase):
                 backoff_time = min(MAX_DELAY, backoff_time * 2)  # double the wait time, but cap at MAX_DELAY
 
     def run_dataverse_schema_export(self, gid, url, verbose=False):
-        dv_schema_export = f"{EXPORT_URL}&persistentId={gid}"
+        dv_schema_export = f"{self.EXPORT_URL}&persistentId={gid}"
         logger.info(f"Running export using dataverse api - {dv_schema_export}")
 
         retries = 0
@@ -149,7 +149,7 @@ class Dataverse(NDEDatabase):
                 pass
 
     def handle_net_case(self, data_url):
-        schema_record = scrape_schema_representation(data_url)
+        schema_record = extract_schema_json(data_url)
         if schema_record:
             data_dict = json.loads(schema_record)
             return (data_dict["@id"], schema_record)
@@ -159,7 +159,7 @@ class Dataverse(NDEDatabase):
     def log_memory_usage(self):
         process = psutil.Process()
         memory_use = process.memory_info().rss / (1024 * 1024)  # Convert bytes to MB
-        logging.info(f"Cursrent memory usage: {memory_use:.2f} MB")
+        logging.info(f"Current memory usage: {memory_use:.2f} MB")
 
 
     def load_cache(self):
@@ -169,10 +169,11 @@ class Dataverse(NDEDatabase):
         self.log_memory_usage()
 
         # Adjust the start parameter to skip the desired number of records
-        initial_page_start = 0
+        initial_page_start = 92333
         records_processed = 0
         handle_url_ct=0
         schemas_gathered_ct=0
+        sleep_time = 5 #seconds
 
         query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
 
@@ -187,7 +188,7 @@ class Dataverse(NDEDatabase):
                         yield (record_id, schema_record)
                         schemas_gathered_ct += 1
                 else:
-                    schema_record =  self.run_schema_export(global_id, data_url)
+                    schema_record =  self.run_dataverse_schema_export(global_id, data_url)
                     if schema_record:
                         logger.info(f"schema export passed on {data_url}")
                         yield (schema_record["@id"], json.dumps(schema_record))
@@ -209,8 +210,8 @@ class Dataverse(NDEDatabase):
                         schemas_gathered_ct += 1
 
             if records_processed % 1000 == 0:
-                logger.info(f"Processed {datasets_gathered_ct} datasets, going to sleep for {sleep_time} seconds to manage load...")
-                time.sleep(5)  # Sleep for 5 seconds every 1000 datasets
+                logger.info(f"Processed {records_processed} datasets, going to sleep for {sleep_time} seconds to manage load...")
+                time.sleep(sleep_time)  # Sleep for 5 seconds every 1000 datasets
 
             # Optional - log memory usage periodically, e.g., every 100 records
             if records_processed % 100 == 0:
@@ -218,7 +219,7 @@ class Dataverse(NDEDatabase):
 
         # Final memory usage log
         self.log_memory_usage()
-        logger.info{f"Processed {records_processed} datasets and {schemas_gathered_ct} schemas."}
+        logger.info(f"Processed {records_processed} datasets and {schemas_gathered_ct} schemas.")
 
     def parse(self, records):
         start_time = time.process_time()
