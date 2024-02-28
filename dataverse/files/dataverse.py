@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 import psutil
 
 import requests
-# from sql_database import NDEDatabase
+from sql_database import NDEDatabase
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -18,7 +18,7 @@ BASE_DELAY = 2  # 2 seconds
 MAX_DELAY = 120  # 2 minutes
 
 
-class Dataverse():#NDEDatabase):
+class Dataverse(NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
     NO_CACHE = True
@@ -85,7 +85,7 @@ class Dataverse():#NDEDatabase):
                 res = req.json()
                 # odd case of a response with a status of ERROR
                 if res.get("status") and res.get("status") == "ERROR":
-                    document = extract_schema_json(url)
+                    document = self.extract_schema_json(url)
                     if document:
                         logger.info(f"successfully scrapped document, {url}")
                         return document
@@ -149,7 +149,7 @@ class Dataverse():#NDEDatabase):
                 pass
 
     def handle_net_case(self, data_url):
-        schema_record = extract_schema_json(data_url)
+        schema_record = self.extract_schema_json(data_url)
         if schema_record:
             data_dict = json.loads(schema_record)
             return (data_dict["@id"], schema_record)
@@ -169,7 +169,7 @@ class Dataverse():#NDEDatabase):
         self.log_memory_usage()
 
         # Adjust the start parameter to skip the desired number of records
-        initial_page_start = 92333
+        initial_page_start = 0
         records_processed = 0
         handle_url_ct=0
         schemas_gathered_ct=0
@@ -178,7 +178,7 @@ class Dataverse():#NDEDatabase):
         query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
 
         # Iterate through the paginated data starting from the adjusted initial position
-        for global_id, data_url, page_data in self.compile_paginated_data(query_endpoint, per_page=1000, start=initial_page_start):
+        for global_id, data_url in self.compile_paginated_data(query_endpoint, per_page=1000, start=initial_page_start):
             records_processed += 1
             if global_id.startswith("doi:10.7910"):
                 if "https://hdl.handle.net/" in data_url:
@@ -206,8 +206,16 @@ class Dataverse():#NDEDatabase):
                     schema_record = self.extract_schema_json(data_url)
                     if schema_record:
                         data_dict = json.loads(schema_record)
-                        yield (data_dict["@id"],  schema_record)
-                        schemas_gathered_ct += 1
+                        if "@id" in data_dict.keys():
+                            record_id = data_dict["identifier"]
+                            yield (record_id,  schema_record)
+                            schemas_gathered_ct += 1
+                        elif "identifier" in data_dict.keys():
+                            record_id = data_dict["identifier"]
+                            yield (record_id,  schema_record)
+                            schemas_gathered_ct += 1
+                        else:
+                            pass
 
             if records_processed % 1000 == 0:
                 logger.info(f"Processed {records_processed} datasets, going to sleep for {sleep_time} seconds to manage load...")
