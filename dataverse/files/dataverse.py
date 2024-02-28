@@ -166,20 +166,19 @@ class Dataverse(NDEDatabase):
         logger.info("Runing load_cache process....")
 
         # Initial memory usage log
-        log_memory_usage()
+        self.log_memory_usage()
 
         # Adjust the start parameter to skip the desired number of records
         initial_page_start = 0
         records_processed = 0
         handle_url_ct=0
-        datasets_gathered_ct=0
         schemas_gathered_ct=0
 
         query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
 
         # Iterate through the paginated data starting from the adjusted initial position
         for global_id, data_url, page_data in self.compile_paginated_data(query_endpoint, per_page=1000, start=initial_page_start):
-            datasets_gathered_ct += 1
+            records_processed += 1
             if global_id.startswith("doi:10.7910"):
                 if "https://hdl.handle.net/" in data_url:
                     record_id, schema_record = self.handle_net_case(data_url)
@@ -209,17 +208,17 @@ class Dataverse(NDEDatabase):
                         yield (data_dict["@id"],  schema_record)
                         schemas_gathered_ct += 1
 
-            if datasets_gathered_ct % 1000 == 0:
+            if records_processed % 1000 == 0:
                 logger.info(f"Processed {datasets_gathered_ct} datasets, going to sleep for {sleep_time} seconds to manage load...")
                 time.sleep(5)  # Sleep for 5 seconds every 1000 datasets
 
             # Optional - log memory usage periodically, e.g., every 100 records
             if records_processed % 100 == 0:
-                log_memory_usage()
+                self.log_memory_usage()
 
         # Final memory usage log
-        log_memory_usage()
-        logger.info(f"Finished processing {records_processed} records.")
+        self.log_memory_usage()
+        logger.info{f"Processed {records_processed} datasets and {schemas_gathered_ct} schemas."}
 
     def parse(self, records):
         start_time = time.process_time()
