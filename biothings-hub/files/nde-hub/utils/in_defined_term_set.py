@@ -121,7 +121,7 @@ def get_in_defined_term_set(doc, properties_dict):
                     else:
                         # if there is no url then keep as is for pubtator to curate
                         if nde_property in ["species", "infectiousAgent"]:
-                            temp_results[nde_property].append(item)
+                            temp_results[nde_property].append(doc_property)
 
             else:
                 # if we find a url DDE gets curation
