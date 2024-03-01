@@ -154,13 +154,36 @@ def get_in_defined_term_set(doc, properties_dict):
     return doc
 
 
+# def handle_dde_docs(data_folder):
+#     csv_url = "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
+#     response = requests.get(csv_url).text
+
+#     properties = process_csv_data(response)
+
+#     docs = []
+#     if isinstance(data_folder, str):
+#         # Read data from the file and process it
+#         logging.info("Reading data from file...")
+#         with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
+#             count = 0
+#             for line in f:
+#                 count += 1
+#                 if count % 1000 == 0:
+#                     logging.info(f"Processed {count} lines")
+#                 doc = orjson.loads(line)
+#                 docs.append(doc)
+
+#     for doc in docs:
+#         get_in_defined_term_set(doc, properties)
+
+#     return docs
+
+
 def handle_dde_docs(data_folder):
     csv_url = "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
     response = requests.get(csv_url).text
-
     properties = process_csv_data(response)
 
-    docs = []
     if isinstance(data_folder, str):
         # Read data from the file and process it
         logging.info("Reading data from file...")
@@ -171,12 +194,8 @@ def handle_dde_docs(data_folder):
                 if count % 1000 == 0:
                     logging.info(f"Processed {count} lines")
                 doc = orjson.loads(line)
-                docs.append(doc)
-
-    for doc in docs:
-        get_in_defined_term_set(doc, properties)
-
-    return docs
+                get_in_defined_term_set(doc, properties)
+                yield doc
 
 
 # def get_in_defined_term_set_wrapper(func):
