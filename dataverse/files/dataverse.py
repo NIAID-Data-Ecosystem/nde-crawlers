@@ -178,7 +178,7 @@ class Dataverse(NDEDatabase):
         query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
 
         # Iterate through the paginated data starting from the adjusted initial position
-        for global_id, data_url in self.compile_paginated_data(query_endpoint, per_page=1000, start=initial_page_start):
+        for global_id, data_url, data_page in self.compile_paginated_data(query_endpoint, per_page=1000, start=initial_page_start):
             records_processed += 1
             if global_id.startswith("doi:10.7910"):
                 if "https://hdl.handle.net/" in data_url:
