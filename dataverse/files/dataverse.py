@@ -3,8 +3,8 @@ import json
 import logging
 import time
 from html.parser import HTMLParser
-import psutil
 
+import psutil
 import requests
 from sql_database import NDEDatabase
 
@@ -61,7 +61,7 @@ class Dataverse(NDEDatabase):
                 parser = SchemaScraper()
                 parser.feed(req.text)
                 if parser.schema:
-                    return parser.schema
+                    return parser.schema.strip()
                 return False
             except requests.RequestException as requestException:
                 retries += 1
@@ -109,25 +109,26 @@ class Dataverse(NDEDatabase):
     def compile_paginated_data(self, query_endpoint, per_page=1000, start=0):
         logger.info(f"Compiling paginated data from {query_endpoint}")
         continue_paging = True
-        retries = 0
 
         while continue_paging:
             url = f"{query_endpoint}&per_page={per_page}&start={start}"
             logger.info(f"Requesting {url}")
-            try:
-                req = requests.get(url)
-                req.raise_for_status()  # Raise an exception for HTTP errors
-                response = req.json()
-                retries = 0  # Reset the retry counter after a successful request
-            except (requests.RequestException, ValueError) as e:
-                logger.error(f"Error accessing {url}: {str(e)}")
-                retries += 1
-                if retries > MAX_RETRIES:
-                    logger.error(f"Max retries reached for {url}. Skipping.")
-                    return
-                delay = min(BASE_DELAY * (2**retries), MAX_DELAY)
-                logger.info(f"Retrying in {delay} seconds...")
-                time.sleep(delay)
+            retries = 0
+            while retries <= MAX_RETRIES:
+                try:
+                    req = requests.get(url)
+                    req.raise_for_status()  # Raise an exception for HTTP errors
+                    response = req.json()
+                    retries = 0  # Reset the retry counter after a successful request
+                except (requests.RequestException, ValueError) as e:
+                    logger.error(f"Error accessing {url}: {str(e)}")
+                    retries += 1
+                    if retries > MAX_RETRIES:
+                        logger.error(f"Max retries reached for {url}. Skipping.")
+                        return
+                    delay = min(BASE_DELAY * (2**retries), MAX_DELAY)
+                    logger.info(f"Retrying in {delay} seconds...")
+                    time.sleep(delay)
             if response:
                 try:
                     total = response.get("data").get("total_count")
@@ -189,7 +190,7 @@ class Dataverse(NDEDatabase):
                         schemas_gathered_ct += 1
                 else:
                     schema_record =  self.run_dataverse_schema_export(global_id, data_url)
-                    if schema_record:
+                    if schema_record and isinstance(schema_record, dict) and schema_record.get("@id"):
                         logger.info(f"schema export passed on {data_url}")
                         yield (schema_record["@id"], json.dumps(schema_record))
                         schemas_gathered_ct += 1
@@ -198,13 +199,17 @@ class Dataverse(NDEDatabase):
                 if "https://hdl.handle.net/1902.4" in data_url:
                     pass
                 elif "https://hdl.handle.net/" in data_url:
-                    record_id, schema_record = self.handle_net_case(data_url)
+                    if record := self.handle_net_case(data_url):
+                        record_id, schema_record = record
+                    else:
+                        schema_record = None
                     if schema_record:
                         yield (record_id, schema_record)
                         schemas_gathered_ct += 1
                 else:
                     schema_record = self.extract_schema_json(data_url)
                     if schema_record:
+                        logger.info("This is the schema_record: %s", schema_record[0:70])
                         data_dict = json.loads(schema_record)
                         if "@id" in data_dict.keys():
                             record_id = data_dict["identifier"]
