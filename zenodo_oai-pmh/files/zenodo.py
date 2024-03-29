@@ -326,6 +326,7 @@ class Zenodo(NDEDatabase):
                 .date()
                 .isoformat(),
                 "url": url,
+                "distribution": {"contentUrl": url + "/files-archive"}
             }
 
             if description := data["metadata"].get("description"):

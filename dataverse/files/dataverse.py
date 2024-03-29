@@ -106,21 +106,24 @@ class Dataverse(NDEDatabase):
                 time.sleep(backoff_time)
                 backoff_time = min(MAX_DELAY, backoff_time * 2)  # double the wait time, but cap at MAX_DELAY
 
-    def compile_paginated_data(self, query_endpoint, per_page=1000, start=0):
+    def compile_paginated_data(self, query_endpoint, per_page=400, start=0):
         logger.info(f"Compiling paginated data from {query_endpoint}")
         continue_paging = True
 
         while continue_paging:
-            url = f"{query_endpoint}&per_page={per_page}&start={start}"
-            logger.info(f"Requesting {url}")
+            pager = per_page
+            response = None
             retries = 0
-            while retries <= MAX_RETRIES:
+            while retries <= MAX_RETRIES and not response:
                 try:
+                    url = f"{query_endpoint}&per_page={pager}&start={start}"
+                    logger.info(f"Requesting {url}")
                     req = requests.get(url)
                     req.raise_for_status()  # Raise an exception for HTTP errors
                     response = req.json()
                     retries = 0  # Reset the retry counter after a successful request
                 except (requests.RequestException, ValueError) as e:
+                    pager = pager//2
                     logger.error(f"Error accessing {url}: {str(e)}")
                     retries += 1
                     if retries > MAX_RETRIES:
@@ -134,7 +137,7 @@ class Dataverse(NDEDatabase):
                     total = response.get("data").get("total_count")
                     page_data = response.get("data").get("items")
                     logger.info(f"Retrieved {len(page_data)} items")
-                    start += per_page
+                    start += pager
                     for page in page_data:
                         # dataset pages use "global_id" key
                         if "global_id" in page.keys():
@@ -179,7 +182,7 @@ class Dataverse(NDEDatabase):
         query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
 
         # Iterate through the paginated data starting from the adjusted initial position
-        for global_id, data_url, data_page in self.compile_paginated_data(query_endpoint, per_page=1000, start=initial_page_start):
+        for global_id, data_url, data_page in self.compile_paginated_data(query_endpoint, per_page=400, start=initial_page_start):
             records_processed += 1
             if global_id.startswith("doi:10.7910"):
                 if "https://hdl.handle.net/" in data_url:
@@ -240,9 +243,9 @@ class Dataverse(NDEDatabase):
         logger.info("Starting metadata parser...")
         # rec = ('doi:10.18738/T8/YJMLKO', '{"name": "ChIP-seq peak calls for epigenetic marks in GBM tumors", "type": "dataset", "url": "https://doi.org/10.18738/T8/YJMLKO", "global_id": "doi:10.18738/T8/YJMLKO", "description": "MACS2 narrowPeak files from ChIP-seq experiments for 11 primary GBM tumors, each targeting CTCF transcription factor marks and H3K27Ac, H3K27Me3, H3K4Me1, H3K4Me3, H3K9Ac, and H3K9Me3 histone modifications. See Methods section of doi:10.1158/0008-5472.CAN-17-1724 for more information.", "published_at": "2018-11-05T05:17:42Z", "publisher": "Texas Data Repository Harvested Dataverse", "citationHtml": "Battenhouse, Anna; Hall, Amelia Weber, 2018, \\"ChIP-seq peak calls for epigenetic marks in GBM tumors\\", <a href=\\"https://doi.org/10.18738/T8/YJMLKO\\" target=\\"_blank\\">https://doi.org/10.18738/T8/YJMLKO</a>, Texas Data Repository Dataverse", "identifier_of_dataverse": "tdr_harvested", "name_of_dataverse": "Texas Data Repository Harvested Dataverse", "citation": "Battenhouse, Anna; Hall, Amelia Weber, 2018, \\"ChIP-seq peak calls for epigenetic marks in GBM tumors\\", https://doi.org/10.18738/T8/YJMLKO, Texas Data Repository Dataverse", "storageIdentifier": "s3://10.18738/T8/YJMLKO", "keywords": ["Medicine, Health and Life Sciences", "glioblastoma", "bivalent", "enhancer", "epigenetic", "histone modification"], "subjects": [], "fileCount": 84, "versionId": 146549, "versionState": "RELEASED", "createdAt": "2018-11-05T05:17:42Z", "updatedAt": "2018-11-05T05:17:42Z", "contacts": [{"name": "", "affiliation": ""}], "authors": ["Battenhouse, Anna", "Hall, Amelia Weber"]}')
         # records = [rec]
-        logger.info(f"Starting parsing of {len(records)} records...")
+        # logger.info(f"Starting parsing of {len(records)} records...")
         for record in records:
-            logger.info(f"parsing record {record[0]}")
+            # logger.info(f"parsing record {record[0]}")
             try:
                 dataset = json.loads(record[1])
                 # here is where the exported schema.org data is parsed
