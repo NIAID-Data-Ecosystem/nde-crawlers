@@ -4,9 +4,15 @@ import time
 import traceback
 from typing import Dict, Generator, Iterable
 
+import bson
 from config import logger
-from pymongo import bson
-from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
+from scores import (
+    MAPPING_SCORES,
+    RECOMMENDED_AUGMENTED_FIELDS,
+    RECOMMENDED_FIELDS,
+    REQUIRED_AUGMENTED_FIELDS,
+    REQUIRED_FIELDS,
+)
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -234,6 +240,5 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
                 # Handle oversized document: log, skip, or process differently
                 # For example, log a warning and skip this document
                 logger.warning("Document %s exceeds MongoDB's size limit: %s bytes", doc["_id"], bson_size)
-
 
     return wrapper
