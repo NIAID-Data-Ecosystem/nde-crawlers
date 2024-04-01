@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nde-logger")
 
-MAX_RETRIES = 5
+MAX_RETRIES = 10
 BASE_DELAY = 2  # 2 seconds
 MAX_DELAY = 120  # 2 minutes
 
@@ -114,6 +114,7 @@ class Dataverse(NDEDatabase):
             pager = per_page
             response = None
             retries = 0
+            backoff_time = BASE_DELAY
             while retries <= MAX_RETRIES and not response:
                 try:
                     url = f"{query_endpoint}&per_page={pager}&start={start}"
@@ -123,15 +124,15 @@ class Dataverse(NDEDatabase):
                     response = req.json()
                     retries = 0  # Reset the retry counter after a successful request
                 except (requests.RequestException, ValueError) as e:
-                    pager = pager//2
+                    pager = max(1, pager//2)
                     logger.error(f"Error accessing {url}: {str(e)}")
                     retries += 1
                     if retries > MAX_RETRIES:
                         logger.error(f"Max retries reached for {url}. Skipping.")
                         return
-                    delay = min(BASE_DELAY * (2**retries), MAX_DELAY)
-                    logger.info(f"Retrying in {delay} seconds...")
-                    time.sleep(delay)
+                    logger.info(f"Retrying in {backoff_time} seconds...")
+                    time.sleep(backoff_time)
+                    backoff_time = min(MAX_DELAY, backoff_time * 2)  # double the wait time, but cap at MAX_DELAY
             if response:
                 try:
                     total = response.get("data").get("total_count")
@@ -212,7 +213,6 @@ class Dataverse(NDEDatabase):
                 else:
                     schema_record = self.extract_schema_json(data_url)
                     if schema_record:
-                        logger.info("This is the schema_record: %s", schema_record[0:70])
                         data_dict = json.loads(schema_record)
                         if "@id" in data_dict.keys():
                             record_id = data_dict["identifier"]
@@ -445,7 +445,7 @@ class Dataverse(NDEDatabase):
                     parse_ct += 1
 
             except Exception as error:
-                logger.info(f"skipping with error - {error}, record id - {record[0]} \n{record}")
+                logger.info(f"skipping with error - {error}, record id - {record[0]}")
 
         process_time = time.process_time() - start_time
         logger.info(f"Completed parsing individual metadata, {parse_ct} records parsed in {process_time:.2f} seconds")
