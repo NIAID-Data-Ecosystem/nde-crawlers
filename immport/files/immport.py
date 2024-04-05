@@ -105,7 +105,7 @@ def map_schema_json(schema_json):
     return schema_json
 
 
-def map_details_json(details_json, existing_health_conditions, existing_measurement_technique):
+def map_details_json(details_json, existing_health_conditions):
     details_dict = {}
     if detailed_description := details_json.get("detailedDescription"):
         details_dict["description"] = detailed_description
@@ -118,14 +118,13 @@ def map_details_json(details_json, existing_health_conditions, existing_measurem
                 health_conditions.extend(existing_health_conditions)
             health_conditions = list({v["name"]: v for v in health_conditions}.values())
             details_dict["healthCondition"] = health_conditions
+    keywords = []
     if program := details_json.get("program"):
-        details_dict["keywords"] = [program]
+        keywords.append(program)
     if endpoints := details_json.get("endpoints"):
-        if existing_measurement_technique:
-            existing_measurement_technique.update({"description": endpoints})
-            details_dict["measurementTechnique"] = existing_measurement_technique
-        else:
-            details_dict["measurementTechnique"] = {"name": endpoints}
+        keywords.append(endpoints)
+    if keywords:
+        details_dict["keywords"] = keywords
     return details_dict
 
 
@@ -169,7 +168,6 @@ def parse():
             schema_json = requests.get(schema_url, timeout=5).json()
             schema_json = map_schema_json(schema_json)
             existing_health_conditions = schema_json.get("healthCondition", None)
-            existing_measurement_technique = schema_json.get("measurementTechnique", None)
 
         except requests.exceptions.Timeout:
             # catch the rather harmless exception, and do nothing
@@ -178,7 +176,7 @@ def parse():
         details_url = f"https://www.immport.org/shared/data/query/ui/study/summary/{immport_id}"
         try:
             details_json = requests.get(details_url, timeout=5).json()
-            details_json = map_details_json(details_json, existing_health_conditions, existing_measurement_technique)
+            details_json = map_details_json(details_json, existing_health_conditions)
         except requests.exceptions.Timeout:
             # catch the rather harmless exception, and do nothing
             logger.info(f"Timeout searching ImmPort ID details_url: {immport_id}")
