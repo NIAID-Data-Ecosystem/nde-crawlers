@@ -94,8 +94,13 @@ class NCBIGeoSpider(scrapy.Spider):
             # remove place holder lines
             elif len(node.xpath("./td")) == 2:
                 if node.xpath("string(./td[1])").get().strip():
+                    # Handle 'Experiment type' specifically (measurementTechnique)
+                    if node.xpath("string(./td[1])").get().strip() == "Experiment type":
+                        experiment_types = node.xpath("./td[2]//text()").getall()
+                        experiment_types = [etype.strip() for etype in experiment_types if etype.strip()]
+                        data[key] = experiment_types
                     # extract multi item entry
-                    if node.xpath("./td[2]").attrib.get("onmouseout"):
+                    elif node.xpath("./td[2]").attrib.get("onmouseout"):
                         key = node.xpath("./td[1]/text()").get().split()[0]
                         data[key] = node.xpath("./td[2]//a/text()").getall()
                     # extract single item entry
