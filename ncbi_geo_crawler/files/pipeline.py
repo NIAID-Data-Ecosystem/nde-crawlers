@@ -59,7 +59,10 @@ class GeoItemProcessorPipeline:
         if species := item.pop("Organism", None):
             output["species"] = {"name": species}
         if measurement_technique := item.pop("Experiment type", None):
-            output["measurementTechnique"] = {"name": measurement_technique}
+            if isinstance(measurement_technique, list):
+                output["measurementTechnique"] = [{"name": technique} for technique in measurement_technique]
+            else:
+                output["measurementTechnique"] = {"name": measurement_technique}
         description = ""
         if summary := item.pop("Summary", None):
             description += summary
