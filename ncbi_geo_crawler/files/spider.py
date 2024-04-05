@@ -96,6 +96,7 @@ class NCBIGeoSpider(scrapy.Spider):
                 if node.xpath("string(./td[1])").get().strip():
                     # Handle 'Experiment type' specifically (measurementTechnique)
                     if node.xpath("string(./td[1])").get().strip() == "Experiment type":
+                        key = "Experiment type"
                         experiment_types = node.xpath("./td[2]//text()").getall()
                         experiment_types = [etype.strip() for etype in experiment_types if etype.strip()]
                         data[key] = experiment_types
