@@ -29,7 +29,7 @@ SPECIES_CACHE = {}
 DISEASE_CACHE = {}
 
 
-@retry(3, 5)
+@retry(7, 5)
 def get_disease_details(identifier, original_name):
     """
     Retrieves disease details from nih for a given MeSH id.
@@ -81,7 +81,7 @@ def get_disease_details(identifier, original_name):
     return standard_dict
 
 
-@retry(3, 5)
+@retry(7, 5)
 def get_species_from_api(pmids):
     url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=species"
     response = requests.get(url)
@@ -95,7 +95,7 @@ def get_species_from_api(pmids):
     return taxonomy_info
 
 
-@retry(3, 5)
+@retry(7, 5)
 def get_species_details(identifier, original_name):
     """
     Retrieves species details from UniProt for a given species name.
@@ -158,7 +158,7 @@ def get_species_details(identifier, original_name):
     return standard_dict
 
 
-@retry(3, 5)
+@retry(7, 5)
 def get_disease_from_api(pmids):
     url = f"https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/pubtator?pmids={','.join(pmids)}&concepts=disease"
     response = requests.get(url)
@@ -299,8 +299,7 @@ def update_record_species(rec, species_data):
             logger.info(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
 
 
-# retry 3 times sleep 5 seconds between each retry
-@retry(3, 5)
+@retry(7, 5)
 def _convert_pmc(pmc_list, pmc_dict):
     base_url = (
         "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&format=json&"
@@ -372,8 +371,7 @@ def _get_pub_date(date: str):
         return None
 
 
-# retry 3 times sleep 5 seconds between each retry
-@retry(3, 5)
+@retry(7, 5)
 def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
     """Use pmid to retrieve both citation and funding info in batch
     :param pmids: A list of PubMed PMIDs
