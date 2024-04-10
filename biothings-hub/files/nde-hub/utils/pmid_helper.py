@@ -64,8 +64,10 @@ def create_db():
 def stream_and_store(filename, entity_type):
     conn = sqlite3.connect(PMID_DB_PATH)
     cur = conn.cursor()
+    file_path = "/data/nde-hub/standardizers/pmid_lookup/"
+    full_path = os.path.join(file_path, filename)
 
-    with gzip.open(filename, 'rt') as file:
+    with gzip.open(full_path, 'rt') as file:
         reader = csv.reader(file, delimiter='\t')
         for row in reader:
             pmid = row[0]
