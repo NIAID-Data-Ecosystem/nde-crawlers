@@ -189,13 +189,15 @@ def download_file(url, local_filename):
     return local_filename
 
 def file_needs_update(url, local_filename):
+    file_path = "/data/nde-hub/standardizers/pmid_lookup/"
+    full_path = os.path.join(file_path, local_filename)
     response = requests.head(url)
     if response.status_code == 200:
         remote_last_modified = response.headers.get('Last-Modified')
         if remote_last_modified:
             remote_last_modified = datetime.strptime(remote_last_modified, '%a, %d %b %Y %H:%M:%S GMT')
-            if os.path.exists(local_filename):
-                local_last_modified = datetime.utcfromtimestamp(os.path.getmtime(local_filename))
+            if os.path.exists(full_path):
+                local_last_modified = datetime.utcfromtimestamp(os.path.getmtime(full_path))
                 return remote_last_modified > local_last_modified
             else:
                 return True  # File does not exist locally, needs download
