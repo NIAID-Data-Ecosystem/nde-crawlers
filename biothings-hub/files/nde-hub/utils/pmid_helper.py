@@ -130,7 +130,7 @@ def pubtator_add(name, table, standard_dict):
     conn.close()
 
 
-@retry(3, 5)
+@retry(7, 5)
 def get_disease_details(identifier, original_name):
     """
     Retrieves disease details from nih for a given MeSH id.
@@ -394,8 +394,7 @@ def update_record_species(rec, species_data):
             continue
 
 
-# retry 3 times sleep 5 seconds between each retry
-@retry(3, 5)
+@retry(7, 5)
 def _convert_pmc(pmc_list, pmc_dict):
     base_url = (
         "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&format=json&"
@@ -467,8 +466,7 @@ def _get_pub_date(date: str):
         return None
 
 
-# retry 3 times sleep 5 seconds between each retry
-@retry(3, 5)
+@retry(7, 5)
 def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
     """Use pmid to retrieve both citation and funding info in batch
     :param pmids: A list of PubMed PMIDs
