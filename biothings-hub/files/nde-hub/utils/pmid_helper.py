@@ -14,7 +14,7 @@ import os
 import os.path
 import sqlite3
 import time
-from concurrent.futures import ThreadPoolExecutor
+import urllib.error
 from copy import copy
 from datetime import datetime
 from itertools import islice
@@ -488,7 +488,13 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     ct_fd = {}
 
     # api query to parse citations
-    handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
+    try:
+        handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
+    except urllib.error.HTTPError as err:
+        logger.error("This is the length of the pmids %s", len(pmids.split(",")))
+        logger.error("The list of pmids %s", pmids)
+        logger.error("HTTP url: %s", err.url)
+        raise err
 
     records = Medline.parse(handle)
     # This can get an incompleteread error we rerun this at the top layer
