@@ -14,11 +14,11 @@ import os
 import os.path
 import sqlite3
 import time
-from concurrent.futures import ThreadPoolExecutor
+import urllib.error
 from copy import copy
 from datetime import datetime
 from itertools import islice
-from typing import Dict, Iterable, Optional
+from typing import Dict, Optional
 
 import orjson
 import requests
@@ -470,7 +470,7 @@ def _get_pub_date(date: str):
 
 
 @retry(7, 5)
-def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
+def batch_get_pmid_eutils(pmids: str, email: str, api_key: Optional[str] = None) -> Dict:
     """Use pmid to retrieve both citation and funding info in batch
     :param pmids: A list of PubMed PMIDs
     :param api_key: API Key from NCBI to access E-utilities
@@ -488,7 +488,13 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     ct_fd = {}
 
     # api query to parse citations
-    handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
+    try:
+        handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
+    except urllib.error.HTTPError as err:
+        logger.error("This is the length of the pmids %s", len(pmids.split(",")))
+        logger.error("The list of pmids %s", pmids)
+        logger.error("HTTP url: %s", err.url)
+        raise err
 
     records = Medline.parse(handle)
     # This can get an incompleteread error we rerun this at the top layer
@@ -544,14 +550,14 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
                 fund = {}
                 if grant_id := grant.get("GrantID"):
                     fund["identifier"] = grant_id
-                if agency := grant.get("Agency"):
-                    fund_dict = standardize_funder(agency)
-                    if fund_dict:
-                        fund["funder"] = fund_dict
-                    else:
-                        fund["funder"] = {"@type": "Organization", "name": agency}
-                if agency or grant_id:
-                    fund["fromPMID"] = True
+                # if agency := grant.get("Agency"):
+                # fund_dict = standardize_funder(agency)
+                # if fund_dict:
+                #     fund["funder"] = fund_dict
+                # else:
+                #     fund["funder"] = {"@type": "Organization", "name": agency}
+                # if agency or grant_id:
+                #     fund["fromPMID"] = True
                 funding.append(fund)
         if pmid := record["MedlineCitation"].get("PMID"):
             if funding:
@@ -664,12 +670,12 @@ def load_pmid_ctfd(data_folder):
                 if pmids := rec.pop("pmids", None):
                     pmids = [pmid.strip().lstrip("0") for pmid in pmids.split(",")]
                     pmids = list(set(pmids))
-                    species = get_data_for_pmids(pmids, "species")
-                    if species:
-                        update_record_species(rec, species)
-                    diseases = get_data_for_pmids(pmids, "disease")
-                    if diseases:
-                        update_record_disease(rec, diseases)
+                    # species = get_data_for_pmids(pmids, "species")
+                    # if species:
+                    #     update_record_species(rec, species)
+                    # diseases = get_data_for_pmids(pmids, "disease")
+                    # if diseases:
+                    #     update_record_disease(rec, diseases)
                     # Sequential processing for the rest
                     for pmid in pmids:
                         if not eutils_info.get(pmid):

@@ -2,6 +2,7 @@ import datetime
 import functools
 import time
 import traceback
+import urllib.error
 from typing import Dict, Generator, Iterable
 
 import bson
