@@ -450,11 +450,14 @@ def _get_pub_date(date: str):
             return None
     # if length is 3 should be year month day or year month day-day or year month-month day
     elif date_len == 3:
-        return (
-            datetime.strptime(s_date[0] + " " + s_date[1].split("-")[0] + " " + s_date[2].split("-")[0], "%Y %b %d")
-            .date()
-            .isoformat()
-        )
+        year = s_date[0]
+        og_month = s_date[1].split("-")[0]
+        day = s_date[2].split("-")[0]
+        month = next((month for month in months if month in og_month), None)
+        if month:
+            return datetime.strptime(year + " " + month + " " + day, "%Y %b %d").date().isoformat()
+        else:
+            logger.warning("Need to update isoformat transformation: %s", date)
     # exception case there are quite a few entries with this case "2020 Jan - Feb"
     elif date_len == 4:
         if s_date[1] in months and s_date[3] in months and s_date[2] == "-":
