@@ -469,7 +469,7 @@ def _get_pub_date(date: str):
         return None
 
 
-@retry(7, 5)
+@retry(7, 30)
 def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
     """Use pmid to retrieve both citation and funding info in batch
     :param pmids: A list of PubMed PMIDs
