@@ -491,7 +491,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     try:
         handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
     except urllib.error.HTTPError as err:
-        logger.error("This is the length of the pmids %s", len(pmids.split(",")))
+        logger.error("This is the length of the pmids %s", len(pmids))
         logger.error("The list of pmids %s", pmids)
         logger.error("HTTP url: %s", err.url)
         raise err
