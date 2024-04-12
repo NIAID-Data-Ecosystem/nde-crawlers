@@ -497,8 +497,6 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
         raise err
 
     records = Medline.parse(handle)
-    # This can get an incompleteread error we rerun this at the top layer
-    records = list(records)
     for record in records:
         citation = {}
         # rename keys
