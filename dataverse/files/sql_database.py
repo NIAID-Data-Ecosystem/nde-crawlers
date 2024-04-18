@@ -213,7 +213,8 @@ class NDEDatabase:
             # gets new records
             records = self.update_cache()
             # dumps all new records into cache table that has existing data
-            self.dump(records)
+            if records:
+                self.dump(records)
             # retreives all the records from the cache table
             records = self.retreive_cache()
             # pipeline to transform data to put into the ndjson file

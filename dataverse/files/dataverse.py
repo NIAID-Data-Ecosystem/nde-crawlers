@@ -15,13 +15,12 @@ logger = logging.getLogger("nde-logger")
 
 MAX_RETRIES = 10
 BASE_DELAY = 2  # 2 seconds
-MAX_DELAY = 120  # 2 minutes
+MAX_DELAY = 60  # 1 minute
 
 
 class Dataverse(NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
-    NO_CACHE = True
 
     DATAVERSE_SERVER = "https://dataverse.harvard.edu/api"
     EXPORT_URL = f"{DATAVERSE_SERVER}/datasets/export?exporter=schema.org"
@@ -61,7 +60,7 @@ class Dataverse(NDEDatabase):
                 parser = SchemaScraper()
                 parser.feed(req.text)
                 if parser.schema:
-                    return parser.schema.strip()
+                    return parser.schema.strip().replace("\n", "").replace("\r", "").replace("\t", "")
                 return False
             except requests.RequestException as requestException:
                 retries += 1
@@ -346,6 +345,13 @@ class Dataverse(NDEDatabase):
                     if "includedInDataCatalog" in dataset:
                         dataset["includedInDataCatalog"] = dataset["includedInDataCatalog"]
                         dataset["includedInDataCatalog"]["versionDate"] = datetime.datetime.today().strftime("%Y-%m-%d")
+                    else:
+                        dataset["includedInDataCatalog"] = {
+                            "@type": "dataset",
+                            "name": "Harvard Dataverse",
+                            "url": "https://dataverse.harvard.edu/",
+                            "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
+                        }
 
                     dataset.pop("@id")
 
