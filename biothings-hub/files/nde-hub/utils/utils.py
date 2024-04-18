@@ -4,8 +4,15 @@ import time
 import traceback
 from typing import Dict, Generator, Iterable
 
+import bson
 from config import logger
-from scores import MAPPING_SCORES, RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
+from scores import (
+    MAPPING_SCORES,
+    RECOMMENDED_AUGMENTED_FIELDS,
+    RECOMMENDED_FIELDS,
+    REQUIRED_AUGMENTED_FIELDS,
+    REQUIRED_FIELDS,
+)
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -223,8 +230,15 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             # TODO FOR TESTING
             # merge_duplicates(doc)
             add_metadata_score(doc)
-            # This will always be last
+
+            # Checking schema and size will always be last
             check_schema(doc)
-            yield doc
+            bson_size = len(bson.BSON.encode(doc))
+            if bson_size < (16 * 1024 * 1024):  # Check if less than 16 MB
+                yield doc
+            else:
+                # Handle oversized document: log, skip, or process differently
+                # For example, log a warning and skip this document
+                logger.warning("Document %s exceeds MongoDB's size limit: %s bytes", doc["_id"], bson_size)
 
     return wrapper

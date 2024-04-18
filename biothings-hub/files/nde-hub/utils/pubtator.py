@@ -168,7 +168,7 @@ def get_species_details(original_name, identifier):
         alternative_names.extend(other_names)
 
     if alternative_names:
-        standard_dict["alternateName"] = alternative_names
+        standard_dict["alternateName"] = list(set(alternative_names))
 
     if lineage := species_info.get("lineage"):
         standard_dict["classification"] = classify_as_host_or_agent(lineage)
@@ -303,9 +303,9 @@ def create_return_object(hit, alternate_names, original_name):
             sameas = {}
             sameas["identifier"] = xref
             sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
-            sameas_name = get_xref_name(xref_ontology, xref_identifier)
-            if sameas_name:
-                sameas["name"] = sameas_name
+            #sameas_name = get_xref_name(xref_ontology, xref_identifier)
+            #if sameas_name:
+            #    sameas["name"] = sameas_name
             sameas_list.append(sameas)
 
     standard_dict = {
@@ -324,7 +324,7 @@ def create_return_object(hit, alternate_names, original_name):
     if sameas_list:
         standard_dict["sameas"] = sameas_list
     if alternate_names:
-        standard_dict["alternateName"] = alternate_names
+        standard_dict["alternateName"] = list(set(alternate_names))
     return standard_dict
 
 

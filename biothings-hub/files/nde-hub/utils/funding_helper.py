@@ -107,9 +107,12 @@ def standardize_funding(data):
                     for i, funding_dict in enumerate(doc["funding"]):
                         if "identifier" in funding_dict:
                             funding_id = funding_dict["identifier"]
-                            if sqlite_lookup(funding_id):
-                                doc["funding"][i] = sqlite_lookup(funding_id)
+                            cached_funding = sqlite_lookup(funding_id)
+                            if cached_funding:
+                                doc["funding"][i] = cached_funding
                             else:
+                                logger.info(f"not in cache: {funding_id}, skipping...")
+                                continue
                                 try:
                                     new_funding = update_funding(funding_id)
                                 except Exception as e:
@@ -129,9 +132,12 @@ def standardize_funding(data):
 
 
                 elif funding_id := doc.get("funding", {}).get("identifier"):
-                    if sqlite_lookup(funding_id):
-                        doc["funding"] = sqlite_lookup(funding_id)
+                    funding_cache = sqlite_lookup(funding_id)
+                    if funding_cache:
+                        doc["funding"] = funding_cache
                     else:
+                        logger.info(f"not in cache: {funding_id}, skipping...")
+                        continue
                         try:
                             new_funding = update_funding(funding_id)
                         except Exception as e:
@@ -177,9 +183,12 @@ def standardize_funding(data):
                 for i, funding_dict in enumerate(doc["funding"]):
                     if "identifier" in funding_dict:
                         funding_id = funding_dict["identifier"]
-                        if sqlite_lookup(funding_id):
-                            doc["funding"][i] = sqlite_lookup(funding_id)
+                        funding_cache = sqlite_lookup(funding_id)
+                        if funding_cache:
+                            doc["funding"][i] = funding_cache
                         else:
+                            logger.info(f"not in cache: {funding_id}, skipping...")
+                            continue
                             try:
                                 new_funding = update_funding(funding_id)
                             except Exception as e:
@@ -208,9 +217,12 @@ def standardize_funding(data):
                                     continue
 
             elif funding_id := doc.get("funding", {}).get("identifier"):
-                if sqlite_lookup(funding_id):
-                    doc["funding"] = sqlite_lookup(funding_id)
+                funding_cache = sqlite_lookup(funding_id)
+                if funding_cache:
+                    doc["funding"] = funding_cache
                 else:
+                    logger.info(f"not in cache: {funding_id}, skipping...")
+                    continue
                     try:
                         new_funding = update_funding(funding_id)
                     except Exception as e:
@@ -276,8 +288,6 @@ def update_funding(funding_id):
                 "FullStudySection",
                 "ProjectStartDate",
                 "ProjectEndDate",
-                "AbstractText",
-                "Terms",
                 "FullFoa",
                 "ProgramOfficers",
                 "AwardAmount",
@@ -324,6 +334,11 @@ def update_funding(funding_id):
         logger.info(f"MULTIPLE PARENT PROJECTS FOUND FOR {funding_id}")
         parent = [i for i in parent if i["award_amount"] != None]
         parent.sort(key=lambda x: x["award_amount"], reverse=True)
+        if len(parent) == 0:
+            logger.info(f"NO PARENT PROJECTS WITH AWARD AMOUNT FOUND FOR {funding_id}")
+            logger.info(f"USING APPLICATION TYPE 1 FOR {funding_id}")
+            parent = [i for i in parent if i["project_num_split"]["appl_type_code"] == "1"]
+            return build_funding_dict(parent[0])
         largest_amount = parent[0]["award_amount"]
         # get all parents with the largest amount
         largest_amount_parents = [i for i in parent if i["award_amount"] == largest_amount]
