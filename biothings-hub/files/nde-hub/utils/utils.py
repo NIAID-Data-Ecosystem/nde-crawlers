@@ -105,17 +105,16 @@ def merge_duplicates(doc: Dict) -> Dict:
 def is_purely_augmented(field, field_content):
     if field == "includedInDataCatalog":
         return False
-    elif isinstance(field_content, str):
+    elif isinstance(field_content, (str, bool)):
         return False
-    elif isinstance(field_content, bool):
-        return False
-    elif isinstance(field_content, dict):
+        
+    if isinstance(field_content, dict):
         field_content = [field_content]
-    elif isinstance(field_content, list) and all(isinstance(item, str) for item in field_content):
-        return False
+        
+    if isinstance(field_content, list):
+        return all(isinstance(item, dict) and item.get("fromPMID", False) for item in field_content)
 
-    return all(item.get("fromPMID", False) for item in field_content)
-
+    return False
 
 def calculate_weighted_score(data, mapping):
     score = 0
