@@ -191,10 +191,15 @@ def add_metadata_score(document: Dict) -> Dict:
     total_recommended = len(local_recommended_fields)
     total_required_augmented = len(REQUIRED_AUGMENTED_FIELDS)
     total_recommended_augmented = len(RECOMMENDED_AUGMENTED_FIELDS)
+    
+    existing_required_fields = [field for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(field, document[field])]
+    existing_recommended_fields = [field for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(field, document[field])]
 
     document["_meta"] = {
         "required_augmented_fields": required_augmented_fields,
         "recommended_augmented_fields": recommended_augmented_fields,
+        "required_fields": existing_required_fields,
+        "recommended_fields": existing_recommended_fields,
         "completeness": {
             "total_score": required_score + recommended_score,
             "total_max_score": total_required + total_recommended,
