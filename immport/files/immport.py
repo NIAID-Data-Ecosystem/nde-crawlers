@@ -67,8 +67,12 @@ def map_schema_json(schema_json):
                 schema_json["species"] = species_list
         else:
             schema_json["species"] = {"name": species}
-    if measurement_technique := schema_json.pop("measurementTechnique", None):
-        schema_json["measurementTechnique"] = {"name": measurement_technique}
+    if measurement_techniques := schema_json.pop("measurementTechnique", None):
+        mt_list = []
+        for measurement_technique in measurement_techniques:
+            mt_list.append({"name": measurement_technique})
+        if mt_list:
+            schema_json["measurementTechnique"] = mt_list
     if health_conditions := schema_json.pop("keywords", None):
         no_dups = set()
         hc = []
