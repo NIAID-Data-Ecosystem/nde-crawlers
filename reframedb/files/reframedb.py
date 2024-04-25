@@ -154,7 +154,10 @@ def parse():
             if indication := metadata.get("indication"):
                 output["healthCondition"] = {"name": indication}
             if assay_type := metadata.get("assay_type"):
-                output["measurementTechnique"] = {"name": assay_type}
+                normalized_assay_type = assay_type.replace(";", ",")
+                split_names = [name_part.replace('.', '').strip() for name_part in normalized_assay_type.split(",")]
+                measurement_techniques = [{"name": name} for name in split_names if name]
+                output["measurementTechnique"] = measurement_techniques
             if bibliography := metadata.get("bibliography"):
                 output["pmids"] = str(bibliography).split(".")[0]
 
