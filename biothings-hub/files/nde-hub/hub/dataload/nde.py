@@ -153,7 +153,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
-            "@id": {"type": "keyword"},
+            "@id": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer"},
             "@type": {"type": "keyword", "copy_to": ["all"]},
             "abstract": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "all": {
