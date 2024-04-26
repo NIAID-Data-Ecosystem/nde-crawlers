@@ -1,3 +1,4 @@
+import json
 import os.path
 
 import biothings
@@ -18,8 +19,8 @@ class NCBI_PMC_Dumper(DockerContainerDumper):
     SRC_ROOT_FOLDER = os.path.join(DATA_ARCHIVE_ROOT, SRC_NAME)
     SCHEDULE = None
     UNCOMPRESS = True
-    # We need to set keep_container = true in order to retrieve cached data used in dump_command
+    VOLUMES = {"/opt/nde/cache": {"bind": "/cache", "mode": "rw"}}
     SRC_URLS = [
-        f'docker://su07?image=nde-crawlers_{SRC_NAME}-crawler&tag=latest&path=/data/{SRC_NAME}_crawled/data.ndjson&dump_command="/home/biothings/run-api-crawler.sh"&container_name={SRC_NAME}_dumper&keep_container=true'
+        f'docker://su07?image=nde-crawlers_{SRC_NAME}-crawler&tag=latest&path=/data/{SRC_NAME}_crawled/data.ndjson&dump_command="/home/biothings/run-api-crawler.sh"&container_name={SRC_NAME}_dumper&volumes={json.dumps(VOLUMES)}'
         # &custom_cmd="/usr/bin/wget https://s3.pgkb.org/data/annotations.zip -O /tmp/annotations.zip"'
     ]
