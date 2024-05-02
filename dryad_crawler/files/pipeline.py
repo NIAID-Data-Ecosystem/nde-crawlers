@@ -35,11 +35,14 @@ class DryadItemProcessorPipeline:
         return None
 
     def process_item(self, item: dict, spider):
+        last_part = item["@id"].split("/")[-1]
+        if "dryad." in last_part:
+            last_part = last_part.replace("dryad.", "")
         output = {
             "@context": item.pop("@context"),
             "@type": item.pop("@type"),
             "url": item.pop("url"),
-            "_id": "DRYAD_" + item.pop("@id").split("//")[-1].replace("/", ":"),
+            "_id": "DRYAD_" + last_part,
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "Dryad Digital Repository",
