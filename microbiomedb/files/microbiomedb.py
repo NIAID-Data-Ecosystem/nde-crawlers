@@ -41,7 +41,7 @@ def parse():
             },
             "@context": "http://schema.org/",
             "@type": "Dataset",
-            "_id": "MICROBIOME_" + record.get("displayName").replace(" ", "_"),
+            "_id": "MICROBIOME_" + record.get("displayName").replace(" ", "_").replace("(", "-").replace(")", "-"),
         }
 
         if record_id := record["id"]:
