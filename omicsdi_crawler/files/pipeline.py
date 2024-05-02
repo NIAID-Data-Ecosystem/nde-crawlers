@@ -25,7 +25,7 @@ class OmicsdiItemProcessorPipeline:
             "@context": "http://schema.org/",
             "@type": item.pop("@type"),
             "url": url,
-            "_id": url_split[-1],
+            "_id": url_split[-1].replace(".", "-"),
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "Omics Discovery Index (OmicsDI)",
