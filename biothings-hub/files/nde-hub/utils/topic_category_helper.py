@@ -3,14 +3,14 @@ import json
 
 def add_topic_category(docs, source_name):
     """
-    Adds 'topicCategory' to documents from a JSON file if the category list is not empty.
-    Creates a file path from 'source_name', loading mappings of document IDs to topic lists.
+    Adds 'topicCategory' to documents from a JSON file located in a specific directory.
+    Loads topic categories from a specified JSON file in the /data/nde-hub/topic_categories/ directory.
 
     :param docs: List of dictionaries, each representing a document.
-    :param source_name: String specifying the path to the JSON file containing topic categories.
-    :return: List of documents, potentially updated with 'topicCategory'.
+    :param source_name: String specifying the name of the JSON file containing topic categories.
+    :return: List of documents, potentially updated with separate 'topicCategory' objects.
     """
-    file_path = f"hub/dataload/sources/{source_name}/{source_name}.json"
+    file_path = f"/data/nde-hub/topic_categories/{source_name}.json"
     with open(file_path, 'r') as file:
         topic_categories = json.load(file)
 
