@@ -1,3 +1,2 @@
--e git+https://github.com/biothings/biothings.api@docker-dumper-feature#egg=biothings[hub,docker]
-# -e git+https://github.com/biothings/biothings.api@0.12.x#egg=biothings[hub,docker]
+-e git+https://github.com/biothings/biothings.api@0.12.x#egg=biothings[hub,docker]
 biopython>=1.79     # for pmids to make citation/funding in utils (ncbi_geo crawler)
