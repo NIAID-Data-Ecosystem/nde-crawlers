@@ -147,6 +147,8 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "recommended_augmented_fields": {"type": "keyword"},
                     "required_augmented_fields": {"type": "keyword"},
+                    "recommended_fields": {"type": "keyword"},
+                    "required_fields": {"type": "keyword"},
                 }
             },
             "@context": {
