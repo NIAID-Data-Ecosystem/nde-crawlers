@@ -22,25 +22,26 @@ __all__ = [
 
 class MalariaGenItemProcessorPipeline:
     def process_item(self, item: dict, spider):
-        _id = item['url'].rstrip('/').split('/')[-1]
-        item['_id'] = _id
+        _id = item["url"].rstrip("/").split("/")[-1]
+        item["_id"] = _id
 
-        item['includedInDataCatalog'] = {
+        item["includedInDataCatalog"] = {
             "name": "MalariaGEN",
             "url": "https://www.malariagen.net/",
             "@type": "Dataset",
             "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
         }
+        item["@type"] = "Dataset"
 
-        item['healthCondition'] = {
+        item["healthCondition"] = {
             "@type": "DefinedTerm",
             "identifier": "0005136",
             "inDefinedTermSet": "MONDO",
             "name": "Malaria",
-            "url": "http://purl.obolibrary.org/obo/MONDO_0005136"
+            "url": "http://purl.obolibrary.org/obo/MONDO_0005136",
         }
 
-        item['isAccessibleForFree'] = True
+        item["isAccessibleForFree"] = True
 
         cleaned_item = dict_sweep(item, vals=[None, "", [], {}])
         return cleaned_item

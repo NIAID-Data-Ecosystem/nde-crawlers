@@ -103,6 +103,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  malariagen-crawler:
+    build:
+      context: malariagen_crawler
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   mendeley-crawler:
     build:
       context: mendeley
