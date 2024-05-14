@@ -120,18 +120,3 @@ class MalariaGenSpider(scrapy.Spider):
             'citation': response.urljoin(citation_url)
         }
         yield details
-
-
-# import json
-# import os
-
-# # load ndjson file and print the first 5 records
-# # Path: /Users/dylanwelzel/scripps/nde-crawlers/malariagen_crawler/files/d/data/malariagen_crawled/data.ndjson
-# import ndjson
-
-# data_path = "/Users/dylanwelzel/scripps/nde-crawlers/malariagen_crawler/files/d/data/malariagen_crawled/data.ndjson"
-# with open(data_path, 'r') as f:
-#     data = [json.loads(l) for l in f.readlines()]
-
-# for record in data:
-#     print(record['isPartOf']['url'])
