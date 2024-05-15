@@ -22,8 +22,8 @@ __all__ = [
 
 class MalariaGenItemProcessorPipeline:
     def process_item(self, item: dict, spider):
-        _id = item["url"].rstrip("/").split("/")[-1]
-        item["_id"] = _id
+        _id = item["url"].rstrip("/").split("/")[-1].lower()
+        item["_id"] = "malariagen_" + _id
 
         item["includedInDataCatalog"] = {
             "name": "MalariaGEN",
