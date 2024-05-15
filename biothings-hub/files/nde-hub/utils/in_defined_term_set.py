@@ -77,13 +77,19 @@ def de_duplicate_dicts(dict_list):
     unique_dicts = []
     seen = set()
     for d in dict_list:
-        identifier = d.get("identifier")
-        if identifier:
-            if identifier not in seen:
-                seen.add(identifier)
-                unique_dicts.append(d)
+        if isinstance(d, dict):  # Check if the item is a dictionary
+            identifier = d.get("identifier")
+            if identifier:
+                if identifier not in seen:
+                    seen.add(identifier)
+                    unique_dicts.append(d)
         else:
-            unique_dicts.append(d)
+            for obj in d:
+                identifier = obj.get("identifier")
+                if identifier:
+                    if identifier not in seen:
+                        seen.add(identifier)
+                        unique_dicts.append(obj)    
     return unique_dicts
 
 
@@ -143,7 +149,7 @@ def get_in_defined_term_set(doc, properties_dict):
                 else:
                     # if there is no url then keep as is for pubtator to curate
                     if nde_property in ["species", "infectiousAgent"]:
-                        temp_results[nde_property].append(item)
+                        temp_results[nde_property].append(doc_property)
 
     # Update doc with species and infectiousAgent results
     for key, value in temp_results.items():
