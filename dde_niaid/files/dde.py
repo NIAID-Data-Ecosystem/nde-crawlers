@@ -167,8 +167,11 @@ def parse():
                         authors["affiliation"] = {"name": affiliation}
                 hit["author"] = authors
 
-            hit["url"] = "https://discovery.biothings.io/dataset/" + hit["_id"]
-            hit["_id"] = "DDE_" + hit["_id"]
+            # Adjust URL based on type
+            if hit["@type"] == "Dataset":
+                hit["url"] = "https://discovery.biothings.io/dataset/" + hit["_id"]
+
+            hit["_id"] = "dde_" + hit["_id"].lower()
 
             # adjust date values
             if dates := hit.pop("_ts", None):
