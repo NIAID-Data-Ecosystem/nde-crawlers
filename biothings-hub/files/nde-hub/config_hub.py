@@ -77,7 +77,7 @@ INDEX_CONFIG = {
     },
     "env": {
         "prod": {
-            "host": "<PRODSERVER>:9200",
+            "host": "http://<PRODSERVER>:9200",
             "indexer": {
                 "args": {
                     "timeout": 300,
@@ -87,7 +87,7 @@ INDEX_CONFIG = {
             },
         },
         "localhub": {
-            "host": os.environ.get("ES_HOST", "localhost:9200"),
+            "host": http://" + os.environ.get("ES_HOST", "localhost:9200"),
             "indexer": {
                 "args": {
                     "timeout": 300,
@@ -169,7 +169,7 @@ RELEASE_CONFIG = {
 STANDALONE_CONFIG = {
     # default config
     "_default": {
-        "es_host": "localhost:9200",
+        "es_host": "http://localhost:9200",
         "index": "biotings_current",
     },
     ## custom definition
