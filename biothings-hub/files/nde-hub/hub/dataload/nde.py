@@ -781,15 +781,16 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "topicCategory": {
                 "properties": {
-                    "description": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
-                    "url": {"type": "text", "copy_to": ["all"]},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "text", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
                     },
+                    "description": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword", "copy_to": ["all"]}
                 }
             },
             "url": {"type": "text", "copy_to": ["all"]},
