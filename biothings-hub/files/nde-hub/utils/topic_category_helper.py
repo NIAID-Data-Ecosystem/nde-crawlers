@@ -58,7 +58,8 @@ def add_topic_category(docs, source_name):
                             "url": "https://openai.com/index/chatgpt"
                         },
                         "identifier": "topic_" + row['Mapped Term CURIE'].split(":")[1],
-                        "url": row['Mapped Term IRI']
+                        "url": row['Mapped Term IRI'],
+                        "inDefinedTermSet": "EDAM"
                     })
         updated_docs.append(doc)
     return updated_docs
