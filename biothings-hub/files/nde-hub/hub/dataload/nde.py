@@ -570,7 +570,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "alternateName": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
-                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
                     "url": {"type": "text"},
                 }
             },
@@ -587,7 +587,7 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
                     "includedInDataCatalog": {
                         "properties": {
                             "@type": {"type": "text"},
@@ -599,7 +599,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "hasPart": {
                         "properties": {
                             "@type": {"type": "text"},
-                            "identifier": {"type": "keyword", "copy_to": ["all"]},
+                            "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
                         }
                     },
                     "relationship": {"type": "text", "copy_to": ["all"]},
