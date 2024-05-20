@@ -307,7 +307,8 @@ class Zenodo(NDEDatabase):
 
             # format the identifier for _id, and identifier
             identifier = identifier.rsplit(":", 1)[-1]
-            url = "https://zenodo.org/record/" + identifier
+            url = "https://zenodo.org/records/" + identifier
+            distribution_base_url = "https://zenodo.org/api/records/"
             # use as much of the metadata variable or header variable to format the transformation
             output = {
                 "@context": "https://schema.org/",
@@ -326,7 +327,7 @@ class Zenodo(NDEDatabase):
                 .date()
                 .isoformat(),
                 "url": url,
-                "distribution": {"contentUrl": url + "/files-archive"}
+                "distribution": {"contentUrl": distribution_base_url + identifier + "/files-archive"},
             }
 
             if description := data["metadata"].get("description"):

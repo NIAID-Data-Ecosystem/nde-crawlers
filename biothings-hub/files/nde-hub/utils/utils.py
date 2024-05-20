@@ -109,14 +109,15 @@ def is_purely_augmented(field, field_content):
         return False
     elif isinstance(field_content, (str, bool)):
         return False
-        
+
     if isinstance(field_content, dict):
         field_content = [field_content]
-        
+
     if isinstance(field_content, list):
         return all(isinstance(item, dict) and item.get("fromPMID", False) for item in field_content)
 
     return False
+
 
 def calculate_weighted_score(data, mapping):
     score = 0
@@ -193,9 +194,13 @@ def add_metadata_score(document: Dict) -> Dict:
     total_recommended = len(local_recommended_fields)
     total_required_augmented = len(REQUIRED_AUGMENTED_FIELDS)
     total_recommended_augmented = len(RECOMMENDED_AUGMENTED_FIELDS)
-    
-    existing_required_fields = [field for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(field, document[field])]
-    existing_recommended_fields = [field for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(field, document[field])]
+
+    existing_required_fields = [
+        field for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(field, document[field])
+    ]
+    existing_recommended_fields = [
+        field for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(field, document[field])
+    ]
 
     document["_meta"] = {
         "required_augmented_fields": required_augmented_fields,
@@ -237,8 +242,9 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             # merge_duplicates(doc)
             add_metadata_score(doc)
 
-            # Checking schema and size will always be last
+            # Everything past this point should always be last in order
             check_schema(doc)
+            doc["_id"] = doc["_id"].casefold()
             bson_size = len(bson.BSON.encode(doc))
             if bson_size < (16 * 1024 * 1024):  # Check if less than 16 MB
                 yield doc
