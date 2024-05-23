@@ -3,6 +3,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
+import dateutil.parser as parser
 import requests
 from sickle import Sickle
 
@@ -119,9 +120,7 @@ def parse():
                         if size := content_details.get("size"):
                             distribution_obj["contentSize"] = size
                         if created_date := content_details.get("created_date"):
-                            distribution_obj["dateModified"] = datetime.strptime(
-                                created_date, "%Y-%m-%dT%H:%M:%S.%f%z"
-                            ).strftime("%Y-%m-%d")
+                            distribution_obj["dateModified"] = parser.parse(created_date).strftime("%Y-%m-%d")
                         if download_url := content_details.get("download_url"):
                             distribution_obj["contentUrl"] = download_url
                     if metrics := content_details.get("metrics"):
@@ -162,7 +161,7 @@ def parse():
                 output["keywords"] = category_list
 
             if publish_date := metadata.get("publish_date"):
-                output["datePublished"] = datetime.strptime(publish_date, "%Y-%m-%dT%H:%M:%S.%f%z").strftime("%Y-%m-%d")
+                output["datePublished"] = parser.parse(publish_date).strftime("%Y-%m-%d")
 
             if related_links := metadata.get("related_links"):
                 citation_obj = {}
@@ -174,7 +173,7 @@ def parse():
                 output["citation"] = citation_obj
 
             if modified_on := metadata.get("modified_on"):
-                output["dateModified"] = datetime.strptime(modified_on, "%Y-%m-%dT%H:%M:%S.%f%z").strftime("%Y-%m-%d")
+                output["dateModified"] = parser.parse(modified_on).strftime("%Y-%m-%d")
 
             if links := metadata.get("links"):
                 output["url"] = links["view"]
