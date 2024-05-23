@@ -87,7 +87,7 @@ INDEX_CONFIG = {
             },
         },
         "localhub": {
-            "host": http://" + os.environ.get("ES_HOST", "localhost:9200"),
+            "host": "http://" + os.environ.get("ES_HOST", "localhost:9200"),
             "indexer": {
                 "args": {
                     "timeout": 300,
