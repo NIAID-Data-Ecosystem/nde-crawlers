@@ -2,3 +2,4 @@ requests
 orjson
 datetime
 sickle
+python-dateutil
