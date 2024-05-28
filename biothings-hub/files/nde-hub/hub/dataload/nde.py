@@ -491,7 +491,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "infectiousAgent": {
                 "properties": {
-                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
@@ -613,7 +613,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
                     "includedInDataCatalog": {
                         "properties": {
                             "@type": {"type": "text"},
@@ -730,7 +730,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
-                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
