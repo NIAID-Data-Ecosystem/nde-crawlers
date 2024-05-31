@@ -73,43 +73,43 @@ class Zenodo(NDEDatabase):
         # print(vars(record.header))
 
         # no version part of another doi, no version, one version, multiple version, newer version of the previous, older version of the previous, exception
-        # identifiers = [237793, 1702333, 8200679, 7492646, 8221703, 6638745, 7204451]
+        identifiers = [237793, 1702333, 8200679, 7492646, 8221703, 6638745, 7204451]
 
-        # for identifier in identifiers:
-        #     # used to test individual records
-        #     record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="oai_datacite")
-        #     # in each doc we want record.identifier and record stored
-        #     doc = {
-        #         "header": dict(record.header),
-        #         "metadata": record.metadata,
-        #         "xml": ElementTree.tostring(record.xml, encoding="unicode"),
-        #     }
+        for identifier in identifiers:
+            # used to test individual records
+            record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="oai_datacite")
+            # in each doc we want record.identifier and record stored
+            doc = {
+                "header": dict(record.header),
+                "metadata": record.metadata,
+                "xml": ElementTree.tostring(record.xml, encoding="unicode"),
+            }
 
-        #     yield (record.header.identifier, json.dumps(doc))
+            yield (record.header.identifier, json.dumps(doc))
 
-        count = 0
-        while True:
-            try:
-                # get the next item
-                record = records.next()
-                count += 1
-                if count % 1000 == 0:
-                    time.sleep(0.5)
-                    logger.info("Loading cache. Loaded %s records", count)
+        # count = 0
+        # while True:
+        #     try:
+        #         # get the next item
+        #         record = records.next()
+        #         count += 1
+        #         if count % 1000 == 0:
+        #             time.sleep(0.5)
+        #             logger.info("Loading cache. Loaded %s records", count)
 
-                # in each doc we want record.identifier and record stored
-                doc = {
-                    "header": dict(record.header),
-                    "metadata": record.metadata,
-                    "xml": ElementTree.tostring(record.xml, encoding="unicode"),
-                }
+        #         # in each doc we want record.identifier and record stored
+        #         doc = {
+        #             "header": dict(record.header),
+        #             "metadata": record.metadata,
+        #             "xml": ElementTree.tostring(record.xml, encoding="unicode"),
+        #         }
 
-                yield (record.header.identifier, json.dumps(doc))
+        #         yield (record.header.identifier, json.dumps(doc))
 
-            except StopIteration:
-                logger.info("Finished Loading. Total Records: %s", count)
-                # if StopIteration is raised, break from loop
-                break
+        #     except StopIteration:
+        #         logger.info("Finished Loading. Total Records: %s", count)
+        #         # if StopIteration is raised, break from loop
+        #         break
 
     @retry(5, 10)
     def get_version_id(self, output, related_ids, url, identifier):
@@ -237,13 +237,35 @@ class Zenodo(NDEDatabase):
 
         # use xml to find funding
         contributors = root.findall(".//{http://datacite.org/schema/kernel-4}contributor[@contributorType='Funder']")
-        funding = []
+        fundings = []
         for contributor in contributors:
             name = contributor.find("./{http://datacite.org/schema/kernel-4}contributorName")
             if name is not None:
-                funding.append({"funder": {"name": name.text}})
-        if funding:
-            output["funding"] = funding
+                fundings.append({"funder": {"name": name.text}})
+
+        funders = root.findall(".//{http://datacite.org/schema/kernel-4}fundingReference")
+
+        for funder in funders:
+            funding = {}
+            funder_identifier = funder.find(".//{http://datacite.org/schema/kernel-4}funderIdentifier")
+            funder_name = funder.find(".//{http://datacite.org/schema/kernel-4}funderName")
+            funding_name = funder.find(".//{http://datacite.org/schema/kernel-4}awardTitle")
+            funding_identifier = funder.find(".//{http://datacite.org/schema/kernel-4}awardNumber")
+            if funder_identifier is not None or funder_name is not None:
+                funding = {"funder": {}}
+                if funder_identifier is not None:
+                    funding["funder"]["identifier"] = funder_identifier.text
+                if funder_name is not None:
+                    funding["funder"]["name"] = funder_name.text
+            if funding_name is not None:
+                funding["name"] = funding_name.text
+            if funding_identifier is not None:
+                funding["identifier"] = funding_identifier.text
+            if funding:
+                funding["@type"] = "MonetaryGrant"
+                fundings.append(funding)
+        if fundings:
+            output["funding"] = fundings
 
         """ TODO try to get the codeRepository field. Not confident how to get it.
         "if this resource is a 'software' @type and has a relatedIdentifier with the isSupplementTo field".
@@ -313,6 +335,12 @@ class Zenodo(NDEDatabase):
             identifier = identifier.rsplit(":", 1)[-1]
             url = "https://zenodo.org/records/" + identifier
             distribution_base_url = "https://zenodo.org/api/records/"
+            date_modified = (
+                datetime.datetime.fromisoformat(data["header"]["datestamp"][:-1])
+                .astimezone(datetime.timezone.utc)
+                .date()
+                .isoformat()
+            )
             # use as much of the metadata variable or header variable to format the transformation
             output = {
                 "@context": "https://schema.org/",
@@ -326,12 +354,11 @@ class Zenodo(NDEDatabase):
                 "name": data["metadata"].get("title")[0],
                 "author": [],
                 "identifier": "zenodo." + identifier,
-                "dateModified": datetime.datetime.fromisoformat(data["header"]["datestamp"][:-1])
-                .astimezone(datetime.timezone.utc)
-                .date()
-                .isoformat(),
+                "dateModified": date_modified,
                 "url": url,
-                "distribution": {"contentUrl": [distribution_base_url + identifier + "/files-archive"]},
+                "distribution": [
+                    {"contentUrl": distribution_base_url + identifier + "/files-archive", "dateModified": date_modified}
+                ],
             }
 
             if description := data["metadata"].get("description"):

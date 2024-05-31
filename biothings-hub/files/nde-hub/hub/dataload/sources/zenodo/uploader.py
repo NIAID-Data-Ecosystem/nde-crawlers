@@ -55,11 +55,11 @@ class ZenodoUploader(NDESourceUploader):
                             current_doc["datePublished"]
                         ):
                             new_doc["sameAs"] += current_doc.get("sameAs")
-                            new_doc["distribution"]["contentUrl"] += current_doc["distribution"].get("contentUrl")
+                            new_doc["distribution"] += current_doc.get("distribution")
                             new_doc_str = json.dumps(new_doc)
                         else:
                             current_doc["sameAs"] += new_doc.get("sameAs")
-                            current_doc["distribution"]["contentUrl"] += new_doc["distribution"].get("contentUrl")
+                            current_doc["distribution"] += new_doc.get("distribution")
                             current_doc_str = json.dumps(current_doc)
                             is_newer = False
 
