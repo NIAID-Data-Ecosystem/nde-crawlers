@@ -50,14 +50,16 @@ class ZenodoUploader(NDESourceUploader):
                     if current_doc:
                         current_doc = json.loads(current_doc[0])
 
-                        # Append sameAs to either new doc or current doc before upserting depending on datePublished
+                        # Append sameAs and distribution.contentUrl to either new doc or current doc before upserting depending on datePublished
                         if datetime.fromisoformat(new_doc["datePublished"]) > datetime.fromisoformat(
                             current_doc["datePublished"]
                         ):
                             new_doc["sameAs"] += current_doc.get("sameAs")
+                            new_doc["distribution"]["contentUrl"] += current_doc["distribution"].get("contentUrl")
                             new_doc_str = json.dumps(new_doc)
                         else:
                             current_doc["sameAs"] += new_doc.get("sameAs")
+                            current_doc["distribution"]["contentUrl"] += new_doc["distribution"].get("contentUrl")
                             current_doc_str = json.dumps(current_doc)
                             is_newer = False
 

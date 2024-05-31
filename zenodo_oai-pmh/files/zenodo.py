@@ -115,64 +115,68 @@ class Zenodo(NDEDatabase):
     def get_version_id(self, output, related_ids, url, identifier):
         version_id = []
         for related_id in related_ids:
-            # note for oai_datacite it should use IsPartOf some other metadataprefixes may use related_id.get("relationType") == "IsVersionOf")
             if (
                 related_id.get("relatedIdentifierType") == "DOI"
-                and related_id.get("relationType") == "IsPartOf"
+                and related_id.get("relationType") == "IsVersionOf"
+                and related_id.text
                 and "zenodo" in related_id.text
             ):
                 version_id.append(related_id.text)
+
+        # It looks like zenodo oai has fixed their schema where they now specify IsVersionOf instead of a vague
+        # IsPartOf for everything so we dont need to query the datacite anymore to find the original version
+        # if version_id:
+        #     if len(version_id) > 1:
+        #         logger.info(
+        #             "There is more than one version recordID in %s. Querying datacite to find correct version"
+        #             % output["_id"]
+        #         )
+        #         # reset version_id and use datacite query to find correct version
+        #         version_id = []
+        #         record = sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="datacite")
+        #         versions = record.xml
+        #         versions = versions.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
+        #         time.sleep(0.5)
+        #         for version in versions:
+        #             if (
+        #                 version.get("relatedIdentifierType") == "DOI"
+        #                 and version.get("relationType") == "IsVersionOf"
+        #                 and "zenodo" in version.text
+        #             ):
+        #                 version_id.append(version.text)
+
         if version_id:
-            if len(version_id) > 1:
-                logger.info(
-                    "There is more than one version recordID in %s. Querying datacite to find correct version"
-                    % output["_id"]
-                )
-                # reset version_id and use datacite query to find correct version
-                version_id = []
-                record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="datacite")
-                versions = record.xml
-                versions = versions.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
-                time.sleep(0.5)
-                for version in versions:
-                    if (
-                        version.get("relatedIdentifierType") == "DOI"
-                        and version.get("relationType") == "IsVersionOf"
-                        and "zenodo" in version.text
-                    ):
-                        version_id.append(version.text)
             assert len(version_id) <= 1, "There is more than one version per recordID: %s. Versions: %s" % (
                 output["_id"],
                 version_id,
             )
-            # have to check version_id again in case version_id was reset and none were found
-            if version_id:
-                output["versionId"] = version_id[0]
-                output["sameAs"] = [url]
-                output["doi"] = version_id[0]
-                output["identifier"] = version_id[0].rsplit("/", 1)[-1]
-                output["_id"] = "ZENODO_" + output["identifier"].rsplit(".", 1)[-1]
-                output["url"] = "https://zenodo.org/record/" + output["identifier"]
+            output["versionId"] = version_id[0]
+            output["sameAs"] = [url]
+            output["doi"] = version_id[0]
+            output["identifier"] = version_id[0].rsplit("/", 1)[-1]
+            output["_id"] = "ZENODO_" + output["identifier"].rsplit(".", 1)[-1]
+            output["url"] = "https://zenodo.org/record/" + output["identifier"].rsplit(".", 1)[-1]
 
         return output
 
     def parse_xml(self, xml, output, gen_type, missing_types, url, identifier):
-        # used for testing to print out xml tags
-        # for element in root.iter():
-        #     print("%s - %s" % (element.tag, element.text))
 
         # use xml to query doi
         root = ElementTree.fromstring(xml)
 
-        doi = root.find(".//{http://datacite.org/schema/kernel-3}identifier[@identifierType='DOI']")
+        # used for testing to print out xml tags
+        # for element in root.iter():
+        #     print("%s - %s" % (element.tag, element.text))
+
+        doi = root.find(".//{http://datacite.org/schema/kernel-4}identifier[@identifierType='DOI']")
         if doi is not None:
             output["doi"] = doi.text
 
         # use xml to get the type
-        zenodo_type = root.find(".//{http://datacite.org/schema/kernel-3}resourceType[@resourceTypeGeneral]").get(
+        zenodo_type = root.find(".//{http://datacite.org/schema/kernel-4}resourceType[@resourceTypeGeneral]").get(
             "resourceTypeGeneral"
         )
-        zenodo_type2 = root.find(".//{http://datacite.org/schema/kernel-3}resourceType[@resourceTypeGeneral]").text
+        zenodo_type2 = root.find(".//{http://datacite.org/schema/kernel-4}resourceType[@resourceTypeGeneral]").text
 
         # format the types to be case insensitive and query the dictionary for the transformation
         zenodo_type = zenodo_type.lower()
@@ -190,13 +194,13 @@ class Zenodo(NDEDatabase):
 
         # xml to find all the authors and format them
         # we cannot use metadata to format due to creator and affiliation being in separate lists
-        creators = root.findall(".//{http://datacite.org/schema/kernel-3}creator")
+        creators = root.findall(".//{http://datacite.org/schema/kernel-4}creator")
         for creator in creators:
             author = {}
-            name = creator.find("./{http://datacite.org/schema/kernel-3}creatorName")
-            affiliation = creator.find("./{http://datacite.org/schema/kernel-3}affiliation")
+            name = creator.find("./{http://datacite.org/schema/kernel-4}creatorName")
+            affiliation = creator.find("./{http://datacite.org/schema/kernel-4}affiliation")
             orcid_id = creator.find(
-                "./{http://datacite.org/schema/kernel-3}nameIdentifier[@nameIdentifierScheme='ORCID']"
+                "./{http://datacite.org/schema/kernel-4}nameIdentifier[@nameIdentifierScheme='ORCID']"
             )
             if name is not None:
                 author["name"] = name.text
@@ -206,12 +210,12 @@ class Zenodo(NDEDatabase):
                 if len(affiliation.text) < 30000:
                     author["affiliation"] = {"name": affiliation.text}
             if orcid_id is not None:
-                author["identifier"] = orcid_id.get("schemeURI") + orcid_id.text
+                author["identifier"] = orcid_id.text
             if author:
                 output["author"].append(author)
 
         # use xml to find the license and conditionOfAccess
-        rights = root.findall(".//{http://datacite.org/schema/kernel-3}rights")
+        rights = root.findall(".//{http://datacite.org/schema/kernel-4}rights")
         for right in rights:
             if "access" in right.text.lower():
                 output["conditionsOfAccess"] = right.text.split(" ", 1)[0]
@@ -219,7 +223,7 @@ class Zenodo(NDEDatabase):
                 output["license"] = right.get("rightsURI")
 
         # use xml to find citedBy field
-        related_ids = root.findall(".//{http://datacite.org/schema/kernel-3}relatedIdentifier")
+        related_ids = root.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
         cited_by = []
         for related_id in related_ids:
             if related_id.get("relationType") == "IsCitedBy" and related_id.get("relatedIdentifierType") == "URL":
@@ -228,14 +232,14 @@ class Zenodo(NDEDatabase):
             output["citedBy"] = cited_by
 
         # use xml to find versioning
-        related_ids = root.findall(".//{http://datacite.org/schema/kernel-3}relatedIdentifier")
+        related_ids = root.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
         output = self.get_version_id(output, related_ids, url, identifier)
 
         # use xml to find funding
-        contributors = root.findall(".//{http://datacite.org/schema/kernel-3}contributor[@contributorType='Funder']")
+        contributors = root.findall(".//{http://datacite.org/schema/kernel-4}contributor[@contributorType='Funder']")
         funding = []
         for contributor in contributors:
-            name = contributor.find("./{http://datacite.org/schema/kernel-3}contributorName")
+            name = contributor.find("./{http://datacite.org/schema/kernel-4}contributorName")
             if name is not None:
                 funding.append({"funder": {"name": name.text}})
         if funding:
@@ -327,7 +331,7 @@ class Zenodo(NDEDatabase):
                 .date()
                 .isoformat(),
                 "url": url,
-                "distribution": {"contentUrl": distribution_base_url + identifier + "/files-archive"},
+                "distribution": {"contentUrl": [distribution_base_url + identifier + "/files-archive"]},
             }
 
             if description := data["metadata"].get("description"):

@@ -54,7 +54,9 @@ def check_schema(doc: Dict) -> Dict:
     assert isinstance(doc, dict), "doc is not a dict"
     assert doc.get("_id"), "_id is None"
     unsafe_chars_pattern = re.compile(r"[^a-zA-Z0-9_-]")
-    assert not re.search(unsafe_chars_pattern, _id), "_id: %s contains unsafe URL characters" % doc.get("_id")
+    assert not re.search(unsafe_chars_pattern, doc.get("_id")), "_id: %s contains unsafe URL characters" % doc.get(
+        "_id"
+    )
     assert doc.get("@type"), "@type is None"
     assert doc.get("includedInDataCatalog"), "includedInDataCatalog is None"
     assert doc.get("version", None) is None, "Remove version field"
