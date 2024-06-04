@@ -19,9 +19,14 @@ def record_generator():
         # add custom values to the record
         _record_dict.update(
             {
-                "_id": "veupathdb_" + _record_dict["id"][0]["value"],
+                "_id": _record_dict["id"][0]["value"],
                 "@type": "Dataset",
-                "includedInDataCatalog": {"name": "VEuPathDB"},
+                "includedInDataCatalog": {
+                    "@type": "Dataset",
+                    "name": "VEuPathDB",
+                    "url": "https://veupathdb.org/veupathdb/app",
+                    "versionDate": datetime.date.today().isoformat(),
+                },
                 "url": "https://veupathdb.org/veupathdb/app/record/dataset/" + _record_dict["id"][0]["value"],
             }
         )
@@ -48,7 +53,6 @@ def record_generator():
         if _record_dict["attributes"]["release_policy"]:
             _record_dict["conditionOfAccess"] = _record_dict["attributes"].pop("release_policy")
 
-
         # tablexs.Contacts
         _record_dict["author"] = [
             {"name": _dict.pop("contact_name"), "affiliation": {"name": str(_dict.pop("affiliation"))}}
@@ -72,7 +76,9 @@ def record_generator():
         if release_dates:
             try:
                 if date_updated:
-                    iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates].append(date_updated)
+                    iso_list = [
+                        datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates
+                    ].append(date_updated)
                 else:
                     iso_list = [datetime.datetime.strptime(d, "%Y-%m-%d").date().isoformat() for d in release_dates]
                 date_updated = sorted(iso_list)[-1]

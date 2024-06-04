@@ -160,6 +160,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  veupath_collections-crawler:
+    build:
+      context: veupath_collections
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   veupathdb-crawler:
     build:
       context: veupathdb

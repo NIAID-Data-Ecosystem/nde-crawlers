@@ -7,6 +7,10 @@ from utils.utils import nde_upload_wrapper
 
 class VEuPathDB_Uploader(NDESourceUploader):
     name = "veupathdb"
+    __metadata__ = {
+        "merger": "merge_struct",
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+    }
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
