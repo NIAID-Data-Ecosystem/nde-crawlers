@@ -54,7 +54,7 @@ def add_topic_category(docs, source_name):
 
     updated_docs = []
     for doc in docs:
-        doc_id = doc['_id']
+        doc_id = doc['_id'].lower()
         topics = topic_dict.get(doc_id, [])
         if topics:
             doc['topicCategory'] = []
