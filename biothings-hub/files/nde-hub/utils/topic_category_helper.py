@@ -4,6 +4,13 @@ import os
 import text2term
 
 
+def read_ndjson(file_path):
+    docs = []
+    with open(file_path, 'r') as file:
+        for line in file:
+            docs.append(json.loads(line.strip()))
+    return docs
+
 def add_topic_category(docs, source_name):
     """
     Adds 'topicCategory' to documents from a JSON file located in a specific directory.
@@ -13,6 +20,10 @@ def add_topic_category(docs, source_name):
     :param source_name: String specifying the name of the JSON file containing topic categories.
     :return: List of documents, potentially updated with separate 'topicCategory' objects.
     """
+
+    if isinstance(docs, str) and docs.endswith('.ndjson'):
+        docs = read_ndjson(docs)
+
     # Cache the EDAM ontology if not already cached
     if not os.path.exists("/data/nde-hub/topic_categories/cache/edam"):
         text2term.cache_ontology("https://edamontology.org/EDAM_unstable.owl", "edam")
