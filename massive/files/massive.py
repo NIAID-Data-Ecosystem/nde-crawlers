@@ -1,9 +1,11 @@
-import datetime
-import ftplib
-import json
+import logging
 import urllib.parse
+from datetime import datetime
 
 import requests
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("nde-logger")
 
 
 def fetch_dataset_ids():
@@ -20,7 +22,7 @@ def fetch_dataset_ids():
     while True:
         response = requests.get(base_url, params=query_params)
         if response.status_code == 200:
-            print(f"Processed page {page}")
+            logger.info(f"Processed page {page}")
             data = response.json()
             row_data = data.get("row_data", [])
             if not row_data:
@@ -29,11 +31,11 @@ def fetch_dataset_ids():
                 dataset_ids.append(item["dataset"])
             query_params["offset"] += query_params["pageSize"]  # Increment offset for next page
             page += 1
-            break
         else:
             raise Exception(f"Failed to fetch dataset IDs, status code: {response.status_code}")
 
     return dataset_ids
+
 
 def fetch_dataset(dataset_id):
     url = f"https://massive.ucsd.edu/ProteoSAFe/QueryDatasets?pageSize=30&offset=0&query=%7B%22title_input%22:%22{dataset_id}%22%7D"
@@ -43,20 +45,22 @@ def fetch_dataset(dataset_id):
     else:
         raise Exception(f"Failed to fetch dataset {dataset_id}, status code: {response.status_code}")
 
+
 def parse_dataset(json_data):
     output = {
         "includedInDataCatalog": {
             "name": "MassIVE",
             "url": "https://massive.ucsd.edu/ProteoSAFe/static/massive.jsp",
             "@type": "Dataset",
-            "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
-        }
+            "versionDate": datetime.today().strftime("%Y-%m-%d"),
+        },
+        "@type": "Dataset"
     }
 
     for item in json_data.get("row_data", []):
         if identifier := item.get("dataset"):
             output["identifier"] = identifier
-            output['_id'] = "massive_" + identifier.lower()
+            output["_id"] = "massive_" + identifier.lower()
 
         if task := item.get("task"):
             output["url"] = "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?task=" + task
@@ -79,12 +83,13 @@ def parse_dataset(json_data):
 
         if keywords := item.get("keywords"):
             if "###" in keywords:
-                output["keywords"] = keywords.split('###')
+                output["keywords"] = keywords.split("###")
             else:
-                output["keywords"] = keywords.split(', ')
+                output["keywords"] = keywords.split(", ")
 
         if date_created := item.get("create_time"):
-            output["dateCreated"] = date_created
+            parsed_date = datetime.strptime(date_created, "%Y-%m-%d %H:%M:%S.%f").strftime("%Y-%m-%d")
+            output["dateCreated"] = parsed_date
 
         if measurement_techniques := item.get("instrument_resolved"):
             mt_list = measurement_techniques.split("###")
@@ -132,62 +137,37 @@ def parse_dataset(json_data):
             else:
                 output["conditionsOfAccess"] = "Closed"
 
-        if 'measurementTechnique' not in output:
-            output['measurementTechnique'] = [{"name": "Mass Spectrometry", "url": "https://ontobee.org/ontology/MMO?iri=http://purl.obolibrary.org/obo/MMO_0000534", "identifier": "MMO_0000534"}]
+        if "measurementTechnique" not in output:
+            output["measurementTechnique"] = [
+                {
+                    "name": "Mass Spectrometry",
+                    "url": "https://ontobee.org/ontology/MMO?iri=http://purl.obolibrary.org/obo/MMO_0000534",
+                    "identifier": "MMO_0000534",
+                }
+            ]
         else:
-            output['measurementTechnique'].append({"name": "Mass Spectrometry", "url": "https://ontobee.org/ontology/MMO?iri=http://purl.obolibrary.org/obo/MMO_0000534", "identifier": "MMO_0000534"})
-
+            output["measurementTechnique"].append(
+                {
+                    "name": "Mass Spectrometry",
+                    "url": "https://ontobee.org/ontology/MMO?iri=http://purl.obolibrary.org/obo/MMO_0000534",
+                    "identifier": "MMO_0000534",
+                }
+            )
 
     return output
 
 
 def parse():
     dataset_ids = fetch_dataset_ids()
-    print(f"Found {len(dataset_ids)} datasets")
+    logger.info(f"Found {len(dataset_ids)} datasets")
     count = 0
     for dataset_id in dataset_ids:
         count += 1
         if count % 100 == 0:
-            print(f"Processed {count} datasets")
-            break
+            logger.info(f"Processed {count} datasets")
         try:
             dataset_json = fetch_dataset(dataset_id)
             parsed_dataset = parse_dataset(dataset_json)
             yield parsed_dataset
         except Exception as e:
-            print(f"Error processing dataset {dataset_id}: {e}")
-
-records = []
-for x in parse():
-    records.append(x)
-with open('massive.json', 'w') as f:
-    json.dump(records, f)
-
-
-# data = requests.get("https://massive.ucsd.edu/ProteoSAFe/QueryDatasets?pageSize=30&offset=0&query={%22title_input%22:%22MSV000094860%22}").json()['row_data'][0]
-
-# # Prepare the CSV rows
-# rows = []
-
-# def extract_values(obj, prefix=''):
-#     if isinstance(obj, dict):
-#         for key, value in obj.items():
-#             if isinstance(value, list):
-#                 if len(value) > 0:
-#                     extract_values(value[0], f"{prefix}{key}.")
-#             else:
-#                 rows.append([f"{prefix}{key}", value])
-#     elif isinstance(obj, list):
-#         for item in obj:
-#             extract_values(item, prefix)
-
-# # Extract values from the JSON
-# extract_values(data)
-
-# # Write to CSV
-# with open('output.csv', 'w', newline='') as csvfile:
-#     writer = csv.writer(csvfile)
-#     writer.writerow(['property', 'value'])
-#     writer.writerows(rows)
-
-# print("CSV file has been created.")
+            logger.info(f"Error processing dataset {dataset_id}: {e}")
