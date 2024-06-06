@@ -79,7 +79,7 @@ def format_query_ky(iri):
 
 def parse():
     # initial request to find total number of hits
-    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22&sort=-_ts.last_updated"
+    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22%20OR%20_meta.guide:%22/guide/creid%22&sort=-_ts.last_updated"
     request = requests.get(url).json()
     # get the number of pages to paginate through
     total = request["total"]
@@ -89,7 +89,7 @@ def parse():
     # paginate through the requests
     for page in range(pages + 1):
         url = (
-            "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22&sort=-_ts.last_updated&size=1000&from="
+            "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22%20OR%20_meta.guide:%22/guide/creid%22&sort=-_ts.last_updated&size=1000&from="
             + str(page * 1000)
         )
         request = requests.get(url).json()
@@ -108,16 +108,17 @@ def parse():
 
                 hit["@type"] = nde_type
 
-            included_in_data_catalog = {
-                "@type": nde_type,
-                "name": "Data Discovery Engine",
-                "url": "https://discovery.biothings.io/",
-                "versionDate": datetime.date.today().isoformat(),
-            }
+            included_in_data_catalog = [
+                {
+                    "@type": nde_type,
+                    "name": "Data Discovery Engine",
+                    "url": "https://discovery.biothings.io/",
+                    "versionDate": datetime.date.today().isoformat(),
+                }
+            ]
 
             # add included in data catalog
             if hit.get("@context") and "nde" in hit.get("@context"):
-                included_in_data_catalog = [included_in_data_catalog]
                 included_in_data_catalog.append(
                     {
                         "@type": nde_type,
@@ -126,10 +127,29 @@ def parse():
                         "versionDate": datetime.date.today().isoformat(),
                     }
                 )
+
+            # add creide to included in data catalog
+            if hit.get("@context") and "creid" in hit.get("@context"):
+                included_in_data_catalog.append(
+                    {
+                        "@type": nde_type,
+                        "name": "Data Discovery Engine, NIAID CREID Network",
+                        "url": "https://discovery.biothings.io/portal/creid",
+                        "versionDate": datetime.date.today().isoformat(),
+                    }
+                )
+                included_in_data_catalog.append(
+                    {
+                        "@type": nde_type,
+                        "name": "Data Discovery Engine, NIAID Data Ecosystem",
+                        "url": "https://discovery.biothings.io/portal/nde",
+                        "versionDate": datetime.date.today().isoformat(),
+                    }
+                )
+
             # all of niaid systems biology is a subset of niaid data ecosystem but if nde is in the context then it is not part of niaid systems biology
             # if the above comment confuses the reader, think of it like the story of oedipus
             if hit.get("@context") and "niaid" in hit.get("@context") and "nde" not in hit.get("@context"):
-                included_in_data_catalog = [included_in_data_catalog]
                 included_in_data_catalog.append(
                     {
                         "@type": nde_type,
