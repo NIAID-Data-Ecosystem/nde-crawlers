@@ -54,7 +54,7 @@ def parse_dataset(json_data):
             "@type": "Dataset",
             "versionDate": datetime.today().strftime("%Y-%m-%d"),
         },
-        "@type": "Dataset"
+        "@type": "Dataset",
     }
 
     for item in json_data.get("row_data", []):
@@ -110,7 +110,7 @@ def parse_dataset(json_data):
                 if email := pi.get("email"):
                     pi_data["email"] = email
                 if institution := pi.get("institution"):
-                    pi_data["affiliation"] = institution
+                    pi_data["affiliation"] = {"name": institution}
                 pis_list.append(pi_data)
             output["author"] = pis_list
 
