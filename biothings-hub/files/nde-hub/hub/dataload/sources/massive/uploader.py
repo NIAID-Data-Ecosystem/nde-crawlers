@@ -1,13 +1,13 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.topic_category_helper import add_topic_category
+from utils.pubtator import standardize_data
 from utils.utils import nde_upload_wrapper
 
 
-class MendeleyUploader(NDESourceUploader):
-    name = "mendeley"
+class MassiveUploader(NDESourceUploader):
+    name = "massive"
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
-        docs = add_topic_category(data_folder, self.name)
+        docs = standardize_data(data_folder)
         for doc in docs:
             yield doc

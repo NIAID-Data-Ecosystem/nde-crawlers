@@ -242,10 +242,8 @@ class NCBI_SRA(NDEDatabase):
 
                 # species
                 species_dict = {}
-                if organism_taxid := run_metadata.get("organism_taxid"):
-                    species_dict["identifier"] = organism_taxid
-                if organism_name := run_metadata.get("organism_name"):
-                    species_dict["name"] = organism_name
+                if taxon_name := run_metadata.get("taxon_name"):
+                    species_dict["name"] = taxon_name
                 if bool(species_dict) and species_dict not in species_list:
                     species_dict["additionalType"] = {
                         "name": "Species",
@@ -299,12 +297,8 @@ class NCBI_SRA(NDEDatabase):
 
                 # instruments
                 instrument_dict = {}
-                if instrument := run_metadata.get("instrument"):
-                    instrument_dict["name"] = instrument
-                if instrument_model := run_metadata.get("instrument_model"):
-                    instrument_dict["identifier"] = instrument_model
-                if instrument_model_description := run_metadata.get("instrument_model_desc"):
-                    instrument_dict["description"] = instrument_model_description
+                if model := run_metadata.get("model"):
+                    instrument_dict["name"] = model
                 if bool(instrument_dict) and instrument_dict not in is_based_on:
                     instrument_dict["additionalType"] = {
                         "name": "Instrument",

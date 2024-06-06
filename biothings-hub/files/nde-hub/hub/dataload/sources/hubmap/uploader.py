@@ -1,5 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
+from utils.topic_category_helper import add_topic_category
+from utils.utils import nde_upload_wrapper
 
 # Example __metadata__ dictionary:
 # <SOURCE_NAME> = https://api.data.niaid.nih.gov/v1/metadata
@@ -27,3 +29,9 @@ class Hubmap_Uploader(NDESourceUploader):
             }
         }
     }
+
+    @nde_upload_wrapper
+    def load_data(self, data_folder):
+        docs = add_topic_category(data_folder, self.name)
+        for doc in docs:
+            yield doc
