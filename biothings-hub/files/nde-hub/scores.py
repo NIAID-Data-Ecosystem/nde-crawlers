@@ -109,4 +109,5 @@ RECOMMENDED_AUGMENTED_FIELDS = [
     "infectiousAgent",
     "healthCondition",
     "citation"
+    "topicCategory"
 ]

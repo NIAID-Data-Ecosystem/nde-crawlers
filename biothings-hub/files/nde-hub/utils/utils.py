@@ -155,12 +155,12 @@ def check_augmented_fields(document, augmented_field_list):
     for field in augmented_field_list:
         value = document.get(field, None)
 
-        if isinstance(value, dict) and value.get("fromPMID", False) == True:
+        if isinstance(value, dict) and (value.get("fromPMID", False) or value.get("fromGPT", False)):
             augmented_fields_found.append(field)
 
         elif isinstance(value, list):
             for item in value:
-                if isinstance(item, dict) and item.get("fromPMID", False) == True:
+                if isinstance(item, dict) and (item.get("fromPMID", False) or item.get("fromGPT", False)):
                     augmented_fields_found.append(field)
                     break  # Once we find one instance in the list, we can break out
 
