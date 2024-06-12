@@ -116,7 +116,11 @@ def is_purely_augmented(field, field_content):
         field_content = [field_content]
 
     if isinstance(field_content, list):
-        return all(isinstance(item, dict) and item.get("fromPMID", False) for item in field_content)
+        return all(
+            isinstance(item, dict) and
+            (item.get("fromPMID", False) or item.get("fromGPT", False))
+            for item in field_content
+        )
 
     return False
 

@@ -71,6 +71,7 @@ def add_topic_category(docs, source_name):
                             "identifier": "topic_" + row["Mapped Term CURIE"].split(":")[1],
                             "url": row["Mapped Term IRI"],
                             "inDefinedTermSet": "EDAM",
+                            "fromGPT": True,
                         }
                     )
         updated_docs.append(doc)
