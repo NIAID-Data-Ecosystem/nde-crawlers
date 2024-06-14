@@ -2,57 +2,126 @@
 # to query all documents: https://zenodo.org/oai2d?verb=ListRecords&metadataPrefix=oai_datacite
 # import re
 import datetime
+import functools
 import json
 import logging
+import time
+import traceback
 from xml.etree import ElementTree
 
-from sql_database import OAIDatabase
+from sickle import Sickle
+from sql_database import NDEDatabase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
-class Zenodo(OAIDatabase):
+def retry(retry_num, retry_sleep_sec):
+    """
+    retry help decorator.
+    :param retry_num: the retry num; retry sleep sec
+    :return: decorator
+    """
+
+    def decorator(func):
+        """decorator"""
+
+        # preserve information about the original function, or the func name will be "wrapper" not "func"
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            """wrapper"""
+            for attempt in range(retry_num):
+                try:
+                    return func(*args, **kwargs)  # should return the raw function's return value
+                except Exception as err:
+                    logger.error(err)
+                    logger.error(traceback.format_exc())
+                    time.sleep(retry_sleep_sec)
+                logger.info("Retrying failed func %s. Trying attempt %s of %s.", func, attempt + 1, retry_num)
+            logger.error("func %s retry failed", func)
+            raise Exception("Exceed max retry num: {} failed".format(retry_num))
+
+        return wrapper
+
+    return decorator
+
+
+class Zenodo(NDEDatabase):
     # override variables
     SQL_DB = "zenodo.db"
     EXPIRE = datetime.timedelta(days=180)
 
-    START = datetime.date.fromisoformat("2017-08-01")
-    METADATA_PREFIX = "oai_datacite"
-    INTERVAL = {"days": 60}
-    HOST = "https://zenodo.org/oai2d"
-    SLEEP_COUNT = 1000
-    SLEEP_LENGTH = 0.5
+    # connect to the website
+    sickle = Sickle("https://zenodo.org/oai2d", max_retries=4, default_retry_after=10)
 
-    def __init__(self, sql_db=None):
-        super().__init__(sql_db)
-
-    def record_data(self, record):
+    @retry(10, 10)
+    def load_cache(self):
         """Retrives the raw data using a sickle request and formats so dump can store it into the cache table
         Returns:
             A tuple (_id, data formatted as a json string)
         """
-        # in each doc we want record.identifier and record stored
-        doc = {
-            "header": dict(record.header),
-            "metadata": record.metadata,
-            "xml": ElementTree.tostring(record.xml, encoding="unicode"),
-        }
 
-        return record.header.identifier, json.dumps(doc)
+        # query all records
+        records = self.sickle.ListRecords(metadataPrefix="oai_datacite", ignore_deleted=True)
 
-    def get_version_id(self, output, related_ids, url):
+        # used to test individual records
+        # record = self.sickle.GetRecord(identifier='oai:zenodo.org:1202262', metadataPrefix='oai_datacite')
+        # pprint(record.metadata)
+        # pprint(type(record))
+        # print(type(record.metadata))
+        # print(type(record.header))
+        # print(vars(record.header))
+
+        # no version part of another doi, no version, one version, multiple version, newer version of the previous, older version of the previous, exception
+        # identifiers = [237793, 1702333, 8200679, 7492646, 8221703, 6638745, 7204451]
+
+        # for identifier in identifiers:
+        #     # used to test individual records
+        #     record = self.sickle.GetRecord(identifier=f"oai:zenodo.org:{identifier}", metadataPrefix="oai_datacite")
+        #     # in each doc we want record.identifier and record stored
+        #     doc = {
+        #         "header": dict(record.header),
+        #         "metadata": record.metadata,
+        #         "xml": ElementTree.tostring(record.xml, encoding="unicode"),
+        #     }
+
+        #     yield (record.header.identifier, json.dumps(doc))
+
+        count = 0
+        while True:
+            try:
+                # get the next item
+                record = records.next()
+                count += 1
+                if count % 1000 == 0:
+                    time.sleep(0.5)
+                    logger.info("Loading cache. Loaded %s records", count)
+
+                # in each doc we want record.identifier and record stored
+                doc = {
+                    "header": dict(record.header),
+                    "metadata": record.metadata,
+                    "xml": ElementTree.tostring(record.xml, encoding="unicode"),
+                }
+
+                yield (record.header.identifier, json.dumps(doc))
+
+            except StopIteration:
+                logger.info("Finished Loading. Total Records: %s", count)
+                # if StopIteration is raised, break from loop
+                break
+
+    @retry(5, 10)
+    def get_version_id(self, output, related_ids, url, identifier):
         version_id = []
         for related_id in related_ids:
-            keys = related_id.keys()
-            if sorted(keys) == sorted(["relatedIdentifierType", "relationType"]):
-                if (
-                    related_id.get("relatedIdentifierType") == "DOI"
-                    and related_id.get("relationType") == "IsVersionOf"
-                    and related_id.text
-                    and "zenodo" in related_id.text
-                ):
-                    version_id.append(related_id.text)
+            if (
+                related_id.get("relatedIdentifierType") == "DOI"
+                and related_id.get("relationType") == "IsVersionOf"
+                and related_id.text
+                and "zenodo" in related_id.text
+            ):
+                version_id.append(related_id.text)
 
         # It looks like zenodo oai has fixed their schema where they now specify IsVersionOf instead of a vague
         # IsPartOf for everything so we dont need to query the datacite anymore to find the original version
@@ -77,7 +146,6 @@ class Zenodo(OAIDatabase):
         #                 version_id.append(version.text)
 
         if version_id:
-            version_id = list(set(version_id))
             assert len(version_id) <= 1, "There is more than one version per recordID: %s. Versions: %s" % (
                 output["_id"],
                 version_id,
@@ -165,7 +233,7 @@ class Zenodo(OAIDatabase):
 
         # use xml to find versioning
         related_ids = root.findall(".//{http://datacite.org/schema/kernel-4}relatedIdentifier")
-        output = self.get_version_id(output, related_ids, url)
+        output = self.get_version_id(output, related_ids, url, identifier)
 
         # use xml to find funding
         contributors = root.findall(".//{http://datacite.org/schema/kernel-4}contributor[@contributorType='Funder']")
@@ -335,3 +403,41 @@ class Zenodo(OAIDatabase):
         # output the missing transformations for @type
         if len(missing_types.keys()) > 0:
             logger.warning("Missing type transformation: {}".format(str(missing_types.keys())))
+
+    def update_cache(self):
+        """If cache is not expired get the new records to add to the cache since last_updated"""
+
+        last_updated = self.retreive_last_updated()
+
+        # get all the records since last_updated to add into current cache
+        logger.info("Updating cache from %s", last_updated)
+        records = self.sickle.ListRecords(
+            **{"metadataPrefix": "oai_datacite", "ignore_deleted": True, "from": last_updated}
+        )
+
+        # Very similar to load_cache()
+        count = 0
+        while True:
+            try:
+                # get the next item
+                record = records.next()
+                count += 1
+                if count % 100 == 0:
+                    time.sleep(0.5)
+                    logger.info("Updating cache. %s new updated records", count)
+
+                # in each doc we want record.identifier and record stored
+                doc = {
+                    "header": dict(record.header),
+                    "metadata": record.metadata,
+                    "xml": ElementTree.tostring(record.xml, encoding="unicode"),
+                }
+
+                yield (record.header.identifier, json.dumps(doc))
+
+            except StopIteration:
+                logger.info("Finished updating cache. Total new records: %s", count)
+                # if StopIteration is raised, break from loop
+                break
+
+        self.insert_last_updated()

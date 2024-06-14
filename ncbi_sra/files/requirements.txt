@@ -4,3 +4,4 @@ sickle
 pandas
 kingfisher
 wget
+python-dateutil

@@ -2,3 +2,4 @@ requests
 datetime
 orjson
 psutil
+python-dateutil

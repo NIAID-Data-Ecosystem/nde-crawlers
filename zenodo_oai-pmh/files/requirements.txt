@@ -1,2 +1,3 @@
 orjson
+python-dateutil
 Sickle
