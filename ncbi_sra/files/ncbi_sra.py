@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep
@@ -18,7 +19,7 @@ logger = logging.getLogger("nde-logger")
 
 class NCBI_SRA(NDEDatabase):
     # override variables
-    SQL_DB = "ncbi_sra2.db"
+    SQL_DB = "ncbi_sra3.db"
     EXPIRE = datetime.timedelta(days=90)
 
     # Used for testing small chunks of data
@@ -198,6 +199,7 @@ class NCBI_SRA(NDEDatabase):
             is_based_on = []
             distribution_list = []
             species_list = []
+            seen_species = set()
             author_list = []
 
             if bio_project := ftp_info.get("ftp_bioProject"):
@@ -243,13 +245,10 @@ class NCBI_SRA(NDEDatabase):
                 # species
                 species_dict = {}
                 if taxon_name := run_metadata.get("taxon_name"):
-                    species_dict["name"] = taxon_name
-                if bool(species_dict) and species_dict not in species_list:
-                    species_dict["additionalType"] = {
-                        "name": "Species",
-                        "url": "http://purl.obolibrary.org/obo/NCIT_C45293",
-                    }
-                    species_list.append(species_dict)
+                    if taxon_name not in seen_species:
+                        species_dict["name"] = taxon_name
+                        seen_species.add(taxon_name)
+                        species_list.append(species_dict)
 
                 # runs
                 run_dict = {}
@@ -332,14 +331,45 @@ class NCBI_SRA(NDEDatabase):
                     }
                     is_based_on.append(hapmap_dict)
 
+            def sanitize_json_string(json_string):
+                # Replace single quotes with double quotes
+                json_string = json_string.replace("'", '"')
+
+                # Remove any trailing commas (common mistake in JSON)
+                json_string = re.sub(r",\s*}", "}", json_string)
+                json_string = re.sub(r",\s*]", "]", json_string)
+
+                return json_string
+
+            def remove_duplicates_and_limit(items, limit=100):
+                seen = set()
+                unique_items = []
+                for item in items:
+                    sanitized_item = sanitize_json_string(json.dumps(item))
+                    if sanitized_item not in seen:
+                        seen.add(sanitized_item)
+                        unique_items.append(item)
+                    if len(unique_items) == limit:
+                        break
+                return unique_items
+
             if len(is_based_on):
                 logger.info(f"Total isBasedOn: {len(is_based_on)}")
-                unique_based_on = {str(d) for d in is_based_on}
-                is_based_on = [json.loads(s) for s in unique_based_on]
+
+                try:
+                    # Remove duplicates and limit to 100
+                    is_based_on = remove_duplicates_and_limit(is_based_on, limit=100)
+                except Exception as e:
+                    logger.error(f"Error while processing isBasedOn: {e}")
+                    # Handle error appropriately, possibly skipping the faulty item or re-logging
+                    is_based_on = []
+
                 logger.info(f"Total unique isBasedOn: {len(is_based_on)}")
+
                 if len(is_based_on) > 100:
                     is_based_on = is_based_on[:100]
                     logger.info(f"isBasedOn exceeds 100 for {study[0]}")
+
                 output["isBasedOn"] = is_based_on
             if len(species_list):
                 output["species"] = species_list

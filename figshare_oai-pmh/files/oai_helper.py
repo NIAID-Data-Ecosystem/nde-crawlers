@@ -110,15 +110,28 @@ def oai_helper(last_updated=None):
             except KeyError:
                 logger.info("Could not find records in response")
                 logger.info(response_dict)
-                raise StopIteration
+                logger.info("Checking if there is another page")
+                try:
+                    resumptionToken = response_dict["OAI-PMH"]["ListRecords"]["resumptionToken"]["#text"]
+                    logger.info("Found resumptionToken: %s", resumptionToken)
+                    continue
+                except KeyError:
+                    logger.info("Could not find resumptionToken in response")
+                    logger.info(response_dict)
+                    raise StopIteration
 
             for record in records:
-                header = record["header"]
+                try:
+                    header = record["header"]
+                except (KeyError, TypeError):
+                    logger.info("Could not find header in record")
+                    logger.info(record)
+                    continue
                 identifier = header["identifier"]
 
                 logger.info("Current Record: %s", identifier)
 
-                if "status" in header and header["status"] == "deleted":
+                if header and "status" in header and header["status"] == "deleted":
                     logger.info("Record %s has been deleted. Not saving record to cache.", header["identifier"])
                 else:
                     count += 1
@@ -146,7 +159,7 @@ def oai_helper(last_updated=None):
             try:
                 logger.info("Getting resumptionToken...")
                 resumptionToken = response_dict["OAI-PMH"]["ListRecords"]["resumptionToken"]["#text"]
-                logger.info("Gottem: %s", resumptionToken)
+                logger.info("Found resumptionToken: %s", resumptionToken)
             except KeyError:
                 logger.info("Could not find resumptionToken in response")
                 logger.info(response_dict)
