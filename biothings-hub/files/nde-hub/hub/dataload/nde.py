@@ -790,7 +790,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "description": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "keyword", "copy_to": ["all"]}
                 }
             },
