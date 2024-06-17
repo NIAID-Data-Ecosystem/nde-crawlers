@@ -109,6 +109,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  massive-crawler:
+    build:
+      context: massive
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   mendeley-crawler:
     build:
       context: mendeley
@@ -133,6 +139,8 @@ services:
     build:
       context: ncbi_sra
       dockerfile: Dockerfile
+      args:
+        buildtime_variable: ${NCBI_API_KEY}
     volumes:
       - data:/data
       - cache:/cache

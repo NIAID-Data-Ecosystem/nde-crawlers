@@ -3,6 +3,7 @@ import urllib.parse
 from datetime import datetime
 
 import requests
+from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -46,6 +47,36 @@ def fetch_dataset(dataset_id):
         raise Exception(f"Failed to fetch dataset {dataset_id}, status code: {response.status_code}")
 
 
+def fetch_html_content(task):
+    url = f"https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?task={task}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.text
+    else:
+        raise Exception(f"Failed to fetch HTML content for task {task}, status code: {response.status_code}")
+
+
+def parse_html_for_doi_and_license(html_content):
+    soup = BeautifulSoup(html_content, "html.parser")
+    p_tag = soup.find("p")
+
+    doi = None
+    license_url = None
+
+    if p_tag:
+        doi_link = p_tag.find("a", href=lambda href: href and "doi.org" in href)
+        if doi_link:
+            doi = doi_link.text.strip().replace("doi:", "")
+
+        license_link = p_tag.find("a", href=lambda href: href and "creativecommons.org" in href)
+        if license_link:
+            license_url = license_link["href"].strip()
+
+    logger.info(f"DOI: {doi}, License URL: {license_url}")
+
+    return doi, license_url
+
+
 def parse_dataset(json_data):
     output = {
         "includedInDataCatalog": {
@@ -64,6 +95,14 @@ def parse_dataset(json_data):
 
         if task := item.get("task"):
             output["url"] = "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?task=" + task
+
+            # Fetch and parse HTML content for DOI and License
+            html_content = fetch_html_content(task)
+            doi, license_url = parse_html_for_doi_and_license(html_content)
+            if doi:
+                output["doi"] = doi
+            if license_url:
+                output["license"] = license_url
 
         if repo_path := item.get("repo_path"):
             path = repo_path.split("-")[-1]
@@ -121,7 +160,7 @@ def parse_dataset(json_data):
                 if citation_id := pub.get("id"):
                     pub_data["identifier"] = citation_id
                 if authors := pub.get("authors"):
-                    pub_data["author"] = authors
+                    pub_data["author"] = {"name": authors}
                 if title := pub.get("title"):
                     pub_data["name"] = title
                 if doi := pub.get("citation"):
