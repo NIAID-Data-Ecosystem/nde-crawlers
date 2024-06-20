@@ -30,10 +30,10 @@ def oai_helper(last_updated=None):
     # last_updated is a date defined in the update_cache function to retrieve records from a specific date
     # last_updated will default to None when called in load_cache
     if last_updated:
-        url = f"https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc&from={last_updated}"
+        url = f"https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc&from={last_updated}&set=item_type_3"
         logger.info("Retrieving records from %s", last_updated)
 
-    url = "https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc"
+    url = "https://api.figshare.com/v2/oai?verb=ListRecords&metadataPrefix=uketd_dc&set=item_type_3"
     count = 0
 
     # Retry logic to handle 500 errors
