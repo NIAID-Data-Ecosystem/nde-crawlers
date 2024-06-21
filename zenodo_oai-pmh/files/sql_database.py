@@ -6,6 +6,7 @@ import sqlite3
 import time
 import traceback
 
+import dateutil
 import requests
 from dateutil.relativedelta import relativedelta
 from sickle import Sickle
@@ -14,6 +15,17 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger("nde-logger")
+
+
+def handle_error(err, retry_sleep_sec):
+    """Handle error for retrying on 502 and 504 errors"""
+    if err.response.status_code in [502, 504]:
+        logger.error("Could not connect to server. Retrying in %s seconds.", retry_sleep_sec)
+        logger.error(err)
+        logger.error(traceback.format_exc())
+        time.sleep(retry_sleep_sec)
+    else:
+        raise err
 
 
 def retry_oai(retry_num, retry_sleep_sec):
@@ -37,16 +49,17 @@ def retry_oai(retry_num, retry_sleep_sec):
                     break
                 except requests.exceptions.HTTPError as err:
                     interval = kwargs.get("interval") or args[3]
-                    if interval and interval.get("days") and interval.get("days") == 1:
-                        if err.response.status_code == 502 or err.response.status_code == 504:
-                            logger.error("Could not connect to server. Retrying in %s seconds.", retry_sleep_sec)
-                            logger.error(err)
-                            logger.error(traceback.format_exc())
-                            time.sleep(retry_sleep_sec)
+                    granularity = kwargs.get("granularity") or args[4]
+                    if granularity != "YYYY-MM-DDThh:mm:ssZ":
+                        if interval and interval.get("days") == 1:
+                            handle_error(err, retry_sleep_sec)
                         else:
                             raise err
                     else:
-                        raise err
+                        if interval and interval.get("hours") == 1:
+                            handle_error(err, retry_sleep_sec)
+                        else:
+                            raise err
                 if attempt + 1 == retry_num:
                     logger.error("func %s retry failed", func)
                     raise Exception("Exceed max retry num: {} failed".format(retry_num))
@@ -284,7 +297,7 @@ class OAIDatabase(NDEDatabase):
 
     START = None
     # end date needs to be tomorrow since it is not inclusive
-    END = datetime.date.today() + datetime.timedelta(days=1)
+    END = datetime.datetime.now().replace(microsecond=0) + datetime.timedelta(days=1)
     METADATA_PREFIX = None
     INTERVAL = None
     HOST = None
@@ -294,6 +307,43 @@ class OAIDatabase(NDEDatabase):
     def __init__(self, sql_db=None):
         super().__init__(sql_db)
         self.sickle = Sickle(self.HOST, max_retries=4, default_retry_after=10)
+        self.identify = self.sickle.Identify()
+        self.granularity = self.identify.granularity
+        self.start = self.START or self.identify.earliestDatestamp
+        self.end = self.END
+        assert (
+            "hours" or "days" or "years" in self.INTERVAL.keys()
+        ), "INTERVAL format only permits hours, days, or years"
+        if self.granularity != "YYYY-MM-DDThh:mm:ssZ":
+            self.start = self.start.date()
+            self.end = self.end.date()
+            if "hours" in self.INTERVAL.keys():
+                raise AssertionError("OAI format does not permit hourly intervals")
+
+    @property
+    def start(self):
+        return self._start
+
+    @start.setter
+    def start(self, value):
+        if isinstance(value, str):
+            self._start = dateutil.parser.parse(value, ignoretz=True)
+        else:
+            self._start = value
+
+    @property
+    def end(self):
+        return self._end
+
+    @end.setter
+    def end(self, value):
+        if value:
+            if isinstance(value, str):
+                self._end = dateutil.parser.parse(value, ignoretz=True)
+            else:
+                self._end = value
+        else:
+            self._end = datetime.datetime.now().replace(microsecond=0) + datetime.timedelta(days=1)
 
     def record_data(self, record):
         """Choose what information in the request record to yield into the cache table
@@ -302,7 +352,7 @@ class OAIDatabase(NDEDatabase):
         raise NotImplementedError("Define in Subclass")
 
     @retry_oai(retry_num=5, retry_sleep_sec=10)
-    def request_data(self, start, until, interval):
+    def request_data(self, start, until, interval, granularity):
         """Request data from the sickle object
         Args:
             sickle: sickle object
@@ -325,26 +375,30 @@ class OAIDatabase(NDEDatabase):
         logger.info("Total Records for this interval: %s", count)
 
     def load_cache(self, start=None):
-        start = start or self.START
-        end = self.END
+        if start:
+            self.start = start
         # since dictionaries are mutable we need to make a copy
         interval = self.INTERVAL.copy()
 
-        while start < end:
+        while self.start < self.end:
             try:
-                until = min(start + relativedelta(**interval), end)
-                logger.info("Start: %s, Until: %s, Interval: %s", start, until, interval)
-                records = self.request_data(start, until, interval)
+                until = min(self.start + relativedelta(**interval), self.end)
+                logger.info("Start: %s, Until: %s, Interval: %s", self.start, until, interval)
+                records = self.request_data(self.start, until, interval, self.granularity)
                 for record in records:
                     yield record
             except requests.exceptions.HTTPError as e:
                 if e.response.status_code == 422 and "UNPROCESSABLE ENTITY" in e.response.reason:
                     logger.info("No records found for this url %s. Continue to next interval.", e.response.url)
-                    start = until
+                    self.start = until
                     interval = self.INTERVAL.copy()
                 else:
                     # break the while loop failed to many times
-                    if interval.get("days") and interval.get("days") // 2 == 0:
+                    if self.granularity != "YYYY-MM-DDThh:mm:ssZ":
+                        if interval.get("days") and interval.get("days") // 2 == 0:
+                            logger.error(traceback.format_exc())
+                            raise e
+                    elif interval.get("hours") and interval.get("hours") // 2 == 0:
                         logger.error(traceback.format_exc())
                         raise e
                     # when querying by year fails change to days
@@ -352,14 +406,18 @@ class OAIDatabase(NDEDatabase):
                         if interval["years"] // 2 == 0:
                             interval["days"] = 365
                             del interval["years"]
+                    if "days" in interval.keys():
+                        if interval["days"] // 2 == 0:
+                            interval["hours"] = 24
+                            del interval["days"]
                     # cut interval in half every time it fails
                     interval = {k: max(1, v // 2) for k, v in interval.items()}
             else:
-                start = until
+                self.start = until
                 interval = self.INTERVAL.copy()
 
     def update_cache(self):
-        last_updated = datetime.date.fromisoformat(self.retreive_last_updated())
+        last_updated = self.retreive_last_updated()
 
         # get all the records since last_updated to add into current cache
         logger.info("Updating cache from %s", last_updated)

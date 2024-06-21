@@ -18,9 +18,10 @@ class Zenodo(OAIDatabase):
     EXPIRE = datetime.timedelta(days=180)
 
     START = datetime.date.fromisoformat("2017-08-01")
-    METADATA_PREFIX = "oai_datacite"
     INTERVAL = {"days": 60}
+
     HOST = "https://zenodo.org/oai2d"
+    METADATA_PREFIX = "oai_datacite"
     SLEEP_COUNT = 1000
     SLEEP_LENGTH = 0.5
 
