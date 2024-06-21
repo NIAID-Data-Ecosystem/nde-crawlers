@@ -17,7 +17,6 @@ class Zenodo(OAIDatabase):
     SQL_DB = "zenodo.db"
     EXPIRE = datetime.timedelta(days=180)
 
-    START = datetime.date.fromisoformat("2017-08-01")
     INTERVAL = {"days": 60}
 
     HOST = "https://zenodo.org/oai2d"
