@@ -117,8 +117,7 @@ def is_purely_augmented(field, field_content):
 
     if isinstance(field_content, list):
         return all(
-            isinstance(item, dict) and
-            (item.get("fromPMID", False) or item.get("fromGPT", False))
+            isinstance(item, dict) and (item.get("fromPMID", False) or item.get("fromGPT", False))
             for item in field_content
         )
 
@@ -202,10 +201,14 @@ def add_metadata_score(document: Dict) -> Dict:
     total_recommended_augmented = len(RECOMMENDED_AUGMENTED_FIELDS)
 
     existing_required_fields = [
-        field for field in REQUIRED_FIELDS if field in document and not is_purely_augmented(field, document[field])
+        field
+        for field in local_required_fields
+        if field in document and not is_purely_augmented(field, document[field])
     ]
     existing_recommended_fields = [
-        field for field in RECOMMENDED_FIELDS if field in document and not is_purely_augmented(field, document[field])
+        field
+        for field in local_recommended_fields
+        if field in document and not is_purely_augmented(field, document[field])
     ]
 
     document["_meta"] = {
