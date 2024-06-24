@@ -16,7 +16,7 @@ disable_warnings(InsecureRequestWarning)
 class VEuPathDB_Dumper(DockerContainerDumper):
     SRC_NAME = "veupathdb"
     SRC_ROOT_FOLDER = os.path.join(DATA_ARCHIVE_ROOT, SRC_NAME)
-    SCHEDULE = None
+    SCHEDULE = "0 4 * * 6"  # Every Saturday at 4:00 AM
     UNCOMPRESS = True
     SRC_URLS = [
         f'docker://su07?image=nde-crawlers_{SRC_NAME}-crawler&tag=latest&path=/data/{SRC_NAME}_crawled/data.ndjson&dump_command="/home/biothings/run-api-crawler.sh"&container_name={SRC_NAME}_dumper&keep_container=false'

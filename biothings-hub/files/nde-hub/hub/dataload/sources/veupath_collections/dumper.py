@@ -16,7 +16,7 @@ disable_warnings(InsecureRequestWarning)
 class VEuPathCollections_Dumper(DockerContainerDumper):
     SRC_NAME = "veupath_collections"
     SRC_ROOT_FOLDER = os.path.join(DATA_ARCHIVE_ROOT, SRC_NAME)
-    SCHEDULE = None
+    SCHEDULE = "0 16 * * 6"  # Every Saturday at 4:00 PM
     UNCOMPRESS = True
 
     SRC_URLS = [

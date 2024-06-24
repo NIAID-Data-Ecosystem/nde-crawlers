@@ -16,7 +16,7 @@ disable_warnings(InsecureRequestWarning)
 class ImmPortDumper(DockerContainerDumper):
     SRC_NAME = "immport"
     SRC_ROOT_FOLDER = os.path.join(DATA_ARCHIVE_ROOT, SRC_NAME)
-    SCHEDULE = None
+    SCHEDULE = "0 12 * * 6"  # Every Saturday at noon
     UNCOMPRESS = True
     SRC_URLS = [
         f'docker://su07?image=nde-crawlers_{SRC_NAME}-crawler&tag=latest&path=/data/{SRC_NAME}_crawled/data.ndjson&dump_command="/home/biothings/run-api-crawler.sh"&container_name={SRC_NAME}_dumper&keep_container=false'

@@ -17,7 +17,7 @@ disable_warnings(InsecureRequestWarning)
 class DataverseDumper(DockerContainerDumper):
     SRC_NAME = "dataverse"
     SRC_ROOT_FOLDER = os.path.join(DATA_ARCHIVE_ROOT, SRC_NAME)
-    SCHEDULE = None
+    SCHEDULE = "0 17 1 1,4,7,10 *"  # 1st day of Jan, Apr, Jul, Oct at 17:00 UTC
     UNCOMPRESS = True
     # NAMED_VOLUMES = [{"name": "dataverse_data", "driver":"local", "driver_opts": {"type": "none", "o": "bind", "device": "/opt/nde/data_test_1"}},
     #                  {"name": "dataverse_cache", "driver":"local", "driver_opts": {"type": "none", "o": "bind", "device": "/opt/nde/cache_test"}}]
