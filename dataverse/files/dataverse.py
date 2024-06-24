@@ -6,7 +6,10 @@ from html.parser import HTMLParser
 
 import psutil
 import requests
-from sql_database import NDEDatabase
+# from sql_database import NDEDatabase
+
+import pprint
+
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -17,61 +20,18 @@ MAX_RETRIES = 10
 BASE_DELAY = 2  # 2 seconds
 MAX_DELAY = 60  # 1 minute
 
-
-class Dataverse(NDEDatabase):
+class Dataverse(): #NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
 
     DATAVERSE_SERVER = "https://dataverse.harvard.edu/api"
     EXPORT_URL = f"{DATAVERSE_SERVER}/datasets/export?exporter=schema.org"
 
-    def extract_schema_json(self, url):
-        """
-        When the schema.org export of the dataset fails,
-        this will grab it from the URL by looking for <script type="application/ld+json">
-        """
-
-        class SchemaScraper(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.readingSchema = False
-                self.schema = None
-
-            def handle_starttag(self, tag, attrs):
-                attrs = dict(attrs)
-                if tag == "script" and attrs.get("type") == "application/ld+json":
-                    self.readingSchema = True
-
-            def handle_data(self, data):
-                if self.readingSchema:
-                    self.schema = data
-                    self.readingSchema = False
-
-        retries = 0
-        backoff_time = BASE_DELAY
-        logger.info(f"Scraping {url} for schema representation")
-
-        while retries <= MAX_RETRIES:
-            try:
-                req = requests.get(url)
-                if not req.ok:
-                    logger.info(f"unable to retrieve {url}, status code: {req.status_code}")
-                    return False
-                parser = SchemaScraper()
-                parser.feed(req.text)
-                if parser.schema:
-                    return parser.schema.strip().replace("\n", "").replace("\r", "").replace("\t", "")
-                return False
-            except requests.RequestException as requestException:
-                retries += 1
-                if retries > MAX_RETRIES:
-                    logger.info(f"Failed to scrape {url} after {MAX_RETRIES} attempts due to {requestException}")
-                    return False
-                logger.info(f"Scraping failed due to {requestException}, retrying in {backoff_time} seconds...")
-                time.sleep(backoff_time)
-                backoff_time = min(MAX_DELAY, backoff_time * 2)  # double the wait time, but cap at MAX_DELAY
-
     def run_dataverse_schema_export(self, gid, url, verbose=False):
+        """
+        Run the dataverse schema.org export on a harvard dataset
+        Returns the schema.org json object
+        """
         dv_schema_export = f"{self.EXPORT_URL}&persistentId={gid}"
         logger.info(f"Running export using dataverse api - {dv_schema_export}")
 
@@ -152,28 +112,29 @@ class Dataverse(NDEDatabase):
             else:
                 pass
 
-    def handle_net_case(self, data_url):
-        schema_record = self.extract_schema_json(data_url)
-        if schema_record:
-            data_dict = json.loads(schema_record)
-            return (data_dict["@id"], schema_record)
-        else:
-            return False
-
     def log_memory_usage(self):
         process = psutil.Process()
         memory_use = process.memory_info().rss / (1024 * 1024)  # Convert bytes to MB
         logging.info(f"Current memory usage: {memory_use:.2f} MB")
 
-
     def load_cache(self):
+        """
+        # For Dev...
+        # Testing ~ set initial_start_page to view different sources
+        # initial_start_page=0 -- for harvard sources
+        #   - https://dataverse.harvard.edu/api/search?q=*&type=dataset&per_page=100&start=0
+        # initial_start_page=94000 -- for external sources (this may increase as more data is added to dataverse)
+        #   - https://dataverse.harvard.edu/api/search?q=*&type=dataset&per_page=5&start=94000
+        # initial_start_page=155000 -- for handle urls
+        #   - https://dataverse.harvard.edu/api/search?q=*&type=dataset&per_page=5&start=155000
+        """
         logger.info("Runing load_cache process....")
 
         # Initial memory usage log
         self.log_memory_usage()
 
         # Adjust the start parameter to skip the desired number of records
-        initial_page_start = 0
+        initial_page_start = 94000
         records_processed = 0
         handle_url_ct=0
         schemas_gathered_ct=0
@@ -184,45 +145,31 @@ class Dataverse(NDEDatabase):
         # Iterate through the paginated data starting from the adjusted initial position
         for global_id, data_url, data_page in self.compile_paginated_data(query_endpoint, per_page=400, start=initial_page_start):
             records_processed += 1
-            if global_id.startswith("doi:10.7910"):
-                if "https://hdl.handle.net/" in data_url:
-                    record_id, schema_record = self.handle_net_case(data_url)
-                    handle_url_ct += 1
-                    if schema_record:
-                        yield (record_id, schema_record)
-                        schemas_gathered_ct += 1
-                else:
-                    schema_record =  self.run_dataverse_schema_export(global_id, data_url)
-                    if schema_record and isinstance(schema_record, dict) and schema_record.get("@id"):
-                        logger.info(f"schema export passed on {data_url}")
-                        yield (schema_record["@id"], json.dumps(schema_record))
-                        schemas_gathered_ct += 1
-            else:
-                # are https://hdl.handle.net/1902.4 empty/dead-links (404 error)
+            if "https://hdl.handle.net/" in data_url:
                 if "https://hdl.handle.net/1902.4" in data_url:
+                    # https://hdl.handle.net/1902.4 : empty/dead-links (404 error) -- maybe handle 404 instead?
                     pass
                 elif "https://hdl.handle.net/" in data_url:
-                    if record := self.handle_net_case(data_url):
-                        record_id, schema_record = record
-                    else:
-                        schema_record = None
-                    if schema_record:
-                        yield (record_id, schema_record)
+                    handle_url_ct += 1
+                    if data_page:
+                        yield (data_url, json.dumps(data_page))
                         schemas_gathered_ct += 1
-                else:
-                    schema_record = self.extract_schema_json(data_url)
-                    if schema_record:
-                        data_dict = json.loads(schema_record)
-                        if "@id" in data_dict.keys():
-                            record_id = data_dict["identifier"]
-                            yield (record_id,  schema_record)
-                            schemas_gathered_ct += 1
-                        elif "identifier" in data_dict.keys():
-                            record_id = data_dict["identifier"]
-                            yield (record_id,  schema_record)
-                            schemas_gathered_ct += 1
-                        else:
-                            pass
+                
+            elif global_id.startswith("doi:10.7910"):
+                # case: harvard data - doi:10.7910
+                # run the built-in dataverse schema export on harvard dataverse sources
+                schema_record =  self.run_dataverse_schema_export(global_id, data_url)
+                if schema_record and isinstance(schema_record, dict) and schema_record.get("@id"):
+                    logger.info(f"schema export passed on {data_url}")
+                    yield (schema_record["@id"], json.dumps(schema_record))
+                    schemas_gathered_ct += 1
+
+            else:
+                # case: outside data (non-harvard registered--therefore not standardized)
+                if data_page:
+                    # yield data available through dataverse api, not extracting from url
+                    yield(data_url, json.dumps(data_page))
+                    schemas_gathered_ct += 1
 
             if records_processed % 1000 == 0:
                 logger.info(f"Processed {records_processed} datasets, going to sleep for {sleep_time} seconds to manage load...")
