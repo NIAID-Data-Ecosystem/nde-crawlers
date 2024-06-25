@@ -119,7 +119,7 @@ class Dataverse(): #NDEDatabase):
 
     def load_cache(self):
         """
-        # For Dev...
+        # For Dev
         # Testing ~ set initial_start_page to view different sources
         # initial_start_page=0 -- for harvard sources
         #   - https://dataverse.harvard.edu/api/search?q=*&type=dataset&per_page=100&start=0
@@ -134,7 +134,7 @@ class Dataverse(): #NDEDatabase):
         self.log_memory_usage()
 
         # Adjust the start parameter to skip the desired number of records
-        initial_page_start = 94000
+        initial_page_start = 0
         records_processed = 0
         handle_url_ct=0
         schemas_gathered_ct=0
@@ -386,13 +386,13 @@ class Dataverse(): #NDEDatabase):
                     if "citation" in dataset:
                         dataset["citation"] = {"citation": dataset.pop("citation")}
 
-                    dataset.pop("publisher")
-                    dataset.pop("citationHtml")
-                    dataset.pop("storageIdentifier")
-                    dataset.pop("fileCount")
-                    dataset.pop("versionId")
-                    dataset.pop("versionState")
-                    dataset.pop("contacts")
+                    keys_to_remove = ['dataSources', 'geographicCoverage', 'majorVersion', 'producers',
+                                    'publications', 'relatedMaterial', 'topicCategory', 'publisher', 'citationHtml',
+                                    'storageIdentifier', 'fileCount', 'versionId', 'versionState', 'contacts']
+
+                    for key in keys_to_remove:
+                        print(f"removing key: {key}")
+                        dataset.pop(key, None)
 
                     yield dataset
                     parse_ct += 1
