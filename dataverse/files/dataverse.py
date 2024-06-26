@@ -6,9 +6,7 @@ from html.parser import HTMLParser
 
 import psutil
 import requests
-# from sql_database import NDEDatabase
-
-import pprint
+from sql_database import NDEDatabase
 
 
 logging.basicConfig(
@@ -20,7 +18,7 @@ MAX_RETRIES = 10
 BASE_DELAY = 2  # 2 seconds
 MAX_DELAY = 60  # 1 minute
 
-class Dataverse(): #NDEDatabase):
+class Dataverse(NDEDatabase):
     SQL_DB = "dataverse.db"
     EXPIRE = datetime.timedelta(days=90)
 
@@ -134,7 +132,7 @@ class Dataverse(): #NDEDatabase):
         self.log_memory_usage()
 
         # Adjust the start parameter to skip the desired number of records
-        initial_page_start = 0
+        initial_page_start = 155000
         records_processed = 0
         handle_url_ct=0
         schemas_gathered_ct=0
@@ -191,10 +189,9 @@ class Dataverse(): #NDEDatabase):
         # records = [rec]
         # logger.info(f"Starting parsing of {len(records)} records...")
         for record in records:
-            # logger.info(f"parsing record {record[0]}")
             try:
                 dataset = json.loads(record[1])
-                # here is where the exported schema.org data is parsed
+                # parse the schema.org export document
                 if "@context" in dataset or "@type" in dataset:
                     dataset = json.loads(record[1])
                     dataset["url"] = dataset["identifier"]
@@ -391,7 +388,6 @@ class Dataverse(): #NDEDatabase):
                                     'storageIdentifier', 'fileCount', 'versionId', 'versionState', 'contacts']
 
                     for key in keys_to_remove:
-                        print(f"removing key: {key}")
                         dataset.pop(key, None)
 
                     yield dataset
