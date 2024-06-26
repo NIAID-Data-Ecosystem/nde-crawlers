@@ -132,7 +132,7 @@ class Dataverse(NDEDatabase):
         self.log_memory_usage()
 
         # Adjust the start parameter to skip the desired number of records
-        initial_page_start = 155000
+        initial_page_start = 0
         records_processed = 0
         handle_url_ct=0
         schemas_gathered_ct=0
