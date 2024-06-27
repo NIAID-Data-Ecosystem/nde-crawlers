@@ -42,7 +42,7 @@ class DryadItemProcessorPipeline:
             "@context": item.pop("@context"),
             "@type": item.pop("@type"),
             "url": item.pop("url"),
-            "_id": "DRYAD_" + last_part,
+            "_id": "DRYAD_" + last_part.replace(".", "_"),
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "Dryad Digital Repository",
