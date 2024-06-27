@@ -1,0 +1,51 @@
+
+Code for extracting a json schema -- used in previous dataverse extraction. 
+Dataverse has in-house data that is easily exported to schema.org export with their built-in function.
+Other data sources are not always exportable directly with the function. 
+This was used to extract external resource data.
+
+def extract_schema_json(self, url):
+    """
+    When the schema.org export of the dataset fails,
+    this will grab it from the URL by looking for <script type="application/ld+json">
+    """
+
+    class SchemaScraper(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.readingSchema = False
+            self.schema = None
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "script" and attrs.get("type") == "application/ld+json":
+                self.readingSchema = True
+
+        def handle_data(self, data):
+            if self.readingSchema:
+                self.schema = data
+                self.readingSchema = False
+
+    retries = 0
+    backoff_time = BASE_DELAY
+    logger.info(f"Scraping {url} for schema representation")
+
+    while retries <= MAX_RETRIES:
+        try:
+            req = requests.get(url)
+            if not req.ok:
+                logger.info(f"unable to retrieve {url}, status code: {req.status_code}")
+                return False
+            parser = SchemaScraper()
+            parser.feed(req.text)
+            if parser.schema:
+                return parser.schema.strip().replace("\n", "").replace("\r", "").replace("\t", "")
+            return False
+        except requests.RequestException as requestException:
+            retries += 1
+            if retries > MAX_RETRIES:
+                logger.info(f"Failed to scrape {url} after {MAX_RETRIES} attempts due to {requestException}")
+                return False
+            logger.info(f"Scraping failed due to {requestException}, retrying in {backoff_time} seconds...")
+            time.sleep(backoff_time)
+            backoff_time = min(MAX_DELAY, backoff_time * 2)  # double the wait time, but cap at MAX_DELAY
