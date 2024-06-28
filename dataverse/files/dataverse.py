@@ -286,11 +286,7 @@ class Dataverse(NDEDatabase):
                         else:
                             dataset.pop("citation")
 
-                    if "includedInDataCatalog" in dataset:
-                        dataset["includedInDataCatalog"] = dataset["includedInDataCatalog"]
-                        dataset["includedInDataCatalog"]["versionDate"] = datetime.datetime.today().strftime("%Y-%m-%d")
-                    else:
-                        dataset["includedInDataCatalog"] = {
+                    dataset["includedInDataCatalog"] = {
                             "@type": "dataset",
                             "name": "Harvard Dataverse",
                             "url": "https://dataverse.harvard.edu/",
