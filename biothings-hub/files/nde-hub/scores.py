@@ -108,6 +108,6 @@ RECOMMENDED_AUGMENTED_FIELDS = [
     "species",
     "infectiousAgent",
     "healthCondition",
-    "citation"
+    "citation",
     "topicCategory"
 ]
