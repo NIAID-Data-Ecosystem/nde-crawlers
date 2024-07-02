@@ -117,7 +117,7 @@ def is_purely_augmented(field, field_content):
 
     if isinstance(field_content, list):
         return all(
-            isinstance(item, dict) and (item.get("fromPMID", False) or item.get("fromGPT", False))
+            isinstance(item, dict) and (item.get("fromPMID", False) or item.get("fromGPT", False) or item.get("fromEXTRACT", False))
             for item in field_content
         )
 
@@ -154,12 +154,12 @@ def check_augmented_fields(document, augmented_field_list):
     for field in augmented_field_list:
         value = document.get(field, None)
 
-        if isinstance(value, dict) and (value.get("fromPMID", False) or value.get("fromGPT", False)):
+        if isinstance(value, dict) and (value.get("fromPMID", False) or value.get("fromGPT", False) or value.get("fromEXTRACT", False)):
             augmented_fields_found.append(field)
 
         elif isinstance(value, list):
             for item in value:
-                if isinstance(item, dict) and (item.get("fromPMID", False) or item.get("fromGPT", False)):
+                if isinstance(item, dict) and (item.get("fromPMID", False) or item.get("fromGPT", False) or item.get("fromEXTRACT", False)):
                     augmented_fields_found.append(field)
                     break  # Once we find one instance in the list, we can break out
 
