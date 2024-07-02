@@ -1,4 +1,5 @@
 from hub.dataload.nde import NDESourceUploader
+from utils.funding_helper import standardize_funding
 from utils.in_defined_term_set import handle_dde_docs
 from utils.pubtator import standardize_data
 from utils.topic_category_helper import add_topic_category
@@ -18,7 +19,8 @@ class DDEUploader(NDESourceUploader):
     @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = handle_dde_docs(data_folder)
-        pubtator_docs = standardize_data(docs)
+        funding_docs = standardize_funding(docs)
+        pubtator_docs = standardize_data(funding_docs)
         topic_category_docs = add_topic_category(pubtator_docs, self.name)
         for doc in topic_category_docs:
             yield doc
