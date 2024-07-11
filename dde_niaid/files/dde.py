@@ -149,7 +149,12 @@ def parse():
 
             # all of niaid systems biology is a subset of niaid data ecosystem but if nde is in the context then it is not part of niaid systems biology
             # if the above comment confuses the reader, think of it like the story of oedipus
-            if hit.get("@context") and "niaid" in hit.get("@context") and "nde" not in hit.get("@context"):
+            if (
+                hit.get("@context")
+                and "niaid" in hit.get("@context")
+                and "nde" not in hit.get("@context")
+                and "creid" not in hit.get("@context")
+            ):
                 included_in_data_catalog.append(
                     {
                         "@type": nde_type,
@@ -168,6 +173,25 @@ def parse():
                 )
 
             hit["includedInDataCatalog"] = included_in_data_catalog
+
+            if citations := hit.get("citation"):
+                if not isinstance(citations, list):
+                    citations = [citations]
+                for citation in citations:
+                    if citation.get("@type") == "ScholarlyArticle":
+                        if pmid := citation.get("pmid"):
+                            hit["pmids"] = (
+                                hit.get("pmids") + "," + str(pmid).lstrip("0") if hit.get("pmids") else str(pmid)
+                            )
+
+                # Use list comprehension to filter out citations with a PMID
+                hit["citation"] = [
+                    citation
+                    for citation in citations
+                    if not (citation.get("pmid") and citation.get("@type") == "ScholarlyArticle")
+                ]
+                if not hit["citation"]:
+                    del hit["citation"]
 
             # remove nonetypes from distribution
             if distribution := hit.pop("distribution", None):
