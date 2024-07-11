@@ -223,6 +223,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "datePublished": {"type": "date"},
                     "description": {"type": "text"},
                     "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "issueNumber": {"type": "text"},
                     "journalName": {"type": "keyword", "copy_to": ["all"]},
@@ -250,6 +251,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "datePublished": {"type": "date"},
                     "description": {"type": "text"},
                     "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "issueNumber": {"type": "text"},
                     "journalName": {"type": "keyword", "copy_to": ["all"]},
@@ -423,8 +425,21 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "datePublished": {"type": "date"},
                     "encodingFormat": {"type": "text"},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
@@ -542,11 +557,21 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
                     "citation": {"type": "text"},
                     "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
                     "doi": {"type": "text", "copy_to": ["all"]},
+                    "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "text", "analyzer": "nde_analyzer"},
                     "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
@@ -554,8 +579,21 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "isBasisFor": {
                 "properties": {
+                    "@type": {"type": "keyword"},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "datePublished": {"type": "date"},
+                    "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
@@ -570,8 +608,20 @@ class NDESourceUploader(BaseSourceUploader):
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
                     "alternateName": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "datePublished": {"type": "date"},
+                    "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
@@ -600,7 +650,11 @@ class NDESourceUploader(BaseSourceUploader):
                     "hasPart": {
                         "properties": {
                             "@type": {"type": "text"},
-                            "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
+                            "identifier": {
+                                "type": "keyword",
+                                "copy_to": ["all"],
+                                "normalizer": "keyword_lowercase_normalizer",
+                            },
                         }
                     },
                     "relationship": {"type": "text", "copy_to": ["all"]},
@@ -798,7 +852,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "description": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "url": {"type": "keyword", "copy_to": ["all"]}
+                    "url": {"type": "keyword", "copy_to": ["all"]},
                 }
             },
             "url": {"type": "text", "copy_to": ["all"]},
