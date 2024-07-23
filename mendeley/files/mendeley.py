@@ -5,6 +5,8 @@ from datetime import datetime
 
 import dateutil.parser as parser
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from sickle import Sickle
 
 # used to test single record
@@ -23,6 +25,11 @@ url_count = 0
 # Function that returns a response using requests, used in ThreadPoolExecutor later on
 
 session = requests.Session()
+retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+adapter = HTTPAdapter(max_retries=retries)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
+
 url_count = 0
 
 
@@ -31,7 +38,13 @@ def get_url(url):
     url_count += 1
     if url_count % 1000 == 0:
         logger.info(f"Retrieved {url_count} Metadata Sources")
-    return session.get(url)
+    try:
+        response = session.get(url, timeout=10)
+        response.raise_for_status()
+        return response
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error retrieving URL {url}: {e}")
+        return None
 
 
 def parse():
@@ -75,7 +88,7 @@ def parse():
 
     # Finally we handle the transformations after retrieving all the metadata.
     for response in response_list:
-        if response.status_code == 200:
+        if response and response.status_code == 200:
             metadata_count += 1
             if metadata_count % 1000 == 0:
                 logger.info(f"Parsed {metadata_count} records")
