@@ -17,7 +17,7 @@ logger = logging.getLogger("nde-logger")
 
 
 class Figshare(NDEDatabase):
-    SQL_DB = "figshare.db"
+    SQL_DB = "figshare_filter.db"
     EXPIRE = datetime.timedelta(days=90)
 
     # sickle = Sickle('https://api.figshare.com/v2/oai',
