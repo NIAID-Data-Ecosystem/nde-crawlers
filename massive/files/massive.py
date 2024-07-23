@@ -207,6 +207,9 @@ def parse():
         try:
             dataset_json = fetch_dataset(dataset_id)
             parsed_dataset = parse_dataset(dataset_json)
+            if "_id" not in parsed_dataset:
+                logger.info(f"Dataset {dataset_id} has no identifier. Skipping...")
+                continue
             yield parsed_dataset
         except Exception as e:
             logger.info(f"Error processing dataset {dataset_id}: {e}")
