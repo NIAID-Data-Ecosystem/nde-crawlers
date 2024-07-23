@@ -186,18 +186,10 @@ def parse():
         }
         """
 
-        trial_variables = {
-            "filter": {
-                "in": {
-                    "cmc_unique_id": [trial["identifier"]]
-                }
-            }
-        }
+        trial_variables = {"filter": {"in": {"cmc_unique_id": [trial["identifier"]]}}}
 
         response = requests.post(
-            url,
-            json={"query": trial_query, "variables": trial_variables},
-            headers={"Content-Type": "application/json"}
+            url, json={"query": trial_query, "variables": trial_variables}, headers={"Content-Type": "application/json"}
         )
 
         test_json = json.loads(response.text)
@@ -222,7 +214,10 @@ def parse():
         if trial["datePublished"] == "Coming Soon":
             trial["datePublished"] = None
         if trial["datePublished"] is not None:
-            iso_date = datetime.strptime(trial["datePublished"], "%B %Y")
+            try:
+                iso_date = datetime.strptime(trial["datePublished"], "%B %Y")
+            except ValueError:
+                iso_date = datetime.strptime(trial["datePublished"], "%B %d, %Y")
             trial["datePublished"] = iso_date.strftime("%Y-%m-%d")
 
         # convert date to iso format
