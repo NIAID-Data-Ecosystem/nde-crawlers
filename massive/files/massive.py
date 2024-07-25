@@ -118,7 +118,8 @@ def parse_dataset(json_data):
             output["sdPublisher"] = {"name": sdPublisher}
 
         if description := item.get("description"):
-            output["description"] = description
+            if description != "null":
+                output["description"] = description
 
         if keywords := item.get("keywords"):
             if "###" in keywords:
