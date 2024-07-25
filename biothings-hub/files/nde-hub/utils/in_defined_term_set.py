@@ -48,8 +48,11 @@ def process_csv_data(csv_content):
 def species_func(species, term_set):
     if term_set == "UniProt":
         identifer = species.get("url").split("_")[-1]
-        species.update(get_species_details(species.get("name"), identifer))
-        species.update(curated_by)
+        try:
+            species.update(get_species_details(species.get("name"), identifer))
+            species.update(curated_by)
+        except Exception as e:
+            logging.error(f"Error fetching species details: {e}")
     return species
 
 
