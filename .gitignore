@@ -150,3 +150,6 @@ config.yml
 
 # VSCode
 .DS_Store
+
+#api secret key
+api_secret.py
