@@ -1,10 +1,8 @@
 import csv
 import datetime
 import logging
-import os
 from io import StringIO
 
-import orjson
 import requests
 from utils.pubtator import get_species_details, query_condition
 
@@ -48,8 +46,11 @@ def process_csv_data(csv_content):
 def species_func(species, term_set):
     if term_set == "UniProt":
         identifer = species.get("url").split("_")[-1]
-        species.update(get_species_details(species.get("name"), identifer))
-        species.update(curated_by)
+        try:
+            species.update(get_species_details(species.get("name"), identifer))
+            species.update(curated_by)
+        except Exception as e:
+            logging.error(f"Error fetching species details: {e}")
     return species
 
 
@@ -89,7 +90,7 @@ def de_duplicate_dicts(dict_list):
                 if identifier:
                     if identifier not in seen:
                         seen.add(identifier)
-                        unique_dicts.append(obj)    
+                        unique_dicts.append(obj)
     return unique_dicts
 
 
@@ -185,23 +186,16 @@ def get_in_defined_term_set(doc, properties_dict):
 #     return docs
 
 
-def handle_dde_docs(data_folder):
+def handle_dde_docs(docs):
     csv_url = "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
     response = requests.get(csv_url).text
     properties = process_csv_data(response)
 
-    if isinstance(data_folder, str):
-        # Read data from the file and process it
-        logging.info("Reading data from file...")
-        with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
-            count = 0
-            for line in f:
-                count += 1
-                if count % 1000 == 0:
-                    logging.info(f"Processed {count} lines")
-                doc = orjson.loads(line)
-                get_in_defined_term_set(doc, properties)
-                yield doc
+    for count, doc in enumerate(docs, count=1):
+        if count % 1000 == 0:
+            logging.info(f"Processed {count} lines")
+        get_in_defined_term_set(doc, properties)
+        yield doc
 
 
 # def get_in_defined_term_set_wrapper(func):

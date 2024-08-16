@@ -1,6 +1,8 @@
 from hub.dataload.nde import NDESourceUploader
+from utils.extract import process_descriptions
 from utils.funding_helper import standardize_funding
 from utils.in_defined_term_set import handle_dde_docs
+from utils.pmid_helper import load_pmid_ctfd, standardize_fields
 from utils.pubtator import standardize_data
 from utils.topic_category_helper import add_topic_category
 from utils.utils import nde_upload_wrapper
@@ -18,9 +20,12 @@ class DDEUploader(NDESourceUploader):
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
-        docs = handle_dde_docs(data_folder)
-        funding_docs = standardize_funding(docs)
-        pubtator_docs = standardize_data(funding_docs)
-        topic_category_docs = add_topic_category(pubtator_docs, self.name)
-        for doc in topic_category_docs:
+        docs = load_pmid_ctfd(data_folder)
+        docs = standardize_fields(docs)
+        docs = handle_dde_docs(docs)
+        docs = standardize_funding(docs)
+        docs = standardize_data(docs)
+        docs = process_descriptions(docs)
+        docs = add_topic_category(docs, self.name)
+        for doc in docs:
             yield doc
