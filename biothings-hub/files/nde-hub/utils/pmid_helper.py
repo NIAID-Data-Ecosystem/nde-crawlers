@@ -547,8 +547,10 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
             for grant in grants:
                 fund = {}
                 if grant_id := grant.get("GrantID"):
+                    grant_id = str(grant_id)
                     fund["identifier"] = grant_id
                 if agency := grant.get("Agency"):
+                    agency = str(agency)
                     fund_dict = standardize_funder(agency)
                     if fund_dict:
                         fund["funder"] = fund_dict
@@ -568,7 +570,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
 def load_pmid_ctfd(data_folder):
     """Takes 1000 documents at a time and batch queries all of the pmids in the documents to improve runtime.
     If there are any pmcids, convert all of them into pmids before running the batch query.
-    Loads the citation and funding into the documents along with uploading the date field.
+    Loads the citation and funding into the documents.
       Returns: A generator with the completed documents
     """
 
@@ -704,7 +706,7 @@ def load_pmid_ctfd_wrapper(func):
     """Wrapper function that takes in a generator and yields a generator that adds citations and funding to the documents using pmids.
     Takes 1000 documents at a time and batch queries all of the pmids in the documents to improve runtime.
     If there are any pmcids, convert all of them into pmids before running the batch query.
-    Loads the citation and funding into the documents along with uploading the date field.
+    Loads the citation and funding into the documents.
       Returns: A generator with the completed documents
     """
 
@@ -835,3 +837,73 @@ def load_pmid_ctfd_wrapper(func):
                             else:
                                 rec["funding"] = copy(funding)
             yield rec
+
+    return wrapper
+
+
+def standardize_fields(docs):
+    api_key = GEO_API_KEY
+    email = GEO_EMAIL
+
+    fields = ["isBasedOn", "isBasisFor", "citedBy", "isPartOf", "hasPart"]
+    while True:
+        # pmid list for batch query
+        pmid_list = []
+        # docs to yield for each batch query
+        doc_list = []
+
+        next_n_docs = list(islice(docs, 1000))
+        if not next_n_docs:
+            break
+        for count, doc in enumerate(next_n_docs, start=1):
+            if count % 1000 == 0:
+                logger.info("Processed %s documents", count)
+
+            doc_list.append(doc)
+
+            for field in fields:
+                if objects := doc.get(field):
+                    if not isinstance(objects, list):
+                        objects = [objects]
+                    for object in objects:
+                        if object.get("@type") == "ScholarlyArticle":
+                            if pmid := object.get("pmid"):
+                                doc["pmids"] = doc.get("pmids") + "," + str(pmid) if doc.get("pmids") else str(pmid)
+
+            if pmids := doc.pop("pmids", None):
+                pmid_list += [pmid.strip() for pmid in pmids.split(",")]
+
+        # check if there are any pmids before requesting
+        if pmid_list:
+            # same thing as list(set(pmid_list))
+            pmid_list = [*set(pmid_list)]
+            # batch request retry up to 3 times
+            eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
+            # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
+            if api_key:
+                time.sleep(0.1)
+            else:
+                time.sleep(0.35)
+
+        for doc in doc_list:
+            for field in fields:
+                if objects := doc.get(field):
+                    if not isinstance(objects, list):
+                        objects = [objects]
+                    field_pmids = [
+                        str(object.get("pmid"))
+                        for object in objects
+                        if object.get("pmid") and object.get("@type") == "ScholarlyArticle"
+                    ]
+                    doc[field] = [
+                        object
+                        for object in objects
+                        if not (object.get("pmid") and object.get("@type") == "ScholarlyArticle")
+                    ]
+                    if field_pmids:
+                        for pmid in field_pmids:
+                            if eutils_info.get(pmid):
+                                if citation := eutils_info[pmid].get("citation"):
+                                    citation["type"] = "ScholarlyArticle"
+                                    doc[field].append(citation)
+            yield doc
