@@ -144,6 +144,12 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  ndex-crawler:
+    build:
+      context: ndex
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   qiita-crawler:
     build:
       context: qiita

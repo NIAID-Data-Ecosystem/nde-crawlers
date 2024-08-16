@@ -3,3 +3,4 @@ datetime
 orjson
 psutil
 python-dateutil
+Sickle

@@ -202,7 +202,11 @@ def parse():
         count += 1
         if count % 50 == 0:
             logger.info("Retrieved %s workflows.", count)
-        metadata = get_metadata(workflow_id)
+        try:
+            metadata = get_metadata(workflow_id)
+        except KeyError:
+            logger.error("Metadata not found for workflow %s", workflow_id)
+            continue
         metadata_list.append(metadata)
 
     logger.info("Parsing Metadata")

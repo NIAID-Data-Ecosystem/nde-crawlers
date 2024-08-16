@@ -118,7 +118,8 @@ def parse_dataset(json_data):
             output["sdPublisher"] = {"name": sdPublisher}
 
         if description := item.get("description"):
-            output["description"] = description
+            if description != "null":
+                output["description"] = description
 
         if keywords := item.get("keywords"):
             if "###" in keywords:
@@ -207,6 +208,9 @@ def parse():
         try:
             dataset_json = fetch_dataset(dataset_id)
             parsed_dataset = parse_dataset(dataset_json)
+            if "_id" not in parsed_dataset:
+                logger.info(f"Dataset {dataset_id} has no identifier. Skipping...")
+                continue
             yield parsed_dataset
         except Exception as e:
             logger.info(f"Error processing dataset {dataset_id}: {e}")

@@ -5,7 +5,8 @@ import platform
 import traceback
 
 import orjson
-from figshare import Figshare
+
+import ndex
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -15,9 +16,12 @@ logger = logging.getLogger("nde-logger")
 # set the release string to be ISO date format
 # minute precision is good enough but feel free to change
 release_string = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-dirname = os.path.join("/data", "figshare_crawled")
+dirname = os.path.join("/data", "ndex_crawled")
+
+# save the UTC date and time of at start of crawling, in ISO-8601
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(dirname, "release.txt")
+
 # so that updates are as atomic as possible, using rename
 final_data_filename = os.path.join(dirname, "data.ndjson")
 tmp_filename = f"{final_data_filename}.{platform.node()}.{os.getpid()}"
@@ -30,8 +34,7 @@ fd = open(tmp_filename, "wb")
 is_parsed = False
 # run parser
 try:
-    parser = Figshare()
-    docs = parser.upload()
+    docs = ndex.parse()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)
@@ -44,7 +47,6 @@ except Exception:
     fd.close()
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-
 finally:
     fd.close()
 

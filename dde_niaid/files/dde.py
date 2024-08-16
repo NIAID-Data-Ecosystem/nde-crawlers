@@ -4,9 +4,55 @@ import re
 import time
 
 import requests
+from api_secret import API_KEY
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
+
+def query_bioportal(iri):
+    """
+    Fetches the descendants of a given concept in a specified ontology from BioPortal.
+
+    :param ontology: The acronym of the ontology in BioPortal.
+    :param concept_id: The ID of the concept to fetch the descendants for.
+    :param api_key: Your BioPortal API key.
+    :return: A list of child concepts.
+    """
+
+
+    base_url = "https://data.bioontology.org"
+    headers = {
+        "Authorization": f"apikey token={API_KEY}"
+    }
+
+
+    response = requests.get(f"{base_url}/search?q={iri}&require_exact_match=true", headers=headers)
+
+    if response.status_code != 200:
+        logger.error(f"Error fetching page: {base_url}/search?q={iri}&require_exact_match=true HTTP: {response.status_code}")
+
+    data = response.json()
+
+    # Check if the response is for a single concept or a list
+    if data == []:
+        logger.info("Could not find alternateNames in bioportal for: %s", iri)
+        return iri, False
+
+
+    lookup = {
+            "name": data["collection"][0]["prefLabel"],
+            "url": iri,
+            "curatedBy": {
+                "name": "Data Discovery Engine",
+                "url": "https://discovery.biothings.io/",
+                "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
+            },
+            "isCurated": True,
+        }
+
+    lookup["alternateName"] = data["collection"][0]["synonym"]
+
+    return lookup, True
 
 
 def query_ols(iri):
@@ -29,6 +75,10 @@ def query_ols(iri):
         request = requests.get(url, params).json()
         # no documentation on how many requests can be made
         time.sleep(0.5)
+
+        if not request.get("_embedded"):
+            logger.info("Could not get request from ols. %s Querying bioportal.", iri)
+            return query_bioportal(iri)
 
         lookup = {
             "name": request["_embedded"]["terms"][0]["label"],
@@ -55,7 +105,7 @@ def query_ols(iri):
 
 def format_query_ols(iri):
     """
-    Formats the query_ols return value to fit our schema for measurementTechnique, infectiousAgent, infectiousDisease, and species
+    Formats the query_ols return value to fit our schema for variableMeasured, measurementTechnique, infectiousAgent, infectiousDisease, and species
     Returns the formatted dictionary {name: ####, url: ####} if an url was given or {name: ####}
     """
     info, is_url = query_ols(iri)
@@ -67,7 +117,7 @@ def format_query_ols(iri):
 
 def format_query_ky(iri):
     """
-    Formats the query_ols return value to fit our schema for variableMeasured and keywords
+    Formats the query_ols return value to fit our schema for keywords
     Returns the formatted keyword
     """
     info, is_url = query_ols(iri)
@@ -110,64 +160,89 @@ def parse():
 
             included_in_data_catalog = [
                 {
-                    "@type": nde_type,
+                    "@type": "DataCatalog",
                     "name": "Data Discovery Engine",
                     "url": "https://discovery.biothings.io/",
                     "versionDate": datetime.date.today().isoformat(),
                 }
             ]
 
-            # add included in data catalog
+            # add sourceOrganization (as determined by the DDE portal to which the record was submitted) - this can be determined based on the @context
             if hit.get("@context") and "nde" in hit.get("@context"):
-                included_in_data_catalog.append(
+                source_organization = [
                     {
-                        "@type": nde_type,
-                        "name": "Data Discovery Engine, NIAID Data Ecosystem",
-                        "url": "https://discovery.biothings.io/portal/nde",
-                        "versionDate": datetime.date.today().isoformat(),
+                        "@type": "ResearchProject",
+                        "name": "NIAID Data Ecosystem",
+                        "url": "https://data.niaid.nih.gov",
+                        "parentOrganization": "NIAID"
                     }
-                )
+                ]
 
-            # add creide to included in data catalog
+            # add creid to included in sourceOrganization
             if hit.get("@context") and "creid" in hit.get("@context"):
-                included_in_data_catalog.append(
+                source_organization = [
                     {
-                        "@type": nde_type,
-                        "name": "Data Discovery Engine, NIAID CREID Network",
-                        "url": "https://discovery.biothings.io/portal/creid",
-                        "versionDate": datetime.date.today().isoformat(),
-                    }
-                )
-                included_in_data_catalog.append(
+                        "@type": "ResearchProject",
+                        "name": "NIAID CREID Network",
+                        "description": "The Centers for Research in Emerging Infectious Diseases (CREID) Network is a coordinated group of emerging infectious disease research centers situated in regions around the globe where emerging and re-emerging infectious disease outbreaks are likely to occur.",
+                        "alternateName": ["CREID","Centers for Research in Emerging Infectious Disease"],
+                        "url": "https://creid-network.org/",
+                        "parentOrganization": "NIAID"
+                    },
                     {
-                        "@type": nde_type,
-                        "name": "Data Discovery Engine, NIAID Data Ecosystem",
-                        "url": "https://discovery.biothings.io/portal/nde",
-                        "versionDate": datetime.date.today().isoformat(),
+                        "@type": "ResearchProject",
+                        "name": "NIAID Data Ecosystem",
+                        "url": "https://data.niaid.nih.gov",
+                        "parentOrganization": "NIAID"
                     }
-                )
+                ]
 
             # all of niaid systems biology is a subset of niaid data ecosystem but if nde is in the context then it is not part of niaid systems biology
             # if the above comment confuses the reader, think of it like the story of oedipus
-            if hit.get("@context") and "niaid" in hit.get("@context") and "nde" not in hit.get("@context"):
-                included_in_data_catalog.append(
+            if (
+                hit.get("@context")
+                and "niaid" in hit.get("@context")
+                and "nde" not in hit.get("@context")
+                and "creid" not in hit.get("@context")
+            ):
+                source_organization = [
                     {
-                        "@type": nde_type,
-                        "name": "Data Discovery Engine, NIAID Systems Biology",
-                        "url": "https://discovery.biothings.io/portal/niaid",
-                        "versionDate": datetime.date.today().isoformat(),
-                    }
-                )
-                included_in_data_catalog.append(
+                        "@type": "ResearchProject",
+                        "name": "NIAID Systems Biology",
+                        "description": "The NIAID/Division of Microbiology and Infectious Diseases (DMID) Systems Biology Consortium for Infectious Diseases is a group of interdisciplinary scientists that bridge disparate scientific disciplines including microbiology, immunology, infectious diseases, microbiome, mathematics, physics, bioinformatics, computational biology, machine learning, statistical methods, and mathematical modeling.",
+                        "alternateName": ["NIAID Systems Biology Consortium for Infectious Diseases", "NIAID SysBio"],
+                        "url": "https://www.niaid.nih.gov/research/systems-biology-consortium",
+                        "parentOrganization": "NIAID"
+                    },
                     {
-                        "@type": nde_type,
-                        "name": "Data Discovery Engine, NIAID Data Ecosystem",
-                        "url": "https://discovery.biothings.io/portal/nde",
-                        "versionDate": datetime.date.today().isoformat(),
+                        "@type": "ResearchProject",
+                        "name": "NIAID Data Ecosystem",
+                        "url": "https://data.niaid.nih.gov",
+                        "parentOrganization": "NIAID"
                     }
-                )
+                ]
 
             hit["includedInDataCatalog"] = included_in_data_catalog
+            hit["sourceOrganization"] = source_organization
+
+            if citations := hit.get("citation"):
+                if not isinstance(citations, list):
+                    citations = [citations]
+                for citation in citations:
+                    if citation.get("@type") == "ScholarlyArticle":
+                        if pmid := citation.get("pmid"):
+                            hit["pmids"] = (
+                                hit.get("pmids") + "," + str(pmid).lstrip("0") if hit.get("pmids") else str(pmid)
+                            )
+
+                # Use list comprehension to filter out citations with a PMID
+                hit["citation"] = [
+                    citation
+                    for citation in citations
+                    if not (citation.get("pmid") and citation.get("@type") == "ScholarlyArticle")
+                ]
+                if not hit["citation"]:
+                    del hit["citation"]
 
             # remove nonetypes from distribution
             if distribution := hit.pop("distribution", None):
@@ -254,9 +329,9 @@ def parse():
                 if type(vms) is list:
                     hit["variableMeasured"] = []
                     for vm in vms:
-                        hit["variableMeasured"].append(format_query_ky(vm))
+                        hit["variableMeasured"].append(format_query_ols(vm))
                 else:
-                    hit["variableMeasured"] = format_query_ky(vms)
+                    hit["variableMeasured"] = format_query_ols(vms)
 
             if keywords := hit.pop("keywords", None):
                 if type(keywords) is list:

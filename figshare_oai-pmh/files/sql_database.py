@@ -78,6 +78,8 @@ class NDEDatabase:
     # Never uses cache, defaults as false
     NO_CACHE = False
 
+    # start, metadata_prefix, sleep time and length,
+
     def __init__(self, sql_db=None):
         # database name example: zenodo.db
         self.SQL_DB = self.SQL_DB or sql_db

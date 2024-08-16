@@ -6,6 +6,7 @@ import json
 import logging
 from xml.etree import ElementTree
 
+import dateutil
 from sql_database import OAIDatabase
 
 logging.basicConfig(level=logging.INFO)
@@ -78,6 +79,10 @@ class Zenodo(OAIDatabase):
 
         if version_id:
             version_id = list(set(version_id))
+            if len(version_id) > 1:
+                version_id = [min(version_id, key=lambda doi: int(doi.split('.')[-1]))]
+
+            # sanity check
             assert len(version_id) <= 1, "There is more than one version per recordID: %s. Versions: %s" % (
                 output["_id"],
                 version_id,
@@ -149,8 +154,12 @@ class Zenodo(OAIDatabase):
         # use xml to find the license and conditionOfAccess
         rights = root.findall(".//{http://datacite.org/schema/kernel-4}rights")
         for right in rights:
-            if "access" in right.text.lower():
-                output["conditionsOfAccess"] = right.text.split(" ", 1)[0]
+            if right.text and "access" in right.text.lower():
+                enum = ["Open", "Restricted", "Closed", "Embargoed"]
+                if right.text.split(" ", 1)[0] not in enum:
+                    logger.error("Conditions of Access not valid: %s", right.text.split(" ", 1)[0])
+                else:
+                    output["conditionsOfAccess"] = right.text.split(" ", 1)[0]
             else:
                 output["license"] = right.get("rightsURI")
 
@@ -297,7 +306,17 @@ class Zenodo(OAIDatabase):
                 output["description"] = description[0]
 
             if date_published := data["metadata"].get("date"):
-                output["datePublished"] = date_published[0]
+                try:
+                    output["datePublished"] = dateutil.parser.parse(date_published[0], ignoretz=True).isoformat()
+                except (dateutil.parser._parser.ParserError, ValueError):
+                    try:
+                        logger.info("Could not parse date: %s" % date_published[0])
+                        output["datePublished"] = dateutil.parser.parse(date_published[0].split("/")[0].replace(" ", "").replace("_", "-"), ignoretz=True).isoformat()
+                    except Exception:
+                        # TODO REMOVE THIS LINE VERY SPECIFIC EXCEPTION WHERE USER PUT WRONG DATE
+                        if date_published[0] == "2024006-24":
+                            output["datePublished"] = dateutil.parser.parse("2024-06-24", ignoretz=True).isoformat()
+
 
             if language := data["metadata"].get("language"):
                 output["inLanguage"] = {"name": language[0]}
