@@ -547,8 +547,10 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
             for grant in grants:
                 fund = {}
                 if grant_id := grant.get("GrantID"):
+                    grant_id = str(grant_id)
                     fund["identifier"] = grant_id
                 if agency := grant.get("Agency"):
+                    agency = str(agency)
                     fund_dict = standardize_funder(agency)
                     if fund_dict:
                         fund["funder"] = fund_dict

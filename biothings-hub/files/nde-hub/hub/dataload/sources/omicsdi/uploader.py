@@ -1,4 +1,5 @@
 from hub.dataload.nde import NDESourceUploader
+from utils.extract import process_descriptions
 from utils.funding_helper import standardize_funding
 from utils.pmid_helper import load_pmid_ctfd
 from utils.pubtator import standardize_data
@@ -19,6 +20,7 @@ class OmicsDIUploader(NDESourceUploader):
         docs = load_pmid_ctfd(data_folder)
         docs = standardize_funding(docs)
         docs = standardize_data(docs)
+        docs = process_descriptions(docs)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
             yield doc

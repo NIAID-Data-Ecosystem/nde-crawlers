@@ -754,8 +754,15 @@ class NDESourceUploader(BaseSourceUploader):
             "sourceOrganization": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "alternateName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "description": {"type": "text"},
+                    "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text"},
                 }
             },
             "spatialCoverage": {

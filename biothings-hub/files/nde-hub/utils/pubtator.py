@@ -4,6 +4,7 @@ import logging
 import os
 import sqlite3
 import time
+from multiprocessing import Pool
 
 import orjson
 import requests
@@ -288,25 +289,25 @@ def get_xref_name(xref_ontology, xref_identifier):
 def create_return_object(hit, alternate_names, original_name):
     ontology = hit["_id"].split(":")[0]
     identifier = hit["_id"].split(":")[1]
-    sameas_list = []
-    if hit.get("xrefs"):
-        for xref_ontology, xref_identifier in hit["xrefs"].items():
-            sameas = {}
-            sameas["identifier"] = f"{xref_ontology}:{xref_identifier}"
-            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
-            # TODO - add name through api call
-            sameas_list.append(sameas)
-    elif hit.get("xref"):
-        for xref in hit["xref"]:
-            xref_ontology = xref.split(":")[0]
-            xref_identifier = xref.split(":")[1]
-            sameas = {}
-            sameas["identifier"] = xref
-            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
-            #sameas_name = get_xref_name(xref_ontology, xref_identifier)
-            #if sameas_name:
-            #    sameas["name"] = sameas_name
-            sameas_list.append(sameas)
+    #    sameas_list = []
+    #    if hit.get("xrefs"):
+    #        for xref_ontology, xref_identifier in hit["xrefs"].items():
+    #            sameas = {}
+    #            sameas["identifier"] = f"{xref_ontology}:{xref_identifier}"
+    #            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
+    # TODO - add name through api call
+    #            sameas_list.append(sameas)
+    #    elif hit.get("xref"):
+    #        for xref in hit["xref"]:
+    #            xref_ontology = xref.split(":")[0]
+    #            xref_identifier = xref.split(":")[1]
+    #            sameas = {}
+    #            sameas["identifier"] = xref
+    #            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
+    # sameas_name = get_xref_name(xref_ontology, xref_identifier)
+    # if sameas_name:
+    #    sameas["name"] = sameas_name
+    #            sameas_list.append(sameas)
 
     standard_dict = {
         "identifier": hit["_id"].split(":")[1],
@@ -321,8 +322,8 @@ def create_return_object(hit, alternate_names, original_name):
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
         },
     }
-    if sameas_list:
-        standard_dict["sameas"] = sameas_list
+    #   if sameas_list:
+    #       standard_dict["sameas"] = sameas_list
     if alternate_names:
         standard_dict["alternateName"] = list(set(alternate_names))
     return standard_dict
@@ -358,6 +359,7 @@ def get_new_health_conditions(health_conditions):
 
 
 def get_new_species(species):
+    return None
     # Split the species list into chunks of 1000
     chunks = [species[x : x + 1000] for x in range(0, len(species), 1000)]
     logger.info(f"Splitting into {len(chunks)} chunks")
@@ -509,140 +511,119 @@ def get_new_species(species):
         return None
 
 
-def lookup_item(original_name, data):
-    # Iterate through the data
-    for item in data:
-        # Compare the original_name with the item name, ignoring case
-        if original_name.lower().strip() == item[0].lower().strip():
-            # If the item data is not None, return the JSON parsed data
-            if item[1] is not None:
-                return json.loads(item[1])
+def lookup_item(original_name, data_dict):
+    original_name_lower = original_name.lower().strip()
+    if original_name_lower in data_dict:
+        return data_dict[original_name_lower]
 
-        # If the item data is not None, proceed with the comparison
-        if item[1] is not None:
-            # Load the JSON data for the item
-            item_data = json.loads(item[1])
-
-            # Compare the original_name with the item name in the JSON data, ignoring case
-            if "name" in item_data and original_name.lower().strip() == item_data["name"].lower().strip():
-                return item_data
-
-            # If the item has alternate names in the JSON data
-            if "alternateName" in item_data:
-                # Iterate through the alternate names
-                for alternate_name in item_data["alternateName"]:
-                    # Compare the original_name with the alternate name, ignoring case
-                    if original_name.lower().strip() == alternate_name.lower().strip():
-                        return item_data
-
-    # If no matching item is found, return None
+    for item_data in data_dict.values():
+        if "name" in item_data and original_name_lower == item_data["name"].lower().strip():
+            return item_data
+        if "alternateName" in item_data:
+            for alternate_name in item_data["alternateName"]:
+                if original_name_lower == alternate_name.lower().strip():
+                    return item_data
     return None
 
 
-def transform(doc_list):
-    # Connect to the SQLite database and fetch health conditions and species data
+def fetch_data_from_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT * FROM health_conditions")
+    c.execute("SELECT original_name, standard_dict FROM health_conditions")
     hc_cursor = c.fetchall()
-    c.execute("SELECT * FROM species")
+    c.execute("SELECT original_name, standard_dict FROM species")
     species_cursor = c.fetchall()
     conn.close()
 
-    def process_section_health_conditions(section, cursor):
-        return process_general_section(section, cursor, lookup_item)
+    hc_dict = {item[0].lower().strip(): json.loads(item[1]) for item in hc_cursor if item[1]}
+    species_dict = {item[0].lower().strip(): json.loads(item[1]) for item in species_cursor if item[1]}
 
-    def process_section_species_and_infectious_agents(section, cursor):
-        new_section_list = process_general_section(section, cursor, lookup_item)
+    return hc_dict, species_dict
 
-        species, infectious_agents = [], []
 
-        for item in new_section_list:
-            logger.info(f"Processing {item['name']}")
-            classification = item.get("classification", None)
-            logger.info(f"Classification: {classification}")
-            if classification == "infectiousAgent":
-                logger.info(f"Adding {item['name']} to infectious agents")
-                infectious_agents.append(item)
-            else:  # 'species' or no classification
-                logger.info(f"Adding {item['name']} to species")
-                species.append(item)
+def process_section(section, cursor_dict):
+    new_section_list = []
+    for original_obj in section:
+        if isinstance(original_obj, str):
+            logger.error(f"Invalid object: {original_obj}")
+            continue
+        original_name = original_obj.get("name")
+        if not original_name:
+            new_section_list.append(original_obj)
+            continue
 
-        return species, infectious_agents
+        new_obj = lookup_item(original_name, cursor_dict)
+        if new_obj:
+            new_section_list.append(new_obj)
+        else:
+            new_section_list.append(original_obj)
+    return new_section_list
 
-    def process_general_section(section, cursor, lookup_fn):
-        new_section_list = []
 
-        # If the section is a list, iterate through its items
-        if isinstance(section, list):
-            for original_obj in section:
-                if original_obj.get("fromPMID"):
-                    new_section_list.append(original_obj)
-                    logger.info(f"Found {original_obj['name']} from PMID")
-                elif "curatedBy" in original_obj:
-                    logger.info(f"Preserving curated item: {original_obj['name']}")
-                    new_section_list.append(original_obj)
-                elif original_name := original_obj.get("name"):
-                    new_obj = lookup_fn(original_name, cursor)
-                    if new_obj:
-                        logger.info(f"Found {original_name} in database")
-                        new_section_list.append(new_obj)
-                    else:
-                        logger.info(f"Could not find {original_name} in database")
-                        new_section_list.append(original_obj)
-        # If the section is not a list, process it as a single object
-        elif original_name := section.get("name"):
-            new_obj = lookup_fn(original_name, cursor)
-            if section.get("fromPMID"):
-                new_section_list.append(section)
-                logger.info(f"Found {section['name']} from PMID")
-            elif section.get("isCurated"):
-                logger.info(f"Preserving curated item: {original_name}")
-                new_section_list.append(section)
-            elif new_obj:
-                logger.info(f"Found {original_name} in database")
-                new_section_list.append(new_obj)
-            else:
-                logger.info(f"Could not find {original_name} in database")
-                new_section_list.append(section)
+def process_document(args):
+    doc, hc_dict, species_dict, doc_index = args
 
-        return new_section_list
+    health_conditions_list = doc.get("healthCondition", {})
+    species_list = doc.get("species", {})
+    infectious_agent_list = doc.get("infectiousAgent", {})
 
-    for doc in doc_list:
-        health_conditions_list = doc.get("healthCondition", {})
-        species_list = doc.get("species", {})
-        infectious_agent_list = doc.get("infectiousAgent", {})
-        if isinstance(species_list, dict):
-            species_list = [species_list]
-        if isinstance(infectious_agent_list, dict):
-            infectious_agent_list = [infectious_agent_list]
+    if isinstance(species_list, dict):
+        species_list = [species_list]
+    if isinstance(infectious_agent_list, dict):
+        infectious_agent_list = [infectious_agent_list]
+    if isinstance(health_conditions_list, dict):
+        health_conditions_list = [health_conditions_list]
 
-        # Process each section in the document using the appropriate lookup function
-        new_health_conditions_list = process_section_health_conditions(health_conditions_list, hc_cursor)
-        new_species_list, new_infectious_agent_list = process_section_species_and_infectious_agents(
-            species_list + infectious_agent_list, species_cursor
-        )
+    new_health_conditions_list = process_section(health_conditions_list, hc_dict)
+    new_species_and_infectious_agents_list = process_section(species_list + infectious_agent_list, species_dict)
 
-        def remove_duplicates_from_list(data_list):
-            seen_identifiers = set()
-            unique_list = []
-
-            for entry in data_list:
+    def remove_duplicates_from_list(data_list):
+        seen_identifiers = set()
+        unique_list = []
+        for entry in data_list:
+            if entry:
                 identifier = entry.get("identifier")
                 if identifier not in seen_identifiers:
                     seen_identifiers.add(identifier)
                     unique_list.append(entry)
+        return unique_list
 
-            return unique_list
+    new_species_list = [
+        item for item in new_species_and_infectious_agents_list if item.get("classification") != "infectiousAgent"
+    ]
+    new_infectious_agent_list = [
+        item for item in new_species_and_infectious_agents_list if item.get("classification") == "infectiousAgent"
+    ]
 
-        # Update the document with the new lists
-        if new_health_conditions_list:
-            doc["healthCondition"] = remove_duplicates_from_list(new_health_conditions_list)
-        if new_species_list:
-            doc["species"] = remove_duplicates_from_list(new_species_list)
-        if new_infectious_agent_list:
-            doc["infectiousAgent"] = remove_duplicates_from_list(new_infectious_agent_list)
+    if new_health_conditions_list:
+        no_hc_dupes = remove_duplicates_from_list(new_health_conditions_list)
+        if no_hc_dupes:
+            doc["healthCondition"] = no_hc_dupes
+    if new_species_list:
+        no_sp_dupes = remove_duplicates_from_list(new_species_list)
+        if no_sp_dupes:
+            doc["species"] = no_sp_dupes
+    if new_infectious_agent_list:
+        no_ia_dupes = remove_duplicates_from_list(new_infectious_agent_list)
+        if no_ia_dupes:
+            doc["infectiousAgent"] = no_ia_dupes
 
+    # Log progress every 1000 documents
+    if doc_index % 1000 == 0:
+        logger.info(f"Processed {doc_index} documents")
+
+    return doc
+
+
+def transform(doc_list):
+    hc_dict, species_dict = fetch_data_from_db()
+
+    with Pool(15) as pool:
+        # Generate arguments for starmap
+        args = [(doc, hc_dict, species_dict, index) for index, doc in enumerate(doc_list)]
+        processed_docs = pool.map(process_document, args)
+
+    for doc in processed_docs:
         yield doc
 
 
@@ -659,6 +640,7 @@ def update_table(conn, table_name, item_list, get_new_items_func):
         found_match = lookup_item(original_name, data)
         # If no match is found and the item is not already in the no_matches list, add it
         if not found_match and original_name not in no_matches:
+            continue
             logger.info(f"No {original_name} in lookup dictionary, saving for batch...")
             no_matches.append(original_name)
 
@@ -695,8 +677,8 @@ def update_lookup_dict(health_conditions_list, species_list, infectious_agents_l
 
     try:
         # Update the health_conditions and species tables with new data
-        update_table(conn, "health_conditions", health_conditions_list, get_new_health_conditions)
-        update_table(conn, "species", species_list + infectious_agents_list, get_new_species)
+        # update_table(conn, "health_conditions", health_conditions_list, get_new_health_conditions)
+        # update_table(conn, "species", species_list + infectious_agents_list, get_new_species)
         conn.close()
 
         # Log the completion of updating the lookup dictionary and standardize the documents

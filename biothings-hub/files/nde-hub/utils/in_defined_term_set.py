@@ -1,10 +1,8 @@
 import csv
 import datetime
 import logging
-import os
 from io import StringIO
 
-import orjson
 import requests
 from utils.pubtator import get_species_details, query_condition
 
@@ -193,7 +191,7 @@ def handle_dde_docs(docs):
     response = requests.get(csv_url).text
     properties = process_csv_data(response)
 
-    for count, doc in enumerate(docs, start=1):
+    for count, doc in enumerate(docs, count=1):
         if count % 1000 == 0:
             logging.info(f"Processed {count} lines")
         get_in_defined_term_set(doc, properties)
