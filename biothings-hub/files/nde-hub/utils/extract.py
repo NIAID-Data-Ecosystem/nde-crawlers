@@ -1,7 +1,5 @@
-import csv
 import datetime
 import json
-import logging
 import os
 import re
 import sqlite3
@@ -10,10 +8,9 @@ import orjson
 import pandas as pd
 import requests
 import text2term
+from config import logger
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("nde-logger")
+from .pubtator import DB_PATH as PUBTATOR_DB_PATH, query_condition
 
 DB_PATH = "/data/nde-hub/standardizers/extract_lookup/extract_lookup.db"
 
@@ -40,127 +37,109 @@ def parse_tsv(ndeid, text_response):
     return dictlist
 
 
-def cache_description(ndeid, text_response, entity_type):
-    logger.info(f"Caching description for {ndeid}...")
-    if entity_type == "-2":
-        table = "species"
-    elif entity_type == "-26":
-        table = "disease"
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(f"CREATE TABLE IF NOT EXISTS {table} (ndeid text, text_response text)")
-    c.execute(f"INSERT INTO {table} VALUES (?, ?)", (ndeid, text_response))
-    conn.commit()
-    conn.close()
-
-
-def get_cached_description(ndeid, entity_type):
-    logger.info(f"Checking cache for {ndeid}...")
-    # if db path doesn't exist, create it
-    if not os.path.exists(DB_PATH):
-        logger.info(f"Creating cache database at {DB_PATH}")
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute(f"CREATE TABLE IF NOT EXISTS species (ndeid text, text_response text)")
-        c.execute(f"CREATE TABLE IF NOT EXISTS disease (ndeid text, text_response text)")
-        conn.commit()
-        conn.close()
-    if entity_type == "-2":
-        table = "species"
-    elif entity_type == "-26":
-        table = "disease"
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(f"SELECT text_response FROM {table} WHERE ndeid = ?", (ndeid,))
-    result = c.fetchone()
-    conn.close()
-    if result:
-        logger.info(f"Found cached description for {ndeid}")
-    else:
-        logger.info(f"No cached description found for {ndeid}")
-    return result[0] if result else None
-
-
 def extract(doc_list):
     logger.info("Processing descriptions...")
     count = 0
-    drop_list = [
-        "Tonga",
-        "Alabama",
-        "Nevada",
-        "Argentina",
-        "Namibia",
-        "Panama",
-        "Virginia",
-        "Bulgaria",
-        "Togo",
-        "China",
-        "Serendip",
-        "Arizona",
-        "California",
-        "Montana",
-    ]
-    # Normalize the drop list for case-insensitive comparison
-    drop_list = set(map(str.lower, drop_list))
-    for doc in doc_list:
-        count += 1
-        if count % 100 == 0:
-            logger.info(f"Extracted {count} documents")
-        logger.info(f"Processing document {doc['_id']}...")
-        for entity_type in ["-2", "-26"]:  # -2 for species, -26 for diseases
-            # Check conditions based on entity_type
-            if entity_type == "-2" and ("species" in doc or "infectiousAgent" in doc):
-                logger.info(f"Species or infectiousAgent already present in document {doc['_id']}. Skipping...")
-                continue
-            if entity_type == "-26" and "healthCondition" in doc:
-                logger.info(f"HealthCondition already present in document {doc['_id']}. Skipping...")
-                continue
-            try:
-                response_text = get_cached_description(doc["_id"], entity_type)
-                if not response_text and response_text != "":
-                    response_text = query_extract_api(doc["description"], entity_type)
-                    # save response_text to sqlite3 cache
-                    cache_description(doc["_id"], response_text, entity_type)
-                extracted_entities = parse_tsv(doc["_id"], response_text)
-                if extracted_entities:
-                    logger.info(f"Found {len(extracted_entities)} entities of type {entity_type}")
-                for entity in extracted_entities:
-                    extracted_text = entity["extracted_text"].lower()
-                    if extracted_text in drop_list:
-                        logger.info(f"Found {extracted_text} in drop list. Skipping...")
+    drop_list = {
+        "tonga",
+        "alabama",
+        "nevada",
+        "argentina",
+        "namibia",
+        "panama",
+        "virginia",
+        "bulgaria",
+        "togo",
+        "china",
+        "serendip",
+        "arizona",
+        "california",
+        "montana",
+    }
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        for doc in doc_list:
+            count += 1
+            if count % 100 == 0:
+                logger.info(f"Extracted {count} documents")
+            logger.info(f"Processing document {doc['_id']}...")
+
+            for entity_type in ["-2", "-26"]:
+                if entity_type == "-2" and ("species" in doc or "infectiousAgent" in doc):
+                    logger.info(f"Species or infectiousAgent already present in document {doc['_id']}. Skipping...")
+                    continue
+                if entity_type == "-26" and "healthCondition" in doc:
+                    logger.info(f"HealthCondition already present in document {doc['_id']}. Skipping...")
+                    continue
+
+                try:
+                    response_text = get_cached_description(doc["_id"].lower(), entity_type, c)
+                    if response_text is None:
+                        logger.info("response_text is None")
                         continue
-                    if entity["entity_type"] == "-2":
-                        doc.setdefault("species", [])
-                        if not any(
-                            s.get("name") == entity["extracted_text"]
-                            or entity["extracted_text"] in s.get("alternateName", [])
-                            for s in doc["species"]
-                        ):
-                            logger.info(f"Adding species {entity['extracted_text']} to document {doc['_id']}")
-                            doc["species"].append({"name": entity["extracted_text"], "identifier": entity["onto_id"]})
-                    # For diseases
-                    elif entity["entity_type"] == "-26":
-                        doc.setdefault("healthCondition", [])
-                        if not any(
-                            d.get("name") == entity["extracted_text"]
-                            or entity["extracted_text"] in d.get("alternateName", [])
-                            for d in doc["healthCondition"]
-                        ):
-                            logger.info(f"Adding disease {entity['extracted_text']} to document {doc['_id']}")
-                            doc["healthCondition"].append({"name": entity["extracted_text"]})
-            except Exception as e:
-                logger.error(f"Error processing document {doc['_id']}: {e}")
+                        response_text = query_extract_api(doc["description"], entity_type)
+                        cache_description(doc["_id"].lower(), response_text, entity_type, c)
+                    extracted_entities = parse_tsv(doc["_id"].lower(), response_text)
+                    if extracted_entities:
+                        logger.info(f"Found {len(extracted_entities)} entities of type {entity_type}")
+                    for entity in extracted_entities:
+                        extracted_text = entity["extracted_text"].lower()
+                        if extracted_text in drop_list:
+                            logger.info(f"Found {extracted_text} in drop list. Skipping...")
+                            continue
+                        if entity["entity_type"] == "-2":
+                            doc.setdefault("species", [])
+                            if not any(
+                                s.get("name") == entity["extracted_text"]
+                                or entity["extracted_text"] in s.get("alternateName", [])
+                                for s in doc["species"]
+                            ):
+                                logger.info(f"Adding species {entity['extracted_text']} to document {doc['_id']}")
+                                doc["species"].append(
+                                    {"name": entity["extracted_text"], "identifier": entity["onto_id"]}
+                                )
+                        elif entity["entity_type"] == "-26":
+                            doc.setdefault("healthCondition", [])
+                            if not any(
+                                d.get("name") == entity["extracted_text"]
+                                or entity["extracted_text"] in d.get("alternateName", [])
+                                for d in doc["healthCondition"]
+                            ):
+                                logger.info(f"Adding disease {entity['extracted_text']} to document {doc['_id']}")
+                                doc["healthCondition"].append({"name": entity["extracted_text"]})
+                except Exception as e:
+                    logger.error(f"Error processing document {doc['_id']}: {e}")
+    finally:
+        conn.close()
     return doc_list
+
+
+def get_cached_description(ndeid, entity_type, cursor):
+    logger.info(f"Checking cache for {ndeid}...")
+    table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
+    if table:
+        cursor.execute(f"SELECT text_response FROM {table} WHERE ndeid = ?", (ndeid,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+
+
+def cache_description(ndeid, text_response, entity_type, cursor):
+    logger.info(f"Caching description for {ndeid}...")
+    table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
+    if table:
+        cursor.execute(f"CREATE TABLE IF NOT EXISTS {table} (ndeid text PRIMARY KEY, text_response text)")
+        cursor.execute(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)", (ndeid, text_response))
 
 
 def apply_heuristics(df):
     # Exclude terms with 3 or less characters
     # save any terms with 3 or less characters to csv for debugging
-    debug_df_3 = df[df["Source Term"].str.len() == 3]
-    debug_df_3.to_csv("3_char_terms.csv", mode="a", columns=["Source Term", "Mapping Score"])
-    debug_df_4 = df[df["Source Term"].str.len() == 4]
-    debug_df_4.to_csv("4_char_terms.csv", mode="a", columns=["Source Term", "Mapping Score"])
+    # debug_df_3 = df[df["Source Term"].str.len() == 3]
+    # debug_df_3.to_csv("3_char_terms.csv", mode="a", columns=["Source Term", "Mapping Score"])
+    # debug_df_4 = df[df["Source Term"].str.len() == 4]
+    # debug_df_4.to_csv("4_char_terms.csv", mode="a", columns=["Source Term", "Mapping Score"])
 
     df = df[df["Source Term"].str.len() > 3]
 
@@ -257,14 +236,27 @@ def insert_species(doc_list, species_mapping):
             species_names = [species_obj["name"] for species_obj in doc["species"]]
             lineage_info = build_species_lineage_info(species_names, species_mapping)
             filtered_species_names = filter_species_terms_for_ancestors(species_mapping, species_names, lineage_info)
-            doc["species"] = [species for species in doc["species"] if species["name"] in filtered_species_names]
+
+            # Preserve curated species
+            preserved_species = [species for species in doc["species"] if species.get("fromPMID", False)]
+
+            # Process species objects that are not curated
             for species_obj in doc["species"]:
+                if species_obj["name"] not in filtered_species_names:
+                    continue
+
+                if species_obj in preserved_species:
+                    updated_species.append(species_obj)  # Keep curated species unchanged
+                    continue
+
                 original_name = species_obj["name"]
                 lower_name = original_name.lower()  # Used for case-insensitive comparison
                 new_obj = species_mapping.get(lower_name, None)  # Get new data or keep existing
+
                 if not new_obj:
                     logger.info(f"Unable to find species details for {original_name}")
                     continue
+
                 # Check classification and categorize accordingly
                 if (
                     new_obj.get("classification") == "infectiousAgent"
@@ -283,22 +275,22 @@ def insert_species(doc_list, species_mapping):
                     existing_species_names.add(lower_name)
                     existing_identifiers.add(new_obj.get("identifier"))
                 else:
-                    logger.info(f"Unable add {original_name} to document {doc['_id']}")
+                    logger.info(f"Unable to add {original_name} to document {doc['_id']}")
                     logger.info(f"Classification: {new_obj.get('classification')}")
                     logger.info(f"Lower name: {lower_name}")
                     logger.info(f"Identifiers: {existing_identifiers}")
                     logger.info(f"identifier: {new_obj.get('identifier')}")
 
-            # Update the document with new species and infectious agents
-            if updated_species:
-                doc["species"] = updated_species
-            else:
-                doc.pop("species", None)
+            # Combine curated species with updated species
+            doc["species"] = preserved_species + updated_species
 
             if updated_infectious_agents:
                 doc["infectiousAgent"] = updated_infectious_agents
             else:
                 doc.pop("infectiousAgent", None)
+
+            if not doc["species"]:
+                doc.pop("species", None)
 
             logger.info(f"Updated species in document {doc['_id']}")
 
@@ -309,13 +301,28 @@ def insert_disease(doc_list, disease_mapping):
     for doc in doc_list:
         if "healthCondition" in doc:
             updated_disease = []
+
+            # Preserve curated diseases
+            preserved_diseases = [disease for disease in doc["healthCondition"] if disease.get("fromPMID", False)]
+
+            # Track names of preserved diseases to avoid duplication
+            preserved_disease_names = {disease["name"].lower() for disease in preserved_diseases}
+
+            # Process diseases that are not curated
             for disease_obj in doc["healthCondition"]:
-                original_name = disease_obj["name"]
-                if original_name in disease_mapping:
-                    updated_disease.append(disease_mapping[original_name])
+                original_name = disease_obj["name"].lower()
+
+                if original_name in preserved_disease_names:
+                    continue  # Skip adding this disease since it's already preserved
+
+                new_obj = disease_mapping.get(original_name, None)
+                if new_obj:
+                    updated_disease.append(new_obj)
                 else:
                     updated_disease.append(disease_obj)  # keep existing disease if no new data
-            doc["healthCondition"] = updated_disease
+
+            # Combine curated diseases with updated diseases
+            doc["healthCondition"] = preserved_diseases + updated_disease
             logger.info(f"Updated disease in document {doc['_id']}")
 
     return doc_list
@@ -410,6 +417,8 @@ def get_species_details(original_name, identifier):
         alternative_names.append(common_name)
 
         standard_dict["displayName"] = f"{common_name} | {scientific_name}"
+    else:
+        standard_dict["displayName"] = scientific_name if scientific_name else original_name
 
     if other_names := species_info.get("otherNames"):
         alternative_names.extend(other_names)
@@ -431,186 +440,176 @@ def process_species(doc_list):
     logger.info("Processing species...")
     species_names = set()  # Using a set to avoid duplicates
 
-    # if not os.path.exists("cache/ncbitaxon"):
-    #     text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
+    # Fetch species from the SQLite database
+    species_dict = fetch_species_from_db()
 
     for doc in doc_list:
         logger.info(f"Processing document {doc['_id']}...")
         if "species" in doc:
-            # Filter out curated species and add to the set
             if isinstance(doc["species"], dict):
                 doc["species"] = [doc["species"]]
             species_in_doc = [s["name"] for s in doc["species"] if not s.get("isCurated", False)]
             species_names.update(species_in_doc)
             logger.info(f"Found {len(species_in_doc)} new species to process")
 
-    # Convert set to list for Text2Term processing
     unique_species_names = list(species_names)
-
     logger.info(f"Total unique species to process: {len(unique_species_names)}")
 
-    # Process species names with Text2Term
+    formatted_species = []
+
+    # Process all species names with Text2Term at once
     if unique_species_names:
-        t2t_result = text2term.map_terms(unique_species_names, "ncbitaxon", use_cache=False)
-        t2t_result.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
-
-        # Apply heuristics
-        t2t_result = apply_heuristics(t2t_result)
-        logger.info(f"Total species after applying heuristics: {len(t2t_result)}")
-
-        formatted_species = []
-        for index, row in t2t_result.iterrows():
-            identifier = row["Mapped Term CURIE"].split(":")[1]  # CURIE format is 'NCBITAXON:ID'
-            original_name = row["Source Term"]
-            try:
-                species_details = get_species_details(original_name, identifier)
-            except Exception as e:
-                logger.info(f"An error occurred while processing {original_name}: {e}")
-                continue
-            if species_details:
-                formatted_species.append(species_details)
-            else:
-                logger.info(f"Unable to find species details for {original_name} ({identifier})")
-
-        species_mapping = {}
-        for sp in formatted_species:
-            lower_name = sp["originalName"].lower()
-            species_mapping[lower_name] = sp
-
-        return insert_species(doc_list, species_mapping)
-    else:
-        logger.info("No new species to process")
-        return doc_list
-
-
-def create_return_object(hit, alternate_names, original_name):
-    ontology = hit["_id"].split(":")[0]
-    identifier = hit["_id"].split(":")[1]
-
-    standard_dict = {
-        "identifier": hit["_id"].split(":")[1],
-        "inDefinedTermSet": ontology,
-        "isCurated": True,
-        "fromEXTRACT": True,
-        "name": hit["name"],
-        "originalName": original_name,
-        "url": f"http://purl.obolibrary.org/obo/{ontology}_{identifier}",
-        "curatedBy": {
-            "name": "Biothings API",
-            "url": "https://biothings.io/",
-            "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
-        },
-    }
-    if alternate_names:
-        standard_dict["alternateName"] = list(set(alternate_names))
-    return standard_dict
-
-
-def process_synonyms(synonym_field):
-    if isinstance(synonym_field, dict):
-        # If the synonym field is a dictionary, return the exact synonyms.
-        return synonym_field.get("exact", [])
-    else:
-        # If the synonym field is a list, filter it by 'EXACT'.
-        return [syn.split('"')[1] for syn in synonym_field if "EXACT" in syn]
-
-
-def load_json_response(response):
-    try:
-        return response.json()
-    except json.decoder.JSONDecodeError:
-        return None
-
-
-def retry_request(url, retries=7):
-    for _ in range(retries):
-        response = requests.get(url)
-        data = load_json_response(response)
-        if data is not None:
-            return data
-        logger.info("Retrying...")
-    logger.info("Failed to decode JSON")
-    return None
-
-
-def handle_response(data, condition, base_url):
-    if "hits" in data:
-        for hit in data["hits"]:
-            alternate_names = process_synonyms(hit.get("synonym", {}))
-            if hit["name"].lower().strip() == condition.lower().strip() or any(
-                name.lower().strip() == condition.lower().strip() for name in alternate_names
-            ):
-                logger.info(f"Found {condition} in ontology: {base_url.split('/')[-1]}")
-                return create_return_object(hit, alternate_names, condition)
-    return None
-
-
-def query_condition(health_condition):
-    BASE_URLS = [
-        "https://biothings.ncats.io/mondo",
-        "https://biothings.ncats.io/hpo",
-        "https://biothings.ncats.io/doid",
-        "https://biothings.ncats.io/ncit",
-    ]
-    logger.info(f'Querying for "{health_condition}"...')
-    for base_url in BASE_URLS:
         try:
-            url = f'{base_url}/query?q=name:("{health_condition}")&limit=1000'
-            data = retry_request(url)
-            result = handle_response(data, health_condition, base_url)
-            if result is not None:
-                return result
+            # get current working directory
+            logger.info("Processing species with Text2Term...")
+            if not os.path.exists("cache/ncbitaxon"):
+                text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
+            t2t_results = text2term.map_terms(unique_species_names, "ncbitaxon", use_cache=True)
+            logger.info(f"Found {len(t2t_results)} results from Text2Term")
+            t2t_results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
 
-            # if not found in name, search in synonyms
-            url = (
-                f'{base_url}/query?q=synonym.exact:"{health_condition}"&limit=1000'
-                if "hpo" in base_url
-                else f'{base_url}/query?q=synonym:"{health_condition}"&limit=1000'
-            )
-            data = retry_request(url)
-            result = handle_response(data, health_condition, base_url)
-            if result is not None:
-                return result
+            for index, row in t2t_results.iterrows():
+                identifier = row["Mapped Term CURIE"].split(":")[1]  # CURIE format is 'NCBITAXON:ID'
+                original_name = row["Source Term"]
+                logger.info(f"Processing {original_name}")
+
+                # Check if the species is in the SQLite database
+                standardized_species = lookup_species_in_db(original_name, species_dict)
+                if standardized_species:
+                    logger.info(f"Found {original_name} in the database")
+                    standardized_species["fromEXTRACT"] = True
+                    standardized_species["originalName"] = original_name
+                    formatted_species.append(standardized_species)
+                else:
+                    logger.info(f"Unable to find {original_name} in the database")
+                    try:
+                        # Get species details
+                        species_details = get_species_details(original_name, identifier)
+                        if species_details:
+                            species_details["fromEXTRACT"] = True
+                            formatted_species.append(species_details)
+                            # Remove 'fromEXTRACT' before caching
+                            species_details.pop("fromEXTRACT")
+                            # Cache the result in the SQLite database for future use
+                            cache_species_in_db(species_details)
+                            # Update the in-memory species dictionary
+                            species_dict[original_name.lower().strip()] = species_details
+                    except Exception as e:
+                        logger.info(f"An error occurred while processing {original_name}: {e}")
+                        continue
+
         except Exception as e:
-            logger.info(f"An error occurred while querying {base_url}: {e}")
-    logger.info(f"Unable to find {health_condition}")
-    return None
+            logger.error(f"Error during Text2Term processing: {e}")
+            return doc_list
+
+    species_mapping = {
+        sp["originalName"].lower() if "originalName" in sp else sp["name"].lower(): sp for sp in formatted_species
+    }
+    return insert_species(doc_list, species_mapping) if formatted_species else doc_list
+
+
+def fetch_species_from_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT original_name, standard_dict FROM species_details")
+    species_cursor = c.fetchall()
+    conn.close()
+
+    species_dict = {item[0].lower().strip(): json.loads(item[1]) for item in species_cursor if item[1]}
+    return species_dict
+
+
+def lookup_species_in_db(original_name, species_dict):
+    original_name_lower = original_name.lower().strip()
+    return species_dict.get(original_name_lower)
+
+
+def cache_species_in_db(species_details):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
+        (species_details["originalName"].lower().strip(), json.dumps(species_details)),
+    )
+    conn.commit()
+    conn.close()
 
 
 def process_diseases(doc_list):
     logger.info("Processing diseases...")
     disease_names = set()  # Using a set to avoid duplicates
 
+    # Fetch diseases from the SQLite database
+    disease_dict = fetch_diseases_from_db()
+
     for doc in doc_list:
         logger.info(f"Processing document {doc['_id']}...")
         if "healthCondition" in doc:
             if isinstance(doc["healthCondition"], dict):
                 doc["healthCondition"] = [doc["healthCondition"]]
-            # Filter out curated disease and add to the set
+            # Filter out curated diseases and add to the set
             disease_in_doc = [s["name"] for s in doc["healthCondition"] if not s.get("isCurated", False)]
             disease_names.update(disease_in_doc)
-            logger.info(f"Found {len(disease_in_doc)} new disease to process")
+            logger.info(f"Found {len(disease_in_doc)} new diseases to process")
 
-    # Convert set to list for Text2Term processing
     unique_disease_names = list(disease_names)
+    logger.info(f"Total unique diseases to process: {len(unique_disease_names)}")
 
-    logger.info(f"Total unique disease to process: {len(unique_disease_names)}")
+    formatted_diseases = []
+    for disease_name in unique_disease_names:
+        # Check if the disease is in the SQLite database
+        standardized_disease = lookup_disease_in_db(disease_name, disease_dict)
+        if standardized_disease:
+            standardized_disease["fromEXTRACT"] = True
+            standardized_disease["originalName"] = disease_name
+            formatted_diseases.append(standardized_disease)
+        else:
+            try:
+                # If not in the database, query the external API
+                disease_details = query_condition(disease_name)
+                if disease_details:
+                    disease_details["fromEXTRACT"] = True
+                    formatted_diseases.append(disease_details)
+                    disease_details.pop("fromEXTRACT")
+                    # Cache the result in the SQLite database for future use
+                    cache_disease_in_db(disease_details)
+                    # Update the in-memory disease dictionary
+                    disease_dict[disease_name.lower().strip()] = disease_details
+            except Exception as e:
+                logger.info(f"An error occurred while processing {disease_name}: {e}")
+                continue
 
-    # Process disease names with Translator KPIs
-    if unique_disease_names:
-        formatted_disease = []
-        for disease_name in unique_disease_names:
-            disease_details = query_condition(disease_name)
-            if disease_details:
-                formatted_disease.append(disease_details)
-            else:
-                logger.info(f"Unable to find disease details for {disease_name}")
+    disease_mapping = {
+        sp["originalName"].lower() if "originalName" in sp else sp["name"].lower(): sp for sp in formatted_diseases
+    }
+    return insert_disease(doc_list, disease_mapping) if formatted_diseases else doc_list
 
-        disease_mapping = {sp["originalName"]: sp for sp in formatted_disease}
-        return insert_disease(doc_list, disease_mapping)
-    else:
-        logger.info("No new disease to process")
-        return doc_list
+
+def fetch_diseases_from_db():
+    conn = sqlite3.connect(PUBTATOR_DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT original_name, standard_dict FROM health_conditions")
+    disease_cursor = c.fetchall()
+    conn.close()
+
+    disease_dict = {item[0].lower().strip(): json.loads(item[1]) for item in disease_cursor if item[1]}
+    return disease_dict
+
+
+def lookup_disease_in_db(original_name, disease_dict):
+    original_name_lower = original_name.lower().strip()
+    return disease_dict.get(original_name_lower)
+
+
+def cache_disease_in_db(disease_details):
+    conn = sqlite3.connect(PUBTATOR_DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR REPLACE INTO health_conditions VALUES (?, ?)",
+        (disease_details["originalName"].lower().strip(), json.dumps(disease_details)),
+    )
+    conn.commit()
+    conn.close()
 
 
 def process_descriptions(data):
