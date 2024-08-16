@@ -23,7 +23,7 @@ RUN pip wheel -r requirements.txt
 FROM python:${PYTHON_VERSION}-slim
 # BioThings Hub depends on git (the executable)
 RUN apt-get -y -qq update && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends git wget && \
     apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 # in config.py it will read environment variables
