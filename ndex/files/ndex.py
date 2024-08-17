@@ -242,7 +242,7 @@ def process_networks(networks):
             output["isBasedOn"] = is_based_on_list
 
         if properties_treatment := properties_dict.get("Treatment"):
-            output["variableMeasured"] = properties_treatment
+            output["variableMeasured"] = {"name": properties_treatment}
 
         if properties_method := properties_dict.get("methods"):
             if properties_method in technique_lookup:

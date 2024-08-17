@@ -345,6 +345,26 @@ class OAIDatabase(NDEDatabase):
         else:
             self._end = datetime.datetime.now().replace(microsecond=0) + datetime.timedelta(days=1)
 
+    def insert_last_updated(self, date_updated=None):
+        """Helper method for update_cache. Changes the date_updated in the metadata table to today"""
+        # connect to database
+        con = sqlite3.connect(self.path + "/" + self.SQL_DB)
+        c = con.cursor()
+
+        today = date_updated or datetime.date.today().isoformat()
+        # upsert date_updated to today
+        c.execute(
+            """INSERT INTO metadata VALUES(?, ?)
+                        ON CONFLICT(name) DO UPDATE SET date=excluded.date
+                  """,
+            ("date_updated", today),
+        )
+
+        logger.info("Cache last_updated on: %s", today)
+        con.commit()
+
+        con.close()
+
     def record_data(self, record):
         """Choose what information in the request record to yield into the cache table
         Args:   records: generator of records
@@ -413,6 +433,7 @@ class OAIDatabase(NDEDatabase):
                     # cut interval in half every time it fails
                     interval = {k: max(1, v // 2) for k, v in interval.items()}
             else:
+                self.insert_last_updated(until.isoformat())
                 self.start = until
                 interval = self.INTERVAL.copy()
 
@@ -425,5 +446,3 @@ class OAIDatabase(NDEDatabase):
         records = self.load_cache(start=last_updated)
         for record in records:
             yield record
-
-        self.insert_last_updated()

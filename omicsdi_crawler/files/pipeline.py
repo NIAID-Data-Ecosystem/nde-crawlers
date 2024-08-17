@@ -67,7 +67,7 @@ class OmicsdiItemProcessorPipeline:
         if same_as := item.pop("sameAs", None):
             output["sameAs"] = same_as
         if variable_measured := item.pop("variableMeasured", None):
-            output["variableMeasured"] = variable_measured
+            output["variableMeasured"] = {"name": variable_measured}
 
         if item:
             logger.warning("Haven't parsed all keys in omiscdi_crawler: " + "\t".join(item.keys()))

@@ -331,15 +331,15 @@ class Zenodo(OAIDatabase):
                     # for k in keyword:
                     output["keywords"].append(keyword)
 
-            if topic_categories := data["metadata"].get("relatedIdentifier"):
-                tcs = []
+            if sdpublishers := data["metadata"].get("relatedIdentifier"):
+                sdps = []
                 # some values may be null: https://zenodo.org/oai2d?verb=GetRecord&identifier=oai:zenodo.org:6670&metadataPrefix=oai_datacite
-                for topic_category in topic_categories:
-                    if topic_category and "https://zenodo.org/communities/" in topic_category:
-                        tc = {"name": topic_category.rsplit("/", 1)[-1], "url": topic_category}
-                        tcs.append(tc)
-                if tcs:
-                    output["topicCategory"] = tcs
+                for sdpublisher in sdpublishers:
+                    if sdpublisher and "https://zenodo.org/communities/" in sdpublisher:
+                        sdp = {"name": sdpublisher.rsplit("/", 1)[-1], "url": sdpublisher}
+                        sdps.append(sdp)
+                if sdps:
+                    output["sdPublisher"] = sdps
 
             # temp fix for outbreak.info
             if cb_outbreak := output.get("includedInDataCatalog"):

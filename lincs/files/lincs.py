@@ -163,7 +163,7 @@ class LINCS:
                     document["distribution"] = {"contentSize": "".join(document.pop("size"))}
 
             if "physicaldetection" in document:
-                document["variableMeasured"] = document.pop("physicaldetection")
+                document["variableMeasured"] = {"name": document.pop("physicaldetection")}
 
             document["keywords"] = []
             if "assaydesignmethod" in document:

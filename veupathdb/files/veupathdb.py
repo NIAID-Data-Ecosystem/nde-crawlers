@@ -112,12 +112,7 @@ def record_generator():
         # gene_counts = [hit["gene_count"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         gene_refs = [hit["gene_type"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         if gene_refs:
-            _record_dict["variableMeasured"] = gene_refs[0]
-            """_record_dict['variableMeasured'] = {
-            '@type': "PropertyValue",
-            'identifier': gene_counts[0],
-            'name': gene_refs[0]
-            }"""
+            _record_dict['variableMeasured'] = {"name": gene_refs[0]}
 
         # remove
         _record_dict.pop("recordClassName")
