@@ -759,7 +759,12 @@ class NDESourceUploader(BaseSourceUploader):
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
                     },
-                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
                     "description": {"type": "text"},
                     "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
