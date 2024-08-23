@@ -76,16 +76,6 @@ INDEX_CONFIG = {
         None: "hub.dataindex.indexer.NDEIndexer",
     },
     "env": {
-        "prod": {
-            "host": "http://<PRODSERVER>:9200",
-            "indexer": {
-                "args": {
-                    "timeout": 300,
-                    "retry_on_timeout": True,
-                    "max_retries": 10,
-                },
-            },
-        },
         "localhub": {
             "host": "http://" + os.environ.get("ES_HOST", "localhost:9200"),
             "indexer": {
