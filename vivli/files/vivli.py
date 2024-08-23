@@ -192,7 +192,7 @@ def parse():
 
             vm = []
             if variable_measured := request.get("outcomeNames"):
-                vm = vm.append({"name": variable_measured})
+                vm.append({"name": variable_measured})
 
             if outcomes := request.get("outcomes"):
                 for outcome in outcomes:

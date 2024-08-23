@@ -1,4 +1,5 @@
 import os
+import subprocess
 from datetime import datetime
 
 import biothings
@@ -37,8 +38,8 @@ class Biostudies_Dumper(dumper.WgetDumper):
     def download(self, remoteurl, localfile):
         self.prepare_local_folders(localfile)
         cmdline = "wget -i %s -P %s -N" % (remoteurl, localfile)
-        return_code = os.system(cmdline)
-        if return_code == 0:
+        return_code = subprocess.run(["wget", "-i", remoteurl, "-P", localfile, "-N"])
+        if return_code.returncode == 0:
             self.logger.info("Success.")
         else:
             self.logger.error("Failed with return code (%s)." % return_code)
