@@ -54,15 +54,21 @@ def add_topic_category(docs, source_name):
         if source_term.lower() == mapped_term_label.lower():
             topic_mapping[source_term] = row
 
+    # Define the exception topics
+    exception_topics = {"Anatomy", "Transcriptomics", "Developmental biology", "Oncology", "Physiology"}
+
     updated_docs = []
     for doc in docs:
         doc_id = doc["_id"].lower()
         topics = topic_dict.get(doc_id, [])
         if topics:
             doc["topicCategory"] = []
+            contains_exception_topic = any(topic.strip('"') in exception_topics for topic in topics)
             for topic in topics:
                 topic_cleaned = topic.strip('"')
                 if topic_cleaned in topic_mapping:
+                    if topic_cleaned == "Human biology" and not contains_exception_topic:
+                        continue  # Skip adding 'Human biology' if no exception topic is present
                     row = topic_mapping[topic_cleaned]
                     doc["topicCategory"].append(
                         {
