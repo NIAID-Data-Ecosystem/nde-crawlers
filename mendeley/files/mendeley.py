@@ -39,7 +39,7 @@ def get_url(url):
     if url_count % 1000 == 0:
         logger.info(f"Retrieved {url_count} Metadata Sources")
     try:
-        response = session.get(url, timeout=10)
+        response = session.get(url, timeout=60)
         response.raise_for_status()
         return response
     except requests.exceptions.RequestException as e:
@@ -68,7 +68,11 @@ def parse():
             metadata = record.metadata
 
             if relation := metadata.get("relation"):
-                urls.append("https://data.mendeley.com/api/datasets-v2/datasets/" + relation[0].split("/")[-1])
+                (
+                    urls.append(
+                        "https://data.mendeley.com/api/datasets-v2/datasets/" + relation[0].split("/")[-1] + "?fields=*"
+                    )
+                )
 
         except StopIteration:
             logger.info("Finished Retrieving ids. Total ids: %s", count)
@@ -78,7 +82,7 @@ def parse():
     logger.info("Retrieving Metadata Sources")
 
     # After we have the ids we use the function declared above and map the list of ids we've obtained from the OAI-PMH and ping their api for metadata.
-    with ThreadPoolExecutor(max_workers=10) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         response_list = list(pool.map(get_url, urls))
         # TODO RESPONSE_LIST IS WHAT WE WANT TO CACHE
 

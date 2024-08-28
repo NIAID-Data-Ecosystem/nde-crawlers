@@ -133,11 +133,13 @@ def parse():
             else:
                 output["isAccessibleForFree"] = False
 
+        measurement_technique = {}
         if data_types := metadata.get("data_types"):
-            output["measurementTechnique"] = {"name": data_types[0]}
-
+            measurement_technique["name"] = data_types[0]
         if dataset_info := metadata.get("dataset_info"):
-            output["measurementTechnique"]["description"] = dataset_info
+            measurement_technique["description"] = dataset_info
+        if "name" in measurement_technique:
+            output["measurementTechnique"] = measurement_technique
 
         if doi_url := metadata.get("doi_url"):
             output["doi"] = doi_url.removeprefix("https://doi.org/")
