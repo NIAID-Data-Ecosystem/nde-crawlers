@@ -367,7 +367,7 @@ class NDESourceUploader(BaseSourceUploader):
             "featureList": {"type": "text", "copy_to": ["all"]},
             "funding": {
                 "properties": {
-                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "endDate": {"type": "date"},
