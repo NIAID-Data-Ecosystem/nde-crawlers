@@ -9,6 +9,27 @@ from api_secret import API_KEY
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
+
+def process_affiliations(author):
+    aff_list = []
+    affiliations = author.get("affiliation")
+    if isinstance(affiliations, list):
+        for affiliation in affiliations:
+            if isinstance(affiliation, str):
+                aff_list.append({"name": affiliation})
+        if aff_list:
+            author["affiliation"] = aff_list
+    elif isinstance(affiliations, str):
+        author["affiliation"] = {"name": affiliations}
+
+def process_authors(authors):
+    if isinstance(authors, list):
+        for author in authors:
+            process_affiliations(author)
+    else:
+        process_affiliations(authors)
+    return authors
+
 def query_bioportal(iri):
     """
     Fetches the descendants of a given concept in a specified ontology from BioPortal.
@@ -252,15 +273,36 @@ def parse():
                     hit["distribution"] = {k: v for k, v in distribution.items() if v is not None}
 
             # rename our id value and creator to author
+            # if authors := hit.pop("creator", None):
+            #     aff_list = []
+            #     if type(authors) is list:
+            #         for author in authors:
+            #             isString = False
+            #             if affiliations := author.get("affiliation") and isinstance(author.get("affiliation"), list):
+            #                 for affiliation in affiliations:
+            #                     if isinstance(affiliation, str):
+            #                         isString = True
+            #                         affiliations.append({"name": affiliation})
+            #             if isString:
+            #                 author["affiliation"] = aff_list
+            #             if affiliation := author.get("affiliation") and isinstance(author.get("affiliation"), str):
+            #                 author["affiliation"] = {"name": affiliation}
+            #     else:
+            #         isString = False
+            #         if affiliations := authors.get("affiliation") and isinstance(authors.get("affiliation"), list):
+            #             for affiliation in affiliations:
+            #                 if isinstance(affiliation, str):
+            #                     isString = True
+            #                     affiliations.append({"name": affiliation})
+            #         if isString:
+            #             authors["affiliation"] = aff_list
+            #         if affiliation := authors.get("affiliation") and isinstance(authors.get("affiliation"), str):
+            #             authors["affiliation"] = {"name": affiliation}
+            #     hit["author"] = authors
+
+
             if authors := hit.pop("creator", None):
-                if type(authors) is list:
-                    for author in authors:
-                        if affiliation := author.get("affiliation"):
-                            author["affiliation"] = {"name": affiliation}
-                else:
-                    if affiliation := authors.get("affiliation"):
-                        authors["affiliation"] = {"name": affiliation}
-                hit["author"] = authors
+                hit["author"] = process_authors(authors)
 
             # Adjust URL based on type
             if hit["@type"] == "Dataset":

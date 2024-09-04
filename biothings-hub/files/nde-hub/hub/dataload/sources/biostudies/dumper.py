@@ -13,7 +13,6 @@ class Biostudies_Dumper(dumper.WgetDumper):
 
     SRC_NAME = "biostudies"
     SRC_ROOT_FOLDER = os.path.join(config.DATA_ARCHIVE_ROOT, SRC_NAME)
-    # TODO change this into config
     SITEMAP_URLS = config.SITEMAP_URLS
 
     def set_release(self):

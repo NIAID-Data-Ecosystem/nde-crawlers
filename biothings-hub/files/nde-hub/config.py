@@ -45,6 +45,8 @@ DIFF_PATH = f"{data_folder}/diff"
 RELEASE_PATH = f"{data_folder}/release"
 CACHE_FOLDER = f"{data_folder}/cache"
 ES_BACKUPS_FOLDER = f"{data_folder}/esbackup"
+# used for biostudies
+SITEMAP_URLS = f"{data_folder}/sitemap_urls"
 
 LOG_FOLDER = f"{data_folder}/logs"
 logger = setup_default_log("hub", LOG_FOLDER)
