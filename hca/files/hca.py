@@ -82,6 +82,9 @@ def parse():
         if entry_id := metadata.get("entryId"):
             output["url"] = f"https://data.humancellatlas.org/explore/projects/{entry_id}"
             output["_id"] = f"HCA_{entry_id}"
+        else:
+            logger.error("No entryId found for project. Skipping...")
+            continue
 
         if projects := metadata.get("projects"):
             for project in projects:
