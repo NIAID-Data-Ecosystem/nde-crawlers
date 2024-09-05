@@ -50,7 +50,6 @@ def parse_section_file(file, accno, output):
 
 
 def parse_file(doc):
-    global count_links
     global missing_attributes
     global missing_subattributes
     global known_attributes
@@ -277,8 +276,6 @@ def parse_file(doc):
                                         else:
                                             output["measurementTechnique"] = [mt]
                         elif type == "publication":
-                            if subsection.get("links"):
-                                count_links += 1
                             if attributes:
                                 citation = {}
                                 for attribute in attributes:
@@ -318,4 +315,3 @@ def parse_file_dir(input_dir):
                 yield parse_file(doc)
     logger.info(f"Missing attributes: {missing_attributes}")
     logger.info(f"Missing subattributes: {missing_subattributes}")
-    logger.info(f"Count links: {count_links}")
