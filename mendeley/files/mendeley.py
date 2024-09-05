@@ -70,7 +70,9 @@ def parse():
             if relation := metadata.get("relation"):
                 (
                     urls.append(
-                        "https://data.mendeley.com/api/datasets-v2/datasets/" + relation[0].split("/")[-1] + "?fields=*"
+                        "https://data.mendeley.com/api/datasets-v2/datasets/"
+                        + relation[0].split("/")[-1]
+                        + "?fields=repository.*"
                     )
                 )
 
@@ -105,9 +107,9 @@ def parse():
                 },
                 "@type": "Dataset",
             }
-            if id := metadata.get("id"):
-                output["identifier"] = id
-                output["_id"] = "Mendeley_" + id
+            if mendeley_id := metadata.get("id"):
+                output["identifier"] = mendeley_id
+                output["_id"] = "Mendeley_" + mendeley_id
             if doi := metadata.get("doi"):
                 output["doi"] = doi["id"]
             if name := metadata.get("name"):
@@ -155,9 +157,10 @@ def parse():
                             }
                 output["distribution"] = distribution_obj
 
+            citation_list = []
             if articles := metadata.get("articles"):
-                citation_obj = {}
                 for article in articles:
+                    citation_obj = {}
                     if title := article.get("title"):
                         citation_obj["name"] = title
                     if doi := article.get("doi"):
@@ -168,7 +171,8 @@ def parse():
                         citation_obj["journalName"] = name
                     if url := article.get("url"):
                         citation_obj["url"] = url
-                output["citation"] = citation_obj
+                    if citation_obj:
+                        citation_list.append(citation_obj)
 
             if categories := metadata.get("categories"):
                 category_list = []
@@ -181,13 +185,18 @@ def parse():
                 output["datePublished"] = parser.parse(publish_date).strftime("%Y-%m-%d")
 
             if related_links := metadata.get("related_links"):
-                citation_obj = {}
                 for link in related_links:
-                    if type := link.get("type"):
-                        citation_obj["@type"] = type
+                    citation_obj = {}
+                    if citation_type := link.get("type"):
+                        citation_obj["@type"] = citation_type
                     if url := link.get("url"):
                         citation_obj["url"] = url
-                output["citation"] = citation_obj
+                    if href := link.get("href"):
+                        citation_obj["url"] = href
+                    if citation_obj:
+                        citation_list.append(citation_obj)
+            if citation_list:
+                output["citation"] = citation_list
 
             if modified_on := metadata.get("modified_on"):
                 output["dateModified"] = parser.parse(modified_on).strftime("%Y-%m-%d")
@@ -196,5 +205,31 @@ def parse():
                 output["url"] = links["view"]
             if repository := metadata.get("repository"):
                 output["sdPublisher"] = {"name": repository["name"]}
+
+            if license_info := metadata.get("data_licence"):
+                output["license"] = license_info.get("url")
+
+            if funders := metadata.get("funders"):
+                funding = []
+                for funder in funders:
+                    funding_entry = {}
+
+                    funder_info = {}
+                    if name := funder.get("name"):
+                        funder_info["name"] = name
+                    if identity := funder.get("identity"):
+                        funder_info["identifier"] = identity
+
+                    if funder_info:
+                        funding_entry["funder"] = funder_info
+
+                    if grant_id := funder.get("grant_id"):
+                        funding_entry["identifier"] = grant_id
+
+                    if funding_entry:
+                        funding.append(funding_entry)
+
+                if funding:
+                    output["funding"] = funding
 
             yield output
