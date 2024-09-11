@@ -35,10 +35,11 @@ known_subsection_types = [
     "miame score",
     "annotations",
     "sample",
-    "additional data files"
+    "additional data files",
 ]
 missing_subattributes = {}
 missing_attributes = {}
+
 
 def parse_section_file(file, accno, output):
     if path := file.get("path"):
@@ -60,7 +61,7 @@ def parse_file(doc):
 
     try:
         output = {
-            "_id": f"biostudies_{accno}",
+            "_id": f"{accno.casefold()}",
             "url": f"https://www.ebi.ac.uk/studies/{accno}",
             "includedInDataCatalog": {
                 "@type": "Dataset",
@@ -106,15 +107,22 @@ def parse_file(doc):
                     try:
                         attribute.get("value")
                     except Exception as e:
-                        logger.info(f"This value is a list url: https://www.ebi.ac.uk/biostudies/api/v1/studies/{accno}")
+                        logger.info(
+                            f"This value is a list url: https://www.ebi.ac.uk/biostudies/api/v1/studies/{accno}"
+                        )
                     if not (value := attribute.pop("value", None)):
                         continue
                     if key == "title":
                         output["name"] = value
                     elif (
-                        key == "abstract" or key == "description" or key == "acknowledgements" or key == "funding statement"
+                        key == "abstract"
+                        or key == "description"
+                        or key == "acknowledgements"
+                        or key == "funding statement"
                     ):
-                        output["description"] = output.get("description") + value if output.get("description") else value
+                        output["description"] = (
+                            output.get("description") + value if output.get("description") else value
+                        )
                     elif key == "keywords" or key == "keyword":
                         if output.get("keywords"):
                             output["keywords"].append(value)
@@ -299,7 +307,6 @@ def parse_file(doc):
     except Exception as e:
         logger.error(f"Error parsing file url: https://www.ebi.ac.uk/biostudies/api/v1/studies/{accno}")
         raise e
-
 
 
 def parse_file_dir(input_dir):
