@@ -1,363 +1,365 @@
-import copy
 import datetime
 import logging
-import math
 import time
 
-import pandas as pd
 import requests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
-def cleanNullTerms(d):
-    clean = {}
-    for k, v in d.items():
-        if not isinstance(v, bool):
-            if v is not None and len(v) > 0:
-                clean[k] = v
-    return clean
-
-
-def get_pages(biotoolsapiurl):
-    biotoolsapiurl
-    # payloads = {'format': 'json', 'domain': 'covid-19', 'page': 'i'}
-    payloads = {"format": "json", "page": "i"}
-    r = requests.get(biotoolsapiurl, params=payloads, timeout=20).json()
-    count = r["count"]
-    list_num = len(r["list"])
-    total_pages = math.ceil(count / list_num)
-    return total_pages
-
-
-def get_dict_key(single_dict):
-    keylist = list(single_dict.keys())
-    only_key = keylist[0]
-    return only_key
-
-
-def parse_defined_terms(definedtermlist):
-    try:
-        termdf = pd.DataFrame(definedtermlist)
-        termdf.rename(columns={"uri": "url", "term": "name"}, inplace=True)
-        termdf["inDefinedTermSet"] = "http://edamontology.org/"
-        termdf["@id"] = termdf["url"].str.replace("http://edamontology.org/", "", regex=True)
-        # termdf['@type'] = 'schema:DefinedTerm'
-        termdf["termCode"] = termdf["@id"]
-        cleandf = termdf[["@type", "@id", "inDefinedTermSet", "termCode", "url", "name"]]
-        termjson = cleandf.to_dict(orient="records")
-    except Exception:
-        termjson = -1
-    return termjson
-
-
-def parse_parameters(parameterdict):
-    datalist = []
-    formatlist = []
-    for eachparameter in parameterdict:
-        content_types = list(eachparameter.keys())
-        if "data" in content_types:
-            if isinstance(eachparameter["data"], dict) == True:
-                datadictlist = []
-                datadictlist.append(eachparameter["data"])
-            elif isinstance(eachparameter["data"], list) == True:
-                datadictlist = eachparameter["data"]
-            datavalue = parse_defined_terms(datadictlist)
-            if datavalue != -1:
-                datalist.extend(datavalue)
-        if "format" in content_types:
-            if isinstance(eachparameter["format"], dict) == True:
-                formatdictlist = []
-                formatdictlist.append(eachparameter["format"])
-            elif isinstance(eachparameter["format"], list) == True:
-                formatdictlist = eachparameter["format"]
-            formatvalue = parse_defined_terms(formatdictlist)
-            if formatvalue != -1:
-                formatlist.extend(formatvalue)
-    if len(datalist) > 0 or len(formatlist) > 0:
-        parameterjson = {
-            "@type": "bioschemastypes:FormalParameter",
-            "encodingFormat": datalist,
-            "defaultValue": formatlist,
-        }
-    else:
-        parameterjson = -1
-    return parameterjson
-
-
-class cleandoc:
-    basejson = {
-        "@type": "ComputationalTool",
-        # "@context": {
-        #     "schema": "http://schema.org/",
-        #     "outbreak": "https://discovery.biothings.io/view/outbreak/",
-        #     "dct": "http://purl.org/dc/terms/"
-        # },
-        "@context": "https://schema.org/",
-        "includedInDataCatalog": {
-            "@type": "ComputationalTool",
-            "name": "biotools",
-            "url": "https://bio.tools/",
-            "versionDate": datetime.date.today().isoformat(),
-        },
-    }
-
-    def add_basic_info(biotooljsonhit, domain_dict):
-        cleanjson = cleandoc.basejson
-        cleanjson["name"] = biotooljsonhit["name"]
-        cleanjson["_id"] = "biotools_" + biotooljsonhit["biotoolsID"]
-
-        for key in domain_dict:
-            if biotooljsonhit["biotoolsID"] in domain_dict[key]["ids"]:
-                cleanjson["topicCategory"] = {
-                    "name": domain_dict[key]["title"],
-                    "url": "https://bio.tools/t?domain=" + domain_dict[key]["domain"],
-                    "curatedBy": {"name": "Biotools", "url": "https://bio.tools/domains"},
-                }
-                if domain_dict[key]["description"] is not None:
-                    cleanjson["topicCategory"]["description"] = domain_dict[key]["description"]
-
-        cleanjson["description"] = biotooljsonhit["description"]
-        cleanjson["identifier"] = biotooljsonhit["biotoolsID"]
-        cleanjson["url"] = "https://bio.tools/" + biotooljsonhit["biotoolsID"]
-        # cleanjson['url'] = biotooljsonhit['homepage']
-        # if homepage is github link, add github repo link
-        if "github" in biotooljsonhit["homepage"]:
-            cleanjson["codeRepository"] = biotooljsonhit["homepage"]
-        else:
-            cleanjson["mainEntityOfPage"] = biotooljsonhit["homepage"]
-        cleanjson["softwareVersion"] = biotooljsonhit["version"]
-        cleanjson["applicationCategory"] = biotooljsonhit["toolType"]
-        cleanjson["license"] = biotooljsonhit["license"]
-        cleanjson["programmingLanguage"] = biotooljsonhit["language"]
-
-        if biotooljsonhit["accessibility"] == "Open access":
-            cleanjson["conditionsOfAccess"] = "Open"
-        elif biotooljsonhit["accessibility"] == "Open access(with restrictions)":
-            cleanjson["conditionsOfAccess"] = "Restricted"
-        elif biotooljsonhit["accessibility"] == "Restricted access":
-            cleanjson["conditionsOfAccess"] = "Closed"
-
-        if biotooljsonhit["cost"] == "Free of charge":
-            cleanjson["isAccessibleForFree"] = True
-        elif biotooljsonhit["cost"] == "Free of charge (with restrictions)":
-            cleanjson["isAccessibleForFree"] = True
-        elif biotooljsonhit["cost"] == "Commercial":
-            cleanjson["isAccessibleForFree"] = False
-
-        try:
-            cleanjson["dateModified"] = biotooljsonhit["lastUpdate"].split("T")[0]
-        except Exception:
-            cleanjson["dateModified"] = biotooljsonhit["lastUpdate"]
-        try:
-            cleanjson["dateCreated"] = biotooljsonhit["additionDate"].split("T")[0]
-        except Exception:
-            cleanjson["dateCreated"] = biotooljsonhit["additionDate"]
-
-        # temp fix for outbreak.info
-        if cb_outbreak := cleanjson.get("includedInDataCatalog"):
-            cleanjson["curatedBy"] = cb_outbreak
-
-        return cleanjson
-
-    def add_app_sub_cat(cleanjson, biotooljsonhit):
-        try:
-            alltopics = biotooljsonhit["topic"]
-            # topicjson = parse_defined_terms(alltopics)
-            # if topicjson != -1:
-            topics = [x["term"] for x in alltopics]
-            cleanjson["keywords"] = topics
-        except Exception:
-            pass
-        return cleanjson
-
-    def add_features(cleanjson, biotooljsonhit):
-        available_functions = biotooljsonhit["function"]
-        if len(available_functions) > 0:
-            operationlist = []
-            inputlist = []
-            outputlist = []
-        for eachfunction in available_functions:
-            # parse operations
-            operations = eachfunction["operation"]
-            features = parse_defined_terms(operations)
-            if features != -1:
-                operationlist.extend(features)
-            # parse inputs
-            inparameterdict = eachfunction["input"]
-            inparameters = parse_parameters(inparameterdict)
-            if inparameters != -1:
-                inputlist.append(inparameters)
-            # parse outputs
-            outparameterdict = eachfunction["output"]
-            outparameters = parse_parameters(outparameterdict)
-            if outparameters != -1:
-                outputlist.append(outparameters)
-                # Note, additional content available from bio.tools in this section includes 'cmd', and 'notes'
-            if len(operationlist) > 0:
-                cleanjson["featureList"] = operationlist
-            if len(inputlist) > 0:
-                cleanjson["input"] = inputlist
-            if len(outputlist) > 0:
-                cleanjson["output"] = outputlist
-        return cleanjson
-
-    # get the downloadUrl and codeRepository from either link or download
-    def add_links(cleanjson, biotooljsonhit):
-        # pool links
-        biotoollinks = []
-        if isinstance(biotooljsonhit["link"], list) == True:
-            for eachdict in biotooljsonhit["link"]:
-                biotoollinks.append(eachdict)
-        if isinstance(biotooljsonhit["download"], list) == True:
-            for eachdict in biotooljsonhit["download"]:
-                biotoollinks.append(eachdict)
-        if isinstance(biotooljsonhit["link"], dict) == True:
-            biotoollinks.append(biotooljsonhit["link"])
-        if isinstance(biotooljsonhit["download"], dict) == True:
-            biotoollinks.append(biotooljsonhit["download"])
-
-        # Parse links
-        if len(biotoollinks) > 0:
-            codeRepository = []
-            discussionUrl = []
-            downloadUrl = []
-            for eachitem in biotoollinks:
-                if isinstance(eachitem, dict) == True and eachitem["type"] != None:
-                    if ("Repository" or "repository") in eachitem["type"]:
-                        codeRepository.append(eachitem["url"])
-                    if ("Issue" or "issue") in eachitem["type"]:
-                        discussionUrl.append(eachitem["url"])
-                    if "file" in eachitem["type"]:
-                        downloadUrl.append({"name": eachitem["url"]})
-                    if ("note" in eachitem.keys()) and (eachitem["note"] != None) and ("image" in eachitem["note"]):
-                        downloadUrl.append({"name": eachitem["url"]})
-            if len(codeRepository) > 0:
-                cleanjson["codeRepository"] = list(set(codeRepository))
-            if len(discussionUrl) > 0:
-                cleanjson["discussionUrl"] = list(set(discussionUrl))
-            if len(downloadUrl) > 0:
-                cleanjson["downloadUrl"] = downloadUrl
-        return cleanjson
-
-    def add_softwarehelp(cleanjson, biotooljsonhit):
-        if len(biotooljsonhit["documentation"]) > 0:
-            if isinstance(biotooljsonhit["documentation"], list) == True:
-                urls = [{"url": x["url"]} for x in biotooljsonhit["documentation"]]
-                cleanjson["softwareHelp"] = urls
-            if isinstance(biotooljsonhit["documentation"], dict) == True:
-                urls = [{"url": biotooljsonhit["documentation"]}]
-                cleanjson["softwareHelp"] = urls
-        return cleanjson
-
-    def add_author(cleanjson, biotooljsonhit):
-        authorlist = []
-        for eachhit in biotooljsonhit["credit"]:
-            newdict = copy.deepcopy(eachhit)
-            if newdict["typeEntity"] == "Person":
-                newdict["@type"] = "Person"
-            elif newdict["typeEntity"] == None:
-                if newdict["orcidid"] != None:
-                    newdict["@type"] = "Person"
-                # else:
-                #     newdict['@type'] = 'dct:Agent'
-            else:
-                newdict["@type"] = "Organization"
-            newdict["identifier"] = newdict.pop("orcidid", None)
-            newdict["role"] = newdict.pop("typeRole", None)
-            newdict.pop("gridid", None)
-            newdict.pop("rorid", None)
-            newdict.pop("fundrefid", None)
-            newdict.pop("note", None)
-            newdict.pop("typeEntity", None)
-            for key, value in dict(newdict).items():
-                if (value is None) or (len(value) == 0):
-                    del newdict[key]
-            authorlist.append(newdict)
-        cleanjson["author"] = authorlist
-        return cleanjson
-
-    def add_citations(cleanjson, biotooljsonhit):
-        citation = []
-        for eachpub in biotooljsonhit["publication"]:
-            tmppub = copy.deepcopy(eachpub)
-            tmppub["@type"] = "Publication"
-            try:
-                tmppub["name"] = tmppub["metadata"]["title"]
-            except Exception:
-                tmppub["name"] = None
-            tmppub.pop("type")
-            tmppub.pop("version")
-            tmppub.pop("note")
-            tmppub.pop("metadata")
-            for key, value in dict(tmppub).items():
-                if (value is None) or (len(value) == 0):
-                    del tmppub[key]
-            citation.append(tmppub)
-        cleanjson["citation"] = citation
-
-        return cleanjson
-
-
 def download_jsondocs():
     logger.info("Retrieving Metadata From API")
-    jsondoclist = []
+
     biotoolsapiurl = "https://bio.tools/api/t"
-    payloads = {"format": "json", "page": "1"}
-    # payloads = {'format': 'json', 'domain': 'covid-19', 'page': '1'}
-    # payloads = {'format': 'json', 'q': 'COVID-19','page':'1'}
-    r = requests.get(biotoolsapiurl, params=payloads, timeout=5).json()
-    count = r["count"]
-    list_num = len(r["list"])
-    total_pages = math.ceil(count / list_num)
-    i = 1
-    while i < total_pages + 1:
-        if i % 100 == 0:
-            logger.info("Retrieved %s of %s pages" % (i, total_pages))
-        if i % 400 == 0:
+    jsondoclist = []
+    payloads = {"format": "json", "page": 1}
+
+    while True:
+        response = requests.get(biotoolsapiurl, params=payloads, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+
+        jsondoclist.extend(data["list"])
+        logger.info("Retrieved %d records so far", len(jsondoclist))
+
+        # Get the 'next' page value from the response and update 'payloads'
+        biotoolsapipage = data.get("next")
+        if not biotoolsapipage:
             break
-        payloads = {"format": "json", "page": i}
-        r = requests.get(biotoolsapiurl, params=payloads, timeout=20).json()
+        else:
+            # Extract the next page number from the 'next' query parameter
+            next_page = biotoolsapipage.split("=")[-1]
+            payloads["page"] = next_page  # Update the page in the payloads
+
+        # Respect API rate limiting
         time.sleep(1)
-        jsondoclist.extend(r["list"])
-        i = i + 1
+
+    logger.info("Finished retrieving all records. Total: %d", len(jsondoclist))
     return jsondoclist
 
 
-def transform_json(jsondoclist, domain_dict):
-    logger.info("Parsing Metadata")
-    for i in range(len(jsondoclist)):
-        if i % 1000 == 0 and i != 0:
-            logger.info("Parsed %s of %s" % (i, len(jsondoclist)))
-        biotooljsonhit = jsondoclist[i]
-        cleanjson = cleandoc.add_basic_info(biotooljsonhit, domain_dict)
-        cleanjson = cleandoc.add_app_sub_cat(cleanjson, biotooljsonhit)
-        cleanjson = cleandoc.add_features(cleanjson, biotooljsonhit)
-        cleanjson = cleandoc.add_links(cleanjson, biotooljsonhit)
-        cleanjson = cleandoc.add_softwarehelp(cleanjson, biotooljsonhit)
-        cleanjson = cleandoc.add_author(cleanjson, biotooljsonhit)
-        cleanjson = cleandoc.add_citations(cleanjson, biotooljsonhit)
-        yield cleanNullTerms(cleanjson)
-    logger.info("Finished Parsing. Total records: %s" % len(jsondoclist))
-
-
-def get_domain_list():
-    domain_dict = {}
-    biotools_domains = "https://bio.tools/api/d/all"
-    r = requests.get(biotools_domains, timeout=5).json()
-    for domain in r["data"]:
-        domain_dict[domain["title"]] = {
-            "ids": [x["biotoolsID"] for x in domain["resources"]],
-            "title": domain["title"],
-            "description": domain["description"],
-            "domain": domain["domain"],
-        }
-    return domain_dict
-
-
 def parse():
+    count = 0
+    logger.info("Parsing biotools metadata")
+
     jsondoclist = download_jsondocs()
-    domain_dict = get_domain_list()
-    doclist = transform_json(jsondoclist, domain_dict)
-    yield from doclist
+    for tool in jsondoclist:
+        count += 1
+        logger.info(f"Parsing tool {count} of {len(jsondoclist)}")
+        if count % 50 == 0:
+            logger.info("Parsed %s tools", count)
+
+        # Initialize the output structure
+        output = {
+            "@type": "ComputationalTool",
+            "includedInDataCatalog": {
+                "@type": "Dataset",
+                "name": "Bio.tools",
+                "url": "https://bio.tools/",
+                "versionDate": datetime.date.today().isoformat(),
+            },
+        }
+
+        # Direct mappings
+        if tool_name := tool.get("name"):
+            output["name"] = tool_name
+
+        if description := tool.get("description"):
+            output["description"] = description
+
+        if homepage := tool.get("homepage"):
+            output["mainEntityOfPage"] = homepage
+
+        # Biotools ID needs to be split into identifier and URL
+        if biotools_id := tool.get("biotoolsID"):
+            output["identifier"] = biotools_id
+            output["url"] = f"https://bio.tools/{biotools_id}"
+            output["_id"] = f"biotools_{biotools_id}"
+        else:
+            logger.warning("Skipping tool without biotoolsID")
+            continue
+
+        # Conditional mappings for date fields with formatting
+        if addition_date := tool.get("additionDate"):
+            output["datePublished"] = addition_date.split("T")[0]
+        if last_update := tool.get("lastUpdate"):
+            output["dateModified"] = last_update.split("T")[0]
+
+        # Topic and Function mappings
+        if topics := tool.get("topic"):
+            output["topicCategory"] = [
+                {
+                    "url": topic.get("uri"),
+                    "identifier": topic.get("uri"),
+                    "name": topic.get("term"),
+                }
+                for topic in topics
+                if topic.get("uri") and topic.get("term")
+            ]
+
+        if functions := tool.get("function"):
+            output["featureList"] = [
+                {
+                    "url": op.get("uri"),
+                    "name": op.get("term"),
+                }
+                for func in functions
+                for op in func.get("operation", [])
+                if op.get("uri") and op.get("term")
+            ]
+
+        # Credit handling based on typeEntity and typeRole
+        if credits := tool.get("credit"):
+            funders = []
+            authors = []
+            contributors = []
+
+            for credit in credits:
+                credit_entry = {
+                    "name": credit.get("name"),
+                    "email": credit.get("email"),
+                    "url": credit.get("orcidid") or credit.get("url"),
+                }
+
+                if credit.get("typeEntity") == "Person":
+                    credit_entry["@type"] = "Person"
+                else:
+                    credit_entry["@type"] = "Organization"
+
+                if credit.get("typeEntity") == "Funding agency":
+                    funders.append(credit_entry)
+                else:
+                    if credit.get("typeRole") in ["Developer", "Primary contact"]:
+                        authors.append(credit_entry)
+                    elif credit.get("typeRole") in ["Maintainer", "Provider", "Contributor", "Support"]:
+                        contributors.append(credit_entry)
+
+            if authors:
+                output["author"] = authors
+            if contributors:
+                output["contributor"] = contributors
+            if funders:
+                output["funding"] = {"funder": funders}
+
+        # Publication handling based on type
+        if publications := tool.get("publication"):
+            for pub in publications:
+                pub_entry = {}
+
+                # Handle DOI
+                if doi := pub.get("doi"):
+                    pub_entry["doi"] = doi
+
+                # Safely handle metadata and its fields
+                if metadata := pub.get("metadata"):
+                    # Handle title (name)
+                    if title := metadata.get("title"):
+                        pub_entry["name"] = title
+
+                    # Handle datePublished, ensuring it's not None
+                    if date := metadata.get("date"):
+                        pub_entry["datePublished"] = date.split("T")[0]  # Only store YYYY-MM-DD format
+
+                    # Handle journal
+                    if journal := metadata.get("journal"):
+                        pub_entry["journal"] = journal
+
+                    # Handle authors
+                    authors = []
+                    if metadata.get("authors"):
+                        for author in metadata.get("authors", []):
+                            if author_name := author.get("name"):
+                                authors.append({"name": author_name})
+                        if authors:
+                            pub_entry["author"] = authors
+
+                    # Handle abstract
+                    if abstract := metadata.get("abstract"):
+                        pub_entry["abstract"] = abstract
+
+                # Handle PMID
+                if pmid := pub.get("pmid"):
+                    pub_entry["pmid"] = pmid
+
+                # Handle PMCID
+                if pmcid := pub.get("pmcid"):
+                    pub_entry["pmcid"] = pmcid
+
+                # Handle version
+                if version := pub.get("version"):
+                    pub_entry["version"] = version
+
+                # Conditional logic based on publication type
+                pub_type = pub.get("type")
+                if pub_type == "Primary":
+                    output.setdefault("citation", []).append(pub_entry)
+                elif pub_type == "Method":
+                    output.setdefault("isBasedOn", []).append(pub_entry)
+                elif pub_type == "Usage":
+                    output.setdefault("citedBy", []).append(pub_entry)
+                elif pub_type == "Benchmarking study":
+                    output.setdefault("isBasisFor", []).append(pub_entry)
+                elif pub_type in ["Review", "Other"]:
+                    output.setdefault("citedBy", []).append(pub_entry)
+                else:
+                    logger.warning("Unknown publication type: %s", pub_type)
+
+        # Relations
+        if relations := tool.get("relation"):
+            for relation in relations:
+                relation_entry = {"identifier": relation.get("biotoolsID")}
+                relation_type = relation.get("type")
+
+                if relation_type == "isNewVersion":
+                    output.setdefault("isRelatedTo", []).append(relation_entry)
+                elif relation_type == "uses":
+                    output.setdefault("isBasedOn", []).append(relation_entry)
+                elif relation_type == "usedBy":
+                    output.setdefault("isBasisFor", []).append(relation_entry)
+                elif relation_type == "includes":
+                    output.setdefault("hasPart", []).append(relation_entry)
+                elif relation_type == "includedIn":
+                    output.setdefault("isPartOf", []).append(relation_entry)
+                else:
+                    logger.warning("Unknown relation type: %s", relation_type)
+
+        # Software-specific fields
+        if version := tool.get("version"):
+            output["softwareVersion"] = version
+
+        if license := tool.get("license"):
+            output["license"] = license
+
+        if programming_language := tool.get("language"):
+            output["programmingLanguage"] = programming_language
+
+        if os := tool.get("operatingSystem"):
+            output["operatingSystem"] = os
+
+        # Download URLs
+        if downloads := tool.get("download"):
+            for download in downloads:
+                download_entry = {"url": download.get("url")}
+                if download.get("version"):  # Only add 'version' if it's not None
+                    download_entry["version"] = download.get("version")
+                output.setdefault("downloadURL", []).append(download_entry)
+
+        # Cost and accessibility
+        if cost := tool.get("cost"):
+            if cost.lower() == "free of charge":
+                output["isAccessibleForFree"] = True
+            elif cost.lower() == "commercial":
+                output["isAccessibleForFree"] = False
+            elif cost.lower() == "free of charge (with restrictions)":
+                output["isAccessibleForFree"] = True
+            else:
+                logger.warning("Unknown cost value: %s", cost)
+
+        if accessibility := tool.get("accessibility"):
+            if accessibility.lower() == "open access":
+                output["conditionsOfAccess"] = "Open"
+            elif accessibility.lower() == "restricted access":
+                output["conditionsOfAccess"] = "Closed"
+            elif accessibility.lower() == "open access (with restrictions)":
+                output["conditionsOfAccess"] = "Restricted"
+            else:
+                logger.warning("Unknown accessibility value: %s", accessibility)
+
+        if documentation := tool.get("documentation"):
+            for doc in documentation:
+                software_help = []
+                if url := doc.get("url"):
+                    software_help.append({"url": url})
+                if doc_type := doc.get("type"):
+                    software_help.append({"name": doc_type})
+                if software_help:
+                    output["softwareHelp"] = software_help
+
+        if other_ids := tool.get("otherID"):
+            for oid in other_ids:
+                if oid.get("type") == "doi":
+                    output["doi"] = oid.get("value")
+
+        if tool_type := tool.get("toolType"):
+            output["applicationCategory"] = tool_type
+
+        if collection_id := tool.get("collectionID"):
+            output["keywords"] = collection_id
+
+        if maturity := tool.get("maturity"):
+            output["creativeWorkStatus"] = maturity
+
+        # Initialize lists to gather all inputs and outputs
+        all_inputs = []
+        all_outputs = []
+
+        # Iterate over each function in the list
+        if functions := tool.get("function"):
+            for func in functions:
+                # Process inputs for each function
+                if inputs := func.get("input"):
+                    for i in inputs:
+                        input_entry = {}
+
+                        # Add URL if available
+                        if url := i.get("data", {}).get("uri"):
+                            input_entry["url"] = url
+
+                        # Add name if available
+                        if name := i.get("data", {}).get("term"):
+                            input_entry["name"] = name
+
+                        # Add encoding format if available
+                        if formats := i.get("format"):
+                            encoding_format = {}
+                            for f in formats:
+                                if encoding_format_url := f.get("uri"):
+                                    encoding_format["url"] = encoding_format_url
+                                if encoding_format_name := f.get("term"):
+                                    encoding_format["name"] = encoding_format_name
+                            if encoding_format:
+                                input_entry["encodingFormat"] = encoding_format
+
+                        # Append the input entry if any data was collected
+                        if input_entry:
+                            all_inputs.append(input_entry)
+
+                # Process outputs for each function
+                if outputs := func.get("output"):
+                    for o in outputs:
+                        output_entry = {}
+
+                        # Add URL if available
+                        if url := o.get("data", {}).get("uri"):
+                            output_entry["url"] = url
+
+                        # Add name if available
+                        if name := o.get("data", {}).get("term"):
+                            output_entry["name"] = name
+
+                        # Add encoding format if available
+                        if formats := o.get("format"):
+                            encoding_format = {}
+                            for f in formats:
+                                if encoding_format_url := f.get("uri"):
+                                    encoding_format["url"] = encoding_format_url
+                                if encoding_format_name := f.get("term"):
+                                    encoding_format["name"] = encoding_format_name
+                            if encoding_format:
+                                output_entry["encodingFormat"] = encoding_format
+
+                        # Append the output entry if any data was collected
+                        if output_entry:
+                            all_outputs.append(output_entry)
+
+        # Only add 'input' and 'output' to the final output if we processed any inputs or outputs
+        if all_inputs:
+            output["input"] = all_inputs
+
+        if all_outputs:
+            output["output"] = all_outputs
+
+        yield output
+
+    logger.info("Finished parsing all tools.")
