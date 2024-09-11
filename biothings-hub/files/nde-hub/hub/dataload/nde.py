@@ -364,7 +364,12 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "text", "copy_to": ["all"]},
                 }
             },
-            "featureList": {"type": "text", "copy_to": ["all"]},
+            "featureList": {
+                "properties": {
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "funding": {
                 "properties": {
                     "identifier": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
@@ -484,7 +489,16 @@ class NDESourceUploader(BaseSourceUploader):
                     "description": {"type": "text"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
-                    "encodingFormat": {"type": "text", "copy_to": ["all"]},
+                    "encodingFormat": {
+                        "properties": {
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                            },
+                            "url": {"type": "text"},
+                        }
+                    },
                 },
             },
             "includedInDataCatalog": {
@@ -719,7 +733,16 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "encodingFormat": {"type": "text", "copy_to": ["all"]},
+                    "encodingFormat": {
+                        "properties": {
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                            },
+                            "url": {"type": "text"},
+                        }
+                    },
                 },
             },
             "processorRequirements": {"type": "text", "copy_to": ["all"]},
