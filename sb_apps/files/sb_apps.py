@@ -103,7 +103,7 @@ def parse():
                     # using dictionary mime_type defined above, find correct value transformations by iterating through keys
                     for file_type in file_types:
                         if file_type in mime_type.keys():
-                            formal_parameter_object["encodingFormat"] = mime_type[file_type]
+                            formal_parameter_object["encodingFormat"] = {"name": mime_type[file_type]}
                 # no empty objects
                 if len(formal_parameter_object):
                     result_input_list.append(formal_parameter_object)
@@ -125,7 +125,7 @@ def parse():
                         file_types = file_types[0].split(", ")
                     for file_type in file_types:
                         if file_type in mime_type.keys():
-                            result_output_object["encodingFormat"] = mime_type[file_type]
+                            result_output_object["encodingFormat"] = {"name": mime_type[file_type]}
 
                 if len(result_output_object):
                     result_output_list.append(result_output_object)
