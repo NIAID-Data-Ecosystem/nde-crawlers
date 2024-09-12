@@ -767,6 +767,7 @@ class NDESourceUploader(BaseSourceUploader):
             "softwareAddOn": {
                 "properties": {
                     "identifier": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
                 }
             },
             "softwareHelp": {
