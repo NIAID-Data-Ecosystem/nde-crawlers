@@ -32,9 +32,6 @@ def download_jsondocs():
             next_page = biotoolsapipage.split("=")[-1]
             payloads["page"] = next_page  # Update the page in the payloads
 
-        # Respect API rate limiting
-        time.sleep(1)
-
     logger.info("Finished retrieving all records. Total: %d", len(jsondoclist))
     return jsondoclist
 
@@ -115,25 +112,71 @@ def parse():
             authors = []
             contributors = []
 
+            # Sets to track unique entries by name or URL to prevent duplicates
+            unique_authors = set()
+            unique_contributors = set()
+            unique_funders = set()
+
             for credit in credits:
+                if not credit.get("name") or not credit.get("typeEntity") or not credit.get("typeRole"):
+                    logger.warning(f"Skipping incomplete credit entry: {credit}")
+                    continue
+
                 credit_entry = {
                     "name": credit.get("name"),
                     "email": credit.get("email"),
                     "url": credit.get("orcidid") or credit.get("url"),
                 }
 
+                identifier = credit.get("name") or credit.get("url")
+
                 if credit.get("typeEntity") == "Person":
                     credit_entry["@type"] = "Person"
                 else:
                     credit_entry["@type"] = "Organization"
 
-                if credit.get("typeEntity") == "Funding agency":
-                    funders.append(credit_entry)
+                type_roles = credit.get("typeRole")
+                is_author = False
+
+                if isinstance(type_roles, list):
+                    for role in type_roles:
+                        if role in ["Developer", "Primary contact"]:
+                            # Prioritize authorship over contribution
+                            if identifier not in unique_authors:
+                                authors.append(credit_entry)
+                                unique_authors.add(identifier)
+                                is_author = True
+                            break  # Stop further processing if added as an author
+                    # Only add to contributors if not already added as an author
+                    if not is_author:
+                        for role in type_roles:
+                            if role in ["Maintainer", "Provider", "Contributor", "Support", "Documentor"]:
+                                if identifier not in unique_contributors:
+                                    contributors.append(credit_entry)
+                                    unique_contributors.add(identifier)
+                                break
                 else:
-                    if credit.get("typeRole") in ["Developer", "Primary contact"]:
-                        authors.append(credit_entry)
-                    elif credit.get("typeRole") in ["Maintainer", "Provider", "Contributor", "Support"]:
-                        contributors.append(credit_entry)
+                    # Handle non-list case (if typeRole is a single string)
+                    if type_roles in ["Developer", "Primary contact"]:
+                        if identifier not in unique_authors:
+                            authors.append(credit_entry)
+                            unique_authors.add(identifier)
+                            is_author = True
+                    elif not is_author and type_roles in [
+                        "Maintainer",
+                        "Provider",
+                        "Contributor",
+                        "Support",
+                        "Documentor",
+                    ]:
+                        if identifier not in unique_contributors:
+                            contributors.append(credit_entry)
+                            unique_contributors.add(identifier)
+
+                if credit.get("typeEntity") == "Funding agency":
+                    if identifier not in unique_funders:
+                        funders.append(credit_entry)
+                        unique_funders.add(identifier)
 
             if authors:
                 output["author"] = authors
@@ -147,25 +190,19 @@ def parse():
             for pub in publications:
                 pub_entry = {}
 
-                # Handle DOI
                 if doi := pub.get("doi"):
                     pub_entry["doi"] = doi
 
-                # Safely handle metadata and its fields
                 if metadata := pub.get("metadata"):
-                    # Handle title (name)
                     if title := metadata.get("title"):
                         pub_entry["name"] = title
 
-                    # Handle datePublished, ensuring it's not None
                     if date := metadata.get("date"):
                         pub_entry["datePublished"] = date.split("T")[0]  # Only store YYYY-MM-DD format
 
-                    # Handle journal
                     if journal := metadata.get("journal"):
                         pub_entry["journal"] = journal
 
-                    # Handle authors
                     authors = []
                     if metadata.get("authors"):
                         for author in metadata.get("authors", []):
@@ -174,24 +211,22 @@ def parse():
                         if authors:
                             pub_entry["author"] = authors
 
-                    # Handle abstract
                     if abstract := metadata.get("abstract"):
                         pub_entry["abstract"] = abstract
 
-                # Handle PMID
                 if pmid := pub.get("pmid"):
                     pub_entry["pmid"] = pmid
 
-                # Handle PMCID
                 if pmcid := pub.get("pmcid"):
                     pub_entry["pmcid"] = pmcid
 
-                # Handle version
                 if version := pub.get("version"):
                     pub_entry["version"] = version
 
                 # Conditional logic based on publication type
                 pub_type = pub.get("type")
+                if isinstance(pub_type, list) and len(pub_type) == 1:
+                    pub_type = pub_type[0]
                 if pub_type == "Primary":
                     output.setdefault("citation", []).append(pub_entry)
                 elif pub_type == "Method":
@@ -211,8 +246,8 @@ def parse():
                 relation_entry = {"identifier": relation.get("biotoolsID")}
                 relation_type = relation.get("type")
 
-                if relation_type == "isNewVersion":
-                    output.setdefault("isRelatedTo", []).append(relation_entry)
+                if relation_type in ["isNewVersionOf", "hasNewVersion"]:
+                    output.setdefault("sameAs", []).append(relation_entry["identifier"])
                 elif relation_type == "uses":
                     output.setdefault("isBasedOn", []).append(relation_entry)
                 elif relation_type == "usedBy":
@@ -240,10 +275,48 @@ def parse():
         # Download URLs
         if downloads := tool.get("download"):
             for download in downloads:
-                download_entry = {"url": download.get("url")}
-                if download.get("version"):  # Only add 'version' if it's not None
-                    download_entry["version"] = download.get("version")
-                output.setdefault("downloadURL", []).append(download_entry)
+                download_url = download.get("url")
+                download_type = download.get("type")
+
+                if not download_url or not download_type:
+                    continue  # Skip if either URL or type is missing
+
+                if download_type == "API specification":
+                    output.setdefault("softwareHelp", []).append({"url": download_url})
+                elif download_type == "Biological data":
+                    output.setdefault("softwareAddOn", []).append({"url": download_url})
+                elif download_type == "Binaries":
+                    output.setdefault("downloadURL", []).append({"name": download_url})
+                elif download_type == "Command-line specificaiton":
+                    output.setdefault("softwareHelp", []).append({"url": download_url})
+                elif download_type == "Container file":
+                    output.setdefault("downloadURL", []).append({"name": download_url})
+                elif download_type == "Icon":
+                    output.setdefault("thumbnailURL", []).append(download_url)
+                elif download_type == "Screenshot":
+                    output.setdefault("thumbnailURL", []).append(download_url)
+                elif download_type == "Source code":
+                    output.setdefault("codeRepository", []).append(download_url)
+                elif download_type == "Software package":
+                    output.setdefault("downloadURL", []).append({"name": download_url})
+                elif download_type == "Test data":
+                    output.setdefault("softwareAddOn", []).append({"url": download_url})
+                elif download_type == "Test script":
+                    output.setdefault("softwareAddOn", []).append({"url": download_url})
+                elif download_type == "Tool wrapper (CWL)":
+                    output["programmingLanguage"] = "CWL"
+                elif download_type == "Tool wrapper (galaxy)":
+                    output["isAvailableOnDevice"] = "Galaxy"
+                elif download_type == "Tool wrapper (taverna)":
+                    output["applicationSuite"] = "Taverna"
+                elif download_type == "VM image":
+                    output.setdefault("downloadURL", []).append({"name": download_url})
+                elif download_type == "Downloads page":
+                    output.setdefault("downloadURL", []).append({"name": download_url})
+                elif download_type == "Other":
+                    output.setdefault("downloadURL", []).append({"name": download_url})
+                else:
+                    logger.warning("Unknown download type: %s", download_type)
 
         # Cost and accessibility
         if cost := tool.get("cost"):
@@ -294,7 +367,6 @@ def parse():
         all_inputs = []
         all_outputs = []
 
-        # Iterate over each function in the list
         if functions := tool.get("function"):
             for func in functions:
                 # Process inputs for each function
@@ -302,15 +374,12 @@ def parse():
                     for i in inputs:
                         input_entry = {}
 
-                        # Add URL if available
                         if url := i.get("data", {}).get("uri"):
                             input_entry["url"] = url
 
-                        # Add name if available
                         if name := i.get("data", {}).get("term"):
                             input_entry["name"] = name
 
-                        # Add encoding format if available
                         if formats := i.get("format"):
                             encoding_format = {}
                             for f in formats:
@@ -321,7 +390,6 @@ def parse():
                             if encoding_format:
                                 input_entry["encodingFormat"] = encoding_format
 
-                        # Append the input entry if any data was collected
                         if input_entry:
                             all_inputs.append(input_entry)
 
@@ -330,15 +398,12 @@ def parse():
                     for o in outputs:
                         output_entry = {}
 
-                        # Add URL if available
                         if url := o.get("data", {}).get("uri"):
                             output_entry["url"] = url
 
-                        # Add name if available
                         if name := o.get("data", {}).get("term"):
                             output_entry["name"] = name
 
-                        # Add encoding format if available
                         if formats := o.get("format"):
                             encoding_format = {}
                             for f in formats:
@@ -349,11 +414,9 @@ def parse():
                             if encoding_format:
                                 output_entry["encodingFormat"] = encoding_format
 
-                        # Append the output entry if any data was collected
                         if output_entry:
                             all_outputs.append(output_entry)
 
-        # Only add 'input' and 'output' to the final output if we processed any inputs or outputs
         if all_inputs:
             output["input"] = all_inputs
 
