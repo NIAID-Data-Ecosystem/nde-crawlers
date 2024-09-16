@@ -1,44 +1,47 @@
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 
 import biothings
 import biothings.hub.dataload.dumper as dumper
 import config
+import requests
 
 biothings.config_for_app(config)
 
 
-class Biostudies_Dumper(dumper.WgetDumper):
+class Biostudies_Dumper(dumper.BaseDumper):
 
+    MAX_PARALLEL_DUMP = 3
     SRC_NAME = "biostudies"
     SRC_ROOT_FOLDER = os.path.join(config.DATA_ARCHIVE_ROOT, SRC_NAME)
-    SITEMAP_URLS = config.SITEMAP_URLS
+
+    def prepare_client(self):
+        pass
+
+    def release_client(self):
+        pass
+
+    def remote_is_better(self, remotefile, localfile):
+        return True
 
     def set_release(self):
-        last_modified_timestamp = os.path.getmtime(self.SITEMAP_URLS)
-        # Convert the timestamp to a human-readable format
-        self.release = datetime.fromtimestamp(last_modified_timestamp).strftime("%Y-%m-%d")
+        self.release = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def create_todump_list(self, force=False, **kwargs):
         self.set_release()  # so we can generate new_data_folder
-        for filename in os.listdir(self.SITEMAP_URLS):
-            new_localfile = os.path.join(self.new_data_folder, filename.replace(".txt", ""))
-            try:
-                current_localfile = os.path.join(self.current_data_folder, filename.replace(".txt", ""))
-            except TypeError:
-                # current data folder doesn't even exist
-                current_localfile = new_localfile
-
-            if force or not os.path.exists(current_localfile):
-                remoteurl = os.path.join(self.SITEMAP_URLS, filename)
-                self.to_dump.append({"remote": remoteurl, "local": new_localfile})
+        hits = requests.get("https://www.ebi.ac.uk/biostudies/api/v1/search").json()["totalHits"]
+        pages = (hits // 100) + 1 if hits % 100 != 0 else hits // 100
+        # form urls to dump TODO change to pages + 1 after testing
+        for page in range(1, pages + 1):
+            remoteurl = f"https://www.ebi.ac.uk/biostudies/api/v1/search?pageSize=100&page={page}"
+            new_localfile = os.path.join(self.new_data_folder, f"biostudies_{page}.txt")
+            self.to_dump.append({"remote": remoteurl, "local": new_localfile})
 
     def download(self, remoteurl, localfile):
         self.prepare_local_folders(localfile)
-        cmdline = "wget -i %s -P %s -N" % (remoteurl, localfile)
-        return_code = subprocess.run(["wget", "-i", remoteurl, "-P", localfile, "-N"])
-        if return_code.returncode == 0:
-            self.logger.info("Success.")
-        else:
-            self.logger.error("Failed with return code (%s)." % return_code)
+        self.logger.info("Downloading accno from %s to %s", remoteurl, localfile)
+        data = requests.get(remoteurl).json()
+        with open(localfile, "w") as f:
+            for hit in data.get("hits"):
+                f.write(hit["accession"] + "\n")

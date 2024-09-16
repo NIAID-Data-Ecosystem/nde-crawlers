@@ -1,9 +1,8 @@
 import datetime
-import json
-import os
 import re
 
 import dateutil
+import requests
 
 try:
     from config import logger
@@ -50,14 +49,15 @@ def parse_section_file(file, accno, output):
             output["distribution"] = [dist_url]
 
 
-def parse_file(doc):
+def parse_file(doc, accno):
     global missing_attributes
     global missing_subattributes
     global known_attributes
     global known_section_attributes
     global known_subsection_types
 
-    accno = doc.pop("accno")
+    if not doc.get("accno"):
+        accno = doc.get("accno")
 
     try:
         output = {
@@ -309,16 +309,23 @@ def parse_file(doc):
         raise e
 
 
-def parse_file_dir(input_dir):
-    for filename in os.listdir(input_dir):
-        if filename.endswith(".json"):
-            with open(os.path.join(input_dir, filename), "r") as infile:
-                doc = json.load(infile)
-                try:
-                    if not doc.get("accno"):
-                        continue
-                except Exception as e:
-                    continue
-                yield parse_file(doc)
+def parse_files(input_file):
+    missing_attributes = {}
+    missing_subattributes = {}
+
+    with open(input_file, "r") as f:
+        for line in f:
+            accno = line.strip()
+            url = f"https://www.ebi.ac.uk/biostudies/api/v1/studies/{accno}"
+            try:
+                response = requests.get(url)
+                response.raise_for_status()  # Raise an HTTPError for bad responses
+                data = response.json()  # This will raise a JSONDecodeError if the response is not valid JSON
+                yield parse_file(data, accno)
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Request error for URL {url}: {e}")
+            except ValueError as e:
+                logger.error(f"JSON decode error for URL {url}: {e}")
+
     logger.info(f"Missing attributes: {missing_attributes}")
     logger.info(f"Missing subattributes: {missing_subattributes}")
