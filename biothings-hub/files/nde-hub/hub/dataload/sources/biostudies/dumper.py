@@ -1,11 +1,11 @@
 import os
-import subprocess
 from datetime import datetime, timezone
 
 import biothings
 import biothings.hub.dataload.dumper as dumper
 import config
 import requests
+from utils.utils import retry
 
 biothings.config_for_app(config)
 
@@ -38,6 +38,7 @@ class Biostudies_Dumper(dumper.BaseDumper):
             new_localfile = os.path.join(self.new_data_folder, f"biostudies_{page}.txt")
             self.to_dump.append({"remote": remoteurl, "local": new_localfile})
 
+    @retry(3, 5)
     def download(self, remoteurl, localfile):
         self.prepare_local_folders(localfile)
         self.logger.info("Downloading accno from %s to %s", remoteurl, localfile)
