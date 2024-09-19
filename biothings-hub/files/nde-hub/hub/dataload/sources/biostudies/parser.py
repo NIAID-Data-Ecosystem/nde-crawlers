@@ -78,7 +78,8 @@ def parse_file(doc, accno):
         if attributes := doc.pop("attributes", None):
             for attribute in attributes:
                 key = attribute.pop("name").casefold()
-                value = attribute.pop("value")
+                if not (value := attribute.pop("value", None)):
+                    continue
 
                 if key == "attachto":
                     output["url"] = f"https://www.ebi.ac.uk/{value}/studies/{accno}"
