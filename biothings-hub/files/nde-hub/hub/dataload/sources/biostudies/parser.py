@@ -320,6 +320,7 @@ def make_request(url):
 
 
 def parse_files(input_file):
+    logger.info("Parsing file %s", input_file)
     missing_attributes = {}
     missing_subattributes = {}
 

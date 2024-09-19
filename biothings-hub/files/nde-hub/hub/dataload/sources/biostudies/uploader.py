@@ -1,10 +1,6 @@
-import asyncio
-import copy
 import os
-from functools import partial
 
 import biothings.hub.dataload.uploader as uploader
-from biothings.utils.workers import upload_worker
 from hub.dataload.nde import NDESourceUploader
 
 from .parser import parse_files
