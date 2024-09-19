@@ -311,16 +311,8 @@ def parse_file(doc, accno):
         raise e
 
 
-@retry(3, 5)
-def make_request(url):
-    response = requests.get(url)
-    response.raise_for_status()  # Raise an HTTPError for bad responses
-    data = response.json()  # This will raise a JSONDecodeError if the response is not valid JSON
-    return data
-
-
 def parse_files(input_file):
-    logger.info("Parsing file %s", input_file)
+    logger.info("Making requests and parsing from Biostudies file: %s", input_file)
     missing_attributes = {}
     missing_subattributes = {}
 
@@ -329,7 +321,9 @@ def parse_files(input_file):
             accno = line.strip()
             url = f"https://www.ebi.ac.uk/biostudies/api/v1/studies/{accno}"
             try:
-                data = make_request(url)
+                response = requests.get(url)
+                response.raise_for_status()  # Raise an HTTPError for bad responses
+                data = response.json()  # This will raise a JSONDecodeError if the response is not valid JSON
                 yield parse_file(data, accno)
             except requests.exceptions.RequestException as e:
                 logger.error(f"Request error for URL {url}: {e}")
