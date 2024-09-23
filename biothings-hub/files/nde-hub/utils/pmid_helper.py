@@ -147,6 +147,8 @@ def get_disease_details(identifier, original_name):
     if lookup_result:
         logger.info(f"Skipping {original_name}, already in database")
         lookup_result["fromPMID"] = True
+        lookup_result["isCurated"] = False
+        lookup_result.pop("curatedBy")
         if "originalName" in lookup_result:
             lookup_result.pop("originalName")
         else:
@@ -162,12 +164,7 @@ def get_disease_details(identifier, original_name):
         "identifier": identifier,
         "inDefinedTermSet": "MeSH",
         "url": f"https://id.nlm.nih.gov/mesh/{identifier}.html",
-        "isCurated": True,
-        "curatedBy": {
-            "name": "PubTator",
-            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
-            "dateModified": datetime.now().strftime("%Y-%m-%d"),
-        },
+        "isCurated": False,
     }
     if terms := disease_info.get("terms"):
         alternative_names = []
@@ -356,12 +353,17 @@ def update_record_species(rec, species_data):
                 if lookup_result:
                     standardized_dict = lookup_result
                     standardized_dict["fromPMID"] = True
+                    standardized_dict["isCurated"] = False
+                    standardized_dict.pop("curatedBy")
+                    standardized_dict.pop("originalName")
                 else:
                     try:
                         standardized_dict = get_species_details(name, taxonomy_id)
                         pubtator_add(name, "species", json.dumps(standardized_dict))
                         standardized_dict.pop("originalName")
+                        standardized_dict.pop("curatedBy")
                         standardized_dict["fromPMID"] = True
+                        standardized_dict["isCurated"] = False
                     except Exception as e:
                         logger.warning(f"Could not get details for {name} with ID {taxonomy_id}: {e}")
                         logger.warning(f"URL: https://rest.uniprot.org/taxonomy/{taxonomy_id}")

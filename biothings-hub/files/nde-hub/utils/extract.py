@@ -398,13 +398,8 @@ def get_species_details(original_name, identifier):
         "inDefinedTermSet": "UniProt",
         "url": f"https://www.uniprot.org/taxonomy/{identifier}",
         "originalName": original_name,
-        "isCurated": True,
+        "isCurated": False,
         "fromEXTRACT": True,
-        "curatedBy": {
-            "name": "PubTator",
-            "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
-            "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
-        },
     }
     if scientific_name := species_info.get("scientificName"):
         standard_dict["name"] = scientific_name
@@ -448,7 +443,7 @@ def process_species(doc_list):
         if "species" in doc:
             if isinstance(doc["species"], dict):
                 doc["species"] = [doc["species"]]
-            species_in_doc = [s["name"] for s in doc["species"] if not s.get("isCurated", False)]
+            species_in_doc = [s["name"] for s in doc["species"] if "isCurated" not in s]
             species_names.update(species_in_doc)
             logger.info(f"Found {len(species_in_doc)} new species to process")
 
@@ -548,7 +543,7 @@ def process_diseases(doc_list):
             if isinstance(doc["healthCondition"], dict):
                 doc["healthCondition"] = [doc["healthCondition"]]
             # Filter out curated diseases and add to the set
-            disease_in_doc = [s["name"] for s in doc["healthCondition"] if not s.get("isCurated", False)]
+            disease_in_doc = [s["name"] for s in doc["healthCondition"] if "isCurated" not in s]
             disease_names.update(disease_in_doc)
             logger.info(f"Found {len(disease_in_doc)} new diseases to process")
 
@@ -562,6 +557,7 @@ def process_diseases(doc_list):
         if standardized_disease:
             standardized_disease["fromEXTRACT"] = True
             standardized_disease["originalName"] = disease_name
+            standardized_disease.pop("curatedBy")
             formatted_diseases.append(standardized_disease)
         else:
             try:
@@ -569,6 +565,7 @@ def process_diseases(doc_list):
                 disease_details = query_condition(disease_name)
                 if disease_details:
                     disease_details["fromEXTRACT"] = True
+                    disease_details.pop("curatedBy")
                     formatted_diseases.append(disease_details)
                     disease_details.pop("fromEXTRACT")
                     # Cache the result in the SQLite database for future use
