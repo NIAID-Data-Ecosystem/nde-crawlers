@@ -118,24 +118,26 @@ def parse():
             unique_funders = set()
 
             for credit in credits:
-                if not credit.get("name") or not credit.get("typeEntity") or not credit.get("typeRole"):
-                    logger.warning(f"Skipping incomplete credit entry: {credit}")
+                if not credit.get("name"):
+                    logger.warning(f"Skipping incomplete credit entry without a name: {credit}")
                     continue
 
-                credit_entry = {
-                    "name": credit.get("name"),
-                    "email": credit.get("email"),
-                    "url": credit.get("orcidid") or credit.get("url"),
-                }
+                credit_entry = {}
+                if credit.get("name"):
+                    credit_entry["name"] = credit.get("name")
+                if credit.get("email"):
+                    credit_entry["email"] = credit.get("email")
+                if credit.get("orcidid") or credit.get("url"):
+                    credit_entry["url"] = credit.get("orcidid") or credit.get("url")
 
                 identifier = credit.get("name") or credit.get("url")
 
                 if credit.get("typeEntity") == "Person":
                     credit_entry["@type"] = "Person"
-                else:
+                elif credit.get("typeEntity") == "Organization":
                     credit_entry["@type"] = "Organization"
 
-                type_roles = credit.get("typeRole")
+                type_roles = credit.get("typeRole") or ["Developer"]
                 is_author = False
 
                 if isinstance(type_roles, list):
@@ -150,13 +152,18 @@ def parse():
                     # Only add to contributors if not already added as an author
                     if not is_author:
                         for role in type_roles:
-                            if role in ["Maintainer", "Provider", "Contributor", "Support", "Documentor"]:
+                            if role in [
+                                "Maintainer",
+                                "Provider",
+                                "Contributor",
+                                "Support",
+                                "Documentor",
+                            ]:
                                 if identifier not in unique_contributors:
                                     contributors.append(credit_entry)
                                     unique_contributors.add(identifier)
                                 break
                 else:
-                    # Handle non-list case (if typeRole is a single string)
                     if type_roles in ["Developer", "Primary contact"]:
                         if identifier not in unique_authors:
                             authors.append(credit_entry)
@@ -198,7 +205,7 @@ def parse():
                         pub_entry["name"] = title
 
                     if date := metadata.get("date"):
-                        pub_entry["datePublished"] = date.split("T")[0]  # Only store YYYY-MM-DD format
+                        pub_entry["datePublished"] = date.split("T")[0]
 
                     if journal := metadata.get("journal"):
                         pub_entry["journal"] = journal
@@ -223,7 +230,6 @@ def parse():
                 if version := pub.get("version"):
                     pub_entry["version"] = version
 
-                # Conditional logic based on publication type
                 pub_type = pub.get("type")
                 if isinstance(pub_type, list) and len(pub_type) == 1:
                     pub_type = pub_type[0]
@@ -239,24 +245,31 @@ def parse():
                     output.setdefault("citedBy", []).append(pub_entry)
                 else:
                     logger.warning("Unknown publication type: %s", pub_type)
+                    if pub_entry:
+                        logger.warning("Adding publication entry to 'citedBy' by default")
+                        logger.warning(pub_entry)
+                        output.setdefault("citedBy", []).append(pub_entry)
 
         # Relations
         if relations := tool.get("relation"):
             for relation in relations:
-                relation_entry = {"identifier": relation.get("biotoolsID")}
+                relation_entry = relation.get("biotoolsID")
                 relation_type = relation.get("type")
+                if not relation_entry:
+                    continue
 
                 if relation_type in ["isNewVersionOf", "hasNewVersion"]:
-                    output.setdefault("sameAs", []).append(relation_entry["identifier"])
+                    output.setdefault("sameAs", []).append(relation_entry)
                 elif relation_type == "uses":
-                    output.setdefault("isBasedOn", []).append(relation_entry)
+                    output.setdefault("isBasedOn", []).append({"identifier": relation_entry})
                 elif relation_type == "usedBy":
-                    output.setdefault("isBasisFor", []).append(relation_entry)
+                    output.setdefault("isBasisFor", []).append({"identifier": relation_entry})
                 elif relation_type == "includes":
-                    output.setdefault("hasPart", []).append(relation_entry)
+                    output.setdefault("hasPart", []).append({"identifier": relation_entry})
                 elif relation_type == "includedIn":
-                    output.setdefault("isPartOf", []).append(relation_entry)
+                    output.setdefault("isPartOf", []).append({"identifier": relation_entry})
                 else:
+                    output.setdefault("isRelatedTo", []).append({"identifier": relation_entry})
                     logger.warning("Unknown relation type: %s", relation_type)
 
         # Software-specific fields
@@ -272,13 +285,27 @@ def parse():
         if os := tool.get("operatingSystem"):
             output["operatingSystem"] = os
 
+        if links := tool.get("link"):
+            for link in links:
+                link_type = link.get("type")
+                link_url = link.get("url")
+                if not link_url:
+                    continue
+                if link_type == "Software catalogue":
+                    output.setdefault("sdPublisher", []).append({"url": link_url})
+                elif link_type == "Repository":
+                    output.setdefault("codeRepository", []).append({"url": link_url})
+                else:
+                    output.setdefault("isRelatedTo", []).append({"url": link_url})
+                    logger.warning("Unknown link type: %s", link_type)
+
         # Download URLs
         if downloads := tool.get("download"):
             for download in downloads:
                 download_url = download.get("url")
                 download_type = download.get("type")
 
-                if not download_url or not download_type:
+                if not download_url:
                     continue  # Skip if either URL or type is missing
 
                 if download_type == "API specification":
@@ -286,19 +313,19 @@ def parse():
                 elif download_type == "Biological data":
                     output.setdefault("softwareAddOn", []).append({"url": download_url})
                 elif download_type == "Binaries":
-                    output.setdefault("downloadURL", []).append({"name": download_url})
+                    output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Command-line specificaiton":
                     output.setdefault("softwareHelp", []).append({"url": download_url})
                 elif download_type == "Container file":
-                    output.setdefault("downloadURL", []).append({"name": download_url})
+                    output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Icon":
-                    output.setdefault("thumbnailURL", []).append(download_url)
+                    output.setdefault("thumbnailUrl", []).append(download_url)
                 elif download_type == "Screenshot":
-                    output.setdefault("thumbnailURL", []).append(download_url)
+                    output.setdefault("thumbnailUrl", []).append(download_url)
                 elif download_type == "Source code":
                     output.setdefault("codeRepository", []).append(download_url)
                 elif download_type == "Software package":
-                    output.setdefault("downloadURL", []).append({"name": download_url})
+                    output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Test data":
                     output.setdefault("softwareAddOn", []).append({"url": download_url})
                 elif download_type == "Test script":
@@ -310,12 +337,13 @@ def parse():
                 elif download_type == "Tool wrapper (taverna)":
                     output["applicationSuite"] = "Taverna"
                 elif download_type == "VM image":
-                    output.setdefault("downloadURL", []).append({"name": download_url})
+                    output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Downloads page":
-                    output.setdefault("downloadURL", []).append({"name": download_url})
+                    output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Other":
-                    output.setdefault("downloadURL", []).append({"name": download_url})
+                    output.setdefault("downloadUrl", []).append({"name": download_url})
                 else:
+                    output.setdefault("downloadUrl", []).append({"name": download_url})
                     logger.warning("Unknown download type: %s", download_type)
 
         # Cost and accessibility
@@ -340,13 +368,19 @@ def parse():
                 logger.warning("Unknown accessibility value: %s", accessibility)
 
         if documentation := tool.get("documentation"):
+            software_help = []
             for doc in documentation:
-                software_help = []
+                software_help_entry = {}
                 if url := doc.get("url"):
-                    software_help.append({"url": url})
+                    software_help_entry["url"] = url
                 if doc_type := doc.get("type"):
-                    software_help.append({"name": doc_type})
-                if software_help:
+                    software_help_entry["name"] = doc_type
+                if software_help_entry:
+                    software_help.append(software_help_entry)
+            if software_help:
+                if "softwareHelp" in output:
+                    output["softwareHelp"].extend(software_help)
+                else:
                     output["softwareHelp"] = software_help
 
         if other_ids := tool.get("otherID"):
