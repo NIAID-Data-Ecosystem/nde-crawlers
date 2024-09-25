@@ -377,6 +377,17 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "endDate": {"type": "date"},
                     "startDate": {"type": "date"},
+                    "projectNumSplit": {
+                        "properties": {
+                            "applTypeCode": {"type": "text", "copy_to": ["all"]},
+                            "activityCode": {"type": "text", "copy_to": ["all"]},
+                            "icCode": {"type": "text", "copy_to": ["all"]},
+                            "serialNum": {"type": "text", "copy_to": ["all"]},
+                            "supportYear": {"type": "text", "copy_to": ["all"]},
+                            "fullSupportYear": {"type": "text", "copy_to": ["all"]},
+                            "suffixCode": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
                     "isBasedOn": {
                         "properties": {
                             "identifier": {"type": "text", "copy_to": ["all"]},
