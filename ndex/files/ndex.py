@@ -51,7 +51,19 @@ def process_networks(networks):
     for network in networks.get("networks", []):
         properties_dict = {}
         if properties := network.get("properties"):
-            properties_dict = {prop["predicateString"]: prop["value"] for prop in properties}
+            properties_dict = {
+                prop["predicateString"]: prop["value"] for prop in properties
+            }
+
+        # Helper function to get value from network or properties_dict
+        def get_value(*keys):
+            for key in keys:
+                if value := network.get(key):
+                    return value
+                elif value := properties_dict.get(key):
+                    return value
+            return None
+
         output = {
             "includedInDataCatalog": {
                 "@type": "Dataset",
@@ -61,7 +73,9 @@ def process_networks(networks):
             },
             "@type": "Dataset",
         }
-        if external_id := network.get("externalId"):
+
+        # Use the helper function to get external_id
+        if external_id := get_value("externalId"):
             if external_id in test_networks:
                 logger.warning(f"Skipping test network {external_id}")
                 continue
@@ -72,58 +86,63 @@ def process_networks(networks):
             logger.warning("Network missing externalId")
             logger.warning(network)
             continue
-        if network.get("isDeleted"):
+
+        if get_value("isDeleted"):
             logger.warning(f"Network {external_id} is deleted")
             continue
-        if name := network.get("name"):
+
+        if name := get_value("name"):
             output["name"] = name
-        if description := network.get("description"):
+        if description := get_value("description"):
             output["description"] = description
-        if creation_time := network.get("creationTime"):
-            output["dateCreated"] = datetime.datetime.fromtimestamp(creation_time / 1000).isoformat()
-        if modification_time := network.get("modificationTime"):
-            output["dateModified"] = datetime.datetime.fromtimestamp(modification_time / 1000).isoformat()
-        elif properties_modification_time := properties_dict.get("lastmodifieddate"):
+
+        if creation_time := get_value("creationTime"):
+            output["dateCreated"] = datetime.datetime.fromtimestamp(
+                int(creation_time) / 1000
+            ).isoformat()
+
+        if modification_time := get_value("modificationTime"):
+            output["dateModified"] = datetime.datetime.fromtimestamp(
+                int(modification_time) / 1000
+            ).isoformat()
+        elif properties_modification_time := get_value(
+            "lastmodifieddate", "ndex:modificationTime"
+        ):
             output["dateModified"] = properties_modification_time
-        elif properties_modification_time := properties_dict.get("ndex:modificationTime"):
-            output["dateModified"] = properties_modification_time
-        if visibility := network.get("visibility"):
+
+        if visibility := get_value("visibility"):
             if visibility == "PUBLIC":
                 output["conditionsOfAccess"] = "Open"
             else:
                 output["conditionsOfAccess"] = "Restricted"
-        elif properties_visibility := properties_dict.get("visibility"):
+        elif properties_visibility := get_value("visibility"):
             if properties_visibility is False:
                 output["conditionsOfAccess"] = "Open"
-        # if version := network.get("version"):
+
+        # Uncomment if needed
+        # if version := get_value("version"):
         #     output["version"] = version
 
         distribution = {}
-        if cx_file_size := network.get("cxFileSize"):
+        if cx_file_size := get_value("cxFileSize"):
             distribution["contentSize"] = cx_file_size
-        if cx_format := network.get("cxFormat"):
+        if cx_format := get_value("cxFormat"):
             distribution["encodingFormat"] = cx_format
         if distribution:
             output["distribution"] = distribution
 
         author = {}
-        if author_name := network.get("author"):
+        if author_name := get_value(
+            "author", "rightsHolder", "owner", "bel:author", "Author"
+        ):
             author["name"] = author_name
-        elif rights_holder := network.get("rightsHolder"):
-            author["name"] = rights_holder
-        elif owner := network.get("owner"):
-            author["name"] = owner
-        elif properties_author := properties_dict.get("bel:author"):
-            author["name"] = properties_author
-        elif properties_author_2 := properties_dict.get("Author"):
-            author["name"] = properties_author_2
         if author:
             output["author"] = author
 
         health_condition_list = []
-        if disease := network.get("disease"):
+        if disease := get_value("disease"):
             health_condition_list.append({"name": disease})
-        if properties_disease := properties_dict.get("diseases_id"):
+        if properties_disease := get_value("diseases_id"):
             for disease in properties_disease:
                 health_condition_list.append({"name": disease})
         if health_condition_list:
@@ -131,120 +150,127 @@ def process_networks(networks):
 
         species_list = []
         seen_species = set()
-        if organism := network.get("organism"):
-            if organism in seen_species:
-                continue
-            species_list.append({"name": organism})
-            seen_species.add(organism)
-        if species := network.get("species"):
-            if species in seen_species:
-                continue
-            species_list.append({"name": species})
-            seen_species.add(species)
-        if idmapper_species := properties_dict.get("idmapper.species"):
-            if idmapper_species in seen_species:
-                continue
-            species_list.append({"name": idmapper_species})
-            seen_species.add(idmapper_species)
-        if properties_species := properties_dict.get("species_common_name"):
-            if properties_species in seen_species:
-                continue
-            species_list.append({"name": properties_species})
-            seen_species.add(properties_species)
-        if properties_organism := properties_dict.get("ORGANISM"):
-            if properties_organism in seen_species:
-                continue
-            species_list.append({"name": properties_organism})
-            seen_species.add(properties_organism)
+        if organism := get_value("organism"):
+            if organism not in seen_species:
+                species_list.append({"name": organism})
+                seen_species.add(organism)
+        if species := get_value("species"):
+            if species not in seen_species:
+                species_list.append({"name": species})
+                seen_species.add(species)
+        if idmapper_species := get_value("idmapper.species"):
+            if idmapper_species not in seen_species:
+                species_list.append({"name": idmapper_species})
+                seen_species.add(idmapper_species)
+        if properties_species := get_value("species_common_name"):
+            if properties_species not in seen_species:
+                species_list.append({"name": properties_species})
+                seen_species.add(properties_species)
+        if properties_organism := get_value("ORGANISM"):
+            if properties_organism not in seen_species:
+                species_list.append({"name": properties_organism})
+                seen_species.add(properties_organism)
         if species_list:
             output["species"] = species_list
 
         is_related_to_list = []
-        if reference := network.get("reference"):
+        if reference := get_value("reference"):
             is_related_to_list.append({"url": reference})
         properties_is_related_to = {}
-        if figure_title := properties_dict.get("figureTitle"):
+        if figure_title := get_value("figureTitle"):
             properties_is_related_to["name"] = figure_title
-        if figure_link := properties_dict.get("figureLink"):
+        if figure_link := get_value("figureLink"):
             properties_is_related_to["url"] = figure_link
         if properties_is_related_to:
             is_related_to_list.append(properties_is_related_to)
-        if uri := network.get("uri"):
+        if uri := get_value("uri"):
             is_related_to_list.append({"url": uri})
         if is_related_to_list:
             output["isRelatedTo"] = is_related_to_list
 
-        if rights := network.get("rights"):
+        if rights := get_value("rights"):
             output["license"] = rights
-        elif properties_license := properties_dict.get("license"):
+        elif properties_license := get_value("license"):
             output["license"] = properties_license
-        elif properties_copyright := properties_dict.get("bel:copyright"):
+        elif properties_copyright := get_value("bel:copyright"):
             output["license"] = properties_copyright
 
-        if doi := network.get("doi"):
+        if doi := get_value("doi"):
             output["doi"] = doi
 
         keywords = []
-        if labels := network.get("labels"):
-            keywords.extend(labels.split(","))
-        if network_type := network.get("network type"):
-            keywords.append(network_type)
-        if network_type2 := network.get("networkType"):
-            keywords.append(network_type2)
-        if properties_keywords := properties_dict.get("dc:type"):
-            keywords.append(properties_keywords)
+        if labels := get_value("labels"):
+            if isinstance(labels, list):
+                keywords.extend(labels.split(","))
+            else:
+                keywords.append(labels)
+        if network_type := get_value("network type"):
+            if isinstance(network_type, list):
+                keywords.extend(network_type)
+            else:
+                keywords.append(network_type)
+        if network_type2 := get_value("networkType"):
+            if isinstance(network_type2, list):
+                keywords.extend(network_type2)
+            else:
+                keywords.append(network_type2)
+        if properties_keywords := get_value("dc:type"):
+            if isinstance(properties_keywords, list):
+                keywords.extend(properties_keywords)
+            else:
+                keywords.append(properties_keywords)
         if keywords:
             output["keywords"] = keywords
 
         same_as_list = []
-        if wiki_pathways_iri := network.get("wikipathwaysIRI"):
+        if wiki_pathways_iri := get_value("wikipathwaysIRI"):
             same_as_list.append(wiki_pathways_iri)
-        if properties_uri := properties_dict.get("URI"):
+        if properties_uri := get_value("URI"):
             same_as_list.append(properties_uri)
-        if kegg_pathways := properties_dict.get("KEGG_PATHWAY_LINK"):
+        if kegg_pathways := get_value("KEGG_PATHWAY_LINK"):
             same_as_list.append(kegg_pathways)
         if same_as_list:
             output["sameAs"] = same_as_list
 
-        if was_derived_from := network.get("prov:wasDerivedFrom"):
+        if was_derived_from := get_value("prov:wasDerivedFrom"):
             output["wasDerivedFrom"] = was_derived_from
 
         citation = {}
-        if pmcid := properties_dict.get("pmcid"):
+        if pmcid := get_value("pmcid"):
             citation["pmcid"] = pmcid
-        if paper_title := properties_dict.get("paperTitle"):
+        if paper_title := get_value("paperTitle"):
             citation["name"] = paper_title
-        if paper_link := properties_dict.get("paperLink"):
+        if paper_link := get_value("paperLink"):
             citation["url"] = paper_link
         if citation:
             output["citation"] = citation
 
         sd_publisher_list = []
-        if data_source := properties_dict.get("Data source"):
+        if data_source := get_value("Data source"):
             sd_publisher_list.append({"name": data_source})
-        if tcga_data_source := properties_dict.get("TCGA Data Source"):
+        if tcga_data_source := get_value("TCGA Data Source"):
             sd_publisher_list.append({"name": tcga_data_source})
-        if properties_source := properties_dict.get("source"):
+        if properties_source := get_value("source"):
             sd_publisher_list.append({"name": properties_source})
         if sd_publisher_list:
             output["sdPublisher"] = sd_publisher_list
 
-        if date := properties_dict.get("dc:date"):
+        if date := get_value("dc:date"):
             date_formatted = date.split(" ")[0]
             output["date"] = date_formatted
 
         is_based_on_list = []
-        if properties_data_source := properties_dict.get("dataSource"):
+        if properties_data_source := get_value("dataSource"):
             is_based_on_list.append({"url": properties_data_source})
-        if properties_source := properties_dict.get("Source"):
+        if properties_source := get_value("Source"):
             is_based_on_list.append({"url": properties_source})
         if is_based_on_list:
             output["isBasedOn"] = is_based_on_list
 
-        if properties_treatment := properties_dict.get("Treatment"):
+        if properties_treatment := get_value("Treatment"):
             output["variableMeasured"] = {"name": properties_treatment}
 
-        if properties_method := properties_dict.get("methods"):
+        if properties_method := get_value("methods"):
             if properties_method in technique_lookup:
                 output["measurementTechnique"] = technique_lookup[properties_method]
 
@@ -265,7 +291,8 @@ def parse():
     networks_count = status.get("networkCount")
     users_count = status.get("userCount")
     groups_count = status.get("groupCount")
-    logger.info(f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
+    logger.info(
+        f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
 
     # Initialize variables
     start = 0
