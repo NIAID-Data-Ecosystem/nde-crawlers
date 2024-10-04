@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 
 import ndex2.client as nc
 
@@ -51,9 +52,7 @@ def process_networks(networks):
     for network in networks.get("networks", []):
         properties_dict = {}
         if properties := network.get("properties"):
-            properties_dict = {
-                prop["predicateString"]: prop["value"] for prop in properties
-            }
+            properties_dict = {prop["predicateString"]: prop["value"] for prop in properties}
 
         # Helper function to get value from network or properties_dict
         def get_value(*keys):
@@ -97,17 +96,11 @@ def process_networks(networks):
             output["description"] = description
 
         if creation_time := get_value("creationTime"):
-            output["dateCreated"] = datetime.datetime.fromtimestamp(
-                int(creation_time) / 1000
-            ).isoformat()
+            output["dateCreated"] = datetime.datetime.fromtimestamp(int(creation_time) / 1000).isoformat()
 
         if modification_time := get_value("modificationTime"):
-            output["dateModified"] = datetime.datetime.fromtimestamp(
-                int(modification_time) / 1000
-            ).isoformat()
-        elif properties_modification_time := get_value(
-            "lastmodifieddate", "ndex:modificationTime"
-        ):
+            output["dateModified"] = datetime.datetime.fromtimestamp(int(modification_time) / 1000).isoformat()
+        elif properties_modification_time := get_value("lastmodifieddate", "ndex:modificationTime"):
             output["dateModified"] = properties_modification_time
 
         if visibility := get_value("visibility"):
@@ -119,10 +112,6 @@ def process_networks(networks):
             if properties_visibility is False:
                 output["conditionsOfAccess"] = "Open"
 
-        # Uncomment if needed
-        # if version := get_value("version"):
-        #     output["version"] = version
-
         distribution = {}
         if cx_file_size := get_value("cxFileSize"):
             distribution["contentSize"] = cx_file_size
@@ -132,9 +121,7 @@ def process_networks(networks):
             output["distribution"] = distribution
 
         author = {}
-        if author_name := get_value(
-            "author", "rightsHolder", "owner", "bel:author", "Author"
-        ):
+        if author_name := get_value("author", "rightsHolder", "owner", "bel:author", "Author"):
             author["name"] = author_name
         if author:
             output["author"] = author
@@ -151,22 +138,32 @@ def process_networks(networks):
         species_list = []
         seen_species = set()
         if organism := get_value("organism"):
+            if "human" in organism.lower():
+                organism = "human"
             if organism not in seen_species:
                 species_list.append({"name": organism})
                 seen_species.add(organism)
         if species := get_value("species"):
+            if "human" in species.lower():
+                species = "human"
             if species not in seen_species:
                 species_list.append({"name": species})
                 seen_species.add(species)
         if idmapper_species := get_value("idmapper.species"):
+            if "human" in idmapper_species.lower():
+                idmapper_species = "human"
             if idmapper_species not in seen_species:
                 species_list.append({"name": idmapper_species})
                 seen_species.add(idmapper_species)
         if properties_species := get_value("species_common_name"):
+            if "human" in properties_species.lower():
+                properties_species = "human"
             if properties_species not in seen_species:
                 species_list.append({"name": properties_species})
                 seen_species.add(properties_species)
         if properties_organism := get_value("ORGANISM"):
+            if "human" in properties_organism.lower():
+                properties_organism = "human"
             if properties_organism not in seen_species:
                 species_list.append({"name": properties_organism})
                 seen_species.add(properties_organism)
@@ -232,9 +229,6 @@ def process_networks(networks):
         if same_as_list:
             output["sameAs"] = same_as_list
 
-        if was_derived_from := get_value("prov:wasDerivedFrom"):
-            output["wasDerivedFrom"] = was_derived_from
-
         citation = {}
         if pmcid := get_value("pmcid"):
             citation["pmcid"] = pmcid
@@ -259,20 +253,39 @@ def process_networks(networks):
             date_formatted = date.split(" ")[0]
             output["date"] = date_formatted
 
-        is_based_on_list = []
+        is_based_on_dict = {}
         if properties_data_source := get_value("dataSource"):
-            is_based_on_list.append({"url": properties_data_source})
+            is_based_on_dict["url"] = properties_data_source
         if properties_source := get_value("Source"):
-            is_based_on_list.append({"url": properties_source})
-        if is_based_on_list:
-            output["isBasedOn"] = is_based_on_list
+            is_based_on_dict["url"] = properties_source
+        if was_derived_from := get_value("prov:wasDerivedFrom"):
+            if "http" in was_derived_from:
+                is_based_on_dict["url"] = was_derived_from
+            elif "ftp://" in was_derived_from:
+                ftp_url = re.search(r"ftp://[^ ]+", was_derived_from).group()
+                is_based_on_dict["url"] = ftp_url
+            else:
+                is_based_on_dict["name"] = was_derived_from
+        if is_based_on_dict:
+            output["isBasedOn"] = is_based_on_dict
 
         if properties_treatment := get_value("Treatment"):
             output["variableMeasured"] = {"name": properties_treatment}
 
+        measurement_technique_list = []
+        measurement_technique_identifiers = set()
         if properties_method := get_value("methods"):
-            if properties_method in technique_lookup:
-                output["measurementTechnique"] = technique_lookup[properties_method]
+            methods = re.split(r",(?![^()]*\))", properties_method)
+            for method in methods:
+                method = method.strip()
+                if method in technique_lookup:
+                    measurement_technique = technique_lookup[method]
+                    identifier = (measurement_technique["name"], measurement_technique["url"])
+                    if identifier not in measurement_technique_identifiers:
+                        measurement_technique_list.append(measurement_technique)
+                        measurement_technique_identifiers.add(identifier)
+        if measurement_technique_list:
+            output["measurementTechnique"] = measurement_technique_list
 
         yield output
 
@@ -291,8 +304,7 @@ def parse():
     networks_count = status.get("networkCount")
     users_count = status.get("userCount")
     groups_count = status.get("groupCount")
-    logger.info(
-        f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
+    logger.info(f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
 
     # Initialize variables
     start = 0
