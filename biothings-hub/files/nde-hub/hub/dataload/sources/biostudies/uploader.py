@@ -22,9 +22,12 @@ class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
         return jobs
 
     @timeout_decorator.timeout(1800, timeout_exception=StopIteration)
+    def parse_files_with_timeout(self, input_file):
+        return list(parse_files(input_file))
+
     def load_data(self, input_file):
         try:
-            return list(parse_files(input_file))
+            return self.parse_files_with_timeout(input_file)
         except StopIteration:
             self.logger.info("Job timed out, StopIteration error in %s", input_file)
             # return an empty list as BasicStorage expects an iterable
