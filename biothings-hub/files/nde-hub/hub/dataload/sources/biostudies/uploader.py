@@ -2,6 +2,7 @@ import os
 
 import biothings
 import biothings.hub.dataload.uploader as uploader
+import timeout_decorator
 from hub.dataload.nde import NDESourceUploader
 
 from .parser import parse_files
@@ -20,9 +21,10 @@ class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
             jobs.append((accno_file,))
         return jobs
 
+    @timeout_decorator.timeout(1800, timeout_exception=StopIteration)
     def load_data(self, input_file):
         try:
-            return parse_files(input_file)
+            return list(parse_files(input_file))
         except StopIteration:
             self.logger.info("Job timed out, StopIteration error in %s", input_file)
             # return an empty list as BasicStorage expects an iterable
