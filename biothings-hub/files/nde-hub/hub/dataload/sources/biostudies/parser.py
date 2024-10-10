@@ -3,6 +3,7 @@ import re
 
 import dateutil
 import requests
+import timeout_decorator
 from utils.utils import retry
 
 try:
@@ -311,12 +312,14 @@ def parse_file(doc, accno):
         raise e
 
 
+@timeout_decorator.timeout(1800, timeout_exception=StopIteration)
 def parse_files(input_file):
     logger.info("Making requests and parsing from Biostudies file: %s", input_file)
     missing_attributes = {}
     missing_subattributes = {}
 
     with open(input_file, "r") as f:
+        logger.info(f"Reading file: {input_file}")
         for line in f:
             accno = line.strip()
             url = f"https://www.ebi.ac.uk/biostudies/api/v1/studies/{accno}"

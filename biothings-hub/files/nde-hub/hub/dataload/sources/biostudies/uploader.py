@@ -21,7 +21,12 @@ class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
         return jobs
 
     def load_data(self, input_file):
-        return parse_files(input_file)
+        try:
+            return parse_files(input_file)
+        except StopIteration:
+            self.logger.info("Job timed out, StopIteration error in %s", input_file)
+            # return an empty list as BasicStorage expects an iterable
+            return []
 
     @classmethod
     def get_mapping(cls):
