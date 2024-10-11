@@ -340,6 +340,7 @@ class NDESourceUploader(BaseSourceUploader):
             "dateModified": {"type": "date"},
             "datePublished": {"type": "date"},
             "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+            "disambiguatingDescription": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "discussionUrl": {"type": "text", "copy_to": ["all"]},
             "distribution": {
                 "properties": {
