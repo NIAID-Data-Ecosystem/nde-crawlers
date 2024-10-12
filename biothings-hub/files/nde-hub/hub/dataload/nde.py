@@ -894,6 +894,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "endDate": {"type": "date"},
                             "name": {"type": "text"},
                             "startDate": {"type": "date"},
+                            "temporalType": {"type": "text"},
                         }
                     }
                 }

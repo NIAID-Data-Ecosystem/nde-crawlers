@@ -35,6 +35,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  covid_radx-crawler:
+    build:
+      context: covid_radx
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   dash-crawler:
     build:
       context: dash
