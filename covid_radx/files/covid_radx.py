@@ -31,6 +31,7 @@ def extract_ids(urls_string):
 def parse(hit):
     output = {
         "_id": hit["_id"],
+        "@type": "Dataset",
         "includedInDataCatalog": {
             "@type": "Dataset",
             "name": "RADx Data Hub",
