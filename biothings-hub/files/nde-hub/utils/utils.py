@@ -7,13 +7,7 @@ from typing import Dict, Generator, Iterable
 
 import bson
 from config import logger
-from scores import (
-    MAPPING_SCORES,
-    RECOMMENDED_AUGMENTED_FIELDS,
-    RECOMMENDED_FIELDS,
-    REQUIRED_AUGMENTED_FIELDS,
-    REQUIRED_FIELDS,
-)
+from scores import RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -126,30 +120,6 @@ def is_purely_augmented(field, field_content):
     return False
 
 
-def calculate_weighted_score(data, mapping):
-    score = 0
-    for key, value in data.items():
-        if key == "description":
-            if value is not None:
-                score += 0.5 * min(1, len(value) / 500)  # Normalized based on an arbitrary max length of 500
-        elif key in mapping:
-            if isinstance(value, dict):
-                score += calculate_weighted_score(value, mapping[key])
-            elif isinstance(value, list):
-                # Only take the maximum score from the list items, not the sum
-                scores = [
-                    calculate_weighted_score(item, mapping[key]) if isinstance(item, dict) else mapping[key]
-                    for item in value
-                ]
-                score += max(scores) if scores else 0  # add the highest score from list items
-            else:
-                try:
-                    score += mapping[key]
-                except TypeError:
-                    logger.info(f"Key {key} has a value of {value} which is not a dict or list")
-    return score
-
-
 def check_augmented_fields(document, augmented_field_list):
     augmented_fields_found = []
 
@@ -188,8 +158,6 @@ def add_metadata_score(document: Dict) -> Dict:
         elif includedInDataCatalog.get("@type") == "ResourceCatalog":
             local_required_fields.append("collectionType")
             local_recommended_fields.extend(["collectionSize", "hasAPI", "hasDownload"])
-
-    weighted_score = calculate_weighted_score(document, MAPPING_SCORES)
 
     required_score = sum(
         1 for field in local_required_fields if field in document and not is_purely_augmented(field, document[field])
@@ -231,7 +199,6 @@ def add_metadata_score(document: Dict) -> Dict:
             "recommended_score": recommended_score,
             "recommended_score_ratio": round(recommended_score / total_recommended, 2) if total_recommended > 0 else 0,
             "recommended_max_score": total_recommended,
-            "weighted_score": weighted_score,
             "augmented_required_ratio": (
                 round(len(required_augmented_fields) / total_required, 2) if total_required > 0 else 0
             ),
