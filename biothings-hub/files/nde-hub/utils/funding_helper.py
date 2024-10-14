@@ -60,26 +60,21 @@ def update_sqlite_db(conn, funding_id, new_funding):
     logger.info(f"Successfully updated funding information for {funding_id}.")
 
 
-def sqlite_lookup(conn, funding_id):
+def batch_sqlite_lookup(conn, funding_ids):
     """
-    Look up the funding information for a given funding id.
+    Perform a batch lookup of funding IDs.
     :param conn: SQLite connection object
-    :param funding_id: the funding id
-    :return: the funding information
+    :param funding_ids: a set of funding IDs
+    :return: a dictionary mapping funding IDs to funding data
     """
-    logger.info(f"Looking up funding information for {funding_id} in SQLite database.")
-    funding_id = funding_id.replace(" ", "").lower()
-
+    logger.info(f"Performing batch lookup for {len(funding_ids)} funding IDs.")
+    placeholders = ",".join("?" for _ in funding_ids)
     c = conn.cursor()
-    c.execute("SELECT funding FROM funding_lookup WHERE funding_id=?", (funding_id,))
-    result = c.fetchone()
-
-    if result:
-        logger.info(f"Successfully found funding information for {funding_id}.")
-        return orjson.loads(result[0])
-    else:
-        logger.info(f"No funding information found for {funding_id}.")
-        return None
+    c.execute(f"SELECT funding_id, funding FROM funding_lookup WHERE funding_id IN ({placeholders})", list(funding_ids))
+    result = c.fetchall()
+    funding_cache = {row[0]: orjson.loads(row[1]) for row in result}
+    logger.info(f"Found {len(funding_cache)} funding records in the database.")
+    return funding_cache
 
 
 def standardize_funding(data):
@@ -110,6 +105,25 @@ def standardize_funding(data):
         else:
             doc_list = list(data)
 
+        # First we collect all unique funding IDs
+        funding_ids = set()
+        for doc in doc_list:
+            funding_field = doc.get("funding", {})
+            if isinstance(funding_field, list):
+                for funding_dict in funding_field:
+                    if "identifier" in funding_dict:
+                        funding_id = funding_dict["identifier"].replace(" ", "").lower()
+                        funding_ids.add(funding_id)
+            elif isinstance(funding_field, dict):
+                if "identifier" in funding_field:
+                    funding_id = funding_field["identifier"].replace(" ", "").lower()
+                    funding_ids.add(funding_id)
+        logger.info(f"Unique funding IDs collected: {len(funding_ids)}")
+
+        # Batch query the database
+        funding_cache_dict = batch_sqlite_lookup(conn, funding_ids)
+
+        # Standardize funding information
         for doc in doc_list:
             count += 1
             if count % 1000 == 0:
@@ -118,8 +132,8 @@ def standardize_funding(data):
             if isinstance(doc.get("funding", {}), list):
                 for i, funding_dict in enumerate(doc["funding"]):
                     if "identifier" in funding_dict:
-                        funding_id = funding_dict["identifier"]
-                        funding_cache = sqlite_lookup(conn, funding_id)
+                        funding_id = funding_dict["identifier"].replace(" ", "").lower()
+                        funding_cache = funding_cache_dict.get(funding_id)
                         if funding_cache:
                             doc["funding"][i] = funding_cache
                         else:
@@ -153,7 +167,8 @@ def standardize_funding(data):
                                     continue
 
             elif funding_id := doc.get("funding", {}).get("identifier"):
-                funding_cache = sqlite_lookup(conn, funding_id)
+                funding_id = funding_id.replace(" ", "").lower()
+                funding_cache = funding_cache_dict.get(funding_id)
                 if funding_cache:
                     doc["funding"] = funding_cache
                 else:
