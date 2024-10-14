@@ -19,8 +19,8 @@ logger = logging.getLogger("nde-logger")
 
 class NCBI_SRA(NDEDatabase):
     # override variables
-    SQL_DB = "ncbi_sra3.db"
-    EXPIRE = datetime.timedelta(days=90)
+    SQL_DB = "ncbi_sra.db"
+    EXPIRE = datetime.timedelta(days=365)
 
     # Used for testing small chunks of data
     DATA_LIMIT = None
@@ -74,8 +74,6 @@ class NCBI_SRA(NDEDatabase):
                 return (study_acc, json.dumps(None))
 
     def load_cache(self):
-        logger.info("Starting FTP Download")
-
         fileloc = "https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab"
         retry_count = 0
         while True:
