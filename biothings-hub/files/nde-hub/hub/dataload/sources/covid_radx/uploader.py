@@ -16,6 +16,5 @@ class Covid_Radx_Uploader(NDESourceUploader):
         docs = standardize_funding(docs)
         docs = standardize_data(docs)
         docs = process_descriptions(docs)
-        docs = add_topic_category(docs, self.name)
         for doc in docs:
             yield doc
