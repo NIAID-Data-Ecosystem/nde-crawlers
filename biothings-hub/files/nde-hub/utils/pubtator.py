@@ -547,6 +547,11 @@ def process_section(section, cursor_dict):
         if isinstance(original_obj, str):
             logger.error(f"Invalid object: {original_obj}")
             continue
+        # Check if the item has already been curated or standardized
+        if any(key in original_obj for key in ["curatedBy", "fromPMID", "fromEXTRACT"]):
+            logger.info(f"{original_obj.get('name')} has already been processed, skipping...")
+            new_section_list.append(original_obj)
+            continue
         original_name = original_obj.get("name")
         if not original_name:
             new_section_list.append(original_obj)
