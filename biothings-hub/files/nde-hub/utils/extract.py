@@ -557,7 +557,6 @@ def process_diseases(doc_list):
         if standardized_disease:
             standardized_disease["fromEXTRACT"] = True
             standardized_disease["originalName"] = disease_name
-            standardized_disease.pop("curatedBy")
             formatted_diseases.append(standardized_disease)
         else:
             try:
