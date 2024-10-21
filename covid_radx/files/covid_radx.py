@@ -9,6 +9,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
+def convert_group_string_to_list(input_string):
+    # Remove the curly braces
+    stripped_string = input_string.strip("{}")
+    # Split by comma and strip double quotes from each element
+    result_list = [item.strip('"') for item in stripped_string.split(",")]
+    return result_list
+
+
 def extract_ids(urls_string):
     urls = urls_string.split(",")
     pmids = []
@@ -122,6 +130,8 @@ def parse(hit):
         total_measurement_techniques.extend(measurement_technique)
     if measurement_technique := hit.get("types_array"):
         total_measurement_techniques.extend(measurement_technique)
+    if measurement_technique := hit.get("data_general_types_array"):
+        total_measurement_techniques.extend(measurement_technique)
     if total_measurement_techniques:
         output["measurementTechnique"] = total_measurement_techniques
 
@@ -156,7 +166,17 @@ def parse(hit):
         output["name"] = name
 
     if date_modified := hit.get("updated_at"):
-        output["dateModified"] = date_modified
+        output["dateModified"] = dateutil.parser.parse(date_modified, ignoretz=True).date().isoformat()
+
+    usage_info_keys = ["general_research_group", "health_biomed_group"]
+    usage_info_list = []
+    for key in usage_info_keys:
+        if name := hit.get(key):
+            name = convert_group_string_to_list(name)
+            usage_info = {"name": name}
+            usage_info_list.append(usage_info)
+    if usage_info_list:
+        output["usageInfo"] = usage_info_list
 
     return output
 
