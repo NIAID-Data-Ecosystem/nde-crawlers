@@ -59,7 +59,7 @@ def parse(hit):
         output["isBasedOn"] = {"url": ibo_url}
 
     if species := hit.get("data_species"):
-        output["species"] = species
+        output["species"] = {"name": species}
 
     if sd_name := hit.get("dcc"):
         output["sdPublisher"] = {"name": sd_name}
@@ -68,9 +68,9 @@ def parse(hit):
         output["description"] = description
 
     if health_condition := hit.get("disease_specific_related_conditions"):
-        output["healthCondition"] = health_condition
+        output["healthCondition"] = {"name": health_condition}
     else:
-        output["healthCondition"] = "COVID-19"
+        output["healthCondition"] = {"name": "COVID-19"}
 
     funding = {}
     identifier = hit.get("grant_number").strip("{}").split(",")
@@ -160,7 +160,10 @@ def parse(hit):
         output["temporalCoverage"] = temporal_coverage
 
     if variable_measured := hit.get("subject_array"):
-        output["variableMeasured"] = variable_measured
+        vms = []
+        for vm in variable_measured:
+            vms.append({"name": vm})
+        output["variableMeasured"] = vms
 
     if name := hit.get("title"):
         output["name"] = name
