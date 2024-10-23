@@ -126,12 +126,11 @@ def parse(hit):
         output["datePublished"] = dateutil.parser.parse(date_published).date().isoformat()
 
     total_measurement_techniques = []
-    if measurement_technique := hit.get("source_array"):
-        total_measurement_techniques.extend(measurement_technique)
-    if measurement_technique := hit.get("types_array"):
-        total_measurement_techniques.extend(measurement_technique)
-    if measurement_technique := hit.get("data_general_types_array"):
-        total_measurement_techniques.extend(measurement_technique)
+    mts = [hit.get("source_array"), hit.get("types_array"), hit.get("data_general_types_array")]
+    for measurement_technique in mts:
+        if measurement_technique:
+            for mt in measurement_technique:
+                total_measurement_techniques.append({"name": mt})
     if total_measurement_techniques:
         output["measurementTechnique"] = total_measurement_techniques
 
