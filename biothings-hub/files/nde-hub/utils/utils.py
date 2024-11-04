@@ -185,30 +185,34 @@ def add_metadata_score(document: Dict) -> Dict:
         if field in document and not is_purely_augmented(field, document[field])
     ]
 
-    document["_meta"] = {
-        "required_augmented_fields": required_augmented_fields,
-        "recommended_augmented_fields": recommended_augmented_fields,
-        "required_fields": existing_required_fields,
-        "recommended_fields": existing_recommended_fields,
-        "completeness": {
-            "total_score": required_score + recommended_score,
-            "total_max_score": total_required + total_recommended,
-            "required_score": required_score,
-            "required_ratio": round(required_score / total_required, 2) if total_required > 0 else 0,
-            "required_max_score": total_required,
-            "recommended_score": recommended_score,
-            "recommended_score_ratio": round(recommended_score / total_recommended, 2) if total_recommended > 0 else 0,
-            "recommended_max_score": total_recommended,
-            "augmented_required_ratio": (
-                round(len(required_augmented_fields) / total_required, 2) if total_required > 0 else 0
-            ),
-            "augmented_recommended_ratio": (
-                round(len(recommended_augmented_fields) / total_recommended, 2) if total_recommended > 0 else 0
-            ),
-            "total_required_augmented": total_required_augmented,
-            "total_recommended_augmented": total_recommended_augmented,
-        },
-    }
+    document.setdefault("_meta", {}).update(
+        {
+            "required_augmented_fields": required_augmented_fields,
+            "recommended_augmented_fields": recommended_augmented_fields,
+            "required_fields": existing_required_fields,
+            "recommended_fields": existing_recommended_fields,
+            "completeness": {
+                "total_score": required_score + recommended_score,
+                "total_max_score": total_required + total_recommended,
+                "required_score": required_score,
+                "required_ratio": round(required_score / total_required, 2) if total_required > 0 else 0,
+                "required_max_score": total_required,
+                "recommended_score": recommended_score,
+                "recommended_score_ratio": (
+                    round(recommended_score / total_recommended, 2) if total_recommended > 0 else 0
+                ),
+                "recommended_max_score": total_recommended,
+                "augmented_required_ratio": (
+                    round(len(required_augmented_fields) / total_required, 2) if total_required > 0 else 0
+                ),
+                "augmented_recommended_ratio": (
+                    round(len(recommended_augmented_fields) / total_recommended, 2) if total_recommended > 0 else 0
+                ),
+                "total_required_augmented": total_required_augmented,
+                "total_recommended_augmented": total_recommended_augmented,
+            },
+        }
+    )
 
     return document
 
