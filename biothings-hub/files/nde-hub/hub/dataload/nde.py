@@ -145,6 +145,11 @@ class NDESourceUploader(BaseSourceUploader):
                             "weighted_score": {"type": "float"},
                         }
                     },
+                    "lineage": {
+                        "properties": {
+                            "taxon": {"type": "integer"},
+                        }
+                    },
                     "recommended_augmented_fields": {"type": "keyword"},
                     "required_augmented_fields": {"type": "keyword"},
                     "recommended_fields": {"type": "keyword"},
