@@ -148,6 +148,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "lineage": {
                         "properties": {
                             "taxon": {"type": "integer"},
+                            "parent_taxon": {"type": "integer"},
                         }
                     },
                     "recommended_augmented_fields": {"type": "keyword"},
