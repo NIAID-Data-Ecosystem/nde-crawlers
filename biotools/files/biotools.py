@@ -333,7 +333,7 @@ def parse():
                 elif download_type == "Tool wrapper (CWL)":
                     output["programmingLanguage"] = "CWL"
                 elif download_type == "Tool wrapper (galaxy)":
-                    output["isAvailableOnDevice"] = "Galaxy"
+                    output["availableOnDevice"] = "Galaxy"
                 elif download_type == "Tool wrapper (taverna)":
                     output["applicationSuite"] = "Taverna"
                 elif download_type == "VM image":
