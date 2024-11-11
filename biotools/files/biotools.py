@@ -100,6 +100,7 @@ def parse():
                 {
                     "url": op.get("uri"),
                     "name": op.get("term"),
+                    **({"inDefinedTermSet": "EDAM"} if "edamontology" in op.get("uri", "") else {})
                 }
                 for func in functions
                 for op in func.get("operation", [])
@@ -400,20 +401,22 @@ def parse():
         # Initialize lists to gather all inputs and outputs
         all_inputs = []
         all_outputs = []
-
+        
         if functions := tool.get("function"):
             for func in functions:
                 # Process inputs for each function
                 if inputs := func.get("input"):
                     for i in inputs:
                         input_entry = {}
-
+        
                         if url := i.get("data", {}).get("uri"):
                             input_entry["url"] = url
-
+                            if "edamontology" in url:
+                                input_entry["inDefinedTermSet"] = "EDAM"
+        
                         if name := i.get("data", {}).get("term"):
                             input_entry["name"] = name
-
+        
                         if formats := i.get("format"):
                             encoding_format = {}
                             for f in formats:
@@ -423,21 +426,23 @@ def parse():
                                     encoding_format["name"] = encoding_format_name
                             if encoding_format:
                                 input_entry["encodingFormat"] = encoding_format
-
+        
                         if input_entry:
                             all_inputs.append(input_entry)
-
+        
                 # Process outputs for each function
                 if outputs := func.get("output"):
                     for o in outputs:
                         output_entry = {}
-
+        
                         if url := o.get("data", {}).get("uri"):
                             output_entry["url"] = url
-
+                            if "edamontology" in url:
+                                output_entry["inDefinedTermSet"] = "EDAM"
+        
                         if name := o.get("data", {}).get("term"):
                             output_entry["name"] = name
-
+        
                         if formats := o.get("format"):
                             encoding_format = {}
                             for f in formats:
@@ -447,13 +452,13 @@ def parse():
                                     encoding_format["name"] = encoding_format_name
                             if encoding_format:
                                 output_entry["encodingFormat"] = encoding_format
-
+        
                         if output_entry:
                             all_outputs.append(output_entry)
-
+        
         if all_inputs:
             output["input"] = all_inputs
-
+        
         if all_outputs:
             output["output"] = all_outputs
 
