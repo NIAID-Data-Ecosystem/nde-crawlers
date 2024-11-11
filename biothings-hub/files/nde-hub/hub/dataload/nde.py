@@ -375,6 +375,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "funding": {
@@ -517,6 +518,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                 },
             },
             "includedInDataCatalog": {
@@ -746,6 +748,11 @@ class NDESourceUploader(BaseSourceUploader):
                 },
             },
             "nctid": {"type": "keyword", "copy_to": ["all"]},
+            "operatingSystem": {
+                "type": "keyword",
+                "normalizer": "keyword_lowercase_normalizer",
+                "copy_to": ["all"],
+            },
             "output": {
                 "properties": {
                     "@type": {"type": "keyword"},
@@ -761,6 +768,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                 },
             },
             "processorRequirements": {"type": "text", "copy_to": ["all"]},
