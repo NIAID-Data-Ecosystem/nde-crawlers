@@ -1,5 +1,6 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.corrections import corrections
+from utils.disambiguating_description import add_disambiguating_description
 from utils.extract import process_descriptions
 from utils.funding_helper import standardize_funding
 from utils.pubtator import standardize_data
@@ -22,6 +23,7 @@ class ImmPortUploader(NDESourceUploader):
         docs = standardize_funding(docs)
         docs = process_descriptions(docs)
         docs = corrections(docs, "CREID")
+        docs = add_disambiguating_description(docs, self.name)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
             yield doc
