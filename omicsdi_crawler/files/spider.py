@@ -22,6 +22,10 @@ class OmicsdiSpider(SitemapSpider):
     sitemap_rules = [("/dataset/", "extract_from_jsonld")]
 
     def extract_from_jsonld(self, response, **kwargs):
+        # Skip URLs that match /dataset/biostudies-literature
+        if "/dataset/biostudies-literature" in response.url:
+            return
+
         jslds = JsonLdExtractor().extract(response.body.decode("utf-8"))
 
         for jsld in jslds:

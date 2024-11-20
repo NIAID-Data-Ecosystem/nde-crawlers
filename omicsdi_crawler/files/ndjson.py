@@ -68,6 +68,10 @@ class NDJsonWriterPipeline:
                 raise RuntimeError(errors)
 
     def process_item(self, item, spider):
-        line = orjson.dumps(ItemAdapter(item).asdict()) + b"\n"
-        self.fd.write(line)
-        return item
+        if ItemAdapter(item).asdict() is None:
+            spider.logger.warning(f"Item {item} is None, skipping")
+            return item
+        else:
+            line = orjson.dumps(ItemAdapter(item).asdict()) + b"\n"
+            self.fd.write(line)
+            return item
