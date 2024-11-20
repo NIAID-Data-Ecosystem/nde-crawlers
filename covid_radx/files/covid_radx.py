@@ -58,17 +58,15 @@ def parse(hit):
     if ibo_url := hit.get("ct_url"):
         output["isBasedOn"] = {"url": ibo_url}
 
-    if species := hit.get("data_species"):
-        output["species"] = {"name": species}
-
     if sd_name := hit.get("dcc"):
         output["sdPublisher"] = {"name": sd_name}
 
     if description := hit.get("description"):
         output["description"] = description
 
-    if health_condition := hit.get("disease_specific_related_conditions"):
-        output["healthCondition"] = {"name": health_condition}
+    if health_conditions := hit.get("disease_specific_related_conditions"):
+        health_conditions = health_conditions.split(", ")
+        output["healthCondition"] = [{"name": health_condition for health_condition in health_conditions}]
     else:
         output["healthCondition"] = {"name": "COVID-19"}
 
@@ -187,7 +185,7 @@ def make_requests():
     page = 1
     size = 200
     request = requests.get(
-        "https://radxdatahub.nih.gov/_next/data/kG2NIYIhioj4eS-hzy2_i/studyExplorer.json?sort=desc&prop=relevance&page=1&size=200"
+        "https://radxdatahub.nih.gov/_next/data/uW-uGmvi-5h0gTOZUbnW9/studyExplorer.json?sort=desc&prop=relevance&page=1&size=200"
     )
     request = request.json()
     total_hits = request["pageProps"]["searchResults"]["hits"]["total"]["value"]
