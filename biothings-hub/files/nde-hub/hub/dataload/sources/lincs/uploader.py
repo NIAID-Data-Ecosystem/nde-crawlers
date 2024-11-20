@@ -27,7 +27,7 @@ class LINCSUploader(NDESourceUploader):
     def load_data(self, data_folder):
         docs = standardize_funding(data_folder)
         docs = process_descriptions(docs)
-        docs = process_measurement_technique(docs)
+        docs = process_measurement_technique(docs, self.name)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
             yield doc

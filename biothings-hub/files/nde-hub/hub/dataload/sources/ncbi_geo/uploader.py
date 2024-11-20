@@ -27,7 +27,7 @@ class NCBI_Geo_Uploader(NDESourceUploader):
         docs = standardize_funding(docs)
         docs = standardize_data(docs)
         docs = process_descriptions(docs)
-        docs = process_measurement_technique(docs)
+        docs = process_measurement_technique(docs, self.name)
         docs = corrections(docs, "CREID")
         docs = add_topic_category(docs, self.name)
         for doc in docs:
