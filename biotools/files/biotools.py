@@ -191,7 +191,7 @@ def parse():
             if contributors:
                 output["contributor"] = contributors
             if funders:
-                output["funding"] = {"funder": funders}
+                output["funding"] = [{"funder": funder} for funder in funders]
 
         # Publication handling based on type
         if publications := tool.get("publication"):
@@ -418,14 +418,17 @@ def parse():
                             input_entry["name"] = name
 
                         if formats := i.get("format"):
-                            encoding_format = {}
+                            encoding_formats = []
                             for f in formats:
+                                encoding_format = {}
                                 if encoding_format_url := f.get("uri"):
                                     encoding_format["url"] = encoding_format_url
                                 if encoding_format_name := f.get("term"):
                                     encoding_format["name"] = encoding_format_name
-                            if encoding_format:
-                                input_entry["encodingFormat"] = encoding_format
+                                if encoding_format:
+                                    encoding_formats.append(encoding_format)
+                            if encoding_formats:
+                                input_entry["encodingFormat"] = encoding_formats
 
                         if input_entry:
                             all_inputs.append(input_entry)
@@ -444,23 +447,54 @@ def parse():
                             output_entry["name"] = name
 
                         if formats := o.get("format"):
-                            encoding_format = {}
+                            encoding_formats = []
                             for f in formats:
+                                encoding_format = {}
                                 if encoding_format_url := f.get("uri"):
                                     encoding_format["url"] = encoding_format_url
                                 if encoding_format_name := f.get("term"):
                                     encoding_format["name"] = encoding_format_name
-                            if encoding_format:
-                                output_entry["encodingFormat"] = encoding_format
+                                if encoding_format:
+                                    encoding_formats.append(encoding_format)
+                            if encoding_formats:
+                                output_entry["encodingFormat"] = encoding_formats
 
                         if output_entry:
                             all_outputs.append(output_entry)
 
-        if all_inputs:
-            output["input"] = all_inputs
+        # Function to merge entries with the same key
+        def merge_entries(entries):
+            merged_entries = {}
+            for entry in entries:
+                key = (entry.get('name'), entry.get('url'), entry.get('inDefinedTermSet'))
+                if key in merged_entries:
+                    # Merge encodingFormats
+                    existing_formats = merged_entries[key].get('encodingFormat', [])
+                    new_formats = entry.get('encodingFormat', [])
+                    # Combine lists and remove duplicates
+                    combined_formats = existing_formats + new_formats
+                    # Remove duplicates based on 'url' and 'name'
+                    unique_formats = { (f['url'], f['name']): f for f in combined_formats }.values()
+                    merged_formats = list(unique_formats)
+                    if merged_formats:
+                        merged_entries[key]['encodingFormat'] = merged_formats
+                    elif 'encodingFormat' in merged_entries[key]:
+                        # Remove encodingFormat if the merged list is empty
+                        del merged_entries[key]['encodingFormat']
+                else:
+                    merged_entries[key] = entry
+            return list(merged_entries.values())
 
-        if all_outputs:
-            output["output"] = all_outputs
+        # Merge inputs and outputs with the same 'name', 'url', and 'inDefinedTermSet'
+        merged_inputs = merge_entries(all_inputs)
+        merged_outputs = merge_entries(all_outputs)
+
+        if merged_inputs:
+            output["input"] = merged_inputs
+
+        if merged_outputs:
+            output["output"] = merged_outputs
+
 
         yield output
 
