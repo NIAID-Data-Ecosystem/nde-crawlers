@@ -193,7 +193,7 @@ def make_requests():
     while (page - 1) * size < total_hits:
         logging.info(f"Processing page {page} of {total_hits // size + 1}")
         request = requests.get(
-            f"https://radxdatahub.nih.gov/_next/data/kG2NIYIhioj4eS-hzy2_i/studyExplorer.json?sort=desc&prop=relevance&page={page}&size={size}"
+            f"https://radxdatahub.nih.gov/_next/data/uW-uGmvi-5h0gTOZUbnW9/studyExplorer.json?sort=desc&prop=relevance&page={page}&size={size}"
         )
         page += 1
         request = request.json()

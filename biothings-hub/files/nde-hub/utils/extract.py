@@ -227,7 +227,7 @@ def insert_species(doc_list, species_mapping):
         updated_species = []
         updated_infectious_agents = []
 
-        # Collect names for comparison to avoid duplicates
+        # Collect names and identifiers from preserved_species to avoid duplicates
         existing_species_names = set()
         existing_infectious_agent_names = set()
         existing_identifiers = set()
@@ -239,6 +239,18 @@ def insert_species(doc_list, species_mapping):
 
             # Preserve curated species
             preserved_species = [species for species in doc["species"] if species.get("fromPMID", False)]
+
+            # Initialize existing_* sets with preserved_species data
+            for species in preserved_species:
+                classification = species.get("classification")
+                name_lower = species["name"].lower()
+                identifier = species.get("identifier")
+                if classification == "host":
+                    existing_species_names.add(name_lower)
+                    existing_identifiers.add(identifier)
+                elif classification == "infectiousAgent":
+                    existing_infectious_agent_names.add(name_lower)
+                    existing_identifiers.add(identifier)
 
             # Process species objects that are not curated
             for species_obj in doc["species"]:
@@ -305,25 +317,28 @@ def insert_disease(doc_list, disease_mapping):
             # Preserve curated diseases
             preserved_diseases = [disease for disease in doc["healthCondition"] if disease.get("fromPMID", False)]
 
-            # Track names of preserved diseases to avoid duplication
+            # Track names and identifiers of preserved diseases to avoid duplication
             preserved_disease_names = {disease["name"].lower() for disease in preserved_diseases}
+            preserved_disease_identifiers = {disease.get("identifier") for disease in preserved_diseases if disease.get("identifier")}
 
             # Process diseases that are not curated
             for disease_obj in doc["healthCondition"]:
                 original_name = disease_obj["name"].lower()
+                identifier = disease_obj.get("identifier")
 
-                if original_name in preserved_disease_names:
+                # Skip if disease is already preserved by name or identifier
+                if original_name in preserved_disease_names or (identifier and identifier in preserved_disease_identifiers):
                     continue  # Skip adding this disease since it's already preserved
 
                 new_obj = disease_mapping.get(original_name, None)
                 if new_obj:
                     updated_disease.append(new_obj)
                 else:
-                    updated_disease.append(disease_obj)  # keep existing disease if no new data
+                    updated_disease.append(disease_obj)  # Keep existing disease if no new data
 
             # Combine curated diseases with updated diseases
             doc["healthCondition"] = preserved_diseases + updated_disease
-            logger.info(f"Updated disease in document {doc['_id']}")
+            logger.info(f"Updated diseases in document {doc['_id']}")
 
     return doc_list
 
