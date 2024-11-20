@@ -96,16 +96,21 @@ def parse():
             ]
 
         if functions := tool.get("function"):
-            output["featureList"] = [
-                {
-                    "url": op.get("uri"),
-                    "name": op.get("term"),
-                    **({"inDefinedTermSet": "EDAM"} if "edamontology" in op.get("uri", "") else {})
-                }
-                for func in functions
-                for op in func.get("operation", [])
-                if op.get("uri") and op.get("term")
-            ]
+            seen_uris = set()
+            output["featureList"] = []
+            for func in functions:
+                for op in func.get("operation", []):
+                    uri = op.get("uri")
+                    term = op.get("term")
+                    if uri and term and uri not in seen_uris:
+                        seen_uris.add(uri)
+                        feature = {
+                            "url": uri,
+                            "name": term,
+                        }
+                        if "edamontology" in uri:
+                            feature["inDefinedTermSet"] = "EDAM"
+                        output["featureList"].append(feature)
 
         # Credit handling based on typeEntity and typeRole
         if credits := tool.get("credit"):

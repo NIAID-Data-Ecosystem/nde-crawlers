@@ -1,6 +1,7 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
 from utils.funding_helper import standardize_funding
+from utils.utils import nde_upload_wrapper
 
 class Biotools_Uploader(NDESourceUploader):
     name = "biotools"
