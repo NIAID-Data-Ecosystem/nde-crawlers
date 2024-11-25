@@ -6,6 +6,25 @@ import xmltodict
 
 logger = logging.getLogger("clinepidb-logger")
 
+def get_variableMeasured(entity):
+    variableMeasured = []
+    # Skip entities with displayName "Sample"
+    if entity.get('displayName') == 'Sample':
+        return variableMeasured
+
+    # Collect variable display names
+    variables = entity.get('variables', [])
+    for variable in variables:
+        displayName = variable.get('displayName')
+        if displayName:
+            variableMeasured.append({'name': displayName})
+
+    # Recursively traverse child entities
+    children = entity.get('children', [])
+    for child in children:
+        variableMeasured.extend(get_variableMeasured(child))
+
+    return variableMeasured
 
 def record_generator():
     logger.info("record generator function started")
@@ -72,7 +91,7 @@ def record_generator():
         )
 
         try:
-            # attributes
+        # attributes
             measurement_technique = record["attributes"].pop("Study_Design")
             if measurement_technique:
                 record["measurementTechnique"] = {"name": measurement_technique}
@@ -173,6 +192,16 @@ def record_generator():
                     hl_list.append({"url": hl_url})
 
             record["isBasedOn"] = hl_list
+
+            # Get variableMeasured
+            eda_study_id = record["attributes"]["eda_study_id"]
+            study_url = "https://clinepidb.org/eda/studies/%s" % eda_study_id
+            cookies = {
+                "Authorization": "eyJhbGciOiJFUzUxMiJ9.eyJzdWIiOiIxMTY1MjQyMjIzIiwiaXNfZ3Vlc3QiOnRydWUsImlzcyI6Imh0dHBzOi8vZXVwYXRoZGIub3JnL29hdXRoIiwiYXVkIjoiYXBpQ29tcG9uZW50U2l0ZSIsImF6cCI6ImFwaUNvbXBvbmVudFNpdGUiLCJhdXRoX3RpbWUiOjE3MzI1NTUyOTksImlhdCI6MTczMjU1NTI5OSwiZXhwIjoxODI3MTYzMjk5fQ.AVyvEqT-DWNiMlsjyRZ1KsG3KXELjc6y3PGMpRVJdre0ODsI9tVRn6UEzT2MKhJjKzo1FHYADVDe-SJUc-T6vmy6APn-1JsAitDe0MvbgenWwBoGYgXNx7T8pQ9uosJmyGBE9-yDq4Jmrk87WEsYUylQ2nHQD6fM022jRXVMG_GS7Hk1"}
+            study_response = requests.get(study_url, headers=headers, cookies=cookies)
+            study_data = study_response.json()
+            variableMeasured = get_variableMeasured(study_data['study']['rootEntity'])
+            record['variableMeasured'] = variableMeasured
 
         except Exception as e:
             logger.error("identifier:" + record["identifier"] + ": " + str(e))
