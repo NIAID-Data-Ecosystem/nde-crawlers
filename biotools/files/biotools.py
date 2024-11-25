@@ -51,7 +51,7 @@ def parse():
         output = {
             "@type": "ComputationalTool",
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "ComputationalTool",
                 "name": "bio.tools",
                 "url": "https://bio.tools/",
                 "versionDate": datetime.date.today().isoformat(),
@@ -88,8 +88,9 @@ def parse():
             output["topicCategory"] = [
                 {
                     "url": topic.get("uri"),
-                    "identifier": topic.get("uri"),
+                    "identifier": topic.get("uri").split("/")[-1],
                     "name": topic.get("term"),
+                    "inDefinedTermSet": "EDAM",
                 }
                 for topic in topics
                 if topic.get("uri") and topic.get("term")
@@ -214,7 +215,8 @@ def parse():
                         pub_entry["datePublished"] = date.split("T")[0]
 
                     if journal := metadata.get("journal"):
-                        pub_entry["journal"] = journal
+                        pub_entry["journalName"] = journal
+                        pub_entry["@type"] = "ScholarlyArticle"
 
                     authors = []
                     if metadata.get("authors"):
@@ -267,7 +269,10 @@ def parse():
                 if relation_type in ["isNewVersionOf", "hasNewVersion"]:
                     output.setdefault("sameAs", []).append(relation_entry)
                 elif relation_type == "uses":
-                    output.setdefault("isBasedOn", []).append({"identifier": relation_entry})
+                    relation_dict = {"identifier": relation_entry}
+                    relation_dict["url"] = f"https://bio.tools/{relation_entry}"
+                    relation_dict["@type"] = "ComputationalTool"
+                    output.setdefault("isBasedOn", []).append(relation_dict)
                 elif relation_type == "usedBy":
                     output.setdefault("isBasisFor", []).append({"identifier": relation_entry})
                 elif relation_type == "includes":
@@ -500,6 +505,11 @@ def parse():
         if merged_outputs:
             output["output"] = merged_outputs
 
+        if 'isBasedOn' in output:
+            for item in output['isBasedOn']:
+                if 'identifier' in item and 'url' not in item:
+                    item['url'] = f"https://bio.tools/{item['identifier']}"
+                    item['@type'] = 'ComputationalTool'
 
         yield output
 
