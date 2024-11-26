@@ -201,7 +201,7 @@ def handle_response(data, condition, base_url):
     if "hits" in data:
         for hit in data["hits"]:
             alternate_names = process_synonyms(hit.get("synonym", {}))
-            if hit["name"].lower().strip() == condition.lower().strip() or any(
+            if hit["label"].lower().strip() == condition.lower().strip() or any(
                 name.lower().strip() == condition.lower().strip() for name in alternate_names
             ):
                 logger.info(f"Found {condition} in ontology: {base_url.split('/')[-1]}")
@@ -219,18 +219,13 @@ def query_condition(health_condition):
     logger.info(f'Querying for "{health_condition}"...')
     for base_url in BASE_URLS:
         try:
-            url = f'{base_url}/query?q=name:("{health_condition}")&limit=1000'
+            url = f'{base_url}/query?q=label:("{health_condition}")&limit=1000'
             data = retry_request(url)
             result = handle_response(data, health_condition, base_url)
             if result is not None:
                 return result
 
-            # if not found in name, search in synonyms
-            url = (
-                f'{base_url}/query?q=synonym.exact:"{health_condition}"&limit=1000'
-                if "hpo" in base_url
-                else f'{base_url}/query?q=synonym:"{health_condition}"&limit=1000'
-            )
+            url = f'{base_url}/query?q=synonym.exact:"{health_condition}"&limit=1000'
             data = retry_request(url)
             result = handle_response(data, health_condition, base_url)
             if result is not None:
@@ -289,31 +284,12 @@ def get_xref_name(xref_ontology, xref_identifier):
 def create_return_object(hit, alternate_names, original_name):
     ontology = hit["_id"].split(":")[0]
     identifier = hit["_id"].split(":")[1]
-    #    sameas_list = []
-    #    if hit.get("xrefs"):
-    #        for xref_ontology, xref_identifier in hit["xrefs"].items():
-    #            sameas = {}
-    #            sameas["identifier"] = f"{xref_ontology}:{xref_identifier}"
-    #            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
-    # TODO - add name through api call
-    #            sameas_list.append(sameas)
-    #    elif hit.get("xref"):
-    #        for xref in hit["xref"]:
-    #            xref_ontology = xref.split(":")[0]
-    #            xref_identifier = xref.split(":")[1]
-    #            sameas = {}
-    #            sameas["identifier"] = xref
-    #            sameas["url"] = f"http://purl.obolibrary.org/obo/{xref_ontology}_{xref_identifier}"
-    # sameas_name = get_xref_name(xref_ontology, xref_identifier)
-    # if sameas_name:
-    #    sameas["name"] = sameas_name
-    #            sameas_list.append(sameas)
 
     standard_dict = {
         "identifier": hit["_id"].split(":")[1],
         "inDefinedTermSet": ontology,
         "isCurated": True,
-        "name": hit["name"],
+        "name": hit["label"],
         "originalName": original_name,
         "url": f"http://purl.obolibrary.org/obo/{ontology}_{identifier}",
         "curatedBy": {
@@ -322,8 +298,6 @@ def create_return_object(hit, alternate_names, original_name):
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
         },
     }
-    #   if sameas_list:
-    #       standard_dict["sameas"] = sameas_list
     if alternate_names:
         standard_dict["alternateName"] = list(set(alternate_names))
     return standard_dict
