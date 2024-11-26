@@ -248,6 +248,7 @@ def parse():
                 elif pub_type == "Usage":
                     output.setdefault("citedBy", []).append(pub_entry)
                 elif pub_type == "Benchmarking study":
+                    pub_entry["@type"] = "ScholarlyArticle"
                     output.setdefault("isBasisFor", []).append(pub_entry)
                 elif pub_type in ["Review", "Other"]:
                     output.setdefault("citedBy", []).append(pub_entry)
@@ -274,13 +275,23 @@ def parse():
                     relation_dict["@type"] = "ComputationalTool"
                     output.setdefault("isBasedOn", []).append(relation_dict)
                 elif relation_type == "usedBy":
-                    output.setdefault("isBasisFor", []).append({"identifier": relation_entry})
+                    output.setdefault("isBasisFor", []).append(
+                        {
+                            "identifier": relation_entry,
+                            "url": f"https://bio.tools/{relation_entry}",
+                            "@type": "ComputationalTool",
+                        })
                 elif relation_type == "includes":
-                    output.setdefault("hasPart", []).append({"identifier": relation_entry})
+                    output.setdefault("hasPart", []).append(
+                        {
+                            "identifier": relation_entry,
+                            "url": f"https://bio.tools/{relation_entry}",
+                            "@type": "ComputationalTool"
+                        })
                 elif relation_type == "includedIn":
                     output.setdefault("isPartOf", []).append({"identifier": relation_entry})
                 else:
-                    output.setdefault("isRelatedTo", []).append({"identifier": relation_entry})
+                    output.setdefault("isRelatedTo", []).append({"identifier": relation_entry, "@type": "CreativeWork"})
                     logger.warning("Unknown relation type: %s", relation_type)
 
         # Software-specific fields
