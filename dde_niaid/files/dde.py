@@ -184,18 +184,25 @@ def parse():
                     "@type": "DataCatalog",
                     "name": "Data Discovery Engine",
                     "url": "https://discovery.biothings.io/",
-                    "versionDate": datetime.date.today().isoformat(),
+                    "versionDate": datetime.date.today().isoformat()
                 }
             ]
 
             # add sourceOrganization (as determined by the DDE portal to which the record was submitted) - this can be determined based on the @context
             if hit.get("@context") and "nde" in hit.get("@context"):
-                source_organization = [
+                source_organization = None
+                included_in_data_catalog = [
                     {
-                        "@type": "ResearchProject",
+                        "@type": "DataCatalog",
+                        "name": "Data Discovery Engine",
+                        "url": "https://discovery.biothings.io/",
+                        "versionDate": datetime.date.today().isoformat()
+                    },
+                    {
+                        "@type": "DataCatalog",
                         "name": "NIAID Data Ecosystem",
                         "url": "https://data.niaid.nih.gov",
-                        "parentOrganization": "NIAID"
+                        "versionDate": datetime.date.today().isoformat()
                     }
                 ]
 
@@ -208,12 +215,6 @@ def parse():
                         "description": "The Centers for Research in Emerging Infectious Diseases (CREID) Network is a coordinated group of emerging infectious disease research centers situated in regions around the globe where emerging and re-emerging infectious disease outbreaks are likely to occur.",
                         "alternateName": ["CREID","Centers for Research in Emerging Infectious Disease"],
                         "url": "https://creid-network.org/",
-                        "parentOrganization": "NIAID"
-                    },
-                    {
-                        "@type": "ResearchProject",
-                        "name": "NIAID Data Ecosystem",
-                        "url": "https://data.niaid.nih.gov",
                         "parentOrganization": "NIAID"
                     }
                 ]
@@ -233,12 +234,6 @@ def parse():
                         "description": "The NIAID/Division of Microbiology and Infectious Diseases (DMID) Systems Biology Consortium for Infectious Diseases is a group of interdisciplinary scientists that bridge disparate scientific disciplines including microbiology, immunology, infectious diseases, microbiome, mathematics, physics, bioinformatics, computational biology, machine learning, statistical methods, and mathematical modeling.",
                         "alternateName": ["NIAID Systems Biology Consortium for Infectious Diseases", "NIAID SysBio"],
                         "url": "https://www.niaid.nih.gov/research/systems-biology-consortium",
-                        "parentOrganization": "NIAID"
-                    },
-                    {
-                        "@type": "ResearchProject",
-                        "name": "NIAID Data Ecosystem",
-                        "url": "https://data.niaid.nih.gov",
                         "parentOrganization": "NIAID"
                     }
                 ]
