@@ -26,7 +26,7 @@ from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
 from .funding_helper import standardize_funder
-from .pubtator import DB_PATH, get_species_details
+from .pubtator import DB_PATH, get_species_details, query_condition
 from .utils import retry
 
 PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
@@ -154,8 +154,21 @@ def get_disease_details(identifier, original_name):
         else:
             logger.info(f"originalName not found in {lookup_result}")
         return lookup_result
-    logger.info(f"Getting details for {original_name}")
+    logger.info(f"Converting {original_name} from MeSH {identifier} to standard format")
+    non_mesh_result = query_condition(original_name, identifier)
+    if non_mesh_result:
+        logger.info(f"Converted {original_name} from MeSH {identifier} to standard format")
+        pubtator_add(original_name, "health_conditions", json.dumps(standard_dict))
+        non_mesh_result["fromPMID"] = True
+        non_mesh_result["isCurated"] = False
+        non_mesh_result.pop("curatedBy")
+        if "originalName" in non_mesh_result:
+            non_mesh_result.pop("originalName")
+        else:
+            logger.info(f"originalName not found in {non_mesh_result}")
+        return non_mesh_result
 
+    logger.info(f"Fetching details for {original_name} with ID {identifier}")
     # Fetch details from the MeSH API
     disease_info = requests.get(f"https://id.nlm.nih.gov/mesh/{identifier}.json")
     disease_info.raise_for_status()
