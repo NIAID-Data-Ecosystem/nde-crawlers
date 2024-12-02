@@ -158,7 +158,7 @@ def get_disease_details(identifier, original_name):
     non_mesh_result = query_condition(original_name, identifier)
     if non_mesh_result:
         logger.info(f"Converted {original_name} from MeSH {identifier} to standard format")
-        pubtator_add(original_name, "health_conditions", json.dumps(standard_dict))
+        pubtator_add(original_name, "health_conditions", json.dumps(non_mesh_result))
         non_mesh_result["fromPMID"] = True
         non_mesh_result["isCurated"] = False
         non_mesh_result.pop("curatedBy")
