@@ -197,19 +197,25 @@ def retry_request(url, retries=7):
     return None
 
 
-def handle_response(data, condition, base_url):
+def handle_response(data, condition, base_url, match_condition=True):
     if "hits" in data:
         for hit in data["hits"]:
             alternate_names = process_synonyms(hit.get("synonym", {}))
-            if hit["label"].lower().strip() == condition.lower().strip() or any(
-                name.lower().strip() == condition.lower().strip() for name in alternate_names
-            ):
-                logger.info(f"Found {condition} in ontology: {base_url.split('/')[-1]}")
-                return create_return_object(hit, alternate_names, condition)
+            term_name = hit.get("label") or hit.get("name")
+            if term_name:
+                if match_condition:
+                    if term_name.lower().strip() == condition.lower().strip() or any(
+                        name.lower().strip() == condition.lower().strip() for name in alternate_names
+                    ):
+                        logger.info(f"Found {condition} in ontology: {base_url.split('/')[-1]}")
+                        return create_return_object(hit, alternate_names, condition)
+                else:
+                    logger.info(f"Found {condition} via xrefs.mesh in ontology: {base_url.split('/')[-1]}")
+                    return create_return_object(hit, alternate_names, condition)
     return None
 
 
-def query_condition(health_condition):
+def query_condition(health_condition, mesh_id=None):
     BASE_URLS = [
         "https://biothings.ncats.io/mondo",
         "https://biothings.ncats.io/hpo",
@@ -219,7 +225,21 @@ def query_condition(health_condition):
     logger.info(f'Querying for "{health_condition}"...')
     for base_url in BASE_URLS:
         try:
+            if mesh_id:
+                # Query using xrefs.mesh
+                url = f'{base_url}/query?q=xrefs.mesh:"{mesh_id}"&limit=1000'
+                data = retry_request(url)
+                result = handle_response(data, health_condition, base_url, match_condition=False)
+                if result is not None:
+                    return result
+
             url = f'{base_url}/query?q=label:("{health_condition}")&limit=1000'
+            data = retry_request(url)
+            result = handle_response(data, health_condition, base_url)
+            if result is not None:
+                return result
+
+            url = f'{base_url}/query?q=name:("{health_condition}")&limit=1000'
             data = retry_request(url)
             result = handle_response(data, health_condition, base_url)
             if result is not None:
@@ -284,12 +304,13 @@ def get_xref_name(xref_ontology, xref_identifier):
 def create_return_object(hit, alternate_names, original_name):
     ontology = hit["_id"].split(":")[0]
     identifier = hit["_id"].split(":")[1]
+    term_name = hit.get("label") or hit.get("name")
 
     standard_dict = {
-        "identifier": hit["_id"].split(":")[1],
+        "identifier": identifier,
         "inDefinedTermSet": ontology,
         "isCurated": True,
-        "name": hit["label"],
+        "name": term_name,
         "originalName": original_name,
         "url": f"http://purl.obolibrary.org/obo/{ontology}_{identifier}",
         "curatedBy": {
