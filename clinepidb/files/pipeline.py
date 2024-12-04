@@ -114,7 +114,7 @@ def record_generator():
             # record['version'] = {str( record['attributes'].pop('eupath_release'))}
 
             cond_acc = cond_acc_dict[record["attributes"]["study_access"].lower()]
-            record["conditionOfAccess"] = cond_acc
+            record["conditionsOfAccess"] = cond_acc
 
             temp_cov = record["attributes"].pop("Years")
             record["temporalCoverage"] = {
