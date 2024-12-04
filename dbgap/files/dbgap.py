@@ -24,15 +24,18 @@ def parse():
     # not in the configuration field we need to move them back to the configuration field
     # phs002978 has the same issue but the keys are in the studyinex field
     bad_keys = [
-        "publication",
-        "diseases",
         "attributions",
+        "consentgroups",
+        "description",
+        "diseases",
         "displaypublicsummary",
+        "publication",
         "studyhistory",
-        "consentgroups",
+        "studyinex",
+        "studynameentrez",
+        "studynamereportpage",
+        "studytypes",
         "studyurls",
-        "studyhistory",
-        "consentgroups",
     ]
 
     def move_keys(description, description_keys, configuration):
@@ -123,11 +126,13 @@ def parse():
             authors = []
             fundings = []
 
-            # fix configuration keys
+            # fix the bad keys
             configuration = data.get("configuration", {})
             description = configuration.get("description", {})
             move_keys(description, bad_keys, configuration)
             description = configuration.get("studyinex", {})
+            move_keys(description, bad_keys, configuration)
+            description = configuration.get("studyhistory", {})
             move_keys(description, bad_keys, configuration)
             configuration = {k: v for k, v in configuration.items() if v}
 
