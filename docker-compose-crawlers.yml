@@ -54,6 +54,12 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  dbgap-crawler:
+    build:
+      context: dbgap
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   dde-crawler:
     build:
       context: dde_niaid

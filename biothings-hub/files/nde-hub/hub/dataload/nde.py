@@ -933,6 +933,7 @@ class NDESourceUploader(BaseSourceUploader):
             "url": {"type": "text", "copy_to": ["all"]},
             "usageInfo": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
