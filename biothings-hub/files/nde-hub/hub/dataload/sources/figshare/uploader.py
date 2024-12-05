@@ -98,7 +98,7 @@ def load_data(self, data_folder):
             for line in f:
                 doc = orjson.loads(line)
                 doc_list.append(doc)
-                count = 1
+                count += 1
                 if count % 1000 == 0:
                     logging.info(f"Processed {count} documents")
     else:
@@ -107,4 +107,6 @@ def load_data(self, data_folder):
     mappings = load_mapping_sheet_from_csv(mapping_file)
     processed_documents = process_documents(doc_list, mappings)
     for doc in processed_documents:
-        yield doc
+        # Yield only if `topicCategory` exists and has a `name` field
+        if "topicCategory" in doc and any("name" in category for category in doc["topicCategory"]):
+            yield doc
