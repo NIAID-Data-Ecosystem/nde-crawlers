@@ -35,20 +35,14 @@ def retry(retry_num, retry_sleep_sec):
             for attempt in range(retry_num):
                 try:
                     return func(*args, **kwargs)  # should return the raw function's return value
-                except (BrokenPipeError, EOFError) as err:
+                except Exception as err:
                     logger.error(err)
                     logger.error(traceback.format_exc())
-                    logger.error(f"Broken pipe encountered. Retrying in {retry_sleep_sec} seconds...")
+                    logger.error(f"Error encountered. Retrying in {retry_sleep_sec} seconds...")
                     time.sleep(retry_sleep_sec)
                     ftp = args[0]
                     ftp.connect("ftp.ncbi.nlm.nih.gov")  # Reconnect to the FTP server
                     ftp.login()
-                except Exception as err:
-                    logger.error(err)
-                    logger.error(traceback.format_exc())
-                    logger.error(f"Rate limit encountered. Retrying in {retry_sleep_sec} seconds...")
-                    time.sleep(retry_sleep_sec)
-
                 logger.info(
                     "Retrying failed func %s. Trying attempt %s of %s.",
                     func.__name__,
@@ -63,7 +57,9 @@ def retry(retry_num, retry_sleep_sec):
     return decorator
 
 
-def get_highest_version(subdirs):
+@retry(retry_num=5, retry_sleep_sec=5)
+def get_highest_version(ftp):
+    subdirs = ftp.nlst()
     highest_version = (0, 0)
     highest_dir = ""
     for subdir in subdirs:
@@ -124,8 +120,7 @@ def download():
 
         for phs in phs_directories:
             ftp.cwd(f"{root_directory}/{phs}")
-            subdirs = ftp.nlst()
-            highest_version = get_highest_version(subdirs)
+            highest_version = get_highest_version(ftp)
             highest_version_dir = f"{root_directory}/{phs}/{highest_version}"
             if highest_version_dir:
                 logger.info(f"Highest version directory in {phs}: {highest_version_dir}")
