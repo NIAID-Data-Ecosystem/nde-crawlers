@@ -211,7 +211,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
-            "availableOnDevice": {"type": "text"},
+            "availableOnDevice": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer"},
             "citation": {
                 "properties": {
                     "@type": {"type": "keyword"},
@@ -505,8 +505,8 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "keyword"},
                     "description": {"type": "text"},
-                    "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "analyzer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "encodingFormat": {
                         "properties": {
                             "name": {
@@ -517,7 +517,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
-                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "keyword", "copy_to": ["all"]},
                 },
             },
             "includedInDataCatalog": {
@@ -755,8 +755,8 @@ class NDESourceUploader(BaseSourceUploader):
             "output": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "identifier": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "analyzer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "encodingFormat": {
                         "properties": {
                             "name": {
@@ -767,7 +767,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
-                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "keyword", "copy_to": ["all"]},
                 },
             },
             "processorRequirements": {"type": "text", "copy_to": ["all"]},
