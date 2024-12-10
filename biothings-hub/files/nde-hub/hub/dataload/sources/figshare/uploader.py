@@ -20,17 +20,12 @@ def load_mapping_sheet_from_csv(csv_file):
 
 
 def process_documents(documents, mappings):
-    count = 0
-    """Process each document and update fields based on mappings."""
     processed_docs = []
 
     for doc in documents:
-        count = 1
-        if count % 1000 == 0:
-            logging.info(f"Processed {count} documents")
         keywords = doc.get("keywords", [])
-        topic_categories = []  # List of DefinedTerm objects
-        remaining_keywords = []  # Keywords not mapped
+        unique_terms = set()  # To store tuples of (label, curie)
+        remaining_keywords = []
 
         for keyword in keywords:
             mapping = next((m for m in mappings if m["Source Term"] == keyword), None)
@@ -41,30 +36,36 @@ def process_documents(documents, mappings):
                     if "obsolete" in mapping.get("Tags", "").lower():
                         replacement = mapping.get("Consider")  # Replacement term
                         if replacement:
-                            topic_categories.append(create_defined_term(replacement, "Plant biology"))
+                            unique_terms.add((replacement, "Plant biology"))
                     else:
-                        topic_categories.append(
-                            create_defined_term(mapping["Mapped Term Label"], mapping["Mapped Term CURIE"])
-                        )
-                elif mapping.get("Decision") != "Good":
+                        unique_terms.add((mapping["Mapped Term Label"], mapping["Mapped Term CURIE"]))
+                else:
                     better_mapping = mapping.get("Better mapping")
                     if better_mapping == "Ignore":
                         remaining_keywords.append(keyword)
                     else:
-                        topic_categories.append(create_defined_term(better_mapping, mapping["Mapped Term CURIE"]))
+                        unique_terms.add((better_mapping, mapping["Mapped Term CURIE"]))
             else:
                 # Handle unmapped terms
                 if not contains_special_characters(keyword) and "years" not in keyword.lower():
                     remaining_keywords.append(keyword)
+
+        # Convert the unique terms into DefinedTerm objects
+        topic_categories = [
+            create_defined_term(label, curie)
+            for (label, curie) in unique_terms
+        ]
 
         # Update document fields
         if topic_categories:
             doc["topicCategory"] = topic_categories
         if remaining_keywords:
             doc["keywords"] = remaining_keywords
+
         processed_docs.append(doc)
 
     return processed_docs
+
 
 
 def create_defined_term(label, iri):
