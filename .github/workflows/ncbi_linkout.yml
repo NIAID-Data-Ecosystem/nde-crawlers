@@ -1,6 +1,13 @@
 name: NCBI Linkout CSV Update
 
 on:
+  pull_request:
+    branches:
+      - main  # Triggers when a PR is targeting the main branch
+    types:
+      - opened
+      - synchronize
+      - reopened
   schedule:
     - cron: "0 20 * * *"  # Runs every day at 12:00 PM PST
   workflow_dispatch:
