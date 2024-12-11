@@ -1,0 +1,75 @@
+name: NCBI Linkout CSV Update
+
+on:
+  schedule:
+    - cron: "0 20 * * *"  # Runs every day at 12:00 PM PST
+  workflow_dispatch:
+
+jobs:
+  check-and-generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install pymongo requests
+
+      - name: Fetch current build metadata
+        id: metadata
+        run: |
+          echo "Fetching metadata..."
+          metadata=$(curl -s https://api.data.niaid.nih.gov/v1/metadata)
+          echo "metadata=$metadata" >> $GITHUB_OUTPUT
+
+      - name: Parse metadata
+        id: parse
+        run: |
+          echo "$metadata" > metadata.json
+          build_date=$(jq -r '.build_date' metadata.json)
+          build_version=$(jq -r '.build_version' metadata.json)
+          echo "build_date=$build_date" >> $GITHUB_OUTPUT
+          echo "build_version=$build_version" >> $GITHUB_OUTPUT
+
+      - name: Check if new build_date
+        id: compare
+        run: |
+          # Read last stored build_date if it exists
+          last_build_date="unknown"
+          if [ -f last_build_date.txt ]; then
+            last_build_date=$(cat last_build_date.txt)
+          fi
+
+          # Compare build_date
+          if [ "$last_build_date" != "${{ steps.parse.outputs.build_date }}" ]; then
+            echo "is_new_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_new_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate CSV if new build
+        if: steps.compare.outputs.is_new_build == 'true'
+        run: |
+          python ncbi_linkout.py
+
+      - name: Upload CSV to NCBI LinkOut FTP (placeholder)
+        if: steps.compare.outputs.is_new_build == 'true'
+        run: |
+          # curl -T ncbi_linkout.csv -u $FTP_USER:$FTP_PASSWORD ftp://ftp.ncbi.nlm.nih.gov/path/
+          echo "Uploading CSV to FTP..."
+
+      - name: Update last_build_date
+        if: steps.compare.outputs.is_new_build == 'true'
+        run: |
+          echo "${{ steps.parse.outputs.build_date }}" > last_build_date.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add last_build_date.txt
+          git commit -m "Update last_build_date.txt"
+          git push
