@@ -3,3 +3,4 @@ biothings[hub, docker] @ git+https://github.com/biothings/biothings.api.git@1.0.
 biopython>=1.79     # for pmids to make citation/funding in utils (ncbi_geo crawler)
 text2term       # for topic_category helper in utils
 timeout-decorator   # for timeout in biostudies
+lxml        # for utils to remove html tags

@@ -7,6 +7,7 @@ from typing import Dict, Generator, Iterable
 
 import bson
 from config import logger
+from lxml import html
 from scores import RECOMMENDED_AUGMENTED_FIELDS, RECOMMENDED_FIELDS, REQUIRED_AUGMENTED_FIELDS, REQUIRED_FIELDS
 
 
@@ -227,6 +228,10 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             # TODO FOR TESTING
             # merge_duplicates(doc)
             add_metadata_score(doc)
+
+            # Remove HTML tags from description field
+            if doc.get("description"):
+                doc["description"] = html.fromstring(doc["description"]).text_content()
 
             # Everything past this point should always be last in order
             check_schema(doc)
