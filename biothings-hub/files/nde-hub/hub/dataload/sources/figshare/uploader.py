@@ -28,23 +28,27 @@ def process_documents(documents, mappings):
         remaining_keywords = []
 
         for keyword in keywords:
-            mapping = next((m for m in mappings if m["Source Term"] == keyword), None)
+            # Normalize case for matching
+            mapping = next((m for m in mappings if m["Source Term"].lower() == keyword.lower()), None)
 
             if mapping:
                 # Check if the term is deprecated and GOOD
                 if mapping.get("Decision") == "Good":
-                    if "obsolete" in mapping.get("Tags", "").lower():
+                    if "obsolete" in (mapping.get("Tags") or "").lower():
                         replacement = mapping.get("Consider")  # Replacement term
                         if replacement:
                             unique_terms.add((replacement, "Plant biology"))
+                            logging.debug(f"Keyword '{keyword}' is obsolete. Using replacement '{replacement}'.")
                     else:
                         unique_terms.add((mapping["Mapped Term Label"], mapping["Mapped Term CURIE"]))
                 else:
                     better_mapping = mapping.get("Better mapping")
                     if better_mapping == "Ignore":
                         remaining_keywords.append(keyword)
+                        logging.debug(f"Keyword '{keyword}' ignored due to mapping decision.")
                     else:
                         unique_terms.add((better_mapping, mapping["Mapped Term CURIE"]))
+                        logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")
             else:
                 # Handle unmapped terms
                 if not contains_special_characters(keyword) and "years" not in keyword.lower():
@@ -67,7 +71,6 @@ def process_documents(documents, mappings):
     return processed_docs
 
 
-
 def create_defined_term(label, iri):
     """Create a DefinedTerm object."""
     return {
@@ -88,26 +91,32 @@ class FigshareUploader(NDESourceUploader):
     name = "figshare"
 
 
-@nde_upload_wrapper
-def load_data(self, data_folder):
-    mapping_file = "mappings.csv"
-    doc_list = []
-    count = 0
-    if isinstance(data_folder, str):
-        ndjson_file = os.path.join(data_folder, "data.ndjson")
-        with open(ndjson_file, "rb") as f:
-            for line in f:
-                doc = orjson.loads(line)
-                doc_list.append(doc)
-                count += 1
-                if count % 1000 == 0:
-                    logging.info(f"Processed {count} documents")
-    else:
-        doc_list = list(data_folder)
+    @nde_upload_wrapper
+    def load_data(self, data_folder):
+        mapping_file = "mappings.csv"
+        doc_list = []
+        count = 0
 
-    mappings = load_mapping_sheet_from_csv(mapping_file)
-    processed_documents = process_documents(doc_list, mappings)
-    for doc in processed_documents:
-        # Yield only if `topicCategory` exists and has a `name` field
-        if "topicCategory" in doc and any("name" in category for category in doc["topicCategory"]):
-            yield doc
+        if isinstance(data_folder, str):
+            ndjson_file = os.path.join(data_folder, "data.ndjson")
+            with open(ndjson_file, "rb") as f:
+                for line in f:
+                    doc = orjson.loads(line)
+                    doc_list.append(doc)
+                    count += 1
+                    if count % 1000 == 0:
+                        logging.info(f"Processed {count} documents")
+        else:
+            doc_list = list(data_folder)
+
+        mappings = load_mapping_sheet_from_csv(mapping_file)
+        logging.debug(f"Loaded mappings: {mappings[:5]}")  # Print first 5 mappings for debugging
+
+        processed_documents = process_documents(doc_list, mappings)
+
+        for i, doc in enumerate(processed_documents, start=1):
+            # Yield only if `topicCategory` exists and at least one category has a `name` field
+            if "topicCategory" in doc and any("name" in category for category in doc["topicCategory"]):
+                yield doc
+            else:
+                logging.debug(f"Document {i} has no valid topicCategory with 'name'. Not yielding.")
