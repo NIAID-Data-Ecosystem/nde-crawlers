@@ -45,4 +45,6 @@ class Biostudies_Dumper(dumper.BaseDumper):
         data = requests.get(remoteurl).json()
         with open(localfile, "w") as f:
             for hit in data.get("hits"):
-                f.write(hit["accession"] + "\n")
+                accession = hit.get("accession")
+                if accession and accession.casefold().startswith("s-epmc"):
+                    f.write(accession + "\n")
