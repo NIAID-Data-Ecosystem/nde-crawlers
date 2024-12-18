@@ -24,7 +24,8 @@ def process_documents(documents, mappings):
 
     for doc in documents:
         keywords = doc.get("keywords", [])
-        unique_terms = set()  # To store tuples of (label, curie)
+        unique_names = set()  # Handle duplicates
+        topic_terms = []
         remaining_keywords = []
 
         for keyword in keywords:
@@ -36,29 +37,34 @@ def process_documents(documents, mappings):
                 if mapping.get("Decision") == "Good":
                     if "obsolete" in (mapping.get("Tags") or "").lower():
                         replacement = mapping.get("Consider")  # Replacement term
-                        if replacement:
-                            unique_terms.add((replacement, "Plant biology"))
+                        if replacement and replacement.lower() != "ignored":
+                            if replacement not in unique_names:
+                                unique_names.add(replacement)
+                                topic_terms.append((replacement, "Plant biology"))
                             logging.debug(f"Keyword '{keyword}' is obsolete. Using replacement '{replacement}'.")
                     else:
-                        unique_terms.add((mapping["Mapped Term Label"], mapping["Mapped Term CURIE"]))
+                        label = mapping["Mapped Term Label"]
+                        if label.lower() != "ignored" and label not in unique_names:
+                            unique_names.add(label)
+                            topic_terms.append((label, mapping["Mapped Term CURIE"]))
                 else:
                     better_mapping = mapping.get("Better mapping")
                     if better_mapping == "Ignore":
                         remaining_keywords.append(keyword)
                         logging.debug(f"Keyword '{keyword}' ignored due to mapping decision.")
                     else:
-                        unique_terms.add((better_mapping, mapping["Mapped Term CURIE"]))
-                        logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")
+                        # Only add if not ignored and not duplicated
+                        if better_mapping.lower() != "ignored" and better_mapping not in unique_names:
+                            unique_names.add(better_mapping)
+                            topic_terms.append((better_mapping, mapping["Mapped Term CURIE"]))
+                            logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")
             else:
                 # Handle unmapped terms
                 if not contains_special_characters(keyword) and "years" not in keyword.lower():
                     remaining_keywords.append(keyword)
 
-        # Convert the unique terms into DefinedTerm objects
-        topic_categories = [
-            create_defined_term(label, curie)
-            for (label, curie) in unique_terms
-        ]
+        # Convert the collected terms into DefinedTerm objects
+        topic_categories = [create_defined_term(label, curie) for (label, curie) in topic_terms]
 
         # Update document fields
         if topic_categories:
@@ -89,7 +95,6 @@ def contains_special_characters(term):
 
 class FigshareUploader(NDESourceUploader):
     name = "figshare"
-
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
