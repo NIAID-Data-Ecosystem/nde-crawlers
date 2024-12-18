@@ -5,7 +5,7 @@ from pymongo import MongoClient
 from datetime import datetime
 
 # Configuration
-MONGO_URI = "mongodb://su11:27017"
+MONGO_URI = os.environ.get("MONGO_URI")
 DATABASE_NAME = "nde_hub"
 OUTPUT_CSV = "ncbi_linkout.csv"
 

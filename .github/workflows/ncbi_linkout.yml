@@ -64,6 +64,8 @@ jobs:
         if: steps.compare.outputs.is_new_build == 'true'
         run: |
           python ncbi_linkout.py
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
 
       - name: Upload CSV to NCBI LinkOut FTP (placeholder)
         if: steps.compare.outputs.is_new_build == 'true'
