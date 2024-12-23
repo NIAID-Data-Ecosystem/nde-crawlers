@@ -162,6 +162,14 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "@id": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer"},
             "@type": {"type": "keyword", "copy_to": ["all"]},
+            "about": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "description": {"type": "text"},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                }
+            },
             "abstract": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "all": {
                 "type": "text",
