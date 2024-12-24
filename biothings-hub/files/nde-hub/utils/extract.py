@@ -57,9 +57,10 @@ def extract(doc_list):
         "montana",
     }
 
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    try:
+    # conn = sqlite3.connect(DB_PATH)
+    # c = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
         for doc in doc_list:
             count += 1
             if count % 100 == 0:
@@ -111,8 +112,6 @@ def extract(doc_list):
                                 doc["healthCondition"].append({"name": entity["extracted_text"]})
                 except Exception as e:
                     logger.error(f"Error processing document {doc['_id']}: {e}")
-    finally:
-        conn.close()
     return doc_list
 
 
@@ -319,7 +318,9 @@ def insert_disease(doc_list, disease_mapping):
 
             # Track names and identifiers of preserved diseases to avoid duplication
             preserved_disease_names = {disease["name"].lower() for disease in preserved_diseases}
-            preserved_disease_identifiers = {disease.get("identifier") for disease in preserved_diseases if disease.get("identifier")}
+            preserved_disease_identifiers = {
+                disease.get("identifier") for disease in preserved_diseases if disease.get("identifier")
+            }
 
             # Process diseases that are not curated
             for disease_obj in doc["healthCondition"]:
@@ -327,7 +328,9 @@ def insert_disease(doc_list, disease_mapping):
                 identifier = disease_obj.get("identifier")
 
                 # Skip if disease is already preserved by name or identifier
-                if original_name in preserved_disease_names or (identifier and identifier in preserved_disease_identifiers):
+                if original_name in preserved_disease_names or (
+                    identifier and identifier in preserved_disease_identifiers
+                ):
                     continue  # Skip adding this disease since it's already preserved
 
                 new_obj = disease_mapping.get(original_name, None)
@@ -519,14 +522,15 @@ def process_species(doc_list):
 
 
 def fetch_species_from_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT original_name, standard_dict FROM species_details")
-    species_cursor = c.fetchall()
-    conn.close()
-
-    species_dict = {item[0].lower().strip(): json.loads(item[1]) for item in species_cursor if item[1]}
-    return species_dict
+    # conn = sqlite3.connect(DB_PATH)
+    # c = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT original_name, standard_dict FROM species_details")
+        species_cursor = c.fetchall()
+        species_dict = {item[0].lower().strip(): json.loads(item[1]) for item in species_cursor if item[1]}
+        return species_dict
+    # conn.close()
 
 
 def lookup_species_in_db(original_name, species_dict):
@@ -535,14 +539,15 @@ def lookup_species_in_db(original_name, species_dict):
 
 
 def cache_species_in_db(species_details):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
-        (species_details["originalName"].lower().strip(), json.dumps(species_details)),
-    )
-    conn.commit()
-    conn.close()
+    # conn = sqlite3.connect(DB_PATH)
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute(
+            "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
+            (species_details["originalName"].lower().strip(), json.dumps(species_details)),
+        )
+        conn.commit()
+    # conn.close()
 
 
 def process_diseases(doc_list):
