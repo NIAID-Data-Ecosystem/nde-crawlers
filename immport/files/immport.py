@@ -106,6 +106,10 @@ def map_schema_json(schema_json):
     # temp fix for outbreak.info
     if cb_outbreak := schema_json.get("includedInDataCatalog"):
         schema_json["curatedBy"] = cb_outbreak
+
+    # set conditionsOfAccess and isAccessibleForFree
+    schema_json["conditionsOfAccess"] = "Closed"
+    schema_json["isAccessibleForFree"] = True
     return schema_json
 
 

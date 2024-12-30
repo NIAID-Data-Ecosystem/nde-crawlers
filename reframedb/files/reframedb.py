@@ -161,6 +161,10 @@ def parse():
             if bibliography := metadata.get("bibliography"):
                 output["pmids"] = str(bibliography).split(".")[0]
 
+            # set conditionsOfAccess and isAccessibleForFree
+            output["conditionsOfAccess"] = "Restricted"
+            output["isAccessibleForFree"] = True
+
             yield output
 
     logger.info("Finished Parsing. Total Records: %s", count)

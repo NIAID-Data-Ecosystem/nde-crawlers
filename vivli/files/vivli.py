@@ -240,6 +240,10 @@ def parse():
             if date_modified := request.get("updatedDate"):
                 output["dateModified"] = datetime.datetime.fromisoformat(date_modified.split(".")[0]).date().isoformat()
 
+            # set conditionsOfAccess and isAccessibleForFree
+            output["conditionsOfAccess"] = "Restricted"
+            output["isAccessibleForFree"] = True
+
             yield output
 
         if count == total:

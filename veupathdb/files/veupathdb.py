@@ -114,6 +114,10 @@ def record_generator():
         if gene_refs:
             _record_dict['variableMeasured'] = {"name": gene_refs[0]}
 
+        # set conditionsOfAccess and isAccessibleForFree
+        _record_dict["conditionsOfAccess"] = "Closed"
+        _record_dict["isAccessibleForFree"] = True
+
         # remove
         _record_dict.pop("recordClassName")
         _record_dict.pop("tableErrors")
