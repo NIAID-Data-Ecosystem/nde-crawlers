@@ -67,11 +67,16 @@ jobs:
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
 
-      - name: Upload CSV to NCBI LinkOut FTP (placeholder)
+      - name: Upload CSV to NCBI LinkOut FTP
         if: steps.compare.outputs.is_new_build == 'true'
         run: |
-          # curl -T ncbi_linkout.csv -u $FTP_USER:$FTP_PASSWORD ftp://ftp.ncbi.nlm.nih.gov/path/
           echo "Uploading CSV to FTP..."
+          curl -T ncbi_linkout.csv \
+               -u $FTP_USER:$FTP_PASSWORD \
+               ftp://ftp-private.ncbi.nlm.nih.gov/holdings/
+        env:
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
 
       - name: Update last_build_date
         if: steps.compare.outputs.is_new_build == 'true'
