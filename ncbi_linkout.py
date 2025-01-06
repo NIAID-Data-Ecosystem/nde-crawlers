@@ -1,13 +1,12 @@
 import csv
-import requests
 import os
+
+import requests
 from pymongo import MongoClient
-from datetime import datetime
 
 # Configuration
 MONGO_URI = os.environ.get("MONGO_URI")
 DATABASE_NAME = "nde_hub"
-OUTPUT_CSV = "ncbi_linkout.csv"
 
 PROVIDER_ID = "4060"
 DB_NAME = "PubMed"
@@ -28,6 +27,9 @@ def get_pmid_documents(collection, size):
             "$elemMatch": {
                 "pmid": {"$exists": True, "$ne": None}
             }
+        },
+        "includedInDataCatalog.name": {
+            "$ne": "Omics Discovery Index (OmicsDI)"
         }
     }).limit(size)
 
@@ -35,6 +37,8 @@ def get_pmid_documents(collection, size):
 def main():
     metadata = get_latest_metadata()
     build_date = metadata.get("build_date")
+    build_date_str = build_date.split("T")[0].replace("-", "")  # "20241224"
+    OUTPUT_CSV = f"ncbi_linkout_{build_date_str}.csv"
     build_version = metadata.get("build_version")
 
     # Check last build date if needed
