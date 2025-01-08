@@ -166,6 +166,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "text"},
                     "description": {"type": "text"},
+                    "displayName": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }

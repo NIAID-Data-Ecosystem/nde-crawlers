@@ -22,6 +22,7 @@ def process_affiliations(author):
     elif isinstance(affiliations, str):
         author["affiliation"] = {"name": affiliations}
 
+
 def process_authors(authors):
     if isinstance(authors, list):
         for author in authors:
@@ -29,6 +30,7 @@ def process_authors(authors):
     else:
         process_affiliations(authors)
     return authors
+
 
 def query_bioportal(iri):
     """
@@ -40,17 +42,15 @@ def query_bioportal(iri):
     :return: A list of child concepts.
     """
 
-
     base_url = "https://data.bioontology.org"
-    headers = {
-        "Authorization": f"apikey token={API_KEY}"
-    }
-
+    headers = {"Authorization": f"apikey token={API_KEY}"}
 
     response = requests.get(f"{base_url}/search?q={iri}&require_exact_match=true", headers=headers)
 
     if response.status_code != 200:
-        logger.error(f"Error fetching page: {base_url}/search?q={iri}&require_exact_match=true HTTP: {response.status_code}")
+        logger.error(
+            f"Error fetching page: {base_url}/search?q={iri}&require_exact_match=true HTTP: {response.status_code}"
+        )
 
     data = response.json()
 
@@ -59,17 +59,16 @@ def query_bioportal(iri):
         logger.info("Could not find alternateNames in bioportal for: %s", iri)
         return iri, False
 
-
     lookup = {
-            "name": data["collection"][0]["prefLabel"],
-            "url": iri,
-            "curatedBy": {
-                "name": "Data Discovery Engine",
-                "url": "https://discovery.biothings.io/",
-                "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
-            },
-            "isCurated": True,
-        }
+        "name": data["collection"][0]["prefLabel"],
+        "url": iri,
+        "curatedBy": {
+            "name": "Data Discovery Engine",
+            "url": "https://discovery.biothings.io/",
+            "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
+        },
+        "isCurated": True,
+    }
 
     lookup["alternateName"] = data["collection"][0]["synonym"]
 
@@ -184,7 +183,7 @@ def parse():
                     "@type": "DataCatalog",
                     "name": "Data Discovery Engine",
                     "url": "https://discovery.biothings.io/",
-                    "versionDate": datetime.date.today().isoformat()
+                    "versionDate": datetime.date.today().isoformat(),
                 }
             ]
 
@@ -196,14 +195,14 @@ def parse():
                         "@type": "DataCatalog",
                         "name": "Data Discovery Engine",
                         "url": "https://discovery.biothings.io/",
-                        "versionDate": datetime.date.today().isoformat()
+                        "versionDate": datetime.date.today().isoformat(),
                     },
                     {
                         "@type": "DataCatalog",
                         "name": "NIAID Data Ecosystem",
                         "url": "https://data.niaid.nih.gov",
-                        "versionDate": datetime.date.today().isoformat()
-                    }
+                        "versionDate": datetime.date.today().isoformat(),
+                    },
                 ]
 
             # add creid to included in sourceOrganization
@@ -213,9 +212,9 @@ def parse():
                         "@type": "ResearchProject",
                         "name": "NIAID CREID Network",
                         "description": "The Centers for Research in Emerging Infectious Diseases (CREID) Network is a coordinated group of emerging infectious disease research centers situated in regions around the globe where emerging and re-emerging infectious disease outbreaks are likely to occur.",
-                        "alternateName": ["CREID","Centers for Research in Emerging Infectious Disease"],
+                        "alternateName": ["CREID", "Centers for Research in Emerging Infectious Disease"],
                         "url": "https://creid-network.org/",
-                        "parentOrganization": "NIAID"
+                        "parentOrganization": "NIAID",
                     }
                 ]
 
@@ -234,7 +233,7 @@ def parse():
                         "description": "The NIAID/Division of Microbiology and Infectious Diseases (DMID) Systems Biology Consortium for Infectious Diseases is a group of interdisciplinary scientists that bridge disparate scientific disciplines including microbiology, immunology, infectious diseases, microbiome, mathematics, physics, bioinformatics, computational biology, machine learning, statistical methods, and mathematical modeling.",
                         "alternateName": ["NIAID Systems Biology Consortium for Infectious Diseases", "NIAID SysBio"],
                         "url": "https://www.niaid.nih.gov/research/systems-biology-consortium",
-                        "parentOrganization": "NIAID"
+                        "parentOrganization": "NIAID",
                     }
                 ]
 
@@ -267,6 +266,11 @@ def parse():
                 else:
                     hit["distribution"] = {k: v for k, v in distribution.items() if v is not None}
 
+            # add displayName to about
+            if about := hit.get("about", None):
+                if (name := about.get("name", None)) and about.get("name", None).casefold != "biosample":
+                    hit["displayName"] = re.sub(r"(?<!^)(?=[A-Z])", " ", name)
+
             # rename our id value and creator to author
             # if authors := hit.pop("creator", None):
             #     aff_list = []
@@ -294,7 +298,6 @@ def parse():
             #         if affiliation := authors.get("affiliation") and isinstance(authors.get("affiliation"), str):
             #             authors["affiliation"] = {"name": affiliation}
             #     hit["author"] = authors
-
 
             if authors := hit.pop("creator", None):
                 hit["author"] = process_authors(authors)
