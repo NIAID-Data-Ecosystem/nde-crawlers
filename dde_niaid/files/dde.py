@@ -268,8 +268,12 @@ def parse():
 
             # add displayName to about
             if about := hit.get("about", None):
-                if (name := about.get("name", None)) and about.get("name", None).casefold != "biosample":
-                    hit["displayName"] = re.sub(r"(?<!^)(?=[A-Z])", " ", name)
+                if not isinstance(about, list):
+                    about = [about]
+
+                for a in about:
+                    if (name := a.get("name", None)) and a.get("name", None).casefold != "biosample":
+                        a["displayName"] = re.sub(r"(?<!^)(?=[A-Z])", " ", name)
 
             # rename our id value and creator to author
             # if authors := hit.pop("creator", None):
