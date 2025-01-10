@@ -94,6 +94,8 @@ def parse_study_info(study_info):
             elif len(obj["storedArray"]) > 0:
                 for name in obj["storedArray"]:
                     author_list.append({"name": name})
+    if author_list:
+        study_dict["author"] = author_list
 
     for obj in study_info["studyInfo"]["details"]:
         if obj["propertyName"] == "Keywords":
