@@ -46,5 +46,5 @@ class Biostudies_Dumper(dumper.BaseDumper):
         with open(localfile, "w") as f:
             for hit in data.get("hits"):
                 accession = hit.get("accession")
-                if accession and accession.casefold().startswith("s-epmc"):
+                if accession and not accession.casefold().startswith("s-epmc"):
                     f.write(accession + "\n")
