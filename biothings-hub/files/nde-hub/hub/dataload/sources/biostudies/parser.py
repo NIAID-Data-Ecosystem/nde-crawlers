@@ -70,6 +70,7 @@ def parse_file(doc, accno):
                 "url": "https://www.ebi.ac.uk/biostudies/",
                 "versionDate": datetime.date.today().isoformat(),
             },
+            "@type": "Dataset",
         }
 
         pattern = re.compile(r"annotations \d+")
