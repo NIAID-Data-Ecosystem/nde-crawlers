@@ -78,10 +78,14 @@ def extract(doc_list):
                 try:
                     response_text = get_cached_description(doc["_id"].lower(), entity_type, c)
                     if response_text is None:
-                        logger.info("response_text is None")
-                        continue
+                        # No row in the DB
+                        logger.info(f"No cached entry for {doc['_id']}. Pinging API...")
                         response_text = query_extract_api(doc["description"], entity_type)
                         cache_description(doc["_id"].lower(), response_text, entity_type, c)
+                    elif response_text == "":
+                        # There is a row, but it's empty
+                        logger.info(f"Cached entry for {doc['_id']} is empty. Skipping...")
+                        continue
                     extracted_entities = parse_tsv(doc["_id"].lower(), response_text)
                     if extracted_entities:
                         logger.info(f"Found {len(extracted_entities)} entities of type {entity_type}")
@@ -128,7 +132,7 @@ def cache_description(ndeid, text_response, entity_type, cursor):
     logger.info(f"Caching description for {ndeid}...")
     table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
     if table:
-        cursor.execute(f"CREATE TABLE IF NOT EXISTS {table} (ndeid text PRIMARY KEY, text_response text)")
+        cursor.execute(f"CREATE TABLE IF NOT EXISTS {table} (ndeid TEXT PRIMARY KEY, text_response TEXT)")
         cursor.execute(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)", (ndeid, text_response))
 
 
