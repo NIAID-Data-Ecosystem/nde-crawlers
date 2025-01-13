@@ -5,7 +5,8 @@ import requests
 from pymongo import MongoClient
 
 # Configuration
-MONGO_URI = os.environ.get("MONGO_URI")
+# MONGO_URI = os.environ.get("MONGO_URI")
+MONGO_URI = "mongodb://su11:27017"
 DATABASE_NAME = "nde_hub"
 
 PROVIDER_ID = "4060"
@@ -21,7 +22,7 @@ def get_latest_metadata():
     r.raise_for_status()
     return r.json()
 
-def get_pmid_documents(collection, size):
+def get_pmid_documents(collection):
     return collection.find({
         "citation": {
             "$elemMatch": {
@@ -31,7 +32,7 @@ def get_pmid_documents(collection, size):
         "includedInDataCatalog.name": {
             "$ne": "Omics Discovery Index (OmicsDI)"
         }
-    }).limit(size)
+    })
 
 
 def main():
@@ -69,12 +70,11 @@ def main():
         return
 
     # Generate the CSV
-    size = 50
     with open(OUTPUT_CSV, "w", newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["PrId", "DB", "UID", "URL", "IconUrl", "UrlName", "SubjectType", "Attribute"])
 
-        for doc in get_pmid_documents(db[target_collection], size):
+        for doc in get_pmid_documents(db[target_collection]):
             citations = doc.get("citation", [])
             dataset_id = str(doc.get("_id", ""))
             for c in citations:
