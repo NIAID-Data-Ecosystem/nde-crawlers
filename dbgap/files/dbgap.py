@@ -76,6 +76,7 @@ def parse():
             assert data.get("@accession"), "Accession number is missing cannot format _id"
             if accession := data.get("@accession"):
                 output["identifier"] = accession
+                output["url"] = f"https://www.ncbi.nlm.nih.gov/projects/gap/cgi-bin/study.cgi?study_id={accession}"
                 output["_id"] = accession.split(".")[0]
 
             if identifier := data.get("@parentstudy"):
