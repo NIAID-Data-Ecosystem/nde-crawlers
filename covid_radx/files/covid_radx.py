@@ -148,9 +148,9 @@ def parse(hit):
         output["mainEntityOfPage"] = main_entity_of_page.strip("{}")
 
     temporal_coverage = {"@type": "temporalInterval", "temportalType": "study date"}
-    if start_date := hit.get("start_date"):
+    if start_date := hit.get("studystartdate"):
         temporal_coverage["startDate"] = dateutil.parser.parse(start_date).date().isoformat()
-    if end_date := hit.get("end_date"):
+    if end_date := hit.get("studyenddate"):
         temporal_coverage["endDate"] = dateutil.parser.parse(end_date).date().isoformat()
 
     if temporal_coverage.get("startDate") or temporal_coverage.get("endDate"):
@@ -185,7 +185,7 @@ def make_requests():
     page = 1
     size = 200
     request = requests.get(
-        "https://radxdatahub.nih.gov/_next/data/uW-uGmvi-5h0gTOZUbnW9/studyExplorer.json?sort=desc&prop=relevance&page=1&size=200"
+        "https://radxdatahub.nih.gov/_next/data/EkA0KoJnF7yU5HKsvyXLT/studyExplorer.json?sort=desc&prop=relevance&page=1&size=200"
     )
     request = request.json()
     total_hits = request["pageProps"]["searchResults"]["hits"]["total"]["value"]
@@ -193,7 +193,7 @@ def make_requests():
     while (page - 1) * size < total_hits:
         logging.info(f"Processing page {page} of {total_hits // size + 1}")
         request = requests.get(
-            f"https://radxdatahub.nih.gov/_next/data/uW-uGmvi-5h0gTOZUbnW9/studyExplorer.json?sort=desc&prop=relevance&page={page}&size={size}"
+            f"https://radxdatahub.nih.gov/_next/data/EkA0KoJnF7yU5HKsvyXLT/studyExplorer.json?sort=desc&prop=relevance&page={page}&size={size}"
         )
         page += 1
         request = request.json()
