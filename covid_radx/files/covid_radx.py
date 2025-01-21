@@ -183,7 +183,7 @@ def parse(hit):
 
 def make_requests():
     page = 1
-    size = 200
+    size = 50
     request = requests.get(
         "https://radxdatahub.nih.gov/_next/data/EkA0KoJnF7yU5HKsvyXLT/studyExplorer.json?sort=desc&prop=relevance&page=1&size=50"
     )
