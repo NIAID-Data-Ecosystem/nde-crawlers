@@ -287,6 +287,18 @@ def process_networks(networks):
         if measurement_technique_list:
             output["measurementTechnique"] = measurement_technique_list
 
+        # Default topicCategory to "Molecular interactions, pathways and networks"
+        # https://github.com/NIAID-Data-Ecosystem/nde-crawlers/issues/152#issuecomment-2597016173
+        output["topicCategory"] = [
+            {
+                "url": "http://edamontology.org/topic_0602",
+                "identifier": "topic_0602",
+                "name": "Molecular interactions, pathways and networks",
+                "inDefinedTermSet": "EDAM",
+            }
+        ]
+
+
         yield output
 
 
