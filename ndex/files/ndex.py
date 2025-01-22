@@ -48,6 +48,11 @@ test_networks = [
 ]
 
 
+def strip_html_tags(text: str) -> str:
+    """Return text with any HTML tags removed."""
+    return re.sub(r"<[^>]*>", "", text)
+
+
 def process_networks(networks):
     for network in networks.get("networks", []):
         properties_dict = {}
@@ -127,11 +132,21 @@ def process_networks(networks):
             output["author"] = author
 
         health_condition_list = []
+
         if disease := get_value("disease"):
-            health_condition_list.append({"name": disease})
+            disease_text = strip_html_tags(disease)
+
+            for item in disease_text.split(","):
+                cleaned_name = item.strip()
+                if cleaned_name:
+                    health_condition_list.append({"name": cleaned_name})
+
         if properties_disease := get_value("diseases_id"):
-            for disease in properties_disease:
-                health_condition_list.append({"name": disease})
+            for disease_item in properties_disease:
+                cleaned_name = strip_html_tags(disease_item).strip()
+                if cleaned_name:
+                    health_condition_list.append({"name": cleaned_name})
+
         if health_condition_list:
             output["healthCondition"] = health_condition_list
 
@@ -297,7 +312,6 @@ def process_networks(networks):
                 "inDefinedTermSet": "EDAM",
             }
         ]
-
 
         yield output
 
