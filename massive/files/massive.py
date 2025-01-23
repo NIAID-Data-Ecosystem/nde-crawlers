@@ -91,7 +91,7 @@ def parse_dataset(json_data):
     for item in json_data.get("row_data", []):
         if identifier := item.get("dataset"):
             output["identifier"] = identifier
-            output["_id"] = "massive_" + identifier.lower()
+            output["_id"] = identifier.lower()
 
         if task := item.get("task"):
             output["url"] = "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?task=" + task
