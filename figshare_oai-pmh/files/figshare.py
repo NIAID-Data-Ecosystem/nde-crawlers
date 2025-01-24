@@ -161,7 +161,9 @@ class Figshare(NDEDatabase):
             if language := metadata.get("language"):
                 output["language"] = language[0]
             if relation := metadata.get("relation"):
-                output["url"] = relation[0]
+                url = relation[0]
+                output["url"] = url
+                output["includedInDataCatalog"]["dataset"] = url
                 output["_id"] = "Figshare_" + relation[0].split("/")[-1]
                 output["identifier"] = relation[0].split("/")[-1]
             if license := metadata.get("license"):

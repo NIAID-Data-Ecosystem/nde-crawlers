@@ -75,7 +75,9 @@ class LINCS:
                 "@type": "Dataset",
                 "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
             }
-            document["url"] = f'https://lincsportal.ccs.miami.edu/datasets/view/{document["datasetid"]}'
+            url = f'https://lincsportal.ccs.miami.edu/datasets/view/{document["datasetid"]}'
+            document["url"] = url
+            document["includedInDataCatalog"]["dataset"] = url
 
             if "assayoverview" in document:
                 document["description"] = document.pop("assayoverview")
@@ -191,9 +193,9 @@ class LINCS:
             if "protocol" in document:
                 isBasedOn_list.append({"url": document.pop("protocol"), "name": f"{assayname[0]} protocol"})
             if len(isBasedOn_list) > 0:
-                document[
-                    "isBasedOn"
-                ] = isBasedOn_list  # [{"name": document.pop("tool"), "url": document.pop("toollink")}]
+                document["isBasedOn"] = (
+                    isBasedOn_list  # [{"name": document.pop("tool"), "url": document.pop("toollink")}]
+                )
             elif "tool" in document:
                 document.pop("tool")
             elif "toollink" in document:

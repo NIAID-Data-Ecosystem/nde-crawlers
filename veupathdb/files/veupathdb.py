@@ -26,6 +26,7 @@ def record_generator():
                     "name": "VEuPathDB",
                     "url": "https://veupathdb.org/veupathdb/app",
                     "versionDate": datetime.date.today().isoformat(),
+                    "dataset": "https://veupathdb.org/veupathdb/app/record/dataset/" + _record_dict["id"][0]["value"],
                 },
                 "url": "https://veupathdb.org/veupathdb/app/record/dataset/" + _record_dict["id"][0]["value"],
             }
@@ -112,7 +113,7 @@ def record_generator():
         # gene_counts = [hit["gene_count"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         gene_refs = [hit["gene_type"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         if gene_refs:
-            _record_dict['variableMeasured'] = {"name": gene_refs[0]}
+            _record_dict["variableMeasured"] = {"name": gene_refs[0]}
 
         # set conditionsOfAccess and isAccessibleForFree
         _record_dict["conditionsOfAccess"] = "Closed"

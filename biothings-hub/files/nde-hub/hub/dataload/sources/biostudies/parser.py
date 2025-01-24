@@ -85,6 +85,7 @@ def parse_file(doc, accno):
 
                 if key == "attachto":
                     output["url"] = f"https://www.ebi.ac.uk/{value}/studies/{accno}"
+                    output["includedInDataCatalog"]["dataset"] = output["url"]
                 elif key == "releasedate":
                     output["datePublished"] = dateutil.parser.parse(value, ignoretz=True).date().isoformat()
                 elif key == "doi":

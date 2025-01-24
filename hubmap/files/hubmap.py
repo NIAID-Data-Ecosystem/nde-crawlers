@@ -145,7 +145,9 @@ def parse():
             output["doi"] = doi_url.removeprefix("https://doi.org/")
 
         if uuid := metadata.get("uuid"):
-            output["url"] = f"https://portal.hubmapconsortium.org/browse/dataset/{uuid}"
+            url = f"https://portal.hubmapconsortium.org/browse/dataset/{uuid}"
+            output["url"] = url
+            output["includedInDataCatalog"]["dataset"] = url
             output["_id"] = "HUBMAP_" + uuid
 
         if files := metadata.get("files"):

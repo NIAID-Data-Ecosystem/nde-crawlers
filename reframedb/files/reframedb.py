@@ -121,6 +121,7 @@ def parse():
                 output["identifier"] = assay_id
                 output["_id"] = "ReframeDB_" + id
                 output["url"] = "https://reframedb.org/assays/" + id
+                output["includedInDataCatalog"]["dataset"] = "https://reframedb.org/assays/" + id
             if assay_title := metadata.get("assay_title"):
                 output["name"] = assay_title
             if title_short := metadata.get("title_short"):
@@ -155,7 +156,7 @@ def parse():
                 output["healthCondition"] = {"name": indication}
             if assay_type := metadata.get("assay_type"):
                 normalized_assay_type = assay_type.replace(";", ",")
-                split_names = [name_part.replace('.', '').strip() for name_part in normalized_assay_type.split(",")]
+                split_names = [name_part.replace(".", "").strip() for name_part in normalized_assay_type.split(",")]
                 measurement_techniques = [{"name": name} for name in split_names if name]
                 output["measurementTechnique"] = measurement_techniques
             if bibliography := metadata.get("bibliography"):

@@ -55,6 +55,7 @@ class FlowRepositoryItemProcessorPipeline:
                 "name": "Flow Repository",
                 "url": "http://flowrepository.org/",
                 "versionDate": datetime.date.today().isoformat(),
+                "dataset": url,
             },
         }
         """ These are the keys:

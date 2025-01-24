@@ -96,6 +96,7 @@ def map_schema_json(schema_json):
         if schema_json.get("includedInDataCatalog"):
             schema_json["includedInDataCatalog"]["versionDate"] = date
             schema_json["includedInDataCatalog"]["name"] = "ImmPort"
+            schema_json["includedInDataCatalog"]["dataCatalog"] = schema_json["url"]
         if "date" not in schema_json:
             schema_json["date"] = date
 

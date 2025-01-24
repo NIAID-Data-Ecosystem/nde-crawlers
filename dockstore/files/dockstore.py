@@ -108,7 +108,9 @@ def parse():
 
         if url := metadata.get("id"):
             if url.startswith("#workflow/"):
-                output["url"] = "https://dockstore.org/workflows/" + url[10:]
+                url = "https://dockstore.org/workflows/" + url[10:]
+                output["url"] = url
+                output["includedInDataCatalog"]["dataset"] = url
                 for key in topic_dict:
                     if url[10:] in topic_dict[key]:
                         output["topicCategory"] = {

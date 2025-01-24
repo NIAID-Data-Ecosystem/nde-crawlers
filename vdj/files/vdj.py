@@ -82,6 +82,7 @@ def parse():
                 "name": "VDJServer",
                 "url": "https://vdj-staging.tacc.utexas.edu/community/",
                 "versionDate": datetime.date.today().isoformat(),
+                "dataset": "https://vdj-staging.tacc.utexas.edu/community/",
             },
             "@type": "Dataset",
             "url": "https://vdj-staging.tacc.utexas.edu/community/",

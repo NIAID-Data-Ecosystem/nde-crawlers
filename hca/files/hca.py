@@ -80,7 +80,9 @@ def parse():
             "@type": "Dataset",
         }
         if entry_id := metadata.get("entryId"):
-            output["url"] = f"https://data.humancellatlas.org/explore/projects/{entry_id}"
+            url = f"https://data.humancellatlas.org/explore/projects/{entry_id}"
+            output["url"] = url
+            output["includedInDataCatalog"]["dataset"] = url
             output["_id"] = f"HCA_{entry_id}"
         else:
             logger.error("No entryId found for project. Skipping...")

@@ -80,7 +80,7 @@ class Zenodo(OAIDatabase):
         if version_id:
             version_id = list(set(version_id))
             if len(version_id) > 1:
-                version_id = [min(version_id, key=lambda doi: int(doi.split('.')[-1]))]
+                version_id = [min(version_id, key=lambda doi: int(doi.split(".")[-1]))]
 
             # sanity check
             assert len(version_id) <= 1, "There is more than one version per recordID: %s. Versions: %s" % (
@@ -290,6 +290,7 @@ class Zenodo(OAIDatabase):
                     "name": "Zenodo",
                     "url": "https://zenodo.org/",
                     "versionDate": datetime.date.today().isoformat(),
+                    "dataset": url,
                 },
                 "_id": "ZENODO_" + identifier,
                 "name": data["metadata"].get("title")[0],
@@ -311,12 +312,13 @@ class Zenodo(OAIDatabase):
                 except (dateutil.parser._parser.ParserError, ValueError):
                     try:
                         logger.info("Could not parse date: %s" % date_published[0])
-                        output["datePublished"] = dateutil.parser.parse(date_published[0].split("/")[0].replace(" ", "").replace("_", "-"), ignoretz=True).isoformat()
+                        output["datePublished"] = dateutil.parser.parse(
+                            date_published[0].split("/")[0].replace(" ", "").replace("_", "-"), ignoretz=True
+                        ).isoformat()
                     except Exception:
                         # TODO REMOVE THIS LINE VERY SPECIFIC EXCEPTION WHERE USER PUT WRONG DATE
                         if date_published[0] == "2024006-24":
                             output["datePublished"] = dateutil.parser.parse("2024-06-24", ignoretz=True).isoformat()
-
 
             if language := data["metadata"].get("language"):
                 output["inLanguage"] = {"name": language[0]}
