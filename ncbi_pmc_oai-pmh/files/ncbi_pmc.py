@@ -216,6 +216,9 @@ class NCBI_PMC(NDEDatabase):
                     if identifier.startswith("PMC"):
                         output["identifier"] = identifier
                         output["url"] = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{identifier}"
+                        output["includedInDataCatalog"][
+                            "dataset"
+                        ] = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{identifier}"
                         output["_id"] = "NCBI_PMC_" + identifier
                     elif identifier.startswith("10."):
                         citation_dict["doi"] = identifier

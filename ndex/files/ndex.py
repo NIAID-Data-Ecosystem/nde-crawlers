@@ -85,6 +85,7 @@ def process_networks(networks):
                 continue
             output["identifier"] = external_id
             output["url"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
+            output["includedInDataCatalog"]["dataset"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
             output["_id"] = f"ndex_{external_id}"
         else:
             logger.warning("Network missing externalId")

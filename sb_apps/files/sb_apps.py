@@ -71,7 +71,10 @@ def parse():
         identifier = data.get("sbg:id")
         output = {
             "_id": "SB_Public_Apps_" + identifier.split("/")[2],
-            "includedInDataCatalog": {"name": "PublicApps@SevenBridges"},
+            "includedInDataCatalog": {
+                "name": "PublicApps@SevenBridges",
+                "dataset": "https://cavatica.sbgenomics.com/public/apps/" + identifier,
+            },
             "@type": "ComputationalTool",
             "url": "https://cavatica.sbgenomics.com/public/apps/" + identifier,
         }

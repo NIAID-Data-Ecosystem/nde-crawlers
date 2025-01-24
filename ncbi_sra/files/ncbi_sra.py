@@ -185,6 +185,7 @@ class NCBI_SRA(NDEDatabase):
             if accession := ftp_info.get("ftp_acc"):
                 output["_id"] = "NCBI_SRA_" + accession
                 output["url"] = "https://www.ncbi.nlm.nih.gov/sra/" + accession
+                output["includedInDataCatalog"]["dataset"] = output["url"]
             if updated := ftp_info.get("ftp_updated"):
                 output["dateModified"] = datetime.datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ").strftime("%Y-%m-%d")
             if published := ftp_info.get("ftp_published"):

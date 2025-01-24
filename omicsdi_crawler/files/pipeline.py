@@ -31,6 +31,7 @@ class OmicsdiItemProcessorPipeline:
                 "name": "Omics Discovery Index (OmicsDI)",
                 "url": "https://www.omicsdi.org/",
                 "versionDate": datetime.date.today().isoformat(),
+                "dataset": url,
             },
         }
 
