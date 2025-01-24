@@ -36,10 +36,10 @@ def record_generator():
     data_urls = [hit["loc"] for hit in dict_data["urlset"]["url"]]
     logger.info("%s datasets found" % len(data_urls))
     cond_acc_dict = {
-        "public": "open",
-        "protected": "restricted",
-        "controlled": "restricted",
-        "prerelease": "restricted",
+        "public": "Open",
+        "protected": "Restricted",
+        "controlled": "Restricted",
+        "prerelease": "Restricted",
     }
 
     for url in data_urls:

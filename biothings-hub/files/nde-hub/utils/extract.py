@@ -1,4 +1,3 @@
-import datetime
 import json
 import os
 import re
@@ -554,6 +553,59 @@ def cache_species_in_db(species_details):
     # conn.close()
 
 
+ontology_priority = {"MONDO": 0, "HPO": 1, "DOID": 2, "NCIT": 3}
+
+
+def deduplicate_diseases(doc_list):
+    """
+    Final pass to unify duplicate diseases. If multiple diseases share
+    the same identifier (preferred) or the same lowercased name, only keep one.
+
+    Priority rules:
+      1. If one has fromPMID=True, keep that one.
+      2. Otherwise compare ontology priorities (inDefinedTermSet).
+      3. If still tied, keep the first one encountered.
+    """
+    logger.info("Deduplicating diseases...")
+    for doc in doc_list:
+        if "healthCondition" not in doc:
+            continue
+
+        unique_map = {}
+
+        for disease in doc["healthCondition"]:
+            key = disease.get("identifier") or disease["name"].lower()
+
+            if key not in unique_map:
+                unique_map[key] = disease
+            else:
+                existing = unique_map[key]
+
+                existing_pmid = existing.get("fromPMID") == True
+                new_pmid = disease.get("fromPMID") == True
+
+                if existing_pmid and not new_pmid:
+                    continue
+                elif new_pmid and not existing_pmid:
+                    unique_map[key] = disease
+                else:
+                    existing_ont = existing.get("inDefinedTermSet")
+                    new_ont = disease.get("inDefinedTermSet")
+
+                    existing_priority = ontology_priority.get(existing_ont, 999)
+                    new_priority = ontology_priority.get(new_ont, 999)
+
+                    if new_priority < existing_priority:
+                        unique_map[key] = disease
+                    else:
+                        continue
+
+        # Rebuild healthCondition from unique_map values
+        doc["healthCondition"] = list(unique_map.values())
+
+    return doc_list
+
+
 def process_diseases(doc_list):
     logger.info("Processing diseases...")
     disease_names = set()  # Using a set to avoid duplicates
@@ -656,5 +708,6 @@ def process_descriptions(data):
     updated_docs = extract(doc_list)
     updated_docs = process_species(updated_docs)
     updated_docs = process_diseases(updated_docs)
+    updated_docs = deduplicate_diseases(updated_docs)
     for doc in updated_docs:
         yield doc

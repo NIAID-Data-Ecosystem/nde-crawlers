@@ -148,7 +148,10 @@ def get_disease_details(identifier, original_name):
         logger.info(f"Skipping {original_name}, already in database")
         lookup_result["fromPMID"] = True
         lookup_result["isCurated"] = False
-        lookup_result.pop("curatedBy")
+        if "curatedBy" in lookup_result:
+            lookup_result.pop("curatedBy")
+        else:
+            logger.info(f"originalName not found in {lookup_result}")
         if "originalName" in lookup_result:
             lookup_result.pop("originalName")
         else:
