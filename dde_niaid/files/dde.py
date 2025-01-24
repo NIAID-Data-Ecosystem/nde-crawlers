@@ -86,11 +86,15 @@ def query_ols(iri):
     pattern = re.compile("^https?://")
 
     if pattern.match(iri):
-        params = {
-            # isnt the best way but good enough to get first instance of http while ignoring https:
-            # https://stackoverflow.com/questions/9760588/how-do-you-extract-a-url-from-a-string-using-python
-            "iri": re.search(r"(?P<url>http?://[^\s]+)", iri).group("url")
-        }
+        iri_http = re.search(r"(?P<url>http?://[^\s]+)", iri)
+        if iri_http:
+            params = {
+                # isnt the best way but good enough to get first instance of http while ignoring https:
+                # https://stackoverflow.com/questions/9760588/how-do-you-extract-a-url-from-a-string-using-python
+                "iri": iri_http.group("url")
+            }
+        else:
+            return iri, False
 
         request = requests.get(url, params).json()
         # no documentation on how many requests can be made
