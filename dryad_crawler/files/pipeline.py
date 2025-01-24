@@ -38,16 +38,18 @@ class DryadItemProcessorPipeline:
         last_part = item["@id"].split("/")[-1]
         if "dryad." in last_part:
             last_part = last_part.replace("dryad.", "")
+        url = item.pop("url")
         output = {
             "@context": item.pop("@context"),
             "@type": item.pop("@type"),
-            "url": item.pop("url"),
+            "url": url,
             "_id": "DRYAD_" + last_part.replace(".", "_"),
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "Dryad Digital Repository",
                 "url": "https://datadryad.org",
                 "versionDate": datetime.date.today().isoformat(),
+                "dataset": url,
             },
         }
 

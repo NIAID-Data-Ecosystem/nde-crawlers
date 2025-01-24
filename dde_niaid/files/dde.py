@@ -308,7 +308,9 @@ def parse():
 
             # Adjust URL based on type
             if hit["@type"] == "Dataset":
-                hit["url"] = "https://discovery.biothings.io/dataset/" + hit["_id"]
+                url = "https://discovery.biothings.io/dataset/" + hit["_id"]
+                hit["url"] = url
+                hit["includedInDataCatalog"][0]["dataset"] = url
 
             hit["_id"] = "dde_" + hit["_id"].lower()
 

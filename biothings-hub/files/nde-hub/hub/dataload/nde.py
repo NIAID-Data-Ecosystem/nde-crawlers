@@ -532,6 +532,7 @@ class NDESourceUploader(BaseSourceUploader):
             "includedInDataCatalog": {
                 "properties": {
                     "@type": {"type": "text"},
+                    "dataset": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                     "versionDate": {"type": "date"},
