@@ -177,7 +177,6 @@ def parse():
                     nde_type = "ComputationalTool"
 
                 hit["@type"] = nde_type
-
             included_in_data_catalog = [
                 {
                     "@type": "DataCatalog",
@@ -188,6 +187,7 @@ def parse():
             ]
 
             # add sourceOrganization (as determined by the DDE portal to which the record was submitted) - this can be determined based on the @context
+            resource_catalog_url = "https://discovery.biothings.io/" + hit["_id"].lower()
             if hit.get("@context") and "nde" in hit.get("@context"):
                 source_organization = None
                 included_in_data_catalog = [
@@ -196,12 +196,14 @@ def parse():
                         "name": "Data Discovery Engine",
                         "url": "https://discovery.biothings.io/",
                         "versionDate": datetime.date.today().isoformat(),
+                        "dataset": resource_catalog_url,
                     },
                     {
                         "@type": "DataCatalog",
                         "name": "NIAID Data Ecosystem",
                         "url": "https://data.niaid.nih.gov",
                         "versionDate": datetime.date.today().isoformat(),
+                        "dataset": resource_catalog_url,
                     },
                 ]
 
@@ -310,8 +312,8 @@ def parse():
             if hit["@type"] == "Dataset":
                 url = "https://discovery.biothings.io/dataset/" + hit["_id"]
                 hit["url"] = url
-                hit["includedInDataCatalog"][0]["dataset"] = url
-
+                if len(hit["includedInDataCatalog"]) == 1:
+                    hit["includedInDataCatalog"][0]["dataset"] = url
             hit["_id"] = "dde_" + hit["_id"].lower()
 
             # adjust date values
