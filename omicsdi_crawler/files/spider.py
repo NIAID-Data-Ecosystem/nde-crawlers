@@ -20,7 +20,7 @@ class OmicsdiSpider(SitemapSpider):
     # expect a very slow start
     sitemap_urls = ["https://www.omicsdi.org/sitemap.xml"]
     sitemap_rules = [
-        ("/dataset/", "extract_from_jsonld", lambda url: None if "/dataset/biostudies-literature" in url else url)
+        ("/dataset/", "extract_from_jsonld", lambda url: url if "/dataset/biostudies-literature" not in url else False)
     ]
 
     def extract_from_jsonld(self, response, **kwargs):
