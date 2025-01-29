@@ -30,11 +30,23 @@ class Biostudies_Dumper(dumper.BaseDumper):
 
     def create_todump_list(self, force=False, **kwargs):
         self.set_release()  # so we can generate new_data_folder
-        hits = requests.get("https://www.ebi.ac.uk/biostudies/api/v1/search").json()["totalHits"]
+        # Initial request to get the facets
+        request = requests.get("https://www.ebi.ac.uk/biostudies/api/v1/public/facets/facet.collection/").json()
+
+        # Extract facets, excluding "europepmc"
+        facets = [child.get("value") for child in request.get("children") if child.get("value") != "europepmc"]
+        # Base URL
+        base_url = "https://www.ebi.ac.uk/biostudies/api/v1/search?"
+        # Construct the URL with all facets combined
+        facet_string = "&".join([f"facet.collection={facet}" for facet in facets])
+        url = f"{base_url}{facet_string}"
+        # Make the request
+        hits = requests.get(url).json().get("totalHits")
+        # Calculate the number of pages
         pages = (hits // 100) + 1 if hits % 100 != 0 else hits // 100
         # form urls to dump TODO change to pages + 1 after testing
         for page in range(1, pages + 1):
-            remoteurl = f"https://www.ebi.ac.uk/biostudies/api/v1/search?pageSize=100&page={page}"
+            remoteurl = f"{url}&pageSize=100&page={page}"
             new_localfile = os.path.join(self.new_data_folder, f"biostudies_{page}.txt")
             self.to_dump.append({"remote": remoteurl, "local": new_localfile})
 
@@ -46,5 +58,5 @@ class Biostudies_Dumper(dumper.BaseDumper):
         with open(localfile, "w") as f:
             for hit in data.get("hits"):
                 accession = hit.get("accession")
-                if accession and not accession.casefold().startswith("s-epmc"):
+                if accession:
                     f.write(accession + "\n")
