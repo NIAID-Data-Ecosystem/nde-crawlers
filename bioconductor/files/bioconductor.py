@@ -80,7 +80,9 @@ def parse():
         if identifier := metadata.get("Package"):
             output["_id"] = "Bioconductor_" + identifier
             output["identifier"] = identifier
-            output["url"] = "https://bioconductor.org/packages/release/bioc/html/" + identifier + ".html"
+            url = "https://bioconductor.org/packages/release/bioc/html/" + identifier + ".html"
+            output["url"] = url
+            output["includedInDataCatalog"]["dataset"] = url
             output["doi"] = f"10.18129/B9.bioc.{identifier}"
 
             downloads = [d["Nb_of_downloads"] for d in download_stats_dicts if d["Package"] == identifier][0]

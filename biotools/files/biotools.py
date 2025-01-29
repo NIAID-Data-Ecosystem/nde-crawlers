@@ -71,7 +71,9 @@ def parse():
         # Biotools ID needs to be split into identifier and URL
         if biotools_id := tool.get("biotoolsID"):
             output["identifier"] = biotools_id
-            output["url"] = f"https://bio.tools/{biotools_id}"
+            url = f"https://bio.tools/{biotools_id}"
+            output["url"] = url
+            output["includedInDataCatalog"]["dataset"] = url
             output["_id"] = f"biotools_{biotools_id}"
         else:
             logger.warning("Skipping tool without biotoolsID")
@@ -280,14 +282,16 @@ def parse():
                             "identifier": relation_entry,
                             "url": f"https://bio.tools/{relation_entry}",
                             "@type": "ComputationalTool",
-                        })
+                        }
+                    )
                 elif relation_type == "includes":
                     output.setdefault("hasPart", []).append(
                         {
                             "identifier": relation_entry,
                             "url": f"https://bio.tools/{relation_entry}",
-                            "@type": "ComputationalTool"
-                        })
+                            "@type": "ComputationalTool",
+                        }
+                    )
                 elif relation_type == "includedIn":
                     output.setdefault("isPartOf", []).append({"identifier": relation_entry})
                 else:
@@ -487,21 +491,21 @@ def parse():
         def merge_entries(entries):
             merged_entries = {}
             for entry in entries:
-                key = (entry.get('name'), entry.get('url'), entry.get('inDefinedTermSet'))
+                key = (entry.get("name"), entry.get("url"), entry.get("inDefinedTermSet"))
                 if key in merged_entries:
                     # Merge encodingFormats
-                    existing_formats = merged_entries[key].get('encodingFormat', [])
-                    new_formats = entry.get('encodingFormat', [])
+                    existing_formats = merged_entries[key].get("encodingFormat", [])
+                    new_formats = entry.get("encodingFormat", [])
                     # Combine lists and remove duplicates
                     combined_formats = existing_formats + new_formats
                     # Remove duplicates based on 'url' and 'name'
-                    unique_formats = { (f['url'], f['name']): f for f in combined_formats }.values()
+                    unique_formats = {(f["url"], f["name"]): f for f in combined_formats}.values()
                     merged_formats = list(unique_formats)
                     if merged_formats:
-                        merged_entries[key]['encodingFormat'] = merged_formats
-                    elif 'encodingFormat' in merged_entries[key]:
+                        merged_entries[key]["encodingFormat"] = merged_formats
+                    elif "encodingFormat" in merged_entries[key]:
                         # Remove encodingFormat if the merged list is empty
-                        del merged_entries[key]['encodingFormat']
+                        del merged_entries[key]["encodingFormat"]
                 else:
                     merged_entries[key] = entry
             return list(merged_entries.values())
@@ -516,11 +520,11 @@ def parse():
         if merged_outputs:
             output["output"] = merged_outputs
 
-        if 'isBasedOn' in output:
-            for item in output['isBasedOn']:
-                if 'identifier' in item and 'url' not in item:
-                    item['url'] = f"https://bio.tools/{item['identifier']}"
-                    item['@type'] = 'ComputationalTool'
+        if "isBasedOn" in output:
+            for item in output["isBasedOn"]:
+                if "identifier" in item and "url" not in item:
+                    item["url"] = f"https://bio.tools/{item['identifier']}"
+                    item["@type"] = "ComputationalTool"
 
         yield output
 

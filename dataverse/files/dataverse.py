@@ -50,19 +50,16 @@ class Dataverse(NDEDatabase):
                         logger.info(
                             f"schema.org export failed on {dv_schema_export}, {url}, {req.status_code}, {res.get('status')}, {res.get('message')}"
                         )
-                        logger.info(
-                            "will attempt to yield original metadata for dataset....")
+                        logger.info("will attempt to yield original metadata for dataset....")
                         return False
                 else:
                     return res
             except (requests.RequestException, json.decoder.JSONDecodeError) as e:
                 retries += 1
                 if retries > MAX_RETRIES:
-                    logger.info(
-                        f"Failed to get {dv_schema_export} after {MAX_RETRIES} attempts due to {e}")
+                    logger.info(f"Failed to get {dv_schema_export} after {MAX_RETRIES} attempts due to {e}")
                     return False
-                logger.info(
-                    f"Request failed due to {e}, retrying in {backoff_time} seconds...")
+                logger.info(f"Request failed due to {e}, retrying in {backoff_time} seconds...")
                 time.sleep(backoff_time)
                 # double the wait time, but cap at MAX_DELAY
                 backoff_time = min(MAX_DELAY, backoff_time * 2)
@@ -85,12 +82,11 @@ class Dataverse(NDEDatabase):
                     response = req.json()
                     retries = 0  # Reset the retry counter after a successful request
                 except (requests.RequestException, ValueError) as e:
-                    pager = max(1, pager//2)
+                    pager = max(1, pager // 2)
                     logger.error(f"Error accessing {url}: {str(e)}")
                     retries += 1
                     if retries > MAX_RETRIES:
-                        logger.error(
-                            f"Max retries reached for {url}. Skipping.")
+                        logger.error(f"Max retries reached for {url}. Skipping.")
                         return
                     logger.info(f"Retrying in {backoff_time} seconds...")
                     time.sleep(backoff_time)
@@ -113,8 +109,7 @@ class Dataverse(NDEDatabase):
                     # data_pages.extend(page_data)
                     continue_paging = total and start < total
                 except Exception as exception:
-                    logger.info(
-                        "passing datapage because of exception: ", exception)
+                    logger.info("passing datapage because of exception: ", exception)
             else:
                 pass
 
@@ -149,7 +144,9 @@ class Dataverse(NDEDatabase):
         query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
 
         # Iterate through the paginated data starting from the adjusted initial position
-        for global_id, data_url, data_page in self.compile_paginated_data(query_endpoint, per_page=400, start=initial_page_start):
+        for global_id, data_url, data_page in self.compile_paginated_data(
+            query_endpoint, per_page=400, start=initial_page_start
+        ):
             records_processed += 1
             if "https://hdl.handle.net/" in data_url:
                 if "https://hdl.handle.net/1902.4" in data_url:
@@ -164,8 +161,7 @@ class Dataverse(NDEDatabase):
             elif global_id.startswith("doi:10.7910"):
                 # case: harvard data - doi:10.7910
                 # run the built-in dataverse schema export on harvard dataverse sources
-                schema_record = self.run_dataverse_schema_export(
-                    global_id, data_url)
+                schema_record = self.run_dataverse_schema_export(global_id, data_url)
                 if schema_record and isinstance(schema_record, dict) and schema_record.get("@id"):
                     logger.info(f"schema export passed on {data_url}")
                     yield (schema_record["@id"], json.dumps(schema_record))
@@ -180,7 +176,8 @@ class Dataverse(NDEDatabase):
 
             if records_processed % 1000 == 0:
                 logger.info(
-                    f"Processed {records_processed} datasets, going to sleep for {sleep_time} seconds to manage load...")
+                    f"Processed {records_processed} datasets, going to sleep for {sleep_time} seconds to manage load..."
+                )
                 # Sleep for 5 seconds every 1000 datasets
                 time.sleep(sleep_time)
 
@@ -190,8 +187,7 @@ class Dataverse(NDEDatabase):
 
         # Final memory usage log
         self.log_memory_usage()
-        logger.info(
-            f"Processed {records_processed} datasets and {schemas_gathered_ct} schemas.")
+        logger.info(f"Processed {records_processed} datasets and {schemas_gathered_ct} schemas.")
 
     def parse(self, records):
         start_time = time.process_time()
@@ -206,21 +202,18 @@ class Dataverse(NDEDatabase):
                 # parse the schema.org export document
                 if "@context" in dataset or "@type" in dataset:
                     dataset = json.loads(record[1])
-                    dataset["url"] = dataset["identifier"]
+                    dataset_url = dataset["identifier"]
+                    dataset["url"] = dataset_url
                     dataset["doi"] = dataset.pop("identifier")
-                    dataset["identifier"] = dataset["doi"].strip(
-                        "https://doi.org")
-                    dataset["_id"] = dataset["doi"].replace(
-                        "https://doi.org", "Dataverse").replace("/", "_")
+                    dataset["identifier"] = dataset["doi"].strip("https://doi.org")
+                    dataset["_id"] = dataset["doi"].replace("https://doi.org", "Dataverse").replace("/", "_")
                     dataset["dateModified"] = (
-                        datetime.datetime.strptime(
-                            dataset["dateModified"], "%Y-%m-%d").date().isoformat()
+                        datetime.datetime.strptime(dataset["dateModified"], "%Y-%m-%d").date().isoformat()
                     )
 
                     if "datePublished" in dataset:
                         dataset["datePublished"] = (
-                            datetime.datetime.strptime(
-                                dataset["datePublished"], "%Y-%m-%d").date().isoformat()
+                            datetime.datetime.strptime(dataset["datePublished"], "%Y-%m-%d").date().isoformat()
                         )
 
                     if dataset["author"] is None:
@@ -229,15 +222,13 @@ class Dataverse(NDEDatabase):
                             dataset["author"] = dataset.pop("creator")
                             for data_dict in dataset["author"]:
                                 if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
-                                    data_dict["affiliation"] = {
-                                        "name": data_dict.pop("affiliation")}
+                                    data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
                         else:
                             dataset.pop("creator")
                     else:
                         for data_dict in dataset["author"]:
                             if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
-                                data_dict["affiliation"] = {
-                                    "name": data_dict.pop("affiliation")}
+                                data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
                         dataset.pop("creator")
 
                     if dataset["publisher"] is None:
@@ -258,7 +249,7 @@ class Dataverse(NDEDatabase):
                     if "description" in dataset:
                         description = dataset.pop("description")
                         if isinstance(description, list):
-                            dataset["description"] = ' '.join(description)
+                            dataset["description"] = " ".join(description)
                         else:
                             dataset["description"] = description
 
@@ -279,25 +270,20 @@ class Dataverse(NDEDatabase):
 
                     if "temporalCoverage" in dataset and dataset["temporalCoverage"]:
                         dataset["temporalCoverage"] = [
-                            {"temporalInterval": {
-                                "duration": dataset["temporalCoverage"][0]}}
+                            {"temporalInterval": {"duration": dataset["temporalCoverage"][0]}}
                         ]
 
                     if "spatialCoverage" in dataset:
-                        dataset["spatialCoverage"] = [
-                            {"name": dataset.pop("spatialCoverage")[0]}]
+                        dataset["spatialCoverage"] = [{"name": dataset.pop("spatialCoverage")[0]}]
 
                     if "distribution" in dataset:
                         for data_dict in dataset["distribution"]:
                             if "@id" in data_dict:
-                                data_dict["@id"] = data_dict["@id"].strip(
-                                    "https://doi.org/")
+                                data_dict["@id"] = data_dict["@id"].strip("https://doi.org/")
                             if "fileFormat" in data_dict:
-                                data_dict["encodingFormat"] = data_dict.pop(
-                                    "fileFormat")
+                                data_dict["encodingFormat"] = data_dict.pop("fileFormat")
                             if "identifier" in data_dict:
-                                data_dict["contentUrl"] = data_dict.pop(
-                                    "identifier")
+                                data_dict["contentUrl"] = data_dict.pop("identifier")
                             if "contentSize" in data_dict:
                                 data_dict.pop("contentSize")
                             if "description" in data_dict and "https://" in data_dict["description"]:
@@ -307,8 +293,7 @@ class Dataverse(NDEDatabase):
                         cit_list = []
                         for data_dict in dataset["citation"]:
                             if "text" in data_dict:
-                                cit_list.append(
-                                    {"citation": data_dict["text"]})
+                                cit_list.append({"citation": data_dict["text"]})
                         if cit_list:
                             dataset["citation"] = cit_list
                         else:
@@ -319,6 +304,7 @@ class Dataverse(NDEDatabase):
                         "name": "Harvard Dataverse",
                         "url": "https://dataverse.harvard.edu/",
                         "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
+                        "dataset": dataset_url,
                     }
 
                     dataset.pop("@id")
@@ -338,10 +324,8 @@ class Dataverse(NDEDatabase):
                     else:
                         dataset["@type"] = "dataset"
                     dataset["doi"] = dataset.pop("global_id")
-                    dataset["identifier"] = dataset["doi"].strip(
-                        "https://doi.org")
-                    dataset["_id"] = dataset["doi"].replace(
-                        "doi:", "Dataverse_").replace("/", "_")
+                    dataset["identifier"] = dataset["doi"].strip("https://doi.org")
+                    dataset["_id"] = dataset["doi"].replace("doi:", "Dataverse_").replace("/", "_")
                     dataset["includedInDataCatalog"] = {
                         "@type": "dataset",
                         "name": "Harvard Dataverse",
@@ -351,16 +335,14 @@ class Dataverse(NDEDatabase):
 
                     # have to strip Z from time to get into correct format
                     if "updatedAt" in dataset:
-                        dataset["dateModified"] = dataset["updatedAt"].strip(
-                            "Z")
+                        dataset["dateModified"] = dataset["updatedAt"].strip("Z")
                         dataset.pop("updatedAt")
                         dataset["dateModified"] = datetime.datetime.strptime(
                             dataset["dateModified"], "%Y-%m-%dT%H:%M:%S"
                         ).strftime("%Y-%m-%d")
 
                     if "published_at" in dataset:
-                        dataset["datePublished"] = dataset["published_at"].strip(
-                            "Z")
+                        dataset["datePublished"] = dataset["published_at"].strip("Z")
                         dataset.pop("published_at")
                         dataset["datePublished"] = datetime.datetime.strptime(
                             dataset["datePublished"], "%Y-%m-%dT%H:%M:%S"
@@ -378,19 +360,16 @@ class Dataverse(NDEDatabase):
                         elif len(dataset["subjects"]) > 1:
                             dataset["topicCategory"] = []
                             for subject in dataset["subjects"]:
-                                dataset["topicCategory"].append(
-                                    {"description": subject})
+                                dataset["topicCategory"].append({"description": subject})
                         else:
-                            dataset["topicCategory"] = {
-                                "description": dataset["subjects"][0]}
+                            dataset["topicCategory"] = {"description": dataset["subjects"][0]}
                         dataset.pop("subjects")
 
                     if "keywords" in dataset:
                         dataset["keywords"] = ",".join(dataset["keywords"])
 
                     if "createdAt" in dataset:
-                        dataset["dateCreated"] = dataset["createdAt"].strip(
-                            "Z")
+                        dataset["dateCreated"] = dataset["createdAt"].strip("Z")
                         dataset.pop("createdAt")
                         dataset["dateCreated"] = datetime.datetime.strptime(
                             dataset["dateCreated"], "%Y-%m-%dT%H:%M:%S"
@@ -410,15 +389,26 @@ class Dataverse(NDEDatabase):
                             dataset.pop("authors")
                         else:
                             # print("[case3]")
-                            dataset["author"] = {
-                                "name": dataset.pop("authors")[0]}
+                            dataset["author"] = {"name": dataset.pop("authors")[0]}
                     if "citation" in dataset:
-                        dataset["citation"] = {
-                            "citation": dataset.pop("citation")}
+                        dataset["citation"] = {"citation": dataset.pop("citation")}
 
-                    keys_to_remove = ['dataSources', 'geographicCoverage', 'majorVersion', 'producers',
-                                      'publications', 'relatedMaterial', 'topicCategory', 'publisher', 'citationHtml',
-                                      'storageIdentifier', 'fileCount', 'versionId', 'versionState', 'contacts']
+                    keys_to_remove = [
+                        "dataSources",
+                        "geographicCoverage",
+                        "majorVersion",
+                        "producers",
+                        "publications",
+                        "relatedMaterial",
+                        "topicCategory",
+                        "publisher",
+                        "citationHtml",
+                        "storageIdentifier",
+                        "fileCount",
+                        "versionId",
+                        "versionState",
+                        "contacts",
+                    ]
 
                     for key in keys_to_remove:
                         dataset.pop(key, None)
@@ -427,10 +417,8 @@ class Dataverse(NDEDatabase):
                     parse_ct += 1
 
             except Exception as error:
-                logger.info(
-                    f"skipping with error - {error}, record id - {record[0]}")
+                logger.info(f"skipping with error - {error}, record id - {record[0]}")
 
         process_time = time.process_time() - start_time
-        logger.info(
-            f"Completed parsing individual metadata, {parse_ct} records parsed in {process_time:.2f} seconds")
+        logger.info(f"Completed parsing individual metadata, {parse_ct} records parsed in {process_time:.2f} seconds")
         logger.info("Document parsing complete")

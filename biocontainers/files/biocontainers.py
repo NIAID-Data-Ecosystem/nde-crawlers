@@ -63,7 +63,9 @@ def parse():
 
         if name := metadata.get("name"):
             output["name"] = name
-            output["url"] = f"https://biocontainers.pro/tools/{name}"
+            url = f"https://biocontainers.pro/tools/{name}"
+            output["url"] = url
+            output["includedInDataCatalog"]["dataset"] = url
             output["_id"] = "biocontainers_" + name
 
             versions_response = s.get(f"https://api.biocontainers.pro//ga4gh/trs/v2/tools/{name}/versions")

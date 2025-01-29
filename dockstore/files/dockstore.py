@@ -108,7 +108,9 @@ def parse():
 
         if url := metadata.get("id"):
             if url.startswith("#workflow/"):
-                output["url"] = "https://dockstore.org/workflows/" + url[10:]
+                dataset_url = "https://dockstore.org/workflows/" + url[10:]
+                output["url"] = dataset_url
+                output["includedInDataCatalog"]["dataset"] = dataset_url
                 for key in topic_dict:
                     if url[10:] in topic_dict[key]:
                         output["topicCategory"] = {
@@ -122,11 +124,15 @@ def parse():
                 if "github.com" in url:
                     output["codeRepository"] = "https://" + url[10:].split(":")[0]
             elif url.startswith("#service/"):
-                output["url"] = "https://dockstore.org/services/" + url[9:]
+                dataset_url = "https://dockstore.org/services/" + url[9:]
+                output["url"] = dataset_url
+                output["includedInDataCatalog"]["dataset"] = dataset_url
                 if "github.com" in url:
                     output["codeRepository"] = "https://" + url[9:].split(":")[0]
             else:
-                output["url"] = "https://dockstore.org/containers/" + url
+                dataset_url = "https://dockstore.org/containers/" + url
+                output["url"] = dataset_url
+                output["includedInDataCatalog"]["dataset"] = dataset_url
                 if "github" in url:
                     output["codeRepository"] = "https://" + url.split(":")[0]
 

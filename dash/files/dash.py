@@ -263,7 +263,9 @@ def parse():
             output["@type"] = "Dataset"
 
             output["_id"] = "NICHD_DASH_Dataset_" + dataset_id
-            output["url"] = f"https://dash.nichd.nih.gov/dataset/{dataset_id}"
+            url = f"https://dash.nichd.nih.gov/dataset/{dataset_id}"
+            output["url"] = url
+            output["includedInDataCatalog"]["dataset"] = url
             distribution_dict = {}
             distribution_dict["contentUrl"] = output["url"]
 
@@ -291,7 +293,7 @@ def parse():
                     "relationship": "Datasets in the same study",
                 }
                 for x in related_datasets
-                if x != dataset and count < 100 # limit to 100 related datasets
+                if x != dataset and count < 100  # limit to 100 related datasets
             ]
 
             dataset_count += 1

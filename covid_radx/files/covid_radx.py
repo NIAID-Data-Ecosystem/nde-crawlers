@@ -134,7 +134,9 @@ def parse(hit):
 
     base_url = "https://radxdatahub.nih.gov/study/"
     if study_id := hit.get("study_id"):
-        output["url"] = base_url + str(study_id)
+        url = base_url + str(study_id)
+        output["url"] = url
+        output["includedInDataCatalog"]["dataset"] = url
 
     total_keywords = []
     if keywords := hit.get("population_focus_array"):
