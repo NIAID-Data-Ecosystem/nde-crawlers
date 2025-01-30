@@ -7,6 +7,11 @@ from utils.utils import nde_upload_wrapper
 class MassiveUploader(NDESourceUploader):
     name = "massive"
 
+    __metadata__ = {
+        "merger": "merge_struct",
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+    }
+
     @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = standardize_data(data_folder)

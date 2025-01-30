@@ -6,7 +6,8 @@ class NDEDataBuilder(builder.DataBuilder):
 
     def merge_order(self, other_sources):
         self.logger.info("Other sources: %s", other_sources)
-        priority = ["ncbi_geo", "lincs", "omicsdi", "veupathdb", "veupath_collections"]
+        # Priority list of sources to merge from highest to lowest
+        priority = ["massive", "ncbi_geo", "lincs", "omicsdi", "veupathdb", "veupath_collections"]
         # Reverse list b/c sources are upserted so highest priority needs to be merged last
         for source in reversed(priority):
             other_sources.append(other_sources.pop(other_sources.index(source)))
