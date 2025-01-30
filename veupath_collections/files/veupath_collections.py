@@ -49,15 +49,18 @@ def record_generator():
             if count % 1000 == 0:
                 logger.info("Parsed %d records", count)
 
+            url = f"https://{site.casefold()}.org/{webapps[i]}/app/record/dataset/{record['id'][0]['value']}"
             output = {
                 "includedInDataCatalog": {
                     "@type": "Dataset",
                     "name": site,
                     "url": f"https://{site.casefold()}.org/{webapps[i]}/app",
                     "versionDate": datetime.date.today().isoformat(),
+                    "dataset": url,
                 },
                 "@context": "http://schema.org/",
                 "@type": "Dataset",
                 "_id": record["id"][0]["value"],
+                "url": url,
             }
             yield output
