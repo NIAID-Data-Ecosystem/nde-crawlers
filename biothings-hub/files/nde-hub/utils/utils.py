@@ -240,15 +240,12 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             # Remove HTML tags from description field
             if doc.get("description"):
                 try:
-                    doc["description"] = html.fromstring(doc["description"]).text_content()
+                    description = html.fromstring(doc["description"]).text_content()
+                    doc["description"] = description
                 except etree.ParserError as e:
                     # At minimum, prevent the lxml error object from escaping
-                    logger.warning(
-                        "ParserError while processing doc %s: %s",
-                        doc.get("_id"),
-                        str(e)
-                    )
-                    doc["description"] = doc["description"]
+                    logger.warning("ParserError while processing doc %s: %s", doc.get("_id"), str(e))
+
             # Everything past this point should always be last in order
             check_schema(doc)
             doc["_id"] = doc["_id"].casefold()
