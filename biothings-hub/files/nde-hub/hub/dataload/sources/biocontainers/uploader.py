@@ -1,4 +1,5 @@
 from hub.dataload.nde import NDESourceUploader
+from utils.corrections import corrections
 from utils.csv_helper import get_source_data
 from utils.funding_helper import standardize_funding
 from utils.pmid_helper import load_pmid_ctfd
@@ -35,5 +36,6 @@ class Biocontainers_Uploader(NDESourceUploader):
     def load_data(self, data_folder):
         docs = load_pmid_ctfd(data_folder)
         docs = standardize_funding(docs)
+        docs = corrections(docs)
         for doc in docs:
             yield doc

@@ -22,7 +22,7 @@ class OmicsDIUploader(NDESourceUploader):
         docs = standardize_funding(docs)
         docs = standardize_data(docs)
         docs = process_descriptions(docs)
-        docs = corrections(docs, "CREID")
+        docs = corrections(docs)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
             yield doc

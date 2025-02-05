@@ -22,7 +22,7 @@ class ImmPortUploader(NDESourceUploader):
         docs = standardize_data(data_folder)
         docs = standardize_funding(docs)
         docs = process_descriptions(docs)
-        docs = corrections(docs, "CREID")
+        docs = corrections(docs)
         docs = add_disambiguating_description(docs, self.name)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
