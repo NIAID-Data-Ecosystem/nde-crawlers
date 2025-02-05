@@ -73,7 +73,7 @@ def add_topic_category(docs, source_name):
                     doc["topicCategory"].append(
                         {
                             "name": topic_cleaned,
-                            "curatedBy": {"name": "gpt-3.5-turbo", "url": "https://openai.com/index/chatgpt"},
+                            "curatedBy": {"name": "GPT-4o-mini", "url": "https://openai.com/index/chatgpt"},
                             "identifier": "topic_" + row["Mapped Term CURIE"].split(":")[1],
                             "url": row["Mapped Term IRI"],
                             "inDefinedTermSet": "EDAM",
