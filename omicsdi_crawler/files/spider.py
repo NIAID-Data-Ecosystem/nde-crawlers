@@ -19,11 +19,12 @@ class OmicsdiSpider(SitemapSpider):
     # parsing huge XMLs is slow and there's like six dozens of them
     # expect a very slow start
     sitemap_urls = ["https://www.omicsdi.org/sitemap.xml"]
-    sitemap_rules = [
-        ("/dataset/", "extract_from_jsonld", lambda url: url if "/dataset/biostudies-literature" not in url else False)
-    ]
+    sitemap_rules = [("/dataset/", "extract_from_jsonld")]
 
     def extract_from_jsonld(self, response, **kwargs):
+        if "/dataset/biostudies-literature" in response.url:
+            return
+
         jslds = JsonLdExtractor().extract(response.body.decode("utf-8"))
 
         for jsld in jslds:
