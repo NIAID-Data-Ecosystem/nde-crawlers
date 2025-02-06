@@ -163,29 +163,31 @@ def parse_study_info(study_info):
         study_dict["citation"] = citation_dict
 
     if study_timeline := study_info.get("studyTimeline"):
-        temporal_coverage_list = []
+        temporal_intervals = {}
+
         for obj in study_timeline:
-            temporal_coverage_obj = {}
-            if obj["propertyName"] == "StudyCollectionStartDate":
-                temporal_coverage_obj["temporalType"] = "collection"
-                temporal_coverage_obj["startDate"] = obj["storedValue"]
+            # Determine the type based on propertyName
+            if obj["propertyName"] in ["StudyEnrollmentStartDate", "StudyEnrollmentEndDate"]:
+                temporal_type = "study date"
+            elif obj["propertyName"] in ["StudyCollectionStartDate", "StudyCollectionEndDate"]:
+                temporal_type = "collection"
+            else:
+                logger.warning(f"Unknown temporal type: {obj['propertyName']}, skipping.")
+                continue
 
-            if obj["propertyName"] == "StudyCollectionEndDate":
-                temporal_coverage_obj["endDate"] = obj["storedValue"]
+            if temporal_type not in temporal_intervals:
+                temporal_intervals[temporal_type] = {
+                    "temporalType": temporal_type,
+                    "@type": "TemporalInterval"
+                }
 
-            if obj["propertyName"] == "StudyEnrollmentStartDate":
-                temporal_coverage_obj["startDate"] = obj["storedValue"]
-                temporal_coverage_obj["temporalType"] = "study date"
+            if "StartDate" in obj["propertyName"]:
+                temporal_intervals[temporal_type]["startDate"] = obj["storedValue"]
+            elif "EndDate" in obj["propertyName"]:
+                temporal_intervals[temporal_type]["endDate"] = obj["storedValue"]
 
-            if obj["propertyName"] == "StudyEnrollmentEndDate":
-                temporal_coverage_obj["endDate"] = obj["storedValue"]
-
-            if temporal_coverage_obj:
-                temporal_coverage_obj["@type"] = "TemporalInterval"
-                temporal_coverage_list.append(temporal_coverage_obj)
-
-        if len(temporal_coverage_list) > 0:
-            study_dict["temporalCoverage"] = temporal_coverage_list
+        if temporal_intervals:
+            study_dict["temporalCoverage"] = list(temporal_intervals.values())
 
     if approval_date := study_info.get("approvalDate"):
         approval_date = approval_date.split("T")[0]
@@ -289,7 +291,7 @@ def parse():
             output["url"] = url
             output["includedInDataCatalog"]["dataset"] = url
 
-            publication_info = get_publication_info(dataset_id)
+            publication_info = get_publication_info(study_id)
             if publication_info:
                 cited_by_list = []
                 for publication in publication_info:

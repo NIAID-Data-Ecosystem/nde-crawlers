@@ -4,15 +4,28 @@ import os
 
 import orjson
 import requests
+from config import token
 
 logging.basicConfig(level=logging.INFO)
+
+
+def get_auth_headers(accept_header):
+    """
+    Return headers for GitHub API requests, including the Authorization header
+    if a token is available in the environment variable GITHUB_TOKEN.
+    """
+    headers = {"Accept": accept_header}
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return headers
+
 
 def list_github_files(owner, repo, directory):
     """
     List files in a GitHub repository directory using the GitHub contents API.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{directory}"
-    headers = {"Accept": "application/vnd.github.v3+json"}
+    headers = get_auth_headers("application/vnd.github.v3+json")
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         data = response.json()
@@ -20,17 +33,19 @@ def list_github_files(owner, repo, directory):
     else:
         raise Exception(f"Error listing directory {directory}: {response.status_code} {response.text}")
 
+
 def get_github_file_content(owner, repo, path):
     """
     Fetch file content from GitHub.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-    headers = {"Accept": "application/vnd.github.v3.raw"}
+    headers = get_auth_headers("application/vnd.github.v3.raw")
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.text
     else:
         raise Exception(f"Error fetching {path}: {response.status_code} {response.text}")
+
 
 def fetch_correction_files(correction_name):
     """
@@ -62,13 +77,15 @@ def fetch_correction_files(correction_name):
         approved = correction_json.get("approved", True)
         records_file_path = prod_records_file
     except Exception as prod_error:
-        logging.info(f"Production file for '{correction_name}' not found or error encountered: {prod_error}. Trying staging folder.")
+        logging.info(f"Production file for '{correction_name}' not found or error encountered: {
+                     prod_error}. Trying staging folder.")
         correction_content = get_github_file_content(owner, repo, staging_correction_file)
         correction_json = json.loads(correction_content)
         approved = correction_json.get("approved", False)
         records_file_path = staging_records_file
 
     return correction_json, approved, records_file_path
+
 
 def get_record_ids(records_content):
     """
@@ -84,8 +101,11 @@ def get_record_ids(records_content):
                 ids.append(id_value.lower())
     return ids
 
+
 def update_source_organization(record_metadata, correction_organizations, approved=True):
     existing_orgs = record_metadata.get("sourceOrganization", [])
+
+
     if not isinstance(existing_orgs, list):
         existing_orgs = [existing_orgs]
 
@@ -107,6 +127,7 @@ def update_source_organization(record_metadata, correction_organizations, approv
     record_metadata["sourceOrganization"] = existing_orgs
     return record_metadata
 
+
 def load_documents(data):
     """
     Load documents from a list or a path to a directory containing a data.ndjson file.
@@ -127,6 +148,7 @@ def load_documents(data):
         doc_list = list(data)
 
     return doc_list
+
 
 def update_documents_with_corrections(documents):
     """
@@ -171,7 +193,8 @@ def update_documents_with_corrections(documents):
             records_content = get_github_file_content(owner, repo, records_file_path)
             record_ids = set(get_record_ids(records_content))
             corrections_dict[correction_name] = (record_ids, correction_organizations, approved)
-            logging.info(f"Loaded correction '{correction_name}' with {len(record_ids)} record IDs (approved: {approved})")
+            logging.info(f"Loaded correction '{correction_name}' with {
+                         len(record_ids)} record IDs (approved: {approved})")
         except Exception as e:
             logging.error(f"Error fetching correction files for '{correction_name}': {e}")
             corrections_dict.pop(correction_name, None)
@@ -187,6 +210,7 @@ def update_documents_with_corrections(documents):
                 doc = update_source_organization(doc, correction_organizations, approved=approved)
                 logging.info(f"Updated document {doc_id} with correction '{correction_name}' (approved: {approved})")
     return documents
+
 
 def corrections(data):
     """
