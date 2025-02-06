@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 
 import orjson
@@ -102,12 +103,30 @@ def get_record_ids(records_content):
     return ids
 
 
-def update_source_organization(record_metadata, correction_organizations, approved=True):
-    existing_orgs = record_metadata.get("sourceOrganization", [])
+def sanitize_org(org):
+    """
+    Checks if the 'url' field is a NaN value.
+    If so, it replaces it with an empty string.
+    """
+    if "url" in org:
+        url_val = org["url"]
+        # Check if url_val is a float and NaN
+        if isinstance(url_val, float) and math.isnan(url_val):
+            org["url"] = ""
+    return org
 
+def update_source_organization(record_metadata, correction_organizations, approved=True):
+    """
+    Merge correction organizations into the document's sourceOrganization,
+    sanitizing any NaN values in the 'url' fields.
+    """
+    existing_orgs = record_metadata.get("sourceOrganization", [])
 
     if not isinstance(existing_orgs, list):
         existing_orgs = [existing_orgs]
+
+    # Sanitize the organizations already in the document.
+    existing_orgs = [sanitize_org(org) for org in existing_orgs]
 
     # Gather identifiers already in the document (using name or url)
     existing_org_identifiers = {
@@ -115,18 +134,17 @@ def update_source_organization(record_metadata, correction_organizations, approv
         for org in existing_orgs if (org.get("name") or org.get("url"))
     }
 
-    # Add each new correction organization, attaching the approval flag to the object
+    # Sanitize and merge new correction organizations.
     for new_org in correction_organizations:
+        new_org = sanitize_org(new_org)
         identifier = new_org.get("name") or new_org.get("url")
         if identifier and identifier.lower() not in existing_org_identifiers:
             new_org["correctionApproved"] = approved
             existing_orgs.append(new_org)
             existing_org_identifiers.add(identifier.lower())
 
-    # Save back into the document; note that we no longer set a top-level flag.
     record_metadata["sourceOrganization"] = existing_orgs
     return record_metadata
-
 
 def load_documents(data):
     """

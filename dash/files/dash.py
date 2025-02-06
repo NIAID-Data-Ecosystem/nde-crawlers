@@ -247,96 +247,89 @@ def parse():
         logger.info(f"Parsing study {study_count} of {len(study_ids)}")
 
         info = get_study_info(study_id)
-        parsed_study = info[0]
-
-        if info == None:
+        if info is None:
             logger.info(f"Failed to get study info for study id:{study_id}, skipping.")
             continue
 
-        dataset_ids = info[1]
+        parsed_study, dataset_ids = info
         if len(dataset_ids) == 0:
             logger.info(f"No datasets found for study id: {study_id}")
             continue
         else:
             logger.info(f"Found {len(dataset_ids)} datasets for study id: {study_id}")
 
+        publication_info = get_publication_info(study_id)
+
         logger.info("Retrieving individual dataset info...")
         related_datasets = []
         for dataset_id in dataset_ids:
-            dataset_info = get_dataset_info(dataset_id)
-            if dataset_info == None:
-                logger.info(f"Failed to get dataset info for {dataset_id}, skipping.")
-                continue
+            try:
+                dataset_info = get_dataset_info(dataset_id)
+                if dataset_info is None:
+                    logger.info(f"Failed to get dataset info for {dataset_id}, skipping.")
+                    continue
 
-            output = parsed_study.copy()
-
-            output["isPartOf"] = [
-                {
+                output = parsed_study.copy()
+                output["isPartOf"] = [{
                     "name": output["name"],
                     "identifier": "NICHD_DASH_Study_" + study_id,
                     "url": f"https://dash.nichd.nih.gov/study/{study_id}",
+                }]
+
+                output["includedInDataCatalog"] = {
+                    "@type": "Dataset",
+                    "name": "NICHD DASH",
+                    "url": "https://dash.nichd.nih.gov/",
+                    "versionDate": datetime.date.today().isoformat(),
                 }
-            ]
+                output["@type"] = "Dataset"
+                output["_id"] = "NICHD_DASH_Dataset_" + dataset_id
+                url = f"https://dash.nichd.nih.gov/dataset/{dataset_id}"
+                output["url"] = url
+                output["includedInDataCatalog"]["dataset"] = url
 
-            output["includedInDataCatalog"] = {
-                "@type": "Dataset",
-                "name": "NICHD DASH",
-                "url": "https://dash.nichd.nih.gov/",
-                "versionDate": datetime.date.today().isoformat(),
-            }
-            output["@type"] = "Dataset"
+                # Use the cached publication_info for all datasets of this study
+                if publication_info:
+                    cited_by_list = []
+                    for publication in publication_info:
+                        publication_dict = {
+                            "name": publication["title"],
+                            "url": publication["publicationUrl"],
+                            "datePublished": publication["date"]
+                        }
+                        cited_by_list.append(publication_dict)
+                    if cited_by_list:
+                        output["citedBy"] = cited_by_list
 
-            output["_id"] = "NICHD_DASH_Dataset_" + dataset_id
-            url = f"https://dash.nichd.nih.gov/dataset/{dataset_id}"
-            output["url"] = url
-            output["includedInDataCatalog"]["dataset"] = url
+                distribution_dict = {"contentUrl": output["url"]}
+                if dataset_title := dataset_info.get("datasetTitle"):
+                    output["name"] = f'{dataset_title} in {output["name"]}'
+                if dataset_description := dataset_info.get("datasetDescription"):
+                    output["description"] = f'{dataset_description}\nStudy Description\n{output["description"]}'
+                if dataset_format := dataset_info.get("datasetFormat"):
+                    distribution_dict["encodingFormat"] = dataset_format
+                output["distribution"] = distribution_dict
 
-            publication_info = get_publication_info(study_id)
-            if publication_info:
-                cited_by_list = []
-                for publication in publication_info:
-                    publication_dict = {}
-                    publication_dict["name"] = publication["title"]
-                    publication_dict["url"] = publication["publicationUrl"]
-                    publication_dict["datePublished"] = publication["date"]
-                    cited_by_list.append(publication_dict)
-                if cited_by_list:
-                    output["citedBy"] = cited_by_list
+                related_datasets.append(output)
+            except Exception as e:
+                logger.error(f"Error parsing dataset {dataset_id}: {e}")
+                continue
 
-            distribution_dict = {}
-            distribution_dict["contentUrl"] = output["url"]
-
-            if dataset_title := dataset_info.get("datasetTitle"):
-                output["name"] = f'{dataset_title} in {output["name"]}'
-
-            if dataset_description := dataset_info.get("datasetDescription"):
-                output["description"] = f'{dataset_description}\nStudy Description\n{output["description"]}'
-
-            if dataset_format := dataset_info.get("datasetFormat"):
-                distribution_dict["encodingFormat"] = dataset_format
-            output["distribution"] = distribution_dict
-
-            related_datasets.append(output)
         count = 0
         for dataset in related_datasets:
             count += 1
-            dataset["isRelatedTo"] = [
-                {
-                    "name": x["name"],
-                    "identifier": x["_id"],
-                    "hasPart": {"identifier": x["isPartOf"][0]["identifier"]},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "NICHD DASH"},
-                    "relationship": "Datasets in the same study",
-                }
-                for x in related_datasets
-                if x != dataset and count < 100  # limit to 100 related datasets
-            ]
+            dataset["isRelatedTo"] = [{
+                "name": x["name"],
+                "identifier": x["_id"],
+                "hasPart": {"identifier": x["isPartOf"][0]["identifier"]},
+                "@type": "Dataset",
+                "includedInDataCatalog": {"name": "NICHD DASH"},
+                "relationship": "Datasets in the same study",
+            } for x in related_datasets if x != dataset and count < 100]  # limit to 100 related datasets
 
             dataset_count += 1
-
             if dataset_count % 100 == 0:
                 logger.info(f"Parsed {dataset_count} datasets")
-
             yield dataset
+
     logger.info(f"Finished parsing. Total datasets: {dataset_count}")
