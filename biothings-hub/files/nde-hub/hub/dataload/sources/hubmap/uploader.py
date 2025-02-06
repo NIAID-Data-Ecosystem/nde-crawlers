@@ -1,4 +1,5 @@
 from hub.dataload.nde import NDESourceUploader
+from utils.corrections import corrections
 from utils.csv_helper import get_source_data
 from utils.extract import process_descriptions
 from utils.topic_category_helper import add_topic_category
@@ -35,5 +36,6 @@ class Hubmap_Uploader(NDESourceUploader):
     def load_data(self, data_folder):
         docs = process_descriptions(data_folder)
         docs = add_topic_category(docs, self.name)
+        docs = corrections(docs)
         for doc in docs:
             yield doc

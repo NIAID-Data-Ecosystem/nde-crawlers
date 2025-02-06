@@ -187,6 +187,7 @@ def parse():
                     "name": "Data Discovery Engine",
                     "url": "https://discovery.biothings.io/",
                     "versionDate": datetime.date.today().isoformat(),
+                    "dataset": "https://discovery.biothings.io/resource/" + hit["_id"].lower(),
                 }
             ]
 
@@ -244,7 +245,8 @@ def parse():
                 ]
 
             hit["includedInDataCatalog"] = included_in_data_catalog
-            hit["sourceOrganization"] = source_organization
+            if source_organization:
+                hit["sourceOrganization"] = source_organization
 
             if citations := hit.get("citation"):
                 if not isinstance(citations, list):

@@ -13,6 +13,14 @@ logging.basicConfig(
 logger = logging.getLogger("nde-logger")
 
 
+def get_publication_info(study_id):
+    url = f"https://dash.nichd.nih.gov/workbench-api/resource/{study_id}/publications"
+    response = requests.get(url)
+    if response.status_code != 200:
+        return None
+    return json.loads(response.text)
+
+
 def get_dataset_ids(study_name):
     dataset_ids = []
     page = 1
@@ -154,16 +162,32 @@ def parse_study_info(study_info):
     if bool(citation_dict):
         study_dict["citation"] = citation_dict
 
-    if "studyTimeline" in study_info["studyInfo"]:
-        temporal_coverage = {}
-        for obj in study_info["studyInfo"]["studyTimeline"]:
-            if obj["propertyName"] == "StudyCollectionStartDate":
-                temporal_coverage["startDate"] = obj["storedValue"]
-            if obj["propertyName"] == "StudyCollectionEndDate":
-                temporal_coverage["endDate"] = obj["storedValue"]
+    if study_timeline := study_info.get("studyTimeline"):
+        temporal_intervals = {}
 
-        if bool(temporal_coverage):
-            study_dict["temporalCoverage"] = temporal_coverage
+        for obj in study_timeline:
+            # Determine the type based on propertyName
+            if obj["propertyName"] in ["StudyEnrollmentStartDate", "StudyEnrollmentEndDate"]:
+                temporal_type = "study date"
+            elif obj["propertyName"] in ["StudyCollectionStartDate", "StudyCollectionEndDate"]:
+                temporal_type = "collection"
+            else:
+                logger.warning(f"Unknown temporal type: {obj['propertyName']}, skipping.")
+                continue
+
+            if temporal_type not in temporal_intervals:
+                temporal_intervals[temporal_type] = {
+                    "temporalType": temporal_type,
+                    "@type": "TemporalInterval"
+                }
+
+            if "StartDate" in obj["propertyName"]:
+                temporal_intervals[temporal_type]["startDate"] = obj["storedValue"]
+            elif "EndDate" in obj["propertyName"]:
+                temporal_intervals[temporal_type]["endDate"] = obj["storedValue"]
+
+        if temporal_intervals:
+            study_dict["temporalCoverage"] = list(temporal_intervals.values())
 
     if approval_date := study_info.get("approvalDate"):
         approval_date = approval_date.split("T")[0]
@@ -266,6 +290,19 @@ def parse():
             url = f"https://dash.nichd.nih.gov/dataset/{dataset_id}"
             output["url"] = url
             output["includedInDataCatalog"]["dataset"] = url
+
+            publication_info = get_publication_info(study_id)
+            if publication_info:
+                cited_by_list = []
+                for publication in publication_info:
+                    publication_dict = {}
+                    publication_dict["name"] = publication["title"]
+                    publication_dict["url"] = publication["publicationUrl"]
+                    publication_dict["datePublished"] = publication["date"]
+                    cited_by_list.append(publication_dict)
+                if cited_by_list:
+                    output["citedBy"] = cited_by_list
+
             distribution_dict = {}
             distribution_dict["contentUrl"] = output["url"]
 
