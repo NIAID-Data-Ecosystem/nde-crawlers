@@ -166,7 +166,6 @@ def parse_study_info(study_info):
         temporal_intervals = {}
 
         for obj in study_timeline:
-            # Determine the type based on propertyName
             if obj["propertyName"] in ["StudyEnrollmentStartDate", "StudyEnrollmentEndDate"]:
                 temporal_type = "study date"
             elif obj["propertyName"] in ["StudyCollectionStartDate", "StudyCollectionEndDate"]:
@@ -187,7 +186,9 @@ def parse_study_info(study_info):
                 temporal_intervals[temporal_type]["endDate"] = obj["storedValue"]
 
         if temporal_intervals:
-            study_dict["temporalCoverage"] = list(temporal_intervals.values())
+            study_dict["temporalCoverage"] = [
+                {"temporalInterval": interval} for interval in temporal_intervals.values()
+            ]
 
     if approval_date := study_info.get("approvalDate"):
         approval_date = approval_date.split("T")[0]
@@ -326,6 +327,9 @@ def parse():
                 "includedInDataCatalog": {"name": "NICHD DASH"},
                 "relationship": "Datasets in the same study",
             } for x in related_datasets if x != dataset and count < 100]  # limit to 100 related datasets
+
+            if "conditionsOfAccess" not in dataset:
+                dataset["conditionsOfAccess"] = "Closed"
 
             dataset_count += 1
             if dataset_count % 100 == 0:
