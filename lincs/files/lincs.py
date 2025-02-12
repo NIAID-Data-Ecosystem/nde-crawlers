@@ -149,10 +149,11 @@ class LINCS:
                 document.pop("datereleased")
 
             if "assayname" in document:
-                assayname = document.pop("assayname")
-                document["measurementTechnique"] = {"name": ",".join(assayname)}
-                if "assayformat" in document:
-                    document["measurementTechnique"]["description"] = document.pop("assayformat")
+                measurement_techniques = []
+                assayname = document.pop("assayname").split(",")
+                for assay in assayname:
+                    measurement_techniques.append({"name": assay})
+                document["measurementTechnique"] = measurement_techniques
 
             if "size" in document:
                 if len(set(document["size"])) > 1:
