@@ -320,6 +320,9 @@ def parse():
                 hit["url"] = url
                 if len(hit["includedInDataCatalog"]) == 1:
                     hit["includedInDataCatalog"][0]["dataset"] = url
+            elif hit["@type"] == "ComputationalTool":
+                hit["includedInDataCatalog"][0]["dataset"] = hit["url"]
+                logger.info("ComputationalTool: %s", hit["url"])
             hit["_id"] = "dde_" + hit["_id"].lower()
 
             # adjust date values

@@ -267,10 +267,9 @@ def parse():
         trial["_id"] = "accessclinicaldata_" + trial["identifier"][0]
         trial["includedInDataCatalog"] = {"name": "AccessClinicalData@NIAID"}
         trial["@type"] = "Dataset"
-        url = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + trial["identifier"][0]
-        trial["url"] = url
-        trial["includedInDataCatalog"]["dataset"] = url
-
+        dataset_url = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + trial["identifier"][0]
+        trial["url"] = dataset_url
+        trial["includedInDataCatalog"]["dataset"] = dataset_url
 
         # getting rid of None values
         result = {k: v for k, v in trial.items() if v is not None}

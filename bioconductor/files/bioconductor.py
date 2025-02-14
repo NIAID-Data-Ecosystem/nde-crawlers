@@ -85,11 +85,13 @@ def parse():
             output["includedInDataCatalog"]["dataset"] = url
             output["doi"] = f"10.18129/B9.bioc.{identifier}"
 
-            downloads = [d["Nb_of_downloads"] for d in download_stats_dicts if d["Package"] == identifier][0]
-            output["interactionStatistic"] = {
-                "userInteractionCount": downloads,
-                "interactionType": "Downloads in the last 12 months",
-            }
+            downloads_list = [d["Nb_of_downloads"] for d in download_stats_dicts if d["Package"] == identifier]
+            if downloads_list:
+                downloads = downloads_list[0]
+                output["interactionStatistic"] = {
+                    "userInteractionCount": downloads,
+                    "interactionType": "Downloads in the last 12 months",
+                }
 
         if version := metadata.get("Version"):
             output["softwareVersion"] = version

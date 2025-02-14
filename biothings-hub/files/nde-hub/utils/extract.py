@@ -61,27 +61,25 @@ def extract(doc_list):
                 # For species (entity type "-2") skip if the record already contains species or infectiousAgent.
                 if entity_type == "-2" and ("species" in doc or "infectiousAgent" in doc):
                     logger.info(
-                        f"Species or infectiousAgent already present in document {doc['_id']}. Skipping species extraction...")
+                        f"Species or infectiousAgent already present in document {doc['_id']}. Skipping species extraction..."
+                    )
                     continue
                 # For diseases (entity type "-26") skip if healthCondition is present.
                 if entity_type == "-26" and "healthCondition" in doc:
                     logger.info(
-                        f"HealthCondition already present in document {doc['_id']}. Skipping disease extraction...")
+                        f"HealthCondition already present in document {doc['_id']}. Skipping disease extraction..."
+                    )
                     continue
 
                 try:
                     response_text = get_cached_description(
                         doc["_id"].lower(), entity_type, c)
                     if response_text is None:
-                        logger.info(
-                            f"No cached entry for {doc['_id']}. Pinging API...")
-                        response_text = query_extract_api(
-                            doc["description"], entity_type)
-                        cache_description(
-                            doc["_id"].lower(), response_text, entity_type, c)
+                        logger.info(f"No cached entry for {doc['_id']}. Pinging API...")
+                        response_text = query_extract_api(doc["description"], entity_type)
+                        cache_description(doc["_id"].lower(), response_text, entity_type, c)
                     elif response_text == "":
-                        logger.info(
-                            f"Cached entry for {doc['_id']} is empty. Skipping...")
+                        logger.info(f"Cached entry for {doc['_id']} is empty. Skipping...")
                         continue
                     extracted_entities = parse_tsv(
                         doc["_id"].lower(), response_text)
@@ -102,13 +100,14 @@ def extract(doc_list):
                                 or entity["extracted_text"] in s.get("alternateName", [])
                                 for s in doc["species"]
                             ):
-                                logger.info(
-                                    f"Adding species {entity['extracted_text']} to document {doc['_id']}")
-                                doc["species"].append({
-                                    "name": entity["extracted_text"],
-                                    "identifier": entity["onto_id"],
-                                    "fromEXTRACT": True
-                                })
+                                logger.info(f"Adding species {entity['extracted_text']} to document {doc['_id']}")
+                                doc["species"].append(
+                                    {
+                                        "name": entity["extracted_text"],
+                                        "identifier": entity["onto_id"],
+                                        "fromEXTRACT": True,
+                                    }
+                                )
                         elif entity["entity_type"] == "-26":
                             doc.setdefault("healthCondition", [])
                             if not any(
@@ -229,95 +228,97 @@ def filter_species_terms_for_ancestors(species_mapping, species_list, lineage_in
 
 def insert_species(doc_list, species_mapping):
     for doc in doc_list:
-        updated_species = []
-        updated_infectious_agents = []
+        # Lists for preserving curated entries and for adding updated (extracted) entries.
+        preserved_hosts = []  # for curated host entries
+        preserved_infectious_agents = []  # for curated infectiousAgent entries
+        updated_hosts = []  # for extracted host entries (after mapping)
+        updated_infectious_agents = []  # for extracted infectiousAgent entries (after mapping)
 
-        # Track names and identifiers from preserved (curated) species so duplicates aren’t added.
-        existing_species_names = set()
+        # Sets for tracking duplicates.
+        existing_host_names = set()
         existing_infectious_agent_names = set()
         existing_identifiers = set()
 
-        if "species" in doc:
-            species_names = [species_obj["name"] for species_obj in doc["species"]]
+        # Combine entries from both "species" and "infectiousAgent" fields.
+        combined_entries = []
+        if "species" in doc and doc["species"]:
+            if isinstance(doc["species"], list):
+                combined_entries.extend(doc["species"])
+            else:
+                combined_entries.append(doc["species"])
+        if "infectiousAgent" in doc and doc["infectiousAgent"]:
+            if isinstance(doc["infectiousAgent"], list):
+                combined_entries.extend(doc["infectiousAgent"])
+            else:
+                combined_entries.append(doc["infectiousAgent"])
+
+        if combined_entries:
+            # Build a list of names for lineage filtering.
+            species_names = [entry.get("name") for entry in combined_entries if "name" in entry]
             lineage_info = build_species_lineage_info(species_names, species_mapping)
             filtered_species_names = filter_species_terms_for_ancestors(
                 species_mapping, species_names, lineage_info)
 
-            # Preserve curated species (those that did NOT come from EXTRACT)
-            preserved_species = [
-                species for species in doc["species"] if not species.get("fromEXTRACT", False)
-            ]
+            for entry in combined_entries:
+                name = entry.get("name")
+                if not name or name not in filtered_species_names:
+                    continue
 
-            # Register curated species and infectious agents from the species field.
-            for species in preserved_species:
-                classification = species.get("classification")
-                name_lower = species["name"].lower()
-                identifier = species.get("identifier")
-                if classification == "host":
-                    existing_species_names.add(name_lower)
+                # Process curated entries (those that did NOT come from extraction)
+                if not entry.get("fromEXTRACT", False):
+                    classification = entry.get("classification")
+                    lower_name = name.lower()
+                    identifier = entry.get("identifier")
+                    if classification == "host":
+                        preserved_hosts.append(entry)
+                        existing_host_names.add(lower_name)
+                    elif classification == "infectiousAgent":
+                        preserved_infectious_agents.append(entry)
+                        existing_infectious_agent_names.add(lower_name)
                     existing_identifiers.add(identifier)
-                elif classification == "infectiousAgent":
-                    existing_infectious_agent_names.add(name_lower)
-                    existing_identifiers.add(identifier)
-
-            # Process species objects that came from extraction.
-            for species_obj in doc["species"]:
-                if species_obj["name"] not in filtered_species_names:
-                    continue
-
-                # If the species is curated already, keep it.
-                if not species_obj.get("fromEXTRACT", False):
-                    updated_species.append(species_obj)
-                    continue
-
-                original_name = species_obj["name"]
-                lower_name = original_name.lower()
-                new_obj = species_mapping.get(lower_name, None)
-                if not new_obj:
-                    logger.info(f"Unable to find species details for {original_name}")
-                    continue
-
-                if (
-                    new_obj.get("classification") == "infectiousAgent"
-                    and lower_name not in existing_infectious_agent_names
-                    and new_obj.get("identifier") not in existing_identifiers
-                ):
-                    updated_infectious_agents.append(new_obj)
-                    existing_infectious_agent_names.add(lower_name)
-                    existing_identifiers.add(new_obj.get("identifier"))
-                elif (
-                    new_obj.get("classification") == "host"
-                    and lower_name not in existing_species_names
-                    and new_obj.get("identifier") not in existing_identifiers
-                ):
-                    updated_species.append(new_obj)
-                    existing_species_names.add(lower_name)
-                    existing_identifiers.add(new_obj.get("identifier"))
                 else:
-                    logger.info(f"Unable to add {original_name} to document {doc['_id']}")
-                    logger.info(f"Classification: {new_obj.get('classification')}")
-                    logger.info(f"Lower name: {lower_name}")
-                    logger.info(f"Identifiers: {existing_identifiers}")
-                    logger.info(f"identifier: {new_obj.get('identifier')}")
+                    # Process extracted entries by looking up details in species_mapping.
+                    original_name = name
+                    lower_name = original_name.lower()
+                    new_obj = species_mapping.get(lower_name)
+                    if not new_obj:
+                        logger.info(f"Unable to find species details for {original_name}")
+                        continue
 
-            # Combine curated species with any updated species.
-            doc["species"] = preserved_species + updated_species
+                    classification = new_obj.get("classification")
+                    identifier = new_obj.get("identifier")
+                    if classification == "infectiousAgent":
+                        if lower_name not in existing_infectious_agent_names and identifier not in existing_identifiers:
+                            updated_infectious_agents.append(new_obj)
+                            existing_infectious_agent_names.add(lower_name)
+                            existing_identifiers.add(identifier)
+                        else:
+                            logger.info(
+                                f"Duplicate or conflict for infectiousAgent {original_name} in document {doc['_id']}"
+                            )
+                    elif classification == "host":
+                        if lower_name not in existing_host_names and identifier not in existing_identifiers:
+                            updated_hosts.append(new_obj)
+                            existing_host_names.add(lower_name)
+                            existing_identifiers.add(identifier)
+                        else:
+                            logger.info(f"Duplicate or conflict for host {original_name} in document {doc['_id']}")
+                    else:
+                        logger.info(f"Unknown classification for {original_name} in document {doc['_id']}")
 
-            # Preserve curated infectious agents from the doc (if any)
-            preserved_infectious_agents = doc.get("infectiousAgent", [])
-            preserved_infectious_agents = [
-                agent for agent in preserved_infectious_agents if not agent.get("fromEXTRACT", False)
-            ]
+            # Reassign fields based on classification.
+            all_hosts = preserved_hosts + updated_hosts
+            all_infectious_agents = preserved_infectious_agents + updated_infectious_agents
 
-            # Combine preserved infectious agents with any updated (standardized) infectious agents.
-            combined_infectious_agents = preserved_infectious_agents + updated_infectious_agents
-            if combined_infectious_agents:
-                doc["infectiousAgent"] = combined_infectious_agents
+            if all_hosts:
+                doc["species"] = all_hosts
+            else:
+                doc.pop("species", None)
+
+            if all_infectious_agents:
+                doc["infectiousAgent"] = all_infectious_agents
             else:
                 doc.pop("infectiousAgent", None)
-
-            if not doc["species"]:
-                doc.pop("species", None)
 
             logger.info(f"Updated species in document {doc['_id']}")
 
@@ -330,10 +331,8 @@ def insert_disease(doc_list, disease_mapping):
             updated_disease = []
 
             # Preserve curated diseases.
-            preserved_diseases = [
-                disease for disease in doc["healthCondition"] if disease.get("fromPMID", False)]
-            preserved_disease_names = {
-                disease["name"].lower() for disease in preserved_diseases}
+            preserved_diseases = [disease for disease in doc["healthCondition"] if disease.get("fromPMID", False)]
+            preserved_disease_names = {disease["name"].lower() for disease in preserved_diseases}
             preserved_disease_identifiers = {
                 disease.get("identifier") for disease in preserved_diseases if disease.get("identifier")
             }
@@ -342,7 +341,9 @@ def insert_disease(doc_list, disease_mapping):
             for disease_obj in doc["healthCondition"]:
                 original_name = disease_obj["name"].lower()
                 identifier = disease_obj.get("identifier")
-                if original_name in preserved_disease_names or (identifier and identifier in preserved_disease_identifiers):
+                if original_name in preserved_disease_names or (
+                    identifier and identifier in preserved_disease_identifiers
+                ):
                     continue
                 new_obj = disease_mapping.get(original_name, None)
                 if new_obj:
@@ -357,8 +358,7 @@ def insert_disease(doc_list, disease_mapping):
 
 
 def classify_as_host_or_agent(scientific_name, lineage):
-    hosts = ["Deuterostomia", "Embryophyta",
-             "Arthropoda", "Archaea", "Mollusca"]
+    hosts = ["Deuterostomia", "Embryophyta", "Arthropoda", "Archaea", "Mollusca"]
     if scientific_name in hosts:
         logger.info(f"Found {scientific_name}, classifying as host")
         return "host"
@@ -400,8 +400,7 @@ def classify_as_host_or_agent(scientific_name, lineage):
                 f"Found Arthropoda in {scientific_names}, classifying as host")
             return "host"
     else:
-        logger.info(
-            f"Found {scientific_names}, classifying as infectiousAgent")
+        logger.info(f"Found {scientific_names}, classifying as infectiousAgent")
         return "infectiousAgent"
 
 
@@ -409,8 +408,7 @@ def get_species_details(original_name, identifier):
     logger.info(f"Getting details for {original_name}")
     identifier = str(identifier)
     identifier = identifier.split("*")[-1]
-    species_info = requests.get(
-        f"https://rest.uniprot.org/taxonomy/{identifier}")
+    species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
     species_info.raise_for_status()
     species_info = species_info.json()
     standard_dict = {
@@ -481,7 +479,6 @@ def process_species(doc_list):
                         normalized.append(agent)
                 doc["infectiousAgent"] = normalized
 
-
     # We want to process a document only if all entries in its species/infectiousAgent fields
     # came solely from EXTRACT (i.e. they all have "fromEXTRACT": True). If any entry is curated,
     # we skip standardization for that document.
@@ -497,11 +494,12 @@ def process_species(doc_list):
             continue
 
         if any(not term.get("fromEXTRACT", False) for term in combined):
-            logger.info(f"Document {doc['_id']} already contains curated species/infectiousAgent. Skipping standardization.")
+            logger.info(
+                f"Document {doc['_id']} already contains curated species/infectiousAgent. Skipping standardization."
+            )
             continue
         else:
             docs_to_standardize.append(doc)
-
 
     term_names = set()
     for doc in docs_to_standardize:
@@ -516,7 +514,6 @@ def process_species(doc_list):
 
     unique_term_names = list(term_names)
     logger.info(f"Total unique species/infectiousAgent to process: {len(unique_term_names)}")
-
 
     formatted_species = []
     if unique_term_names:
@@ -560,10 +557,8 @@ def process_species(doc_list):
 
 
     species_mapping = {
-        (sp["originalName"].lower() if "originalName" in sp else sp["name"].lower()): sp
-        for sp in formatted_species
+        (sp["originalName"].lower() if "originalName" in sp else sp["name"].lower()): sp for sp in formatted_species
     }
-
 
     return insert_species(doc_list, species_mapping) if formatted_species else doc_list
 
