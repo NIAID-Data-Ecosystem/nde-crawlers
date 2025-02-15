@@ -4,6 +4,7 @@ import biothings
 import biothings.hub.dataload.uploader as uploader
 import timeout_decorator
 from hub.dataload.nde import NDESourceUploader
+from utils.utils import nde_upload_wrapper
 
 from .parser import parse_files
 
@@ -25,6 +26,7 @@ class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
     def parse_files_with_timeout(self, input_file):
         return list(parse_files(input_file))
 
+    @nde_upload_wrapper
     def load_data(self, input_file):
         try:
             return self.parse_files_with_timeout(input_file)
