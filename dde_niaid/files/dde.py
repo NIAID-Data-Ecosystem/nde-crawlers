@@ -205,8 +205,8 @@ def parse():
                     },
                     {
                         "@type": "DataCatalog",
-                        "name": "NIAID Data Ecosystem",
-                        "url": "https://data.niaid.nih.gov",
+                        "name": "NIAID Data Ecosystem in DDE",
+                        "url": "https://discovery.biothings.io/portal/nde",
                         "versionDate": datetime.date.today().isoformat(),
                         "dataset": resource_catalog_url,
                     },
