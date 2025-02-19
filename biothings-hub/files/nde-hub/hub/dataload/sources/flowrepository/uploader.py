@@ -4,6 +4,7 @@ from utils.csv_helper import get_source_data
 from utils.extract import process_descriptions
 from utils.funding_helper import standardize_funding
 from utils.pmid_helper import load_pmid_ctfd
+from utils.topic_category_helper import add_topic_category
 from utils.utils import nde_upload_wrapper
 
 # Example __metadata__ dictionary:
@@ -38,6 +39,7 @@ class FlowRepositoryUploader(NDESourceUploader):
         docs = load_pmid_ctfd(data_folder)
         docs = standardize_funding(docs)
         docs = process_descriptions(docs)
+        docs = add_topic_category(docs)
         docs = corrections(docs)
         for doc in docs:
             yield doc
