@@ -69,6 +69,7 @@ def parse_file(doc, accno):
                 "name": "BioStudies",
                 "url": "https://www.ebi.ac.uk/biostudies/",
                 "versionDate": datetime.date.today().isoformat(),
+                "dataset": f"https://www.ebi.ac.uk/studies/{accno}",
             },
             "@type": "Dataset",
         }
