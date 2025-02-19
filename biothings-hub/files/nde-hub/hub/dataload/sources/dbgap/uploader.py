@@ -15,7 +15,7 @@ class dbGaP_Uploader(NDESourceUploader):
         docs = load_pmid_ctfd(data_folder)
         docs = standardize_funding(docs)
         docs = standardize_data(docs)
-        docs = add_topic_category(docs)
+        docs = add_topic_category(docs, self.name)
         docs = corrections(docs)
         for doc in docs:
             yield doc
