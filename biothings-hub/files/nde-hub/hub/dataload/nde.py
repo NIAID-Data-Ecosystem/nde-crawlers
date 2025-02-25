@@ -875,11 +875,40 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "text"},
                         }
                     },
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "classification": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "commonName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"},
+                        }
+                    },
+                    "displayName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "url": {"type": "text", "copy_to": ["all"]},
-                    "alternateName": {
+                    "isCurated": {"type": "boolean"},
+                    "name": {
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
@@ -889,23 +918,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
                     },
-                    "commonName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
-                    "displayName": {
-                        "type": "keyword",
-                        "normalizer": "keyword_lowercase_normalizer",
-                        "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword"}},
-                    },
-                    "isCurated": {"type": "boolean"},
-                    "fromEXTRACT": {"type": "boolean"},
-                    "fromPMID": {"type": "boolean"},
-                    "curatedBy": {
-                        "properties": {
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "text", "copy_to": ["all"]},
-                            "dateModified": {"type": "date"},
-                        }
-                    },
+                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "temporalCoverage": {

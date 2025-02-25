@@ -180,6 +180,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  tycho-crawler:
+    build:
+      context: tycho_crawler
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   vdj-crawler:
     build:
       context: vdj

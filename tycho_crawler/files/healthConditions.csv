@@ -1,0 +1,94 @@
+isAbout.name,isAbout.identifier.identifier pairs,healthcondition.originalName,healthCondition.name,healthCondition.url
+Acute hepatitis C,http://purl.bioontology.org/ontology/SNOMEDCT/235866006,Acute hepatitis C,acute hepatitis C virus infection,http://purl.obolibrary.org/obo/MONDO_0100371
+Acute nonparalytic poliomyelitis,http://purl.bioontology.org/ontology/SNOMEDCT/14535005,Acute nonparalytic poliomyelitis,acute nonparalytic poliomyelitis,http://purl.obolibrary.org/obo/MONDO_0003231
+Acute paralytic poliomyelitis,http://purl.bioontology.org/ontology/SNOMEDCT/240460008,Acute paralytic poliomyelitis,paralytic poliomyelitis,http://purl.obolibrary.org/obo/MONDO_0000341
+Acute poliomyelitis,http://purl.bioontology.org/ontology/SNOMEDCT/398102009,Acute poliomyelitis,poliomyelitis,http://purl.obolibrary.org/obo/MONDO_0017373
+Acute type A viral hepatitis,http://purl.bioontology.org/ontology/SNOMEDCT/25102003,Acute type A viral hepatitis,hepatitis A virus infection,http://purl.obolibrary.org/obo/MONDO_0005790
+Amebic dysentery,http://purl.bioontology.org/ontology/SNOMEDCT/387754006,Amebic dysentery,amebic dysentery,http://purl.obolibrary.org/obo/MONDO_0024275
+Anthrax,http://purl.bioontology.org/ontology/SNOMEDCT/409498004,Anthrax,anthrax infection,http://purl.obolibrary.org/obo/MONDO_0005119
+Aseptic meningitis,http://purl.bioontology.org/ontology/SNOMEDCT/301770000,Aseptic meningitis,aseptic meningitis,http://purl.obolibrary.org/obo/MONDO_0006662
+Babesiosis,http://purl.bioontology.org/ontology/SNOMEDCT/21061004,Babesiosis,babesiosis,http://purl.obolibrary.org/obo/MONDO_0005661
+Bacillary dysentery,http://purl.bioontology.org/ontology/SNOMEDCT/274081004,Bacillary dysentery,shigellosis,http://purl.obolibrary.org/obo/MONDO_0019345
+Chlamydia trachomatis infection,http://purl.bioontology.org/ontology/SNOMEDCT/240589008,Chlamydia trachomatis infection,chlamydia trachomatis infectious disease,http://purl.obolibrary.org/obo/MONDO_0005701
+Chlamydial infection,http://purl.bioontology.org/ontology/SNOMEDCT/105629000,Chlamydial infection,chlamydia trachomatis infectious disease,http://purl.obolibrary.org/obo/MONDO_0005701
+Congenital rubella syndrome,http://purl.bioontology.org/ontology/SNOMEDCT/1857005,Congenital rubella syndrome,congenital rubella syndrome,http://purl.obolibrary.org/obo/MONDO_0017361
+Congenital syphilis,http://purl.bioontology.org/ontology/SNOMEDCT/35742006,Congenital syphilis,congenital syphilis,http://purl.obolibrary.org/obo/MONDO_0005714
+Cryptosporidiosis,http://purl.bioontology.org/ontology/SNOMEDCT/240370009,Cryptosporidiosis,cryptosporidiosis,http://purl.obolibrary.org/obo/MONDO_0015474
+Dengue hemorrhagic fever,http://purl.bioontology.org/ontology/SNOMEDCT/20927009,Dengue hemorrhagic fever,dengue hemorrhagic fever,http://purl.obolibrary.org/obo/MONDO_0005358
+Dengue,http://purl.bioontology.org/ontology/SNOMEDCT/38362002,Dengue,dengue disease,http://purl.obolibrary.org/obo/MONDO_0005502
+Diphtheria,http://purl.bioontology.org/ontology/SNOMEDCT/397428000,Diphtheria,diphtheria,http://purl.obolibrary.org/obo/MONDO_0005504
+Disease caused by West Nile virus,http://purl.bioontology.org/ontology/SNOMEDCT/417093003,Disease caused by West Nile virus,West Nile fever,http://purl.obolibrary.org/obo/MONDO_0002282
+Dysentery,http://purl.bioontology.org/ontology/SNOMEDCT/111939009,Dysentery,dysentery,http://purl.obolibrary.org/obo/MONDO_0001517
+Encephalitis lethargica,http://purl.bioontology.org/ontology/SNOMEDCT/186499007,Encephalitis lethargica,encephalitis lethargica,http://purl.obolibrary.org/obo/MONDO_0019384
+Gonorrhea,http://purl.bioontology.org/ontology/SNOMEDCT/15628003,Gonorrhea,gonorrhea,http://purl.obolibrary.org/obo/MONDO_0004277
+Human ehrlichiosis caused by Ehrlichia chaffeensis,http://purl.bioontology.org/ontology/SNOMEDCT/359747000,Human ehrlichiosis caused by Ehrlichia chaffeensis,human monocytic ehrlichiosis,http://purl.obolibrary.org/obo/MONDO_0000225
+Infection caused by non-cholerae vibrio,http://purl.bioontology.org/ontology/SNOMEDCT/398557001,Infection caused by non-cholerae vibrio,vibrio vulnificus infectious disease,http://purl.obolibrary.org/obo/MONDO_0043297
+Infective encephalitis,http://purl.bioontology.org/ontology/SNOMEDCT/312215006,Infective encephalitis,infectious encephalitis,http://purl.obolibrary.org/obo/MONDO_0020067
+Inflammatory disease of liver,http://purl.bioontology.org/ontology/SNOMEDCT/128241005,Inflammatory disease of liver,hepatitis,http://purl.obolibrary.org/obo/MONDO_0002251
+Legionella infection,http://purl.bioontology.org/ontology/SNOMEDCT/26726000,Legionella infection,legionellosis,http://purl.obolibrary.org/obo/MONDO_0005823
+Lyme disease,http://purl.bioontology.org/ontology/SNOMEDCT/23502006,Lyme disease,lyme disease,http://purl.obolibrary.org/obo/MONDO_0019632
+Measles,http://purl.bioontology.org/ontology/SNOMEDCT/14189004,Measles,measles,http://purl.obolibrary.org/obo/MONDO_0004619
+Meningococcal infectious disease,http://purl.bioontology.org/ontology/SNOMEDCT/23511006,Meningococcal infectious disease,meningococcal infection,http://purl.obolibrary.org/obo/MONDO_0005373
+Meningococcal meningitis,http://purl.bioontology.org/ontology/SNOMEDCT/192644005,Meningococcal meningitis,meningococcal meningitis,http://purl.obolibrary.org/obo/MONDO_0018059
+Mumps,http://purl.bioontology.org/ontology/SNOMEDCT/36989005,Mumps,mumps infectious disease,http://purl.obolibrary.org/obo/MONDO_0000989
+Murine typhus,http://purl.bioontology.org/ontology/SNOMEDCT/25668000,Murine typhus,endemic typhus,http://purl.obolibrary.org/obo/MONDO_0000330
+Pertussis,http://purl.bioontology.org/ontology/SNOMEDCT/27836007,Pertussis,pertussis,http://purl.obolibrary.org/obo/MONDO_0005077
+Pneumonia,http://purl.bioontology.org/ontology/SNOMEDCT/233604007,Pneumonia,pneumonia,http://purl.obolibrary.org/obo/MONDO_0005249
+Post-infectious encephalitis,http://purl.bioontology.org/ontology/SNOMEDCT/192727001,Post-infectious encephalitis,postinfectious encephalitis,http://purl.obolibrary.org/obo/MONDO_0020068
+Primary encephalitis,http://purl.bioontology.org/ontology/SNOMEDCT/406573001,Primary encephalitis,infectious encephalitis,http://purl.obolibrary.org/obo/MONDO_0020067
+Rocky Mountain spotted fever,http://purl.bioontology.org/ontology/SNOMEDCT/186772009,Rocky Mountain spotted fever,rocky mountain spotted fever,http://purl.obolibrary.org/obo/MONDO_0019359
+Rubella,http://purl.bioontology.org/ontology/SNOMEDCT/36653000,Rubella,rubella,http://purl.obolibrary.org/obo/MONDO_0004656
+Salmonella infection,http://purl.bioontology.org/ontology/SNOMEDCT/302231008,Salmonella infection,salmonellosis,http://purl.obolibrary.org/obo/MONDO_0000827
+Scarlet fever,http://purl.bioontology.org/ontology/SNOMEDCT/30242009,Scarlet fever,scarlet fever,http://purl.obolibrary.org/obo/MONDO_0005952
+Shigellosis,http://purl.bioontology.org/ontology/SNOMEDCT/36188001,Shigellosis,shigellosis,http://purl.obolibrary.org/obo/MONDO_0019345
+Spotted fever group rickettsial disease,http://purl.bioontology.org/ontology/SNOMEDCT/186771002,Spotted fever group rickettsial disease,spotted fever,http://purl.obolibrary.org/obo/MONDO_0001195
+Toxic shock syndrome,http://purl.bioontology.org/ontology/SNOMEDCT/18504008,Toxic shock syndrome,toxic shock syndrome,http://purl.obolibrary.org/obo/MONDO_0001881
+Tularemia,http://purl.bioontology.org/ontology/SNOMEDCT/19265001,Tularemia,tularemia,http://purl.obolibrary.org/obo/MONDO_0018077
+Typhus group rickettsial disease,http://purl.bioontology.org/ontology/SNOMEDCT/240613006,Typhus group rickettsial disease,typhus,http://purl.obolibrary.org/obo/MONDO_0001246
+Varicella,http://purl.bioontology.org/ontology/SNOMEDCT/38907003,Varicella,varicella zoster infection,http://purl.obolibrary.org/obo/MONDO_0005608
+Viral hepatitis type A,http://purl.bioontology.org/ontology/SNOMEDCT/40468003,Viral hepatitis type A,hepatitis A virus infection,http://purl.obolibrary.org/obo/MONDO_0005790
+Viral hepatitis,http://purl.bioontology.org/ontology/SNOMEDCT/3738000,Viral hepatitis,viral hepatitis,http://purl.obolibrary.org/obo/MONDO_0006011
+Yellow fever,http://purl.bioontology.org/ontology/SNOMEDCT/16541001,Yellow fever,yellow fever,http://purl.obolibrary.org/obo/MONDO_0020502
+Pellagra,http://purl.bioontology.org/ontology/SNOMEDCT/418186002,Pellagra,pellagra,http://purl.obolibrary.org/obo/MONDO_0019975
+Listeriosis,http://purl.bioontology.org/ontology/SNOMEDCT/4241002,Listeriosis,listeriosis,http://purl.obolibrary.org/obo/MONDO_0005828
+Active tuberculosis,http://purl.bioontology.org/ontology/SNOMEDCT/427099000,Active tuberculosis,active tuberculosis,http://purl.obolibrary.org/obo/MONDO_0100481
+Streptococcal sore throat,http://purl.bioontology.org/ontology/SNOMEDCT/43878008,Streptococcal sore throat,streptococcal sore throat,http://purl.obolibrary.org/obo/MONDO_0021783
+Encephalitis,http://purl.bioontology.org/ontology/SNOMEDCT/45170000,Encephalitis,encephalitis,http://purl.obolibrary.org/obo/MONDO_0019956
+Typhoid fever,http://purl.bioontology.org/ontology/SNOMEDCT/4834000,Typhoid fever,typhoid fever,http://purl.obolibrary.org/obo/MONDO_0005619
+Tuberculosis,http://purl.bioontology.org/ontology/SNOMEDCT/56717001,Tuberculosis,tuberculosis,http://purl.obolibrary.org/obo/MONDO_0018076
+Giardiasis,http://purl.bioontology.org/ontology/SNOMEDCT/58265007,Giardiasis,giardiasis,http://purl.obolibrary.org/obo/MONDO_0001103
+Coccidioidomycosis,http://purl.bioontology.org/ontology/SNOMEDCT/60826002,Coccidioidomycosis,coccidioidomycosis,http://purl.obolibrary.org/obo/MONDO_0005706
+Influenza,http://purl.bioontology.org/ontology/SNOMEDCT/6142004,Influenza,influenza,http://purl.obolibrary.org/obo/MONDO_0005812
+Malaria,http://purl.bioontology.org/ontology/SNOMEDCT/61462000,Malaria,malaria,http://purl.obolibrary.org/obo/MONDO_0005136
+Acquired immune deficiency syndrome,http://purl.bioontology.org/ontology/SNOMEDCT/62479008,Acquired immune deficiency syndrome,AIDS,http://purl.obolibrary.org/obo/MONDO_0012268
+Cholera,http://purl.bioontology.org/ontology/SNOMEDCT/63650001,Cholera,cholera,http://purl.obolibrary.org/obo/MONDO_0015766
+Viral hepatitis type B,http://purl.bioontology.org/ontology/SNOMEDCT/66071002,Viral hepatitis type B,hepatitis B virus infection,http://purl.obolibrary.org/obo/MONDO_0005344
+Smallpox,http://purl.bioontology.org/ontology/SNOMEDCT/67924001,Smallpox,smallpox,http://purl.obolibrary.org/obo/MONDO_0004651
+Infection caused by larvae of Trichinella,http://purl.bioontology.org/ontology/SNOMEDCT/709018004,Infection caused by larvae of Trichinella,trichinellosis,http://purl.obolibrary.org/obo/MONDO_0019444
+Infection caused by Escherichia coli,http://purl.bioontology.org/ontology/SNOMEDCT/71057007,Infection caused by Escherichia coli,escherichia coli infection,http://purl.obolibrary.org/obo/MONDO_0020920
+Meningitis,http://purl.bioontology.org/ontology/SNOMEDCT/7180009,Meningitis,meningitis,http://purl.obolibrary.org/obo/MONDO_0021108
+Ornithosis,http://purl.bioontology.org/ontology/SNOMEDCT/75116005,Ornithosis,ornithosis,http://purl.obolibrary.org/obo/MONDO_0005888
+Brucellosis,http://purl.bioontology.org/ontology/SNOMEDCT/75702008,Brucellosis,brucellosis,http://purl.obolibrary.org/obo/MONDO_0005683
+Syphilis,http://purl.bioontology.org/ontology/SNOMEDCT/76272004,Syphilis,syphilis,http://purl.obolibrary.org/obo/MONDO_0005976
+Acute type B viral hepatitis,http://purl.bioontology.org/ontology/SNOMEDCT/76795007,Acute type B viral hepatitis,acute hepatitis B virus infection,http://purl.obolibrary.org/obo/MONDO_0100370
+Tetanus,http://purl.bioontology.org/ontology/SNOMEDCT/76902006,Tetanus,tetanus,http://purl.obolibrary.org/obo/MONDO_0005526
+Leprosy,http://purl.bioontology.org/ontology/SNOMEDCT/81004002,Leprosy,leprosy,http://purl.obolibrary.org/obo/MONDO_0005124
+COVID-19,http://purl.bioontology.org/ontology/SNOMEDCT/840539006,COVID-19,covid-19,http://purl.obolibrary.org/obo/MONDO_0100096
+Human anaplasmosis caused by Anaplasma phagocytophilum,http://purl.bioontology.org/ontology/SNOMEDCT/85708001,Human anaplasmosis caused by Anaplasma phagocytophilum,human granulocytic ehrlichiosis,http://purl.obolibrary.org/obo/MONDO_0005118
+Campylobacteriosis,http://purl.bioontology.org/ontology/SNOMEDCT/86500004,Campylobacteriosis,campylobacteriosis,http://purl.obolibrary.org/obo/MONDO_0005688
+Haemophilus influenzae infection,http://purl.bioontology.org/ontology/SNOMEDCT/91428005,Haemophilus influenzae infection,haemophilus infectious disease,http://purl.obolibrary.org/obo/MONDO_0006926
+Infantile paralysis,http://purl.bioontology.org/ontology/SNOMEDCT/397928009,Infantile paralysis,Infantile onset,http://purl.obolibrary.org/obo/HP_0003593
+Hepatitis non-A non-B,http://purl.bioontology.org/ontology/SNOMEDCT/186634008,,viral hepatitis,http://purl.obolibrary.org/obo/MONDO_0006011
+Typhoid and paratyphoid fevers,http://purl.bioontology.org/ontology/SNOMEDCT/186090001,Typhoid and paratyphoid fevers,paratyphoid fever,http://purl.obolibrary.org/obo/MONDO_0018626
+Dengue without warning signs,http://purl.bioontology.org/ontology/SNOMEDCT/722862003,Dengue without warning signs,dengue disease,http://purl.obolibrary.org/obo/MONDO_0005502
+Smallpox without rash,http://purl.bioontology.org/ontology/SNOMEDCT/74724001,Smallpox without rash,smallpox,http://purl.obolibrary.org/obo/MONDO_0004651
+West Nile fever without encephalitis,http://purl.bioontology.org/ontology/SNOMEDCT/397420007,West Nile fever without encephalitis,West Nile fever,http://purl.obolibrary.org/obo/MONDO_0002282
+Disorder of nervous system caused by West Nile virus,http://purl.bioontology.org/ontology/SNOMEDCT/430397002,Disorder of nervous system caused by West Nile virus,West Nile fever,http://purl.obolibrary.org/obo/MONDO_0002282
+Lobar pneumonia,http://purl.bioontology.org/ontology/SNOMEDCT/278516003,Lobar pneumonia,pneumonia,http://purl.obolibrary.org/obo/MONDO_0005249
+Infection caused by Shiga toxin producing Escherichia coli,http://purl.bioontology.org/ontology/SNOMEDCT/328291000119103,Infection caused by Shiga toxin producing Escherichia coli,escherichia coli infection,http://purl.obolibrary.org/obo/MONDO_0020920
+Invasive drug resistant Streptococcus pneumoniae disease,http://purl.bioontology.org/ontology/SNOMEDCT/406618009,Invasive drug resistant Streptococcus pneumoniae disease,pneumococcal infection,http://purl.obolibrary.org/obo/MONDO_0005114
+Invasive Group A beta-hemolytic streptococcal disease,http://purl.bioontology.org/ontology/SNOMEDCT/406614006,Invasive Group A beta-hemolytic streptococcal disease,streptococcal infection,http://purl.obolibrary.org/obo/MONDO_0021680
+Invasive Streptococcus pneumoniae disease,http://purl.bioontology.org/ontology/SNOMEDCT/406617004,Invasive Streptococcus pneumoniae disease,pneumococcal infection,http://purl.obolibrary.org/obo/MONDO_0005114
+Intestinal infection caused by Escherichia coli O157:H7,http://purl.bioontology.org/ontology/SNOMEDCT/446328009,Intestinal infection caused by Escherichia coli O157:H7,escherichia coli infectio,http://purl.obolibrary.org/obo/MONDO_0020920
+Invasive meningococcal disease,http://purl.bioontology.org/ontology/SNOMEDCT/707225006,Invasive meningococcal disease,meningococcal infection,http://purl.obolibrary.org/obo/MONDO_0005373
+Haemophilus influenzae type b infection,http://purl.bioontology.org/ontology/SNOMEDCT/709410003,Haemophilus influenzae type b infection,haemophilus infectious disease,http://purl.obolibrary.org/obo/MONDO_0006926
