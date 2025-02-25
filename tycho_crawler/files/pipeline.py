@@ -54,6 +54,7 @@ class TychoItemProcessorPipeline:
             "@type": "Dataset",
             "_id": _id,
             "identifier": _id,
+            "sameAs": item.get("zenodo_url"),
             "url": url,
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
