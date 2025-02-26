@@ -169,7 +169,7 @@ class TychoItemProcessorPipeline:
         vm = {
             "name": "Count of disease cases",
             "url": "http://purl.obolibrary.org/obo/APOLLO_SV_00000497",
-            "curatedBy": "NIAID Data Ecosystem",
+            "curatedBy": {"name": "NIAID Data Ecosystem"},
             "isCurated": "True",
         }
         vm_set = set()

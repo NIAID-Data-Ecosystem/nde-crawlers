@@ -964,29 +964,11 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "variableMeasured": {
                 "properties": {
-                    "description": {"type": "text"},
-                    "identifier": {"type": "text", "copy_to": ["all"]},
-                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
-                    "name": {
-                        "type": "keyword",
-                        "normalizer": "keyword_lowercase_normalizer",
-                        "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword"}},
-                    },
-                    "url": {"type": "text", "copy_to": ["all"]},
                     "alternateName": {
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
                     },
-                    "originalName": {
-                        "type": "keyword",
-                        "normalizer": "keyword_lowercase_normalizer",
-                        "copy_to": ["all"],
-                    },
-                    "isCurated": {"type": "boolean"},
-                    "fromEXTRACT": {"type": "boolean"},
-                    "fromPMID": {"type": "boolean"},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -994,6 +976,24 @@ class NDESourceUploader(BaseSourceUploader):
                             "dateModified": {"type": "date"},
                         }
                     },
+                    "description": {"type": "text"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "isCurated": {"type": "boolean"},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "version": {
