@@ -171,7 +171,7 @@ def load_documents(data):
     return doc_list
 
 
-def update_documents_with_corrections(doc):
+def update_documents_with_corrections(documents):
     """
     For every correction available in our corrections repo, update any documents whose
     _id appears in that correction's records file.
@@ -215,28 +215,30 @@ def update_documents_with_corrections(doc):
             record_ids = set(get_record_ids(records_content))
             corrections_dict[correction_name] = (record_ids, correction_organizations, approved)
             logging.info(
-                f"Loaded correction '{correction_name}' with {
-                         len(record_ids)} record IDs (approved: {approved})"
+                f"Loaded correction '{correction_name}' with {len(record_ids)} record IDs (approved: {approved})"
             )
         except Exception as e:
             logging.error(f"Error fetching correction files for '{correction_name}': {e}")
             corrections_dict.pop(correction_name, None)
 
-    # Update each document: for every correction, if the document _id is in the records list, update it.
-    doc_id = doc.get("_id", "").lower()
-    for correction_name, correction_data in corrections_dict.items():
-        if correction_data is None:
-            continue
-        record_ids, correction_organizations, approved = correction_data
-        if doc_id and doc_id in record_ids:
-            doc = update_source_organization(doc, correction_organizations, approved=approved)
-            logging.info(f"Updated document {doc_id} with correction '{correction_name}' (approved: {approved})")
-    return doc
+    # Process and yield each document as it comes in.
+    for doc in documents:
+        doc_id = doc.get("_id", "").lower()
+        for correction_name, correction_data in corrections_dict.items():
+            if correction_data is None:
+                continue
+            record_ids, correction_organizations, approved = correction_data
+            if doc_id and doc_id in record_ids:
+                doc = update_source_organization(doc, correction_organizations, approved=approved)
+                logging.info(f"Updated document {doc_id} with correction '{correction_name}' (approved: {approved})")
+        yield doc
 
 
-def corrections(doc):
+def corrections(data):
     """
     Load documents and then update them by applying every correction found in our corrections repo.
     """
-    updated_doc = update_documents_with_corrections(doc)
-    return updated_doc
+
+    documents = load_documents(data)
+    updated_documents = update_documents_with_corrections(documents)
+    return updated_documents
