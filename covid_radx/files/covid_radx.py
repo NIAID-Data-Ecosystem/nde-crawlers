@@ -38,7 +38,7 @@ def extract_ids(urls_string):
 
 def parse(hit):
     output = {
-        "_id": hit["_id"],
+        "_id": f"radx_{hit["_id"]}",
         "@type": "Dataset",
         "includedInDataCatalog": {
             "@type": "Dataset",
@@ -149,14 +149,14 @@ def parse(hit):
     if main_entity_of_page := hit.get("study_website_url"):
         output["mainEntityOfPage"] = main_entity_of_page.strip("{}")
 
-    temporal_coverage = {"@type": "temporalInterval", "temportalType": "study date"}
+    temporal_coverage = {"@type": "temporalInterval", "temporalType": "study date"}
     if start_date := hit.get("studystartdate"):
         temporal_coverage["startDate"] = dateutil.parser.parse(start_date).date().isoformat()
     if end_date := hit.get("studyenddate"):
         temporal_coverage["endDate"] = dateutil.parser.parse(end_date).date().isoformat()
 
     if temporal_coverage.get("startDate") or temporal_coverage.get("endDate"):
-        output["temporalCoverage"] = temporal_coverage
+        output["temporalCoverage"] = {"temporalInterval": temporal_coverage}
 
     if variable_measured := hit.get("subject_array"):
         vms = []
