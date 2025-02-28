@@ -170,7 +170,7 @@ class TychoItemProcessorPipeline:
             "name": "Count of disease cases",
             "url": "http://purl.obolibrary.org/obo/APOLLO_SV_00000497",
             "curatedBy": {"name": "NIAID Data Ecosystem"},
-            "isCurated": "True",
+            "isCurated": True,
         }
         vm_set = set()
         vm_set.add(json.dumps(vm, sort_keys=True))
