@@ -48,12 +48,12 @@ class TychoItemProcessorPipeline:
                 metadata["access"] = [metadata["access"]]
             url = metadata["access"][0]["landingPage"]
         else:
-            url = "https://www.tycho.pitt.edu/dataset/" + _id
+            url = "https://www.tycho.pitt.edu/dataset/" + identifier
         output = {
             "@context": "http://schema.org/",
             "@type": "Dataset",
             "_id": _id,
-            "identifier": _id,
+            "identifier": identifier,
             "sameAs": item.get("zenodo_url"),
             "url": url,
             "includedInDataCatalog": {
@@ -146,7 +146,7 @@ class TychoItemProcessorPipeline:
             if licenses := stored.get("licenses"):
                 if not isinstance(metadata["storedIn"]["licenses"], list):
                     licenses = [metadata["storedIn"]["licenses"]]
-                output["licenses"] = [
+                output["license"] = [
                     license["identifier"]["identifier"]
                     for license in licenses
                     if license.get("identifier") and license["identifier"].get("identifier")
