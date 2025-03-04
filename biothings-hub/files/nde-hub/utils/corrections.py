@@ -78,8 +78,10 @@ def fetch_correction_files(correction_name):
         approved = correction_json.get("approved", True)
         records_file_path = prod_records_file
     except Exception as prod_error:
-        logging.info(f"Production file for '{correction_name}' not found or error encountered: {
-                     prod_error}. Trying staging folder.")
+        logging.info(
+            f"Production file for '{correction_name}' not found or error encountered: {
+                     prod_error}. Trying staging folder."
+        )
         correction_content = get_github_file_content(owner, repo, staging_correction_file)
         correction_json = json.loads(correction_content)
         approved = correction_json.get("approved", False)
@@ -115,6 +117,7 @@ def sanitize_org(org):
             org["url"] = ""
     return org
 
+
 def update_source_organization(record_metadata, correction_organizations, approved=True):
     """
     Merge correction organizations into the document's sourceOrganization,
@@ -130,8 +133,7 @@ def update_source_organization(record_metadata, correction_organizations, approv
 
     # Gather identifiers already in the document (using name or url)
     existing_org_identifiers = {
-        (org.get("name") or org.get("url")).lower()
-        for org in existing_orgs if (org.get("name") or org.get("url"))
+        (org.get("name") or org.get("url")).lower() for org in existing_orgs if (org.get("name") or org.get("url"))
     }
 
     # Sanitize and merge new correction organizations.
@@ -145,6 +147,7 @@ def update_source_organization(record_metadata, correction_organizations, approv
 
     record_metadata["sourceOrganization"] = existing_orgs
     return record_metadata
+
 
 def load_documents(data):
     """
@@ -185,7 +188,7 @@ def update_documents_with_corrections(documents):
         production_files = list_github_files(owner, repo, prod_dir)
         production_records = [fname for fname in production_files if fname.endswith("_records.txt")]
         for fname in production_records:
-            correction_name = fname[:-len("_records.txt")]
+            correction_name = fname[: -len("_records.txt")]
             corrections_dict[correction_name] = None  # placeholder for later details
     except Exception as e:
         logging.error(f"Error listing production corrections: {e}")
@@ -195,7 +198,7 @@ def update_documents_with_corrections(documents):
         staging_files = list_github_files(owner, repo, staging_dir)
         staging_records = [fname for fname in staging_files if fname.endswith("_records.txt")]
         for fname in staging_records:
-            correction_name = fname[:-len("_records.txt")]
+            correction_name = fname[: -len("_records.txt")]
             if correction_name not in corrections_dict:
                 corrections_dict[correction_name] = None
     except Exception as e:
@@ -211,13 +214,14 @@ def update_documents_with_corrections(documents):
             records_content = get_github_file_content(owner, repo, records_file_path)
             record_ids = set(get_record_ids(records_content))
             corrections_dict[correction_name] = (record_ids, correction_organizations, approved)
-            logging.info(f"Loaded correction '{correction_name}' with {
-                         len(record_ids)} record IDs (approved: {approved})")
+            logging.info(
+                f"Loaded correction '{correction_name}' with {len(record_ids)} record IDs (approved: {approved})"
+            )
         except Exception as e:
             logging.error(f"Error fetching correction files for '{correction_name}': {e}")
             corrections_dict.pop(correction_name, None)
 
-    # Update each document: for every correction, if the document _id is in the records list, update it.
+    # Process and yield each document as it comes in.
     for doc in documents:
         doc_id = doc.get("_id", "").lower()
         for correction_name, correction_data in corrections_dict.items():
@@ -227,13 +231,14 @@ def update_documents_with_corrections(documents):
             if doc_id and doc_id in record_ids:
                 doc = update_source_organization(doc, correction_organizations, approved=approved)
                 logging.info(f"Updated document {doc_id} with correction '{correction_name}' (approved: {approved})")
-    return documents
+        yield doc
 
 
 def corrections(data):
     """
     Load documents and then update them by applying every correction found in our corrections repo.
     """
+
     documents = load_documents(data)
     updated_documents = update_documents_with_corrections(documents)
     return updated_documents

@@ -22,6 +22,7 @@ from scores import (
     RESOURCE_CATALOG_REQUIRED,
     RESOURCE_CATALOG_REQUIRED_AUGMENTED,
 )
+from utils.corrections import corrections
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -142,11 +143,8 @@ def is_purely_augmented(field: str, field_content) -> bool:
     if isinstance(field_content, list):
         # All items must be augmented dicts to consider it purely augmented
         return all(
-            isinstance(item, dict) and (
-                item.get("fromPMID", False)
-                or item.get("fromGPT", False)
-                or item.get("fromEXTRACT", False)
-            )
+            isinstance(item, dict)
+            and (item.get("fromPMID", False) or item.get("fromGPT", False) or item.get("fromEXTRACT", False))
             for item in field_content
         )
 
@@ -193,18 +191,14 @@ def add_metadata_score(document: Dict) -> Dict:
     if doc_type == "ComputationalTool":
         local_required_fields = list(COMPUTATIONAL_TOOL_REQUIRED)
         local_recommended_fields = list(COMPUTATIONAL_TOOL_RECOMMENDED)
-        local_required_augmented_fields = list(
-            COMPUTATIONAL_TOOL_REQUIRED_AUGMENTED)
-        local_recommended_augmented_fields = list(
-            COMPUTATIONAL_TOOL_RECOMMENDED_AUGMENTED)
+        local_required_augmented_fields = list(COMPUTATIONAL_TOOL_REQUIRED_AUGMENTED)
+        local_recommended_augmented_fields = list(COMPUTATIONAL_TOOL_RECOMMENDED_AUGMENTED)
 
     elif doc_type == "ResourceCatalog":
         local_required_fields = list(RESOURCE_CATALOG_REQUIRED)
         local_recommended_fields = list(RESOURCE_CATALOG_RECOMMENDED)
-        local_required_augmented_fields = list(
-            RESOURCE_CATALOG_REQUIRED_AUGMENTED)
-        local_recommended_augmented_fields = list(
-            RESOURCE_CATALOG_RECOMMENDED_AUGMENTED)
+        local_required_augmented_fields = list(RESOURCE_CATALOG_REQUIRED_AUGMENTED)
+        local_recommended_augmented_fields = list(RESOURCE_CATALOG_RECOMMENDED_AUGMENTED)
 
     else:
         # Default: treat as a Dataset
@@ -215,21 +209,15 @@ def add_metadata_score(document: Dict) -> Dict:
 
     # 2) Calculate coverage for required & recommended fields (non-augmented)
     required_score = sum(
-        1
-        for field in local_required_fields
-        if field in document and not is_purely_augmented(field, document[field])
+        1 for field in local_required_fields if field in document and not is_purely_augmented(field, document[field])
     )
     recommended_score = sum(
-        1
-        for field in local_recommended_fields
-        if field in document and not is_purely_augmented(field, document[field])
+        1 for field in local_recommended_fields if field in document and not is_purely_augmented(field, document[field])
     )
 
     # 3) Identify which fields are truly augmented
-    required_augmented_fields = check_augmented_fields(
-        document, local_required_augmented_fields)
-    recommended_augmented_fields = check_augmented_fields(
-        document, local_recommended_augmented_fields)
+    required_augmented_fields = check_augmented_fields(document, local_required_augmented_fields)
+    recommended_augmented_fields = check_augmented_fields(document, local_recommended_augmented_fields)
 
     # 4) Tally counts
     total_required = len(local_required_fields)
@@ -239,14 +227,10 @@ def add_metadata_score(document: Dict) -> Dict:
 
     # 5) Collect which fields are present as non-augmented
     existing_required_fields = [
-        f
-        for f in local_required_fields
-        if f in document and not is_purely_augmented(f, document[f])
+        f for f in local_required_fields if f in document and not is_purely_augmented(f, document[f])
     ]
     existing_recommended_fields = [
-        f
-        for f in local_recommended_fields
-        if f in document and not is_purely_augmented(f, document[f])
+        f for f in local_recommended_fields if f in document and not is_purely_augmented(f, document[f])
     ]
 
     # 6) Update the document’s _meta section
@@ -264,20 +248,14 @@ def add_metadata_score(document: Dict) -> Dict:
                 "required_max_score": total_required,
                 "recommended_score": recommended_score,
                 "recommended_score_ratio": (
-                    round(recommended_score / total_recommended,
-                          2) if total_recommended > 0 else 0
+                    round(recommended_score / total_recommended, 2) if total_recommended > 0 else 0
                 ),
                 "recommended_max_score": total_recommended,
                 "augmented_required_ratio": (
-                    round(len(required_augmented_fields) / total_required, 2)
-                    if total_required > 0
-                    else 0
+                    round(len(required_augmented_fields) / total_required, 2) if total_required > 0 else 0
                 ),
                 "augmented_recommended_ratio": (
-                    round(len(recommended_augmented_fields)
-                          / total_recommended, 2)
-                    if total_recommended > 0
-                    else 0
+                    round(len(recommended_augmented_fields) / total_recommended, 2) if total_recommended > 0 else 0
                 ),
                 "total_required_augmented": total_required_augmented,
                 "total_recommended_augmented": total_recommended_augmented,
@@ -287,6 +265,7 @@ def add_metadata_score(document: Dict) -> Dict:
 
     return document
 
+
 def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]:
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -294,6 +273,8 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
         for doc in gen:
             # dictionaries are mutable so we dont need to reassign
             add_date(doc)
+            # corrections util for sourceOrganization
+            corrections(doc)
             # TODO FOR TESTING
             # merge_duplicates(doc)
             add_metadata_score(doc)

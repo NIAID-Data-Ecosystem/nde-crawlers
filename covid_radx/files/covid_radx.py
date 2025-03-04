@@ -38,7 +38,7 @@ def extract_ids(urls_string):
 
 def parse(hit):
     output = {
-        "_id": f"radx_{hit["_id"]}",
+        "_id": f"radx_{hit['_id']}",
         "@type": "Dataset",
         "includedInDataCatalog": {
             "@type": "Dataset",
