@@ -16,20 +16,25 @@ def load_mapping(name):
     """
     Loads mappings from the CSV and groups multiple mappings (if any) for the same repository technique.
     If the "Field" column is missing or empty, defaults to "measurementTechnique".
+    If "Manually Mapped Term" is empty, uses the "Repository Technique" for the name.
     """
     csv_file = f"/data/nde-hub/standardizers/measurement_technique_lookup/{name}.csv"
     mapping = {}
     with open(csv_file, "r", newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            repo_technique = row["Repository Technique"]
+            repo_technique = row["Repository Technique"].strip()
+            manually_mapped = row["Manually Mapped Term"].strip() if row["Manually Mapped Term"] else ""
+            if not manually_mapped:
+                manually_mapped = repo_technique
+
             entry = {
-                "name": row["Manually Mapped Term"],
-                "inDefinedTermSet": row["Ontology"],
-                "url": row["URL"],
-                "identifier": get_identifier(row["URL"]),
+                "name": manually_mapped,
+                "inDefinedTermSet": row["Ontology"].strip(),
+                "url": row["URL"].strip(),
+                "identifier": get_identifier(row["URL"].strip()),
                 "isCurated": True,
-                "field": row.get("Field", "measurementTechnique") or "measurementTechnique",
+                "field": row.get("Field", "measurementTechnique").strip() or "measurementTechnique",
             }
             if repo_technique in mapping:
                 mapping[repo_technique].append(entry)
@@ -59,6 +64,7 @@ def process_measurement_technique(data, name):
     If a repository technique maps to more than one target field, each mapping entry is
     added to the appropriate field.
     If measurementTechnique ends up as an empty list, it is removed from the document.
+    For the 'keywords' field, only the mapping name string is appended.
     """
     mapping = load_mapping(name)
 
@@ -87,13 +93,14 @@ def process_measurement_technique(data, name):
                         target_field = map_record.get("field", "measurementTechnique")
                         new_entry = dict(map_record)
                         new_entry["originalName"] = original_name
-                        if target_field == "measurementTechnique":
+                        if target_field == "keywords":
+                            # Append only the name string for keywords.
+                            append_to_field(doc, target_field, new_entry["name"])
+                        elif target_field == "measurementTechnique":
                             new_mt.append(new_entry)
                         else:
-                            # Append the new entry to the corresponding target field.
                             append_to_field(doc, target_field, new_entry)
                 else:
-                    # If no mapping found, keep the original item in measurementTechnique.
                     new_mt.append(item)
 
         # Overwrite or remove measurementTechnique based on whether new_mt is empty.
