@@ -8,7 +8,7 @@ class NDEIndexer(Indexer):
         self.es_index_settings["analysis"]["tokenizer"] = {
             "char_tokenizer": {
                 "type": "char_group",
-                "tokenize_on_chars": ["whitespace", "\n", ",", "/", "\\", "_", ";"],
+                "tokenize_on_chars": ["whitespace", "\n", ",", "/", "\\", "_", ";", "(", ")"],
             }
         }
 
