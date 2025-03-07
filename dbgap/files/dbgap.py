@@ -67,6 +67,7 @@ def parse():
                 "url": "https://www.ncbi.nlm.nih.gov/gap/",
                 "versionDate": datetime.date.today().isoformat(),
             },
+            "conditionsOfAccess": "Restricted",
         }
 
         file_path = os.path.join(json_dir, json_file)
@@ -283,33 +284,34 @@ def parse():
             if is_related_to:
                 output["isRelatedTo"] = is_related_to
 
-            if consent_groups := authorized_access.get("consentgroups", {}).get("participantset"):
-                if not isinstance(consent_groups, list):
-                    consent_groups = [consent_groups]
-                for consent_group in consent_groups:
-                    if irbrequired := consent_group.get("irbrequired"):
-                        if irbrequired.casefold() == "yes":
-                            output["conditionsOfAccess"] = "Restricted"
-                        else:
-                            embargo_length = int(authorized_access.get("policy", {}).get("embargolength"))
-                            display_public_summary = configuration.get("displaypublicsummary").casefold()
-                            au_display_public_summary = (
-                                authorized_access.get("policy", {}).get("displaypublicsummary").casefold()
-                            )
+            # all conditions of access are restricted by default
+            # if consent_groups := authorized_access.get("consentgroups", {}).get("participantset"):
+            #     if not isinstance(consent_groups, list):
+            #         consent_groups = [consent_groups]
+            #     for consent_group in consent_groups:
+            #         if irbrequired := consent_group.get("irbrequired"):
+            #             if irbrequired.casefold() == "yes":
+            #                 output["conditionsOfAccess"] = "Restricted"
+            #             else:
+            #                 embargo_length = int(authorized_access.get("policy", {}).get("embargolength"))
+            #                 display_public_summary = configuration.get("displaypublicsummary").casefold()
+            #                 au_display_public_summary = (
+            #                     authorized_access.get("policy", {}).get("displaypublicsummary").casefold()
+            #                 )
 
-                            if embargo_length > 0:
-                                output["conditionsOfAccess"] = "Embargoed"
-                            elif embargo_length == 0 and display_public_summary == "no":
-                                output["conditionsOfAccess"] = "Closed"
-                            elif (
-                                embargo_length == 0
-                                and display_public_summary == "yes"
-                                and au_display_public_summary == "yes"
-                            ):
-                                output["conditionsOfAccess"] = "Open"
-                            elif display_public_summary != au_display_public_summary:
-                                output["conditionsOfAccess"] = "Closed"
-                        break
+            #                 if embargo_length > 0:
+            #                     output["conditionsOfAccess"] = "Embargoed"
+            #                 elif embargo_length == 0 and display_public_summary == "no":
+            #                     output["conditionsOfAccess"] = "Closed"
+            #                 elif (
+            #                     embargo_length == 0
+            #                     and display_public_summary == "yes"
+            #                     and au_display_public_summary == "yes"
+            #                 ):
+            #                     output["conditionsOfAccess"] = "Open"
+            #                 elif display_public_summary != au_display_public_summary:
+            #                     output["conditionsOfAccess"] = "Closed"
+            #             break
 
             policy = authorized_access.get("policy", {})
             acknowledgementtext = policy.get("acknowledgementtext", {})
