@@ -20,7 +20,7 @@ class NDEIndexer(Indexer):
             "type": "custom",
             "tokenizer": "char_tokenizer",
             "char_filter": ["html_strip"],
-            "filter": ["lowercase", "asciifolding"],
+            "filter": ["lowercase", "asciifolding", "stemmer"],
         }
 
         # Testing standard tokenizer instead of the custom char_tokenizer
@@ -28,5 +28,5 @@ class NDEIndexer(Indexer):
             "type": "custom",
             "tokenizer": "char_tokenizer",
             "char_filter": ["html_strip"],
-            "filter": ["lowercase", "asciifolding", "shingle"],
+            "filter": ["lowercase", "asciifolding", "shingle", "stemmer"],
         }
