@@ -105,6 +105,7 @@ class TychoItemProcessorPipeline:
 
         if metadata.get("identifier") and metadata["identifier"].get("identifier"):
             output["identifier"] = metadata["identifier"]["identifier"]
+            output["doi"] = output["identifier"]
 
         if name := metadata.get("title"):
             output["name"] = name
@@ -151,6 +152,8 @@ class TychoItemProcessorPipeline:
                     for license in licenses
                     if license.get("identifier") and license["identifier"].get("identifier")
                 ]
+                if len(output["license"]) == 1:
+                    output["license"] = output["license"][0]
 
         s_cov = []
         if s_coverage := metadata.get("spatialCoverage"):
@@ -220,9 +223,12 @@ class TychoItemProcessorPipeline:
             for distribution in distributions:
                 d = {}
                 if distribution.get("access") and distribution["access"].get("landingPage"):
-                    d["url"] = distribution["access"]["landingPage"]
+                    d["contentUrl"] = distribution["access"]["landingPage"]
                 if formats := distribution.get("formats"):
-                    d["encodingFormat"] = formats
+                    if len(formats) == 1:
+                        d["encodingFormat"] = formats[0]
+                    else:
+                        d["encodingFormat"] = formats
                 if d:
                     d_list.append(d)
 
