@@ -107,9 +107,12 @@ def map_schema_json(schema_json):
     if cb_outbreak := schema_json.get("includedInDataCatalog"):
         schema_json["curatedBy"] = cb_outbreak
 
-    # set conditionsOfAccess and isAccessibleForFree
-    schema_json["conditionsOfAccess"] = "Closed"
-    schema_json["isAccessibleForFree"] = True
+    if schema_json["_id"] in ["IMMPORT_SDY1760", "IMMPORT_SDY2112"]:
+        schema_json["conditionsOfAccess"] = "Restricted"
+        schema_json["isAccessibleForFree"] = True
+    else:
+        schema_json["conditionsOfAccess"] = "Closed"
+        schema_json["isAccessibleForFree"] = True
 
     # set includedInDataCatalog.dataset
     if schema_json.get("includedInDataCatalog"):
