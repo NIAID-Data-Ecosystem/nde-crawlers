@@ -24,7 +24,7 @@ class DryadSpider(SitemapSpider):
     # parsing huge XMLs is slow
     # expect a very slow start
     sitemap_urls = ["https://datadryad.org/sitemap.xml"]
-    sitemap_rules = [("/stash/", "extract_from_jsonld")]
+    sitemap_rules = [("/dataset/", "extract_from_jsonld")]
 
     # for testing purposes limit requests to urls
     # limit = 70  # Limit entries

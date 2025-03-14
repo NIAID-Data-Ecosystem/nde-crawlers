@@ -46,9 +46,17 @@ def parse(hit):
             "url": "https://radxdatahub.nih.gov/",
             "versionDate": datetime.date.today().isoformat(),
         },
+        "conditionsOfAccess": "Restricted",
+        "license": "https://sharing.nih.gov/accessing-data/accessing-genomic-data/how-to-request-and-access-datasets-from-dbgap",
     }
     # Add the rest of the fields from _source
     hit = hit["_source"]
+    if doi := hit.get("study_doi"):
+        output["doi"] = doi
+
+    if phs := hit.get("phs"):
+        output["identifier"] = phs
+
     if version := hit.get("@version"):
         output["@version"] = version
 

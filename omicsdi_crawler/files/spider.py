@@ -3,6 +3,8 @@
 # PYTHONPATH="$PYTHONPATH:." SCRAPY_SETTINGS_MODULE="settings" scrapy runspider spider.py
 # If you are using the Dockerfile, runspider does this for you: /home/biothings/run-spider.sh
 
+import re
+
 from extruct import JsonLdExtractor
 from scrapy.spiders import SitemapSpider
 
@@ -19,11 +21,13 @@ class OmicsdiSpider(SitemapSpider):
     # parsing huge XMLs is slow and there's like six dozens of them
     # expect a very slow start
     sitemap_urls = ["https://www.omicsdi.org/sitemap.xml"]
-    sitemap_rules = [("/dataset/", "extract_from_jsonld")]
+    # sitemap_rules = [("/dataset/", "extract_from_jsonld")]
+
+    sitemap_rules = [(re.compile(r"/dataset/(?!biostudies-literature/)"), "extract_from_jsonld")]
 
     def extract_from_jsonld(self, response, **kwargs):
-        if "/dataset/biostudies-literature" in response.url:
-            return
+        # if "/dataset/biostudies-literature" in response.url:
+        #     return
 
         jslds = JsonLdExtractor().extract(response.body.decode("utf-8"))
 

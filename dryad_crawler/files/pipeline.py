@@ -67,7 +67,7 @@ class DryadItemProcessorPipeline:
         if identifier := item.pop("identifier", None):
             output["identifier"] = identifier
             if "doi" in identifier:
-                output["doi"] = identifier
+                output["doi"] = identifier.lstrip("doi:")
 
         if keywords := item.pop("keywords", None):
             output["keywords"] = keywords
