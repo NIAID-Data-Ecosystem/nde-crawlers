@@ -192,25 +192,26 @@ def parse():
             ]
 
             # add sourceOrganization (as determined by the DDE portal to which the record was submitted) - this can be determined based on the @context
-            resource_catalog_url = "https://discovery.biothings.io/" + hit["_id"].lower()
-            if hit.get("@context") and "nde" in hit.get("@context"):
-                source_organization = None
-                included_in_data_catalog = [
-                    {
-                        "@type": "DataCatalog",
-                        "name": "Data Discovery Engine",
-                        "url": "https://discovery.biothings.io/",
-                        "versionDate": datetime.date.today().isoformat(),
-                        "dataset": resource_catalog_url,
-                    },
-                    {
-                        "@type": "DataCatalog",
-                        "name": "NIAID Data Ecosystem in DDE",
-                        "url": "https://discovery.biothings.io/portal/nde",
-                        "versionDate": datetime.date.today().isoformat(),
-                        "dataset": resource_catalog_url,
-                    },
-                ]
+            # remove mentions of the NDE entry point in the DDE by commenting, who knows this could change again
+            # resource_catalog_url = "https://discovery.biothings.io/" + hit["_id"].lower()
+            #if hit.get("@context") and "nde" in hit.get("@context"):
+            #    source_organization = None
+            #    included_in_data_catalog = [
+            #        {
+            #            "@type": "DataCatalog",
+            #            "name": "Data Discovery Engine",
+            #            "url": "https://discovery.biothings.io/",
+            #            "versionDate": datetime.date.today().isoformat(),
+            #            "dataset": resource_catalog_url,
+            #        },
+            #        {
+            #            "@type": "DataCatalog",
+            #            "name": "NIAID Data Ecosystem in DDE",
+            #            "url": "https://discovery.biothings.io/portal/nde",
+            #            "versionDate": datetime.date.today().isoformat(),
+            #            "dataset": resource_catalog_url,
+            #        }
+            #    ]
 
             # add creid to included in sourceOrganization
             if hit.get("@context") and "creid" in hit.get("@context"):
