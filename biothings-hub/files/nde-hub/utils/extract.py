@@ -261,7 +261,15 @@ def insert_species(doc_list, species_mapping):
 
             for entry in combined_entries:
                 name = entry.get("name")
-                if not name or name not in filtered_species_names:
+                from_extract = entry.get("fromEXTRACT", False)
+                logger.info(f"Processing entry: name='{name}', fromEXTRACT={from_extract}")
+                if not name:
+                    logger.info("Skipping entry without a name.")
+                    continue
+
+                # If the entry is not curated and its name is not in the filtered list, skip it.
+                if not entry.get("curatedBy") and name not in filtered_species_names:
+                    logger.info(f"Skipping '{name}' because it is not in the filtered species list: {filtered_species_names}")
                     continue
 
                 # Process curated entries (those that did NOT come from extraction)
@@ -270,9 +278,11 @@ def insert_species(doc_list, species_mapping):
                     lower_name = name.lower()
                     identifier = entry.get("identifier")
                     if classification == "host":
+                        logger.info(f"Preserving host: {name}")
                         preserved_hosts.append(entry)
                         existing_host_names.add(lower_name)
                     elif classification == "infectiousAgent":
+                        logger.info(f"Preserving infectiousAgent: {name}")
                         preserved_infectious_agents.append(entry)
                         existing_infectious_agent_names.add(lower_name)
                     existing_identifiers.add(identifier)
@@ -284,7 +294,7 @@ def insert_species(doc_list, species_mapping):
                     if not new_obj:
                         logger.info(f"Unable to find species details for {original_name}")
                         continue
-
+                    logger.info(f"Adding extracted entry for '{original_name}' with classification '{new_obj.get('classification')}'")
                     classification = new_obj.get("classification")
                     identifier = new_obj.get("identifier")
                     if classification == "infectiousAgent":
@@ -293,9 +303,7 @@ def insert_species(doc_list, species_mapping):
                             existing_infectious_agent_names.add(lower_name)
                             existing_identifiers.add(identifier)
                         else:
-                            logger.info(
-                                f"Duplicate or conflict for infectiousAgent {original_name} in document {doc['_id']}"
-                            )
+                            logger.info(f"Duplicate or conflict for infectiousAgent {original_name} in document {doc['_id']}")
                     elif classification == "host":
                         if lower_name not in existing_host_names and identifier not in existing_identifiers:
                             updated_hosts.append(new_obj)
@@ -321,9 +329,8 @@ def insert_species(doc_list, species_mapping):
                 doc.pop("infectiousAgent", None)
 
             logger.info(f"Updated species in document {doc['_id']}")
-
+    logger.info(f"After reassigning, doc[{doc['_id']}]: species={doc.get('species')}, infectiousAgent={doc.get('infectiousAgent')}")
     return doc_list
-
 
 def insert_disease(doc_list, disease_mapping):
     for doc in doc_list:
@@ -594,6 +601,36 @@ def cache_species_in_db(species_details):
     # conn.close()
 
 
+def deduplicate_species(species_list):
+    """
+    Deduplicate a list of species dictionaries based on the 'identifier' key.
+    Keeps the first occurrence of each identifier.
+    """
+    seen = set()
+    deduped = []
+    for sp in species_list:
+        identifier = sp.get('identifier')
+        # If identifier exists and we haven't seen it, add it.
+        if identifier is not None:
+            if identifier not in seen:
+                seen.add(identifier)
+                deduped.append(sp)
+        else:
+            # If no identifier is found, simply include the record.
+            deduped.append(sp)
+    return deduped
+
+def deduplicate_species_in_docs(doc_list):
+    """
+    Iterate over documents and deduplicate the 'species' field.
+    """
+    for doc in doc_list:
+        if "species" in doc:
+            doc["species"] = deduplicate_species(doc["species"])
+    return doc_list
+
+
+
 ontology_priority = {"MONDO": 0, "HPO": 1, "DOID": 2, "NCIT": 3}
 
 
@@ -755,6 +792,7 @@ def process_descriptions(data):
 
     updated_docs = extract(doc_list)
     updated_docs = process_species(updated_docs)
+    updated_docs = deduplicate_species_in_docs(updated_docs)
     updated_docs = process_diseases(updated_docs)
     updated_docs = deduplicate_diseases(updated_docs)
     for doc in updated_docs:
