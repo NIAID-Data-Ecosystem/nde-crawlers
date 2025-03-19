@@ -4,6 +4,7 @@ import biothings
 import biothings.hub.dataload.uploader as uploader
 import timeout_decorator
 from hub.dataload.nde import NDESourceUploader
+from utils.topic_category_helper import add_topic_category
 from utils.utils import nde_upload_wrapper
 
 from .parser import parse_files
@@ -29,7 +30,10 @@ class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
     @nde_upload_wrapper
     def load_data(self, input_file):
         try:
-            return self.parse_files_with_timeout(input_file)
+            docs = self.parse_files_with_timeout(input_file)
+            docs = add_topic_category(docs)
+            for doc in docs:
+                yield doc
         except TimeoutError:
             self.logger.info("Job timed out, TimeoutError in %s", input_file)
             # return an empty list as BasicStorage expects an iterable
