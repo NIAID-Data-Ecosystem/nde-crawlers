@@ -630,6 +630,32 @@ def deduplicate_species_in_docs(doc_list):
     return doc_list
 
 
+def remove_redundant_species(doc_list):
+    """
+    Remove species entries that are redundant when a curated infectiousAgent exists.
+
+    For each document, if there is at least one curated infectiousAgent (i.e. where "isCurated" is True),
+    then remove any species entry whose "name" matches the infectiousAgent name.
+    """
+    logger.info("Removing redundant species entries based on curated infectiousAgent...")
+    for doc in doc_list:
+        if "infectiousAgent" in doc and "species" in doc:
+            curated_names = {
+                ia["name"].strip().lower()
+                for ia in doc["infectiousAgent"]
+                if ia.get("isCurated", False)
+            }
+            if curated_names:
+                original_species = doc["species"]
+                # Filter out species that match any curated infectiousAgent name.
+                doc["species"] = [
+                    sp for sp in original_species
+                    if sp.get("name", "").strip().lower() not in curated_names
+                ]
+                if len(original_species) != len(doc["species"]):
+                    logger.info(f"Removed redundant species from document {doc['_id']}")
+        yield doc
+
 
 ontology_priority = {"MONDO": 0, "HPO": 1, "DOID": 2, "NCIT": 3}
 
@@ -793,6 +819,7 @@ def process_descriptions(data):
     updated_docs = extract(doc_list)
     updated_docs = process_species(updated_docs)
     updated_docs = deduplicate_species_in_docs(updated_docs)
+    updated_docs = remove_redundant_species(updated_docs)
     updated_docs = process_diseases(updated_docs)
     updated_docs = deduplicate_diseases(updated_docs)
     for doc in updated_docs:
