@@ -654,7 +654,7 @@ def remove_redundant_species(doc_list):
                 ]
                 if len(original_species) != len(doc["species"]):
                     logger.info(f"Removed redundant species from document {doc['_id']}")
-        yield doc
+    return doc_list
 
 
 ontology_priority = {"MONDO": 0, "HPO": 1, "DOID": 2, "NCIT": 3}

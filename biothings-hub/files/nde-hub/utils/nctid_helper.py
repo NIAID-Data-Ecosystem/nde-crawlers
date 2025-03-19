@@ -153,8 +153,6 @@ def nctid_helper(docs):
                 if measurement_techniques:
                     doc["measurementTechnique"] = measurement_techniques
                     measurement_added_count += 1
-                else:
-                    doc["measurementTechnique"] = []
             except Exception as e:
                 logger.error(f"Error processing NCT ID {nctid}: {e}")
         updated_docs.append(doc)
