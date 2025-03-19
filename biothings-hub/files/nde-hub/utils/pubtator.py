@@ -530,10 +530,12 @@ def process_section(section, cursor_dict):
 def process_document(args):
     doc, hc_dict, species_dict, doc_index = args
 
+    # Get the sections from the document
     health_conditions_list = doc.get("healthCondition", {})
     species_list = doc.get("species", {})
     infectious_agent_list = doc.get("infectiousAgent", {})
 
+    # Ensure each section is a list
     if isinstance(species_list, dict):
         species_list = [species_list]
     if isinstance(infectious_agent_list, dict):
@@ -541,6 +543,7 @@ def process_document(args):
     if isinstance(health_conditions_list, dict):
         health_conditions_list = [health_conditions_list]
 
+    # Process the sections using the lookup dictionaries
     new_health_conditions_list = process_section(health_conditions_list, hc_dict)
     new_species_and_infectious_agents_list = process_section(species_list + infectious_agent_list, species_dict)
 
@@ -555,19 +558,45 @@ def process_document(args):
                     unique_list.append(entry)
         return unique_list
 
+    # Split new_species_and_infectious_agents_list into species and infectious agents
     new_species_list = [
-        item for item in new_species_and_infectious_agents_list if item.get("classification") != "infectiousAgent"
+        item for item in new_species_and_infectious_agents_list
+        if item.get("classification") != "infectiousAgent"
     ]
     new_infectious_agent_list = [
-        item for item in new_species_and_infectious_agents_list if item.get("classification") == "infectiousAgent"
+        item for item in new_species_and_infectious_agents_list
+        if item.get("classification") == "infectiousAgent"
     ]
 
+    # Further filter species: remove any species that were converted to infectious agents.
+    # Get all originalNames from infectiousAgent entries (case-insensitive)
+    converted_names = set()
+    for item in new_infectious_agent_list:
+        orig_name = item.get("originalName")
+        if orig_name:
+            converted_names.add(orig_name.lower().strip())
+
+    filtered_species_list = []
+    for item in new_species_list:
+        sp_name = None
+        if isinstance(item, dict):
+            sp_name = item.get("name") or item.get("originalName")
+        else:
+            sp_name = item
+
+        # Only include species that are not in the converted names set
+        if sp_name and sp_name.lower().strip() not in converted_names:
+            filtered_species_list.append(item)
+        elif not sp_name:
+            filtered_species_list.append(item)
+
+    # Update document sections with duplicates removed
     if new_health_conditions_list:
         no_hc_dupes = remove_duplicates_from_list(new_health_conditions_list)
         if no_hc_dupes:
             doc["healthCondition"] = no_hc_dupes
-    if new_species_list:
-        no_sp_dupes = remove_duplicates_from_list(new_species_list)
+    if filtered_species_list:
+        no_sp_dupes = remove_duplicates_from_list(filtered_species_list)
         if no_sp_dupes:
             doc["species"] = no_sp_dupes
     if new_infectious_agent_list:
