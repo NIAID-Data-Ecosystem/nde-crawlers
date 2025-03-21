@@ -14,10 +14,16 @@ def process_lineage(docs):
         records = list(docs)
 
     # Collect all unique taxon IDs from species and infectiousAgent fields
+    taxon_count = 0
     all_taxon_ids = set()
     for record in records:
+        taxon_count += 1
+        if taxon_count % 1000 == 0:
+            print(f"Processing document {taxon_count}...")
         for field in ["species", "infectiousAgent"]:
             if field in record:
+                if not isinstance(record[field], list):
+                    record[field] = [record[field]]
                 for item in record[field]:
                     taxid = item.get("identifier")
                     if taxid and taxid.isdigit():
@@ -59,9 +65,10 @@ def process_lineage(docs):
         lineage_ids = taxon_lineage_dict.get(taxid, []) + [taxid]
         entries = []
         for taxon in lineage_ids:
-            parent_taxon = taxon_parent_dict.get(taxon)
             entry = {"taxon": taxon}
-            if parent_taxon is not None:
+            # Only set a parent if taxon is not the root (i.e. taxon != 1)
+            parent_taxon = taxon_parent_dict.get(taxon)
+            if taxon != 1 and parent_taxon is not None:
                 entry["parent_taxon"] = parent_taxon
             entries.append(entry)
         return entries

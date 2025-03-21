@@ -13,6 +13,8 @@ curated_by = {
         "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
     }
 }
+_species_cache = {}
+_health_condition_cache = {}
 
 
 def process_csv_data(csv_content):
@@ -45,24 +47,34 @@ def process_csv_data(csv_content):
 
 def species_func(species, term_set):
     if term_set == "UniProt":
+        key = species.get("name")
+        if key in _species_cache:
+            return _species_cache[key]
         identifer = species.get("url").split("_")[-1]
         try:
-            species.update(get_species_details(species.get("name"), identifer))
+            details = get_species_details(species.get("name"), identifer)
+            species.update(details)
             species.update(curated_by)
+            _species_cache[key] = species
         except Exception as e:
             logging.error(f"Error fetching species details: {e}")
     return species
 
 
 def health_condition_func(health_condition, term_set):
+    key = (health_condition.get("name"), term_set)
+    if key in _health_condition_cache:
+        return _health_condition_cache[key]
     term_sets = ["MeSH", "DOID", "NCIT", "MONDO"]
     if term_set in term_sets:
         result = query_condition(health_condition.get("name"))
         if result:
             health_condition.update(result)
             health_condition.update(curated_by)
+            _health_condition_cache[key] = health_condition
     else:
         health_condition["inDefinedTermSet"] = "Other"
+        _health_condition_cache[key] = health_condition
     return health_condition
 
 
@@ -95,6 +107,7 @@ def de_duplicate_dicts(dict_list):
 
 
 def get_in_defined_term_set(doc, properties_dict):
+    logging.info(f'Processing doc: {doc.get("_id")}')
     nde_properties = {
         "species": species_func,
         "infectiousAgent": species_func,

@@ -127,7 +127,7 @@ def merge_duplicates(doc: Dict) -> Dict:
 def is_purely_augmented(field: str, field_content) -> bool:
     """
     Returns True if field_content is ONLY 'augmented' data
-    (fromPMID, fromGPT, fromEXTRACT) -- meaning there's no 'original' content.
+    (fromPMID, fromGPT, fromEXTRACT, fromNCT) -- meaning there's no 'original' content.
     """
     # Special case: includedInDataCatalog always considered "not purely augmented"
     if field == "includedInDataCatalog":
@@ -144,7 +144,7 @@ def is_purely_augmented(field: str, field_content) -> bool:
         # All items must be augmented dicts to consider it purely augmented
         return all(
             isinstance(item, dict)
-            and (item.get("fromPMID", False) or item.get("fromGPT", False) or item.get("fromEXTRACT", False))
+            and (item.get("fromPMID", False) or item.get("fromGPT", False) or item.get("fromEXTRACT", False) or item.get("fromNCT", False))
             for item in field_content
         )
 
@@ -164,14 +164,14 @@ def check_augmented_fields(document: Dict, augmented_field_list: list) -> list:
 
         if isinstance(value, dict):
             # Single dict: check if it has fromPMID/fromGPT/fromEXTRACT
-            if any(value.get(flag, False) for flag in ["fromPMID", "fromGPT", "fromEXTRACT"]):
+            if any(value.get(flag, False) for flag in ["fromPMID", "fromGPT", "fromEXTRACT", "fromNCT"]):
                 augmented_fields_found.append(field)
 
         elif isinstance(value, list):
             # List of dicts: find at least one augmented
             for item in value:
                 if isinstance(item, dict) and any(
-                    item.get(flag, False) for flag in ["fromPMID", "fromGPT", "fromEXTRACT"]
+                    item.get(flag, False) for flag in ["fromPMID", "fromGPT", "fromEXTRACT", "fromNCT"]
                 ):
                     augmented_fields_found.append(field)
                     break  # No need to keep checking this field's list

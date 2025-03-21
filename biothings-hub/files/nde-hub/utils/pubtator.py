@@ -164,6 +164,8 @@ def get_species_details(original_name, identifier):
         alternative_names.append(common_name)
 
         standard_dict["displayName"] = f"{common_name} | {scientific_name}"
+    else:
+        standard_dict["displayName"] = scientific_name
 
     if other_names := species_info.get("otherNames"):
         alternative_names.extend(other_names)
@@ -264,41 +266,6 @@ def process_synonyms(synonym_field):
         # If the synonym field is a list, filter it by 'EXACT'.
         return [syn.split('"')[1] for syn in synonym_field if "EXACT" in syn]
 
-
-def get_xref_name(xref_ontology, xref_identifier):
-    # Dictionary mapping each ontology to its API endpoint
-    api_endpoints = {
-        "ICD9": "https://clinicaltables.nlm.nih.gov/api/icd9cm_dx/v3/search?terms=",
-        "MESH": "https://id.nlm.nih.gov/mesh/lookup/label?resource=",
-        "SCTID": "https://www.ebi.ac.uk/ols4/api/v2/ontologies/snomed/classes/http%253A%252F%252Fsnomed.info%252Fid%252F",
-        "EFO": "https://www.ebi.ac.uk/ols4/api/v2/ontologies/efo/classes/http%253A%252F%252Fwww.ebi.ac.uk%252Fefo%252FEFO_",
-        "ICD10CM": "https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?terms=",
-    }
-
-    # Check if the provided ontology is in our list of endpoints
-    if xref_ontology not in api_endpoints:
-        return None
-
-    # Form the URL for the request
-    url = api_endpoints[xref_ontology] + xref_identifier
-
-    response = requests.get(url)
-
-    response.raise_for_status()
-
-    # Parse the JSON response and return the name
-    try:
-        if xref_ontology == "ICD9":
-            return response.json()[4][1]
-        elif xref_ontology == "MESH":
-            return response.json()[0]
-        elif xref_ontology == "SCTID" or xref_ontology == "EFO" or xref_ontology == "ICD10CM":
-            return response.json()["label"]
-    except KeyError:
-        logger.info(f"Check the response from {url}")
-        return None
-
-    return response.json()["name"]  # This assumes that the response is a JSON object with a 'name' field
 
 
 def create_return_object(hit, alternate_names, original_name):
@@ -563,10 +530,12 @@ def process_section(section, cursor_dict):
 def process_document(args):
     doc, hc_dict, species_dict, doc_index = args
 
+    # Get the sections from the document
     health_conditions_list = doc.get("healthCondition", {})
     species_list = doc.get("species", {})
     infectious_agent_list = doc.get("infectiousAgent", {})
 
+    # Ensure each section is a list
     if isinstance(species_list, dict):
         species_list = [species_list]
     if isinstance(infectious_agent_list, dict):
@@ -574,6 +543,7 @@ def process_document(args):
     if isinstance(health_conditions_list, dict):
         health_conditions_list = [health_conditions_list]
 
+    # Process the sections using the lookup dictionaries
     new_health_conditions_list = process_section(health_conditions_list, hc_dict)
     new_species_and_infectious_agents_list = process_section(species_list + infectious_agent_list, species_dict)
 
@@ -588,19 +558,45 @@ def process_document(args):
                     unique_list.append(entry)
         return unique_list
 
+    # Split new_species_and_infectious_agents_list into species and infectious agents
     new_species_list = [
-        item for item in new_species_and_infectious_agents_list if item.get("classification") != "infectiousAgent"
+        item for item in new_species_and_infectious_agents_list
+        if item.get("classification") != "infectiousAgent"
     ]
     new_infectious_agent_list = [
-        item for item in new_species_and_infectious_agents_list if item.get("classification") == "infectiousAgent"
+        item for item in new_species_and_infectious_agents_list
+        if item.get("classification") == "infectiousAgent"
     ]
 
+    # Further filter species: remove any species that were converted to infectious agents.
+    # Get all originalNames from infectiousAgent entries (case-insensitive)
+    converted_names = set()
+    for item in new_infectious_agent_list:
+        orig_name = item.get("originalName")
+        if orig_name:
+            converted_names.add(orig_name.lower().strip())
+
+    filtered_species_list = []
+    for item in new_species_list:
+        sp_name = None
+        if isinstance(item, dict):
+            sp_name = item.get("name") or item.get("originalName")
+        else:
+            sp_name = item
+
+        # Only include species that are not in the converted names set
+        if sp_name and sp_name.lower().strip() not in converted_names:
+            filtered_species_list.append(item)
+        elif not sp_name:
+            filtered_species_list.append(item)
+
+    # Update document sections with duplicates removed
     if new_health_conditions_list:
         no_hc_dupes = remove_duplicates_from_list(new_health_conditions_list)
         if no_hc_dupes:
             doc["healthCondition"] = no_hc_dupes
-    if new_species_list:
-        no_sp_dupes = remove_duplicates_from_list(new_species_list)
+    if filtered_species_list:
+        no_sp_dupes = remove_duplicates_from_list(filtered_species_list)
         if no_sp_dupes:
             doc["species"] = no_sp_dupes
     if new_infectious_agent_list:

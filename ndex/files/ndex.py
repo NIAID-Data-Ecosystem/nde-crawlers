@@ -53,6 +53,7 @@ def strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]*>", "", text)
 
 
+
 def process_networks(networks):
     for network in networks.get("networks", []):
         properties_dict = {}
@@ -67,6 +68,25 @@ def process_networks(networks):
                 elif value := properties_dict.get(key):
                     return value
             return None
+
+        # Helper function to add species to a list
+        def add_species(raw_value, seen, species_list):
+            if not raw_value:
+                return
+            # Split the string by commas
+            for token in raw_value.split(","):
+                token = token.strip()
+                # Skip empty tokens or tokens that are purely numeric
+                if not token or token.isdigit():
+                    continue
+                # Standardize any value that mentions "human"
+                if "human" in token.lower():
+                    token = "human"
+                # Only add if we haven't seen this species yet
+                if token not in seen:
+                    species_list.append({"name": token})
+                    seen.add(token)
+
 
         output = {
             "includedInDataCatalog": {
@@ -153,36 +173,12 @@ def process_networks(networks):
 
         species_list = []
         seen_species = set()
-        if organism := get_value("organism"):
-            if "human" in organism.lower():
-                organism = "human"
-            if organism not in seen_species:
-                species_list.append({"name": organism})
-                seen_species.add(organism)
-        if species := get_value("species"):
-            if "human" in species.lower():
-                species = "human"
-            if species not in seen_species:
-                species_list.append({"name": species})
-                seen_species.add(species)
-        if idmapper_species := get_value("idmapper.species"):
-            if "human" in idmapper_species.lower():
-                idmapper_species = "human"
-            if idmapper_species not in seen_species:
-                species_list.append({"name": idmapper_species})
-                seen_species.add(idmapper_species)
-        if properties_species := get_value("species_common_name"):
-            if "human" in properties_species.lower():
-                properties_species = "human"
-            if properties_species not in seen_species:
-                species_list.append({"name": properties_species})
-                seen_species.add(properties_species)
-        if properties_organism := get_value("ORGANISM"):
-            if "human" in properties_organism.lower():
-                properties_organism = "human"
-            if properties_organism not in seen_species:
-                species_list.append({"name": properties_organism})
-                seen_species.add(properties_organism)
+
+        # Process each field using the helper
+        for field in ["organism", "species", "idmapper.species", "species_common_name", "ORGANISM"]:
+            value = get_value(field)
+            add_species(value, seen_species, species_list)
+
         if species_list:
             output["species"] = species_list
 
@@ -343,7 +339,10 @@ def parse():
 
     while networks.get("networks"):
         for network in process_networks(networks):
-            yield network
+            if "isRelatedTo" in network:
+                yield network
+            else:
+                logger.warning(f"Skipping network {network.get('identifier')} without isRelatedTo")
         start += 1
         logger.info(f"Retrieved {start * size} networks")
         networks = fetch_networks(start, size)

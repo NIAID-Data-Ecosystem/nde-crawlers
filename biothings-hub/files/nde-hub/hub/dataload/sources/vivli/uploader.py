@@ -3,6 +3,7 @@ from utils.clinical_trails_helper import load_ct_wrapper
 from utils.corrections import corrections
 from utils.extract import process_descriptions
 from utils.funding_helper import standardize_funding
+from utils.nctid_helper import nctid_helper
 from utils.pubtator import standardize_data
 from utils.topic_category_helper import add_topic_category
 from utils.utils import nde_upload_wrapper
@@ -23,6 +24,7 @@ class VivliUploader(NDESourceUploader):
         docs = standardize_data(data_folder)
         docs = standardize_funding(docs)
         docs = process_descriptions(docs)
+        docs = nctid_helper(docs)
         docs = corrections(docs)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
