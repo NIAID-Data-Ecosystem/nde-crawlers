@@ -62,15 +62,16 @@ class NDEDataBuilder(builder.DataBuilder):
             if len(result["documents"]) > 2:
                 # find all of the duplicate records
                 def is_valid_document(doc):
-                    if not doc["_id"].startswith(duplicate):
+                    if any(doc["_id"].startswith(source) for source in sources):
                         return True
-                    sdPublisher = doc.get("sdPublisher")
-                    if isinstance(sdPublisher, list):
-                        return any(
-                            any(source in pub.get("name", "").lower() for source in sources) for pub in sdPublisher
-                        )
-                    elif isinstance(sdPublisher, dict):
-                        return any(source in sdPublisher.get("name", "").lower() for source in sources)
+                    if doc["_id"].startswith(duplicate):
+                        sdPublisher = doc.get("sdPublisher")
+                        if isinstance(sdPublisher, list):
+                            return any(
+                                any(source in pub.get("name", "").lower() for source in sources) for pub in sdPublisher
+                            )
+                        elif isinstance(sdPublisher, dict):
+                            return any(source in sdPublisher.get("name", "").lower() for source in sources)
                     return False
 
                 result["documents"] = [doc for doc in result["documents"] if is_valid_document(doc)]
