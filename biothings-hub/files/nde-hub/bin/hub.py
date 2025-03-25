@@ -27,12 +27,10 @@ import hub.dataload.sources
 class NDEHubServer(HubServer):
     def configure_build_manager(self):
         import biothings.hub.databuild.builder as builder
-        from hub.databuild.builder import NDEDataBuilder, TestNDEDataBuilder
+        from hub.databuild.builder import NDEDataBuilder
 
         # set specific managers
-        build_manager = builder.BuilderManager(
-            builder_class=[NDEDataBuilder, TestNDEDataBuilder], job_manager=self.managers["job_manager"]
-        )
+        build_manager = builder.BuilderManager(builder_class=NDEDataBuilder, job_manager=self.managers["job_manager"])
         build_manager.configure()
         self.managers["build_manager"] = build_manager
         self.logger.info("Using custom builder %s" % NDEDataBuilder)

@@ -16,8 +16,6 @@ class NDEDataBuilder(builder.DataBuilder):
         self.logger.info("This is the merge order: %s", other_sources)
         return other_sources
 
-
-class TestNDEDataBuilder(builder.DataBuilder):
     def deduplication(self, sources, duplicate):
         db = mongo.get_target_db()
         collection_name = self.target_backend.target_name
@@ -121,4 +119,4 @@ class TestNDEDataBuilder(builder.DataBuilder):
     def post_merge(self, source_names, batch_size, job_manager):
         duplicate = "zenodo"
         sources = ["dryad", "tycho"]
-        self.deduplication_documents(sources, duplicate)
+        self.deduplication(sources, duplicate)
