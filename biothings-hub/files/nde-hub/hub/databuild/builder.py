@@ -77,7 +77,9 @@ class NDEDataBuilder(builder.DataBuilder):
 
             # TODO: If two sources have the same doi this will not work as expected so assert that the length is 2
             # Will also need to handle includedInDataCatalog field if there are more than 2 sources
-            assert len(result["documents"]) == 2, "Expected 2 documents when merging"
+            assert (
+                len(result["documents"]) == 2
+            ), f"Expected 2 documents when merging, but got {len(result['documents'])}. Documents: {result['documents']}"
 
             for doc in result["documents"]:
                 if not doc["_id"].startswith(duplicate):
