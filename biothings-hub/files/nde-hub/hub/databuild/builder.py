@@ -23,7 +23,7 @@ class NDEDataBuilder(builder.DataBuilder):
 
         self.logger.info(f"Agregating documents with duplicate {duplicate} and sources {sources} in {collection_name}")
         pipeline = [
-            {"$match": {"doi": {"$ne": None}, "@type": "Dataset"}},
+            {"$match": {"doi": {"$ne": None}}},
             {
                 "$group": {
                     "_id": "$doi",
