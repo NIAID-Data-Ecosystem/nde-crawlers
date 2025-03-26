@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
-COOKIE = 'user="2|1:0|10:1736145251|4:user|32:ImR5bGFud2VsemVsQGdtYWlsLmNvbSI=|ccb32c2a6a6358c49df26ed93c497cc9ba7c010dd95d58e3770d71dd168f12c6"'
+COOKIE = 'user="2|1:0|10:1739568870|4:user|32:ImR5bGFud2VsemVsQGdtYWlsLmNvbSI=|9f59634323c0035247302521940fde1d90f1211557841020d4cb66b9cf54bfd8"'
 
 
 def retrieve_study_metadata():
