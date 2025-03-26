@@ -195,7 +195,7 @@ def make_requests():
     page = 1
     size = 50
     request = requests.get(
-        "https://radxdatahub.nih.gov/_next/data/EkA0KoJnF7yU5HKsvyXLT/studyExplorer.json?sort=desc&prop=relevance&page=1&size=50"
+        "https://radxdatahub.nih.gov/_next/data/cx3d2E3xBhLBo0cZuZj8o/studyExplorer.json?sort=desc&prop=relevance&page=1&size=50"
     )
     request = request.json()
     total_hits = request["pageProps"]["searchResults"]["hits"]["total"]["value"]
@@ -203,7 +203,7 @@ def make_requests():
     while (page - 1) * size < total_hits:
         logging.info(f"Processing page {page} of {total_hits // size + 1}")
         request = requests.get(
-            f"https://radxdatahub.nih.gov/_next/data/EkA0KoJnF7yU5HKsvyXLT/studyExplorer.json?sort=desc&prop=relevance&page={page}&size={size}"
+            f"https://radxdatahub.nih.gov/_next/data/cx3d2E3xBhLBo0cZuZj8o/studyExplorer.json?sort=desc&prop=relevance&page={page}&size={size}"
         )
         page += 1
         request = request.json()
