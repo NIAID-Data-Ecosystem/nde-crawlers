@@ -72,7 +72,7 @@ class LINCS:
             document["includedInDataCatalog"] = {
                 "name": "LINCS",
                 "url": "https://lincsportal.ccs.miami.edu/datasets/",
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
             }
             url = f'https://lincsportal.ccs.miami.edu/datasets/view/{document["datasetid"]}'

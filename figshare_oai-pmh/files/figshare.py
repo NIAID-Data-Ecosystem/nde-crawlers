@@ -85,6 +85,7 @@ class Figshare(NDEDatabase):
 
             output = {
                 "includedInDataCatalog": {
+                    "@type": "DataCatalog",
                     "name": "Figshare",
                     "versionDate": datetime.date.today().isoformat(),
                     "url": "https://figshare.com",

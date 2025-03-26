@@ -62,7 +62,7 @@ def parse():
         output = {
             "@type": "Dataset",
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "The Database of Genotypes and Phenotypes",
                 "url": "https://www.ncbi.nlm.nih.gov/gap/",
                 "versionDate": datetime.date.today().isoformat(),

@@ -37,7 +37,7 @@ def parse_metadata(metadata):
     """Parse the metadata of a workflow."""
     output = {
         "includedInDataCatalog": {
-            "@type": "ComputationalTool",
+            "@type": "DataCatalog",
             "name": "WorkflowHub",
             "url": "https://workflowhub.eu/",
             "versionDate": datetime.date.today().isoformat(),

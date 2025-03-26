@@ -65,7 +65,7 @@ def parse_file(doc, accno):
             "_id": f"{accno.casefold()}",
             "url": f"https://www.ebi.ac.uk/studies/{accno}",
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "BioStudies",
                 "url": "https://www.ebi.ac.uk/biostudies/",
                 "versionDate": datetime.date.today().isoformat(),

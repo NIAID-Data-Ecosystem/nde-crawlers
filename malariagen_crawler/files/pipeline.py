@@ -28,7 +28,7 @@ class MalariaGenItemProcessorPipeline:
         item["includedInDataCatalog"] = {
             "name": "MalariaGEN",
             "url": "https://www.malariagen.net/",
-            "@type": "Dataset",
+            "@type": "DataCatalog",
             "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
             "dataset": item["url"],
         }

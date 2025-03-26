@@ -111,6 +111,7 @@ def parse():
             metadata = json.loads(response.text)[0]
             output = {
                 "includedInDataCatalog": {
+                    "@type": "DataCatalog",
                     "name": "ReframeDB",
                     "versionDate": datetime.today().isoformat(),
                     "url": "https://reframedb.org/",

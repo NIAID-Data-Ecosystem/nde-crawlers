@@ -82,7 +82,7 @@ def parse_dataset(json_data):
         "includedInDataCatalog": {
             "name": "MassIVE",
             "url": "https://massive.ucsd.edu/ProteoSAFe/static/massive.jsp",
-            "@type": "Dataset",
+            "@type": "DataCatalog",
             "versionDate": datetime.today().strftime("%Y-%m-%d"),
         },
         "@type": "Dataset",

@@ -58,13 +58,15 @@ class OmicsdiItemProcessorPipeline:
         if author := item.pop("creator", None):
             output["author"] = author
         if description := item.pop("description", None):
-            output["description"] = description
+            if description.get("description"):
+                output["description"] = description.get("description")
         if distribution := item.pop("distribution", None):
             output["distribution"] = distribution
         if keywords := item.pop("keywords", None):
             output["keywords"] = keywords
         if name := item.pop("name", None):
-            output["name"] = name
+            if name.get("name"):
+                output["name"] = name.get("name")
         if same_as := item.pop("sameAs", None):
             output["sameAs"] = same_as
         if variable_measured := item.pop("variableMeasured", None):

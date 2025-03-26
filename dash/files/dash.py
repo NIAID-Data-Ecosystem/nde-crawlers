@@ -278,7 +278,7 @@ def parse():
                 }]
 
                 output["includedInDataCatalog"] = {
-                    "@type": "Dataset",
+                    "@type": "DataCatalog",
                     "name": "NICHD DASH",
                     "url": "https://dash.nichd.nih.gov/",
                     "versionDate": datetime.date.today().isoformat(),

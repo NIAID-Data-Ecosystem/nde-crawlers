@@ -52,7 +52,7 @@ def record_generator():
             url = f"https://{site.casefold()}.org/{webapps[i]}/app/record/dataset/{record['id'][0]['value']}"
             output = {
                 "includedInDataCatalog": {
-                    "@type": "Dataset",
+                    "@type": "DataCatalog",
                     "name": site,
                     "url": f"https://{site.casefold()}.org/{webapps[i]}/app",
                     "versionDate": datetime.date.today().isoformat(),

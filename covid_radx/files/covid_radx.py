@@ -41,7 +41,7 @@ def parse(hit):
         "_id": f"radx_{hit['_id']}",
         "@type": "Dataset",
         "includedInDataCatalog": {
-            "@type": "Dataset",
+            "@type": "DataCatalog",
             "name": "RADx Data Hub",
             "url": "https://radxdatahub.nih.gov/",
             "versionDate": datetime.date.today().isoformat(),

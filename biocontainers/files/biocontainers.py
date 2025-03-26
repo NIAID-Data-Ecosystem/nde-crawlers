@@ -50,7 +50,7 @@ def parse():
 
         output = {
             "includedInDataCatalog": {
-                "@type": "ComputationalTool",
+                "@type": "DataCatalog",
                 "name": "BioContainers",
                 "url": "https://biocontainers.pro/",
                 "versionDate": datetime.date.today().isoformat(),

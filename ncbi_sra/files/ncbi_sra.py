@@ -174,7 +174,7 @@ class NCBI_SRA(NDEDatabase):
             output = {
                 "@context": "https://schema.org/",
                 "includedInDataCatalog": {
-                    "@type": "Dataset",
+                    "@type": "DataCatalog",
                     "name": "NCBI SRA",
                     "url": "https://www.ncbi.nlm.nih.gov/sra/",
                     "versionDate": datetime.date.today().strftime("%Y-%m-%d"),

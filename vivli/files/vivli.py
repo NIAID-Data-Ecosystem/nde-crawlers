@@ -72,7 +72,7 @@ def parse():
 
             output = {
                 "includedInDataCatalog": {
-                    "@type": "Dataset",
+                    "@type": "DataCatalog",
                     "name": "Vivli",
                     "url": "https://vivli.org/",
                     "versionDate": datetime.date.today().isoformat(),

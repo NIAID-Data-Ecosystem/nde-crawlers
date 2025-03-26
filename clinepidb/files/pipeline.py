@@ -86,6 +86,7 @@ def record_generator():
                 "_id": "clinepidb_" + record["identifier"],
                 "@type": "Dataset",
                 "includedInDataCatalog": {
+                    "@type": "DataCatalog",
                     "name": "ClinEpiDB",
                     "url": "https://clinepidb.org/ce/app/",
                     "versionDate": datetime.date.today().isoformat(),

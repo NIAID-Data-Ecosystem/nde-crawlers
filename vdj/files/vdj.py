@@ -78,7 +78,7 @@ def parse():
 
         output = {
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "VDJServer",
                 "url": "https://vdj-staging.tacc.utexas.edu/community/",
                 "versionDate": datetime.date.today().isoformat(),

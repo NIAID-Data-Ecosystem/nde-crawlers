@@ -212,7 +212,7 @@ def parse():
             #            "dataset": resource_catalog_url,
             #        }
             #    ]
-
+            source_organization = None
             # add creid to included in sourceOrganization
             if hit.get("@context") and "creid" in hit.get("@context"):
                 source_organization = [

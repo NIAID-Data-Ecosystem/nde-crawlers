@@ -12,7 +12,7 @@ class AccessClinicalDataUploader(NDESourceUploader):
 
     __metadata__ = {
         "merger": "merge_struct",
-        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+        "merger_kwargs": {"aslistofdict": "", "include": ["includedInDataCatalog"]},
     }
 
     @nde_upload_wrapper

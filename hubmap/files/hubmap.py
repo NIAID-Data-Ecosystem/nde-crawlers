@@ -61,7 +61,7 @@ def parse():
             logger.info("Parsed %s out of %s datasets", count, len(datasets))
         output = {
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "HuBMAP",
                 "url": "https://hubmapconsortium.org/",
                 "versionDate": datetime.date.today().isoformat(),

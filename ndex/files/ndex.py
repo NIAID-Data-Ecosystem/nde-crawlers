@@ -90,7 +90,7 @@ def process_networks(networks):
 
         output = {
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "NDEx",
                 "url": "https://www.ndexbio.org/",
                 "versionDate": datetime.date.today().isoformat(),

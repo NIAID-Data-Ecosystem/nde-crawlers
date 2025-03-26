@@ -57,7 +57,7 @@ def parse():
 
         output = {
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "Qiita",
                 "url": "https://qiita.ucsd.edu/",
                 "versionDate": datetime.date.today().isoformat(),

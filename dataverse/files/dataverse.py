@@ -300,7 +300,7 @@ class Dataverse(NDEDatabase):
                             dataset.pop("citation")
 
                     dataset["includedInDataCatalog"] = {
-                        "@type": "dataset",
+                        "@type": "DataCatalog",
                         "name": "Harvard Dataverse",
                         "url": "https://dataverse.harvard.edu/",
                         "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
@@ -327,7 +327,7 @@ class Dataverse(NDEDatabase):
                     dataset["identifier"] = dataset["doi"].strip("https://doi.org")
                     dataset["_id"] = dataset["doi"].replace("doi:", "Dataverse_").replace("/", "_")
                     dataset["includedInDataCatalog"] = {
-                        "@type": "dataset",
+                        "@type": "DataCatalog",
                         "name": "Harvard Dataverse",
                         "url": "https://dataverse.harvard.edu/",
                         "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),

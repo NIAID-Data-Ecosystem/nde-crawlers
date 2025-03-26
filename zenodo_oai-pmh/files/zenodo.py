@@ -286,7 +286,7 @@ class Zenodo(OAIDatabase):
             output = {
                 "@context": "https://schema.org/",
                 "includedInDataCatalog": {
-                    "@type": "Organization",
+                    "@type": "DataCatalog",
                     "name": "Zenodo",
                     "url": "https://zenodo.org/",
                     "versionDate": datetime.date.today().isoformat(),

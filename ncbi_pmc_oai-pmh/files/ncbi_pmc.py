@@ -175,7 +175,7 @@ class NCBI_PMC(NDEDatabase):
 
             output = {
                 "includedInDataCatalog": {
-                    "@type": "Dataset",
+                    "@type": "DataCatalog",
                     "name": "NCBI PMC",
                     "versionDate": datetime.date.today().strftime("%Y-%m-%d"),
                     "url": "https://www.ncbi.nlm.nih.gov/pmc/",

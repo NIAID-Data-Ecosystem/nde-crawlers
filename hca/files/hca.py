@@ -72,7 +72,7 @@ def parse():
         logger.info(f"Parsing project {count} of {len(project_meta)}")
         output = {
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "Human Cell Atlas",
                 "url": "https://data.humancellatlas.org/",
                 "versionDate": datetime.date.today().isoformat(),

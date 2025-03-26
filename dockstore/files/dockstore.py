@@ -73,7 +73,7 @@ def parse():
 
         output = {
             "includedInDataCatalog": {
-                "@type": "ComputationalTool",
+                "@type": "DataCatalog",
                 "name": "Dockstore",
                 "url": "https://dockstore.org/",
                 "versionDate": datetime.date.today().isoformat(),

@@ -101,6 +101,7 @@ def parse():
             metadata = json.loads(response.text)
             output = {
                 "includedInDataCatalog": {
+                    "@type": "DataCatalog",
                     "name": "Mendeley",
                     "versionDate": datetime.today().isoformat(),
                     "url": "https://data.mendeley.com/",

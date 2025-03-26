@@ -22,7 +22,7 @@ def record_generator():
                 "_id": _record_dict["id"][0]["value"],
                 "@type": "Dataset",
                 "includedInDataCatalog": {
-                    "@type": "Dataset",
+                    "@type": "DataCatalog",
                     "name": "VEuPathDB",
                     "url": "https://veupathdb.org/veupathdb/app",
                     "versionDate": datetime.date.today().isoformat(),

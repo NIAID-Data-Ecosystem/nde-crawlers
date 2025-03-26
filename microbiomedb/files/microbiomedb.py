@@ -34,7 +34,7 @@ def parse():
 
         output = {
             "includedInDataCatalog": {
-                "@type": "Dataset",
+                "@type": "DataCatalog",
                 "name": "MicrobiomeDB",
                 "url": "https://microbiomedb.org/mbio/app",
                 "versionDate": datetime.date.today().isoformat(),
