@@ -530,7 +530,7 @@ def process_section(section, cursor_dict):
 def process_document(args):
     doc, hc_dict, species_dict, doc_index = args
 
-    # Get the sections from the document
+    # Get sections from the document
     health_conditions_list = doc.get("healthCondition", {})
     species_list = doc.get("species", {})
     infectious_agent_list = doc.get("infectiousAgent", {})
@@ -543,7 +543,7 @@ def process_document(args):
     if isinstance(health_conditions_list, dict):
         health_conditions_list = [health_conditions_list]
 
-    # Process the sections using the lookup dictionaries
+    # Process sections using lookup dictionaries.
     new_health_conditions_list = process_section(health_conditions_list, hc_dict)
     new_species_and_infectious_agents_list = process_section(species_list + infectious_agent_list, species_dict)
 
@@ -558,7 +558,7 @@ def process_document(args):
                     unique_list.append(entry)
         return unique_list
 
-    # Split new_species_and_infectious_agents_list into species and infectious agents
+    # Split processed items into species and infectious agents.
     new_species_list = [
         item for item in new_species_and_infectious_agents_list
         if item.get("classification") != "infectiousAgent"
@@ -568,48 +568,51 @@ def process_document(args):
         if item.get("classification") == "infectiousAgent"
     ]
 
-    # Further filter species: remove any species that were converted to infectious agents.
-    # Get all originalNames from infectiousAgent entries (case-insensitive)
+    # Build a set of normalized names for converted species (using both originalName and name).
     converted_names = set()
-    for item in new_infectious_agent_list:
-        orig_name = item.get("originalName")
-        if orig_name:
-            converted_names.add(orig_name.lower().strip())
+    for agent in new_infectious_agent_list:
+        if agent.get("originalName"):
+            converted_names.add(agent.get("originalName").lower().strip())
+        if agent.get("name"):
+            converted_names.add(agent.get("name").lower().strip())
 
+    # Filter out any species entry that matches any converted name.
     filtered_species_list = []
     for item in new_species_list:
         sp_name = None
         if isinstance(item, dict):
-            sp_name = item.get("name") or item.get("originalName")
+            sp_name = item.get("name")
         else:
             sp_name = item
 
-        # Only include species that are not in the converted names set
-        if sp_name and sp_name.lower().strip() not in converted_names:
-            filtered_species_list.append(item)
-        elif not sp_name:
+        if sp_name and sp_name.lower().strip() in converted_names:
+            # Species was converted to an infectiousAgent; skip it.
+            continue
+        else:
             filtered_species_list.append(item)
 
-    # Update document sections with duplicates removed
-    if new_health_conditions_list:
-        no_hc_dupes = remove_duplicates_from_list(new_health_conditions_list)
-        if no_hc_dupes:
-            doc["healthCondition"] = no_hc_dupes
-    if filtered_species_list:
-        no_sp_dupes = remove_duplicates_from_list(filtered_species_list)
-        if no_sp_dupes:
-            doc["species"] = no_sp_dupes
-    if new_infectious_agent_list:
-        no_ia_dupes = remove_duplicates_from_list(new_infectious_agent_list)
-        if no_ia_dupes:
-            doc["infectiousAgent"] = no_ia_dupes
+    # Remove duplicates from each section.
+    no_hc_dupes = remove_duplicates_from_list(new_health_conditions_list) if new_health_conditions_list else []
+    no_ia_dupes = remove_duplicates_from_list(new_infectious_agent_list) if new_infectious_agent_list else []
+    no_sp_dupes = remove_duplicates_from_list(filtered_species_list) if filtered_species_list else []
 
-    # Log progress every 1000 documents
+    # Update document sections.
+    if no_hc_dupes:
+        doc["healthCondition"] = no_hc_dupes
+    if no_sp_dupes:
+        doc["species"] = no_sp_dupes
+    else:
+        # Remove species property if list is empty.
+        if "species" in doc:
+            del doc["species"]
+    if no_ia_dupes:
+        doc["infectiousAgent"] = no_ia_dupes
+
+    # Log progress every 1000 documents.
     if doc_index % 1000 == 0:
         logger.info(f"Processed {doc_index} documents")
 
     return doc
-
 
 def transform(doc_list):
     hc_dict, species_dict = fetch_data_from_db()

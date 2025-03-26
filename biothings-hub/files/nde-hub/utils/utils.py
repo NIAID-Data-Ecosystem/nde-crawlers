@@ -270,11 +270,11 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         gen = func(*args, **kwargs)
+        # corrections util for sourceOrganization
+        corrections(gen)
         for doc in gen:
             # dictionaries are mutable so we dont need to reassign
             add_date(doc)
-            # corrections util for sourceOrganization
-            corrections(doc)
             # TODO FOR TESTING
             # merge_duplicates(doc)
             add_metadata_score(doc)

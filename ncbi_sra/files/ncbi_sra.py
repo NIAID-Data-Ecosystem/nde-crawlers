@@ -199,6 +199,8 @@ class NCBI_SRA(NDEDatabase):
             distribution_list = []
             species_list = []
             seen_species = set()
+            measurement_technique_list = []
+            seen_measurements_techniques = set()
             author_list = []
 
             if bio_project := ftp_info.get("ftp_bioProject"):
@@ -248,6 +250,14 @@ class NCBI_SRA(NDEDatabase):
                         species_dict["name"] = taxon_name
                         seen_species.add(taxon_name)
                         species_list.append(species_dict)
+
+                # measurement techniques
+                measurement_technique_dict = {}
+                if measurement_technique := run_metadata.get("library_strategy"):
+                    if measurement_technique not in seen_measurements_techniques:
+                        measurement_technique_dict["name"] = measurement_technique
+                        seen_measurements_techniques.add(measurement_technique)
+                        measurement_technique_list.append(measurement_technique_dict)
 
                 # runs
                 run_dict = {}
@@ -374,6 +384,8 @@ class NCBI_SRA(NDEDatabase):
                 output["species"] = species_list
             if len(distribution_list):
                 output["distribution"] = distribution_list
+            if len(measurement_technique_list):
+                output["measurementTechnique"] = measurement_technique_list
 
             yield output
             logger.info(f"Yielded: {study[0]}")
