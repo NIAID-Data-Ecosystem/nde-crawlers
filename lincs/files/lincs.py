@@ -4,7 +4,9 @@ import logging
 import requests
 
 logging.basicConfig(
-    format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("nde-logger")
 
@@ -14,7 +16,9 @@ class LINCS:
         # If there is only one author
         if "," not in authors_string:
             # Check for initials without periods and add periods if needed
-            authors_string = " ".join([name + "." if len(name) == 1 else name for name in authors_string.split()])
+            authors_string = " ".join(
+                [name + "." if len(name) == 1 else name for name in authors_string.split()]
+            )
             return [authors_string]
 
         # If there are multiple authors
@@ -31,7 +35,7 @@ class LINCS:
 
             i = 0
             while i < len(potential_authors):
-                potential_author = potential_authors[i].strip()  # Remove leading and trailing whitespace
+                potential_author = potential_authors[i].strip()  # Remove leading/trailing whitespace
 
                 # If the potential_author contains a space or it's the last part, it's a single author name.
                 # Otherwise, it's a part of multiple author name.
@@ -47,7 +51,8 @@ class LINCS:
 
             # Now check for initials without periods and add periods if needed
             authors = [
-                " ".join([name + "." if len(name) == 1 else name for name in author.split()]) for author in authors
+                " ".join([name + "." if len(name) == 1 else name for name in author.split()])
+                for author in authors
             ]
 
             # Remove duplicates
@@ -64,6 +69,7 @@ class LINCS:
 
         doc_ct = 0
         success_ct = 0
+        docs = []
 
         for document in lincsportal_data["results"]["documents"]:
             doc_ct += 1
@@ -107,29 +113,22 @@ class LINCS:
                     document["dateModified"] = date.strftime("%Y-%m-%d")
                 except ValueError:
                     logger.warning("Invalid date format in datemodified: " + document["datemodified"])
-
                 document.pop("datemodified")
 
             if "screeninglabinvestigator" in document:
                 authors = self.parse_authors(document["screeninglabinvestigator"])
                 for author in authors:
-                    author_list.append(
-                        {
-                            "name": author,
-                        }
-                    )
+                    author_list.append({"name": author})
                 document.pop("screeninglabinvestigator")
 
-            # remove duplicate authors
+            # Remove duplicate authors
             no_dupes = []
             name_dict = {}
-
             if author_list:
                 for author_obj in author_list:
                     if author_obj["name"] not in name_dict:
                         no_dupes.append(author_obj)
                         name_dict[author_obj["name"]] = author_obj
-
             document["author"] = no_dupes
 
             if "datasetname" in document:
@@ -145,7 +144,6 @@ class LINCS:
                     document["datePublished"] = date.strftime("%Y-%m-%d")
                 except ValueError:
                     logger.warning("Invalid date format in datereleased: " + document["datereleased"])
-
                 document.pop("datereleased")
 
             if "assayname" in document:
@@ -168,21 +166,42 @@ class LINCS:
             if "physicaldetection" in document:
                 document["variableMeasured"] = {"name": document.pop("physicaldetection")}
 
-            document["keywords"] = []
+            keywords_set = set()
+
             if "assaydesignmethod" in document:
-                document["keywords"] = document.pop("assaydesignmethod")
+                method = document.pop("assaydesignmethod")
+                if isinstance(method, str):
+                    keywords_set.update([k.strip() for k in method.split(",")])
+                else:
+                    keywords_set.update(method)
+
             if "biologicalprocess" in document:
-                document["keywords"] = document["keywords"] + document.pop("biologicalprocess")
+                process = document.pop("biologicalprocess")
+                if isinstance(process, str):
+                    keywords_set.update([k.strip() for k in process.split(",")])
+                else:
+                    keywords_set.update(process)
+
             if "technologies" in document:
-                document["keywords"].append(document.pop("technologies"))
+                keywords_set.add(document.pop("technologies"))
             if "biologicalbucket" in document:
-                document["keywords"].append(document.pop("biologicalbucket"))
+                keywords_set.add(document.pop("biologicalbucket"))
             if "endpointcategorization" in document:
-                document["keywords"].append(document.pop("endpointcategorization"))
+                keywords_set.add(document.pop("endpointcategorization"))
+
             if "protein" in document:
                 for x in document["protein"]:
-                    document["keywords"].append(x)
+                    keywords_set.add(x)
                 document.pop("protein")
+
+            if "cellline" in document:
+                for x in document["cellline"]:
+                    keywords_set.add(x)
+                document.pop("cellline")
+
+            # Convert the set back to a list and assign to document["keywords"]
+            if keywords_set:
+                document["keywords"] = list(keywords_set)
 
             isBasedOn_list = []
             if "tool" in document and "toollink" in document:
@@ -194,9 +213,7 @@ class LINCS:
             if "protocol" in document:
                 isBasedOn_list.append({"url": document.pop("protocol"), "name": f"{assayname[0]} protocol"})
             if len(isBasedOn_list) > 0:
-                document["isBasedOn"] = (
-                    isBasedOn_list  # [{"name": document.pop("tool"), "url": document.pop("toollink")}]
-                )
+                document["isBasedOn"] = isBasedOn_list
             elif "tool" in document:
                 document.pop("tool")
             elif "toollink" in document:
@@ -205,78 +222,66 @@ class LINCS:
             if "datasetgroup" in document:
                 rt_id = document.pop("datasetgroup")
                 document["isRelatedTo"] = {
-                    "_id": "LINCS_" + rt_id,
+                    "_id": rt_id.lower(),
                     "identifier": rt_id,
                     "name": rt_id,
                     "url": f"https://lincsportal.ccs.miami.edu/datasets/view/{rt_id}",
                 }
 
-            if "cellline" in document:
-                for x in document["cellline"]:
-                    document["keywords"].append(x)
-                document.pop("cellline")
-            document["keywords"] = ",".join(document["keywords"])
+            # Remove unused fields
+            for key in [
+                "concentrations",
+                "timepoints",
+                "expentimentalcomments",
+                "centerletter",
+                "id",
+                "path",
+                "centername",
+                "versions",
+                "latestversions",
+                "datalevels",
+                "projectname",
+                "ldplink",
+                "statsvalues",
+                "statsfields",
+                "counts",
+                "levelspath",
+                "datasetlevels",
+                "_version_",
+                "endpoints",
+                "smlincsidentifier",
+                "pipeline",
+                "phosphoprotein",
+                "dockerized_container",
+                "iPSC",
+                "primarycell",
+                "differentiatediPSC",
+                "antibody",
+                "centerdatasetid",
+            ]:
+                if key in document:
+                    document.pop(key)
 
-            if "concentrations" in document:
-                document.pop("concentrations")
-            if "timepoints" in document:
-                document.pop("timepoints")
-            if "expentimentalcomments" in document:
-                document.pop("expentimentalcomments")
-            if "centerletter" in document:
-                document.pop("centerletter")
-            if "id" in document:
-                document.pop("id")
-            if "path" in document:
-                document.pop("path")
-            if "centername" in document:
-                document.pop("centername")
-            if "versions" in document:
-                document.pop("versions")
-            if "latestversions" in document:
-                document.pop("latestversions")
-            if "datalevels" in document:
-                document.pop("datalevels")
-            if "projectname" in document:
-                document.pop("projectname")
-            if "ldplink" in document:
-                document.pop("ldplink")
-            if "statsvalues" in document:
-                document.pop("statsvalues")
-            if "statsfields" in document:
-                document.pop("statsfields")
-            if "counts" in document:
-                document.pop("counts")
-            if "levelspath" in document:
-                document.pop("levelspath")
-            if "datasetlevels" in document:
-                document.pop("datasetlevels")
-            if "_version_" in document:
-                document.pop("_version_")
-            if "endpoints" in document:
-                document.pop("endpoints")
-            if "smlincsidentifier" in document:
-                document.pop("smlincsidentifier")
-            if "pipeline" in document:
-                document.pop("pipeline")
-            if "phosphoprotein" in document:
-                document.pop("phosphoprotein")
-            if "dockerized_container" in document:
-                document.pop("dockerized_container")
-            if "iPSC" in document:
-                document.pop("iPSC")
-            if "primarycell" in document:
-                document.pop("primarycell")
-            if "differentiatediPSC" in document:
-                document.pop("differentiatediPSC")
-            if "antibody" in document:
-                document.pop("antibody")
-            if "centerdatasetid" in document:
-                document.pop("centerdatasetid")
-
-            if document["_id"]:
-                yield document
+            if document.get("_id"):
+                docs.append(document)
                 success_ct += 1
+
         logger.info(
             f"{doc_ct} documents found from https://lincsportal.ccs.miami.edu/, and {success_ct} documents successfully parsed from that set."
         )
+
+        # Build mapping from dataset identifier to proper dataset name.
+        id_to_name = {}
+        for doc in docs:
+            id_to_name[doc.get("identifier")] = doc.get("name", doc.get("identifier"))
+
+        # Update isRelatedTo object using the mapping.
+        for doc in docs:
+            if "isRelatedTo" in doc:
+                rt_id = doc["isRelatedTo"]["identifier"]
+                proper_name = id_to_name.get(rt_id, rt_id)
+                doc["isRelatedTo"]["name"] = proper_name
+                doc["isRelatedTo"]["url"] = f"https://lincsportal.ccs.miami.edu/datasets/view/{rt_id}"
+
+        for doc in docs:
+            yield doc
