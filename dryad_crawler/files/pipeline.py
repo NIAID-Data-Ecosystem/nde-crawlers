@@ -10,6 +10,8 @@ import datetime
 import logging
 import re
 
+from w3lib.html import remove_tags
+
 logger = logging.getLogger("nde-logger")
 
 
@@ -62,7 +64,8 @@ class DryadItemProcessorPipeline:
             output["description"] = description
 
         if has_part := item.pop("usageNotes", None):
-            output["hasPart"] = {"name": has_part}
+            clean_text = remove_tags(has_part).strip()
+            output["hasPart"] = {"name": clean_text}
 
         if identifier := item.pop("identifier", None):
             output["identifier"] = identifier
