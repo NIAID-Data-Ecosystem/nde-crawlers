@@ -33,7 +33,7 @@ class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
         try:
             docs = self.parse_files_with_timeout(input_file)
             docs = standardize_data(docs)
-            docs = add_topic_category(docs)
+            docs = add_topic_category(docs, self.name)
             for doc in docs:
                 yield doc
         except TimeoutError:
