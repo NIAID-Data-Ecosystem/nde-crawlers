@@ -1,6 +1,5 @@
 import datetime
 import logging
-
 import requests
 
 logging.basicConfig(
@@ -20,45 +19,27 @@ class LINCS:
                 [name + "." if len(name) == 1 else name for name in authors_string.split()]
             )
             return [authors_string]
-
-        # If there are multiple authors
         else:
-            # First, handle the semicolon-separated authors
+            # Handle multiple authors, first replace semicolons with commas if needed
             if ";" in authors_string:
                 authors_string = authors_string.replace(";", ",")
-
-            # Split the authors_string into potential authors
             potential_authors = authors_string.split(",")
-
-            # Initialize a list to hold the actual authors
             authors = []
-
             i = 0
             while i < len(potential_authors):
-                potential_author = potential_authors[i].strip()  # Remove leading/trailing whitespace
-
-                # If the potential_author contains a space or it's the last part, it's a single author name.
-                # Otherwise, it's a part of multiple author name.
+                potential_author = potential_authors[i].strip()
                 if " " in potential_author or i + 1 == len(potential_authors):
                     authors.append(potential_author)
                 else:
-                    # If it's a multiple author name, concatenate it with the next part and add to the authors list
                     author = potential_author + ", " + potential_authors[i + 1].strip()
                     authors.append(author)
-                    i += 1  # skip next part because it's already included in the author name
-
+                    i += 1
                 i += 1
-
-            # Now check for initials without periods and add periods if needed
             authors = [
                 " ".join([name + "." if len(name) == 1 else name for name in author.split()])
                 for author in authors
             ]
-
-            # Remove duplicates
-            authors = list(set(authors))
-
-        return authors
+            return list(set(authors))
 
     def parser(self):
         lincsportal_url = "https://lincsportal.ccs.miami.edu/dcic/api/fetchdata?limit=1000&searchTerm=*"
@@ -67,13 +48,9 @@ class LINCS:
         logger.info(f"Request status: {lincsportal_res.status_code}")
         lincsportal_data = lincsportal_res.json()
 
-        doc_ct = 0
-        success_ct = 0
-        docs = []
+        docs = []  # Collect all processed documents here
 
         for document in lincsportal_data["results"]["documents"]:
-            doc_ct += 1
-
             document["@type"] = "Dataset"
             document["includedInDataCatalog"] = {
                 "name": "LINCS",
@@ -124,11 +101,10 @@ class LINCS:
             # Remove duplicate authors
             no_dupes = []
             name_dict = {}
-            if author_list:
-                for author_obj in author_list:
-                    if author_obj["name"] not in name_dict:
-                        no_dupes.append(author_obj)
-                        name_dict[author_obj["name"]] = author_obj
+            for author_obj in author_list:
+                if author_obj["name"] not in name_dict:
+                    no_dupes.append(author_obj)
+                    name_dict[author_obj["name"]] = author_obj
             document["author"] = no_dupes
 
             if "datasetname" in document:
@@ -147,11 +123,13 @@ class LINCS:
                 document.pop("datereleased")
 
             if "assayname" in document:
-                measurement_techniques = []
-                assayname = document.pop("assayname").split(",")
-                for assay in assayname:
-                    measurement_techniques.append({"name": assay})
-                document["measurementTechnique"] = measurement_techniques
+                assay_data = document.pop("assayname")
+                if isinstance(assay_data, str):
+                    assay_data = [name.strip() for name in assay_data.split(",")]
+                else:
+                    assay_data = [name.strip() for name in assay_data]
+                unique_assays = list(dict.fromkeys(assay_data))
+                document["measurementTechnique"] = [{"name": assay} for assay in unique_assays]
 
             if "size" in document:
                 if len(set(document["size"])) > 1:
@@ -167,64 +145,55 @@ class LINCS:
                 document["variableMeasured"] = {"name": document.pop("physicaldetection")}
 
             keywords_set = set()
-
             if "assaydesignmethod" in document:
                 method = document.pop("assaydesignmethod")
                 if isinstance(method, str):
                     keywords_set.update([k.strip() for k in method.split(",")])
                 else:
                     keywords_set.update(method)
-
             if "biologicalprocess" in document:
                 process = document.pop("biologicalprocess")
                 if isinstance(process, str):
                     keywords_set.update([k.strip() for k in process.split(",")])
                 else:
                     keywords_set.update(process)
-
             if "technologies" in document:
                 keywords_set.add(document.pop("technologies"))
             if "biologicalbucket" in document:
                 keywords_set.add(document.pop("biologicalbucket"))
             if "endpointcategorization" in document:
                 keywords_set.add(document.pop("endpointcategorization"))
-
             if "protein" in document:
                 for x in document["protein"]:
                     keywords_set.add(x)
                 document.pop("protein")
-
             if "cellline" in document:
                 for x in document["cellline"]:
                     keywords_set.add(x)
                 document.pop("cellline")
-
-            # Convert the set back to a list and assign to document["keywords"]
             if keywords_set:
                 document["keywords"] = list(keywords_set)
 
-            isBasedOn_list = []
+            # Leave isBasedOn and other fields unchanged...
             if "tool" in document and "toollink" in document:
+                isBasedOn_list = []
                 for index, tool in enumerate(document["tool"]):
-                    temp_dict = {"name": tool, "url": document["toollink"][index]}
-                    isBasedOn_list.append(temp_dict)
+                    isBasedOn_list.append({"name": tool, "url": document["toollink"][index]})
+                document["isBasedOn"] = isBasedOn_list
                 document.pop("tool")
                 document.pop("toollink")
             if "protocol" in document:
-                isBasedOn_list.append({"url": document.pop("protocol"), "name": f"{assayname[0]} protocol"})
-            if len(isBasedOn_list) > 0:
-                document["isBasedOn"] = isBasedOn_list
-            elif "tool" in document:
-                document.pop("tool")
-            elif "toollink" in document:
-                document.pop("toollink")
+                document.setdefault("isBasedOn", []).append(
+                    {"url": document.pop("protocol"), "name": "protocol"}
+                )
 
+            # Only change isRelatedTo: initially set it based on datasetgroup, then update later.
             if "datasetgroup" in document:
                 rt_id = document.pop("datasetgroup")
                 document["isRelatedTo"] = {
                     "_id": rt_id.lower(),
                     "identifier": rt_id,
-                    "name": rt_id,
+                    "name": rt_id,  # temporary; will be updated below
                     "url": f"https://lincsportal.ccs.miami.edu/datasets/view/{rt_id}",
                 }
 
@@ -259,29 +228,19 @@ class LINCS:
                 "antibody",
                 "centerdatasetid",
             ]:
-                if key in document:
-                    document.pop(key)
+                document.pop(key, None)
 
-            if document.get("_id"):
-                docs.append(document)
-                success_ct += 1
-
-        logger.info(
-            f"{doc_ct} documents found from https://lincsportal.ccs.miami.edu/, and {success_ct} documents successfully parsed from that set."
-        )
+            docs.append(document)
 
         # Build mapping from dataset identifier to proper dataset name.
-        id_to_name = {}
-        for doc in docs:
-            id_to_name[doc.get("identifier")] = doc.get("name", doc.get("identifier"))
+        mapping = {doc["identifier"]: doc.get("name", doc["identifier"]) for doc in docs}
 
-        # Update isRelatedTo object using the mapping.
+        # Update isRelatedTo field using the mapping.
         for doc in docs:
             if "isRelatedTo" in doc:
                 rt_id = doc["isRelatedTo"]["identifier"]
-                proper_name = id_to_name.get(rt_id, rt_id)
+                proper_name = mapping.get(rt_id, rt_id)
                 doc["isRelatedTo"]["name"] = proper_name
-                doc["isRelatedTo"]["url"] = f"https://lincsportal.ccs.miami.edu/datasets/view/{rt_id}"
 
         for doc in docs:
             yield doc
