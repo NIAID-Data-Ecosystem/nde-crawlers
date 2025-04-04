@@ -15,15 +15,18 @@ def parse():
     count = 0
 
     for study in studies:
-        if study["nct_number"] == "NCT04280705":
-            study["isPartOf"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial",
-                    "identifier": "ACTT",
-                    "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-                }
-            ]
-            study["isRelatedTo"] = [
+        result = {}
+
+        nct_number = study.get("nct_number")
+
+        # Conditionally add relationship fields based on nct_number.
+        if nct_number == "NCT04280705":
+            result["isPartOf"] = [{
+                "name": "Adaptive COVID-19 Treatment Trial",
+                "identifier": "ACTT",
+                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
+            }]
+            result["isRelatedTo"] = [
                 {
                     "name": "Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021",
                     "identifier": "accessclinicaldata_NCT04401579",
@@ -49,15 +52,13 @@ def parse():
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
             ]
-        if study["nct_number"] == "NCT04401579":
-            study["isPartOf"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial",
-                    "identifier": "ACTT",
-                    "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-                }
-            ]
-            study["isRelatedTo"] = [
+        elif nct_number == "NCT04401579":
+            result["isPartOf"] = [{
+                "name": "Adaptive COVID-19 Treatment Trial",
+                "identifier": "ACTT",
+                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
+            }]
+            result["isRelatedTo"] = [
                 {
                     "name": "Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021",
                     "identifier": "accessclinicaldata_NCT04280705",
@@ -83,15 +84,13 @@ def parse():
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
             ]
-        if study["nct_number"] == "NCT04492475":
-            study["isPartOf"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial",
-                    "identifier": "ACTT",
-                    "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-                }
-            ]
-            study["isRelatedTo"] = [
+        elif nct_number == "NCT04492475":
+            result["isPartOf"] = [{
+                "name": "Adaptive COVID-19 Treatment Trial",
+                "identifier": "ACTT",
+                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
+            }]
+            result["isRelatedTo"] = [
                 {
                     "name": "Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021",
                     "identifier": "accessclinicaldata_NCT04280705",
@@ -117,15 +116,13 @@ def parse():
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
             ]
-        if study["nct_number"] == "NCT04640168":
-            study["isPartOf"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial",
-                    "identifier": "ACTT",
-                    "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-                }
-            ]
-            study["isRelatedTo"] = [
+        elif nct_number == "NCT04640168":
+            result["isPartOf"] = [{
+                "name": "Adaptive COVID-19 Treatment Trial",
+                "identifier": "ACTT",
+                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
+            }]
+            result["isRelatedTo"] = [
                 {
                     "name": "Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021",
                     "identifier": "accessclinicaldata_NCT04280705",
@@ -152,96 +149,100 @@ def parse():
                 },
             ]
 
-        study["name"] = study.pop("title")
-        study["identifier"] = study.pop("cmc_unique_id")
-        study["description"] = study.pop("description")
-        study["abstract"] = study.pop("brief_study_description")
+        result["name"] = study.get("title")
+        unique_id = study.get("cmc_unique_id")
+        result["description"] = study.get("description")
+        result["abstract"] = study.get("brief_study_description")
+        result["usageInfo"] = "https://accessclinicaldata.niaid.nih.gov/api/files/NIAIDDUAAccessclinicaldata@NIAID.pdf"
 
         has_part_list = []
         for doc in study.get("study_documents", []):
-            if doc["s3_location"] is None or doc["s3_location"].endswith(".zip"):
+            s3_location = doc.get("s3_location")
+            if s3_location is None or s3_location.endswith(".zip"):
                 continue
-            has_part_list.append(
-                {
-                    "@type": "CreativeWork",
-                    "name": doc["file_name"],
-                    "url": "https://accessclinicaldata.niaid.nih.gov/api/files/" + doc["s3_location"],
-                    "encodingFormat": doc["data_format"],
-                }
-            )
+
+            creative_work = {
+                "@type": "CreativeWork",
+                "name": doc.get("file_name"),
+                "url": "https://accessclinicaldata.niaid.nih.gov/api/files/" + s3_location
+            }
+            data_format = doc.get("data_format")
+            if data_format is not None:
+                creative_work["encodingFormat"] = data_format
+
+            has_part_list.append(creative_work)
+
         if has_part_list:
-            study["hasPart"] = has_part_list
+            result["hasPart"] = has_part_list
 
-        # URL no longer available
-        # study["usageInfo"] = {
-        #     "url": "https://accessclinicaldata.niaid.nih.gov/dashboard/Public/files/NIAIDDUA2021Accessclinicaldata@NIAID.pdf"
-        # }
+        date_published = study.get("data_availability_date")
+        if date_published == "Coming Soon":
+            result["datePublished"] = None
+        elif date_published:
+            if "T" in date_published:
+                result["datePublished"] = datetime.fromisoformat(date_published).strftime("%Y-%m-%d")
+            else:
+                try:
+                    iso_date = datetime.strptime(date_published, "%B %Y")
+                except ValueError:
+                    iso_date = datetime.strptime(date_published, "%B %d, %Y")
+                result["datePublished"] = iso_date.strftime("%Y-%m-%d")
+        else:
+            result["datePublished"] = None
 
-        # Convert publication dates to ISO format
-        study["datePublished"] = study.pop("data_availability_date")
-        if study["datePublished"] == "Coming Soon":
-            study["datePublished"] = None
-        if study["datePublished"] is not None:
-            try:
-                iso_date = datetime.strptime(study["datePublished"], "%B %Y")
-            except ValueError:
-                iso_date = datetime.strptime(study["datePublished"], "%B %d, %Y")
-            study["datePublished"] = iso_date.strftime("%Y-%m-%d")
+        date_modified = study.get("most_recent_update")
+        if date_modified:
+            if "T" in date_modified:
+                result["dateModified"] = datetime.fromisoformat(date_modified).strftime("%Y-%m-%d")
+            else:
+                iso_date = datetime.strptime(date_modified, "%B %Y")
+                result["dateModified"] = iso_date.strftime("%Y-%m-%d")
+        else:
+            result["dateModified"] = None
 
-        study["dateModified"] = study.pop("most_recent_update")
-        if study["dateModified"] is not None:
-            iso_date = datetime.strptime(study["dateModified"], "%B %Y")
-            study["dateModified"] = iso_date.strftime("%Y-%m-%d")
+        result["additionalType"] = study.get("data_available")
+        result["funding"] = [{"funder": {"name": study.get("creator")}}]
+        if nct_number and nct_number is not "N/A":
+            result["nctid"] = nct_number
+        result["healthCondition"] = {"name": study.get("condition")}
+        result["mainEntityOfPage"] = study.get("clinical_trial_website")
 
-        study["additionalType"] = study.pop("data_available")
-        study["funding"] = [{"funder": {"name": study.pop("creator")}}]
-        study["nctid"] = study.pop("nct_number")
-        study["healthCondition"] = {"name": study.pop("condition")}
-        study["mainEntityOfPage"] = study.pop("clinical_trial_website")
-
-        # Process the publications field for valid citation URLs
-        citation_URL = study.pop("publications")
-        if citation_URL is not None and validators.url(citation_URL):
-            if "pubmed" in citation_URL:
-                study["pmids"] = citation_URL.split("/")[-2]
-            elif "doi" in citation_URL:
-                doi_id = citation_URL.split("/")[-1]
+        citation_url = study.get("publications")
+        if citation_url and validators.url(citation_url):
+            if "pubmed" in citation_url:
+                result["pmids"] = citation_url.split("/")[-2]
+            elif "doi" in citation_url:
+                doi_id = citation_url.split("/")[-1]
                 r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
                 if "pubmed" in r.url:
-                    study["pmids"] = r.url.split("/")[-2]
+                    result["pmids"] = r.url.split("/")[-2]
                 else:
-                    study["citation"] = None
+                    result["citation"] = None
             else:
-                study["citation"] = [{"url": citation_URL}]
+                result["citation"] = [{"url": citation_url}]
         else:
-            study["citation"] = None
+            result["citation"] = None
 
-        study["conditionsOfAccess"] = "Restricted" if study.pop("data_available_for_request") else "Closed"
+        result["conditionsOfAccess"] = "Restricted" if study.get("data_available_for_request") else "Closed"
 
-        # De-duplicate identifiers if needed
-        if study["identifier"] != study["nctid"]:
-            study["identifier"] = [study["identifier"], study["nctid"]]
-        else:
-            study["identifier"] = [study["nctid"]]
+        identifiers = [x for x in (unique_id, nct_number) if x is not None]
+        seen = set()
+        identifiers = [x for x in identifiers if x not in seen and not seen.add(x)]
+        result["identifier"] = identifiers
 
-        # Append a unique _id and set additional catalog fields
-        study["_id"] = "accessclinicaldata_" + study["identifier"][0].lower()
-        study["includedInDataCatalog"] = {"name": "AccessClinicalData@NIAID"}
-        study["@type"] = "Dataset"
-        dataset_url = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + study["identifier"][0]
-        study["url"] = dataset_url
-        study["includedInDataCatalog"]["dataset"] = dataset_url
+        primary_id = result["identifier"][0]
+        result["_id"] = "accessclinicaldata_" + primary_id.lower()
+        dataset_url = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + primary_id
+        result["url"] = dataset_url
+        result["includedInDataCatalog"] = {"name": "AccessClinicalData@NIAID", "dataset": dataset_url}
+        result["@type"] = "Dataset"
 
-        # Remove any None values before yielding the record
-        result = {k: v for k, v in study.items() if v is not None}
-        missing_properties = {k: v for k, v in study.items() if v is None}
+        # Remove any keys with None values.
+        clean_result = {k: v for k, v in result.items() if v is not None}
 
-        yield result
+        yield clean_result
 
         count += 1
-
-        if len(missing_properties.keys()) > 0:
-            logger.warning("Missing type transformation: {}".format(str(missing_properties.keys())))
         logger.info("Parsed %s records", count)
 
     logger.info("Finished Parsing. Total Records: %s", count)

@@ -3,6 +3,7 @@ import logging
 import re
 
 import ndex2.client as nc
+import requests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -40,12 +41,50 @@ technique_lookup = {
     "CRISPR screening": {"name": "CRISPR/Cas9 method", "url": "http://www.bioassayontology.org/bao#BAO_0010249"},
 }
 
-test_networks = [
-    "89274295-1730-11e7-b39e-0ac135e8bacf",
-    "e6bf9a50-b666-11ee-8a13-005056ae23aa",
-    "792f0c5c-22b6-11ea-bb65-0ac135e8bacf",
-    "b164f77e-499c-11e8-a4bf-0ac135e8bacf",
-]
+
+VALID_NETWORK_SETS = {
+    "bdba6a7a-488a-11ec-b3be-0ac135e8bacf",  # INDRA-GO
+    "453c1c63-5c10-11e9-9f06-0ac135e8bacf",  # WikiPathways (Homo sapiens)
+    "0e7da362-e594-11ef-8e41-005056ae3c32",  # Gene Ontology (GO-CAMs)
+    "224d4de6-e23f-11ea-99da-0ac135e8bacf",  # HiDef
+    "78db519f-eb1d-11eb-b666-0ac135e8bacf",  # Swaney (Science 2021)
+    "0bd21f41-cd02-11ea-aaef-0ac135e8bacf",  # Zhang (bioinformatics 2018)
+    "2c200d22-e2fe-11ea-99da-0ac135e8bacf",  # Patrick (cell systems 2018)
+}
+
+
+def get_valid_network_ids():
+    """
+    Iterates over each network set in VALID_NETWORK_SETS, calls the NDEx API,
+    and collects network IDs from the 'networks' array in each response.
+
+    Returns:
+        A list of network IDs.
+    """
+    base_url = "https://www.ndexbio.org/v2/networkset/"
+    valid_networks = []
+
+    for network_set_id in VALID_NETWORK_SETS:
+        if network_set_id == "78db519f-eb1d-11eb-b666-0ac135e8bacf":
+            # Zhang (bioinformatics 2018) is just one network
+            valid_networks.append("78db519f-eb1d-11eb-b666-0ac135e8bacf")
+            continue
+        url = base_url + network_set_id
+        logger.info(f"Fetching network set: {network_set_id} from {url}")
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                valid_networks.extend(data.get("networks", []))
+                logger.info(
+                    f"Fetched {len(data.get('networks', []))} networks from {url}")
+            else:
+                logger.error(
+                    f"Failed to fetch {url}: HTTP {response.status_code}")
+        except Exception as e:
+            logger.error(f"Exception occurred while fetching {url}: {e}")
+
+    return valid_networks
 
 
 def strip_html_tags(text: str) -> str:
@@ -53,14 +92,103 @@ def strip_html_tags(text: str) -> str:
     return re.sub(r"<[^>]*>", "", text)
 
 
+def convert_to_pmid(identifier: str) -> str:
+    """
+    Given an identifier (PMID, DOI, or URL), use the NCBI ID Converter API
+    to convert it to a PMID if possible.
 
-def process_networks(networks):
+    If the identifier is already numeric (assumed to be a PMID), it's returned as is.
+    """
+    # If already a numeric PMID, return it
+    if identifier.isdigit():
+        return identifier
+
+    base_url = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/"
+    email = os.environ.get("NDEX_EMAIL")
+    params = {
+        "ids": identifier,
+        "format": "json",
+        "tool": "niaid-data-ecosystem",
+        "email": email
+    }
+    try:
+        logger.info(f"Converting identifier {identifier} to PMID")
+        response = requests.get(base_url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            records = data.get("records", [])
+            logger.info(
+                f"Received {len(records)} records for identifier {identifier}")
+            if records:
+                logger.info(f"Records: {records}")
+                # The API returns a list of records; we take the first one.
+                record = records[0]
+                pmid = record.get("pmid")
+                if pmid:
+                    logger.info(f"Converted {identifier} to PMID: {pmid}")
+                    return pmid
+    except Exception as e:
+        print(f"Error converting identifier {identifier}: {e}")
+    return None
+
+
+def process_reference(ref: str) -> tuple:
+    """
+    Processes a reference string to extract identifiers and converts them
+    to PMIDs (if possible). Also extracts any URLs that are not DOIs, PMIDs, or PMCIDs.
+    Returns a tuple of PMIDs (as a comma-separated string) and any extra URL found.
+    """
+    pmid_set = set()
+    extra_url = None
+    logger.info(f"Processing reference: {ref}")
+    with open("ref.txt", "a") as f:
+        f.write(ref + "\n")
+
+    # Look for a PMID in the reference
+    pmid_match = re.search(r'PMID[:\s]?(\d+)', ref, re.IGNORECASE)
+    if pmid_match:
+        logger.info(f"Found PMID: {pmid_match.group(1)}")
+        pmid = pmid_match.group(1)
+        pmid_set.add(pmid)
+
+    # Look for a PubMed Central ID (PMCID) in the reference
+    pmcid_match = re.search(r'PMCID[:\s]?PMC(\d+)', ref, re.IGNORECASE)
+    if pmcid_match:
+        logger.info(f"Found PMCID: {pmcid_match.group(1)}")
+        pmcid = pmcid_match.group(1)
+        pmid_from_pmcid = convert_to_pmid(pmcid)
+        if pmid_from_pmcid:
+            pmid_set.add(pmid_from_pmcid)
+
+    # Look for a DOI in the reference
+    doi_match = re.search(
+        r'(10\.\d{4,9}/[-._;()/:A-Z0-9]+)', ref, re.IGNORECASE)
+    if doi_match:
+        logger.info(f"Found DOI: {doi_match.group(1)}")
+        doi = doi_match.group(1)
+        pmid_from_doi = convert_to_pmid(doi)
+        if pmid_from_doi:
+            pmid_set.add(pmid_from_doi)
+
+    # Look for any other URLs in the reference
+    url_match = re.search(
+        r'(https?://[^\s]+)', ref, re.IGNORECASE)
+    if url_match:
+        url = url_match.group(1)
+        if not any(x in url.lower() for x in ["doi", "pmc", "pubmed"]):
+            logger.info(f"Found URL: {url}")
+            extra_url = url
+
+    return ','.join(sorted(pmid_set)), extra_url
+
+
+def process_networks(networks, valid_network_ids):
     for network in networks.get("networks", []):
         properties_dict = {}
         if properties := network.get("properties"):
             properties_dict = {prop["predicateString"]: prop["value"] for prop in properties}
 
-        # Helper function to get value from network or properties_dict
+        # Helper to search for keys in both network and its properties
         def get_value(*keys):
             for key in keys:
                 if value := network.get(key):
@@ -69,24 +197,18 @@ def process_networks(networks):
                     return value
             return None
 
-        # Helper function to add species to a list
         def add_species(raw_value, seen, species_list):
             if not raw_value:
                 return
-            # Split the string by commas
             for token in raw_value.split(","):
                 token = token.strip()
-                # Skip empty tokens or tokens that are purely numeric
                 if not token or token.isdigit():
                     continue
-                # Standardize any value that mentions "human"
                 if "human" in token.lower():
                     token = "human"
-                # Only add if we haven't seen this species yet
                 if token not in seen:
                     species_list.append({"name": token})
                     seen.add(token)
-
 
         output = {
             "includedInDataCatalog": {
@@ -98,14 +220,11 @@ def process_networks(networks):
             "@type": "Dataset",
         }
 
-        # Use the helper function to get external_id
         if external_id := get_value("externalId"):
-            if external_id in test_networks:
-                logger.warning(f"Skipping test network {external_id}")
-                continue
             output["identifier"] = external_id
             output["url"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
-            output["includedInDataCatalog"]["dataset"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
+            output["includedInDataCatalog"][
+                "dataset"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
             output["_id"] = f"ndex_{external_id}"
         else:
             logger.warning("Network missing externalId")
@@ -122,18 +241,17 @@ def process_networks(networks):
             output["description"] = description
 
         if creation_time := get_value("creationTime"):
-            output["dateCreated"] = datetime.datetime.fromtimestamp(int(creation_time) / 1000).isoformat()
+            output["dateCreated"] = datetime.datetime.fromtimestamp(
+                int(creation_time) / 1000).isoformat()
 
         if modification_time := get_value("modificationTime"):
-            output["dateModified"] = datetime.datetime.fromtimestamp(int(modification_time) / 1000).isoformat()
+            output["dateModified"] = datetime.datetime.fromtimestamp(
+                int(modification_time) / 1000).isoformat()
         elif properties_modification_time := get_value("lastmodifieddate", "ndex:modificationTime"):
             output["dateModified"] = properties_modification_time
 
         if visibility := get_value("visibility"):
-            if visibility == "PUBLIC":
-                output["conditionsOfAccess"] = "Open"
-            else:
-                output["conditionsOfAccess"] = "Restricted"
+            output["conditionsOfAccess"] = "Open" if visibility == "PUBLIC" else "Restricted"
         elif properties_visibility := get_value("visibility"):
             if properties_visibility is False:
                 output["conditionsOfAccess"] = "Open"
@@ -153,38 +271,38 @@ def process_networks(networks):
             output["author"] = author
 
         health_condition_list = []
-
         if disease := get_value("disease"):
             disease_text = strip_html_tags(disease)
-
             for item in disease_text.split(","):
                 cleaned_name = item.strip()
                 if cleaned_name:
                     health_condition_list.append({"name": cleaned_name})
-
         if properties_disease := get_value("diseases_id"):
             for disease_item in properties_disease:
                 cleaned_name = strip_html_tags(disease_item).strip()
                 if cleaned_name:
                     health_condition_list.append({"name": cleaned_name})
-
         if health_condition_list:
             output["healthCondition"] = health_condition_list
 
         species_list = []
         seen_species = set()
-
-        # Process each field using the helper
         for field in ["organism", "species", "idmapper.species", "species_common_name", "ORGANISM"]:
             value = get_value(field)
             add_species(value, seen_species, species_list)
-
         if species_list:
             output["species"] = species_list
 
-        is_related_to_list = []
         if reference := get_value("reference"):
-            is_related_to_list.append({"url": reference})
+            pmids, extra_url = process_reference(reference)
+            if pmids:
+                output["pmids"] = pmids
+            if extra_url:
+                output["citation"] = {
+                    "url": extra_url, "description": f"{output['name']} is found accessible at {extra_url}"}
+
+        # Process other related fields (still added as isRelatedTo)
+        is_related_to_list = []
         properties_is_related_to = {}
         if figure_title := get_value("figureTitle"):
             properties_is_related_to["name"] = figure_title
@@ -241,16 +359,6 @@ def process_networks(networks):
         if same_as_list:
             output["sameAs"] = same_as_list
 
-        citation = {}
-        if pmcid := get_value("pmcid"):
-            citation["pmcid"] = pmcid
-        if paper_title := get_value("paperTitle"):
-            citation["name"] = paper_title
-        if paper_link := get_value("paperLink"):
-            citation["url"] = paper_link
-        if citation:
-            output["citation"] = citation
-
         sd_publisher_list = []
         if data_source := get_value("Data source"):
             sd_publisher_list.append({"name": data_source})
@@ -292,15 +400,16 @@ def process_networks(networks):
                 method = method.strip()
                 if method in technique_lookup:
                     measurement_technique = technique_lookup[method]
-                    identifier = (measurement_technique["name"], measurement_technique["url"])
+                    identifier = (
+                        measurement_technique["name"], measurement_technique["url"])
                     if identifier not in measurement_technique_identifiers:
-                        measurement_technique_list.append(measurement_technique)
+                        measurement_technique_list.append(
+                            measurement_technique)
                         measurement_technique_identifiers.add(identifier)
         if measurement_technique_list:
             output["measurementTechnique"] = measurement_technique_list
 
-        # Default topicCategory to "Molecular interactions, pathways and networks"
-        # https://github.com/NIAID-Data-Ecosystem/nde-crawlers/issues/152#issuecomment-2597016173
+        # Default topicCategory remains unchanged.
         output["topicCategory"] = [
             {
                 "url": "http://edamontology.org/topic_0602",
@@ -309,6 +418,12 @@ def process_networks(networks):
                 "inDefinedTermSet": "EDAM",
             }
         ]
+
+        # Only yield the record if it comes from one of the valid network sets or has a citation/pmid.
+        if output['identifier'] not in valid_network_ids and ("citation" not in output or "pmids" not in output):
+            logger.warning(
+                f"Skipping network {output.get('identifier')} because it is not in a valid network set and has no reference")
+            continue
 
         yield output
 
@@ -322,27 +437,33 @@ def parse():
     def fetch_networks(start, size):
         return anon_ndex.search_networks(start=start, size=size)
 
-    # Fetch general status information
     status = anon_ndex.status
     networks_count = status.get("networkCount")
     users_count = status.get("userCount")
     groups_count = status.get("groupCount")
-    logger.info(f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
+    logger.info(
+        f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
 
-    # Initialize variables
     start = 0
     size = 1000
-
     networks = anon_ndex.search_networks(start=start, size=size)
     total_networks = networks.get("numFound", 0)
     logger.info(f"Found {total_networks} networks")
 
+    valid_network_ids = set(get_valid_network_ids())
+    logger.info(f"Found {len(valid_network_ids)} valid network IDs")
+
     while networks.get("networks"):
-        for network in process_networks(networks):
-            if "isRelatedTo" in network:
-                yield network
-            else:
-                logger.warning(f"Skipping network {network.get('identifier')} without isRelatedTo")
+        for network in process_networks(networks, valid_network_ids):
+            yield network
         start += 1
         logger.info(f"Retrieved {start * size} networks")
         networks = fetch_networks(start, size)
+
+
+count = 0
+for network in parse():
+    count += 1
+    if count % 1000 == 0:
+        logger.info(f"Processed {count} networks")
+logger.info(f"Total processed networks: {count}")
