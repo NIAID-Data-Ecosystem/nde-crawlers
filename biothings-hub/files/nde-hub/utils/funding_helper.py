@@ -206,7 +206,6 @@ def standardize_funding(data):
         conn.close()
 
 
-@retry(3, 5)
 def update_funding(funding_id):
     """
     Update funding information for a given funding id.
@@ -316,58 +315,65 @@ def update_funding(funding_id):
             return build_funding_dict(largest_amount_parents[0])
 
 
-@retry(3, 5)
 def standardize_funder(funder):
     """
     Standardize the funder dictionary using a SQLite cache.
     :param funder: the funder name
     :return: the funder dictionary
     """
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT funder_data FROM funder_cache WHERE funder_name = ?", (funder,))
+        result = cursor.fetchone()
 
-    cursor.execute("SELECT funder_data FROM funder_cache WHERE funder_name = ?", (funder,))
-    result = cursor.fetchone()
+        if result:
+            logger.info(f"FOUND FUNDING INFORMATION FOR {funder} in SQLite cache")
+            return json.loads(result[0])
 
-    if result:
-        logger.info(f"FOUND FUNDING INFORMATION FOR {funder} in SQLite cache")
-        return json.loads(result[0])
+        funder_dict = {}
+        funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
+        funder_name = funder_name.replace("&", "and")
+        funder_acronym_list = re.findall(r"\(([^)]*)\)", funder)
+        funder_acronym = funder_acronym_list[0] if funder_acronym_list else ""
 
-    funder_dict = {}
-    funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
-    funder_name = funder_name.replace("&", "and")
-    funder_acronym_list = re.findall(r"\(([^)]*)\)", funder)
-    funder_acronym = funder_acronym_list[0] if funder_acronym_list else ""
+        url = f"https://api.crossref.org/funders?query={funder_name}"
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching data from CrossRef API: {e}")
+            return {"name": funder, "@type": "Organization"}
 
-    url = f"https://api.crossref.org/funders?query={funder_name}"
-    response = requests.get(url)
-    data = response.json()
+        try:
+            data = response.json()
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON response: {e}")
+            return {"name": funder, "@type": "Organization"}
 
-    if "message" not in data or "items" not in data["message"]:
-        logger.info(f"No message in response for {funder_name}, {url}")
-        funder_dict = {"name": funder, "@type": "Organization"}
-    else:
-        for item in data["message"]["items"]:
-            if item["name"].lower() == funder_name.lower() or funder_acronym.lower() in [
-                alt_name.lower() for alt_name in item.get("alt-names", [])
-            ]:
-                funder_dict["name"] = item["name"]
-                funder_dict["alternateName"] = item.get("alt-names", [])
-                funder_dict["identifier"] = item["id"]
-                break
+        if "message" not in data or "items" not in data["message"]:
+            logger.info(f"No message in response for {funder_name}, {url}")
+            funder_dict = {"name": funder, "@type": "Organization"}
+        else:
+            for item in data["message"]["items"]:
+                if item["name"].lower() == funder_name.lower() or funder_acronym.lower() in [
+                    alt_name.lower() for alt_name in item.get("alt-names", [])
+                ]:
+                    funder_dict["name"] = item["name"]
+                    funder_dict["alternateName"] = item.get("alt-names", [])
+                    funder_dict["identifier"] = item["id"]
+                    break
 
-    if not funder_dict:
-        logger.info(f"NO FUNDING INFORMATION FOUND FOR {funder_name}, {url}")
-        funder_dict = {"name": funder, "@type": "Organization"}
+        if not funder_dict:
+            logger.info(f"NO FUNDING INFORMATION FOUND FOR {funder_name}, {url}")
+            funder_dict = {"name": funder, "@type": "Organization"}
 
-    cursor.execute(
-        "INSERT OR REPLACE INTO funder_cache (funder_name, funder_data) VALUES (?, ?)",
-        (funder, json.dumps(funder_dict)),
-    )
-    conn.commit()
-
-    logger.info(f"Standardized and saved funding information for {funder_name}")
-    return funder_dict
+        cursor.execute(
+            "INSERT OR REPLACE INTO funder_cache (funder_name, funder_data) VALUES (?, ?)",
+            (funder, json.dumps(funder_dict)),
+        )
+        conn.commit()
+        logger.info(f"Standardized and saved funding information for {funder_name}")
+        return funder_dict
 
 
 def build_funding_dict(funding_info):

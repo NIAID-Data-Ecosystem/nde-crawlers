@@ -267,7 +267,6 @@ def process_synonyms(synonym_field):
         return [syn.split('"')[1] for syn in synonym_field if "EXACT" in syn]
 
 
-
 def create_return_object(hit, alternate_names, original_name):
     ontology = hit["_id"].split(":")[0]
     identifier = hit["_id"].split(":")[1]
@@ -489,13 +488,12 @@ def lookup_item(original_name, data_dict):
 
 
 def fetch_data_from_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT original_name, standard_dict FROM health_conditions")
-    hc_cursor = c.fetchall()
-    c.execute("SELECT original_name, standard_dict FROM species")
-    species_cursor = c.fetchall()
-    conn.close()
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT original_name, standard_dict FROM health_conditions")
+        hc_cursor = c.fetchall()
+        c.execute("SELECT original_name, standard_dict FROM species")
+        species_cursor = c.fetchall()
 
     hc_dict = {item[0].lower().strip(): json.loads(item[1]) for item in hc_cursor if item[1]}
     species_dict = {item[0].lower().strip(): json.loads(item[1]) for item in species_cursor if item[1]}
@@ -560,12 +558,10 @@ def process_document(args):
 
     # Split processed items into species and infectious agents.
     new_species_list = [
-        item for item in new_species_and_infectious_agents_list
-        if item.get("classification") != "infectiousAgent"
+        item for item in new_species_and_infectious_agents_list if item.get("classification") != "infectiousAgent"
     ]
     new_infectious_agent_list = [
-        item for item in new_species_and_infectious_agents_list
-        if item.get("classification") == "infectiousAgent"
+        item for item in new_species_and_infectious_agents_list if item.get("classification") == "infectiousAgent"
     ]
 
     # Build a set of normalized names for converted species (using both originalName and name).
@@ -613,6 +609,7 @@ def process_document(args):
         logger.info(f"Processed {doc_index} documents")
 
     return doc
+
 
 def transform(doc_list):
     hc_dict, species_dict = fetch_data_from_db()
