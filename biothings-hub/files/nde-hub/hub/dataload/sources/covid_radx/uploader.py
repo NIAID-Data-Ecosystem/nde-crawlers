@@ -38,6 +38,41 @@ class Covid_Radx_Uploader(NDESourceUploader):
             "url": "http://purl.obolibrary.org/obo/MONDO_0100096",
         }
 
+        homo_sapiens = {
+            "identifier": "9606",
+            "inDefinedTermSet": "UniProt",
+            "url": "https://www.uniprot.org/taxonomy/9606",
+            "originalName": "homo sapiens",
+            "isCurated": True,
+            "curatedBy": {
+                "name": "PubTator",
+                "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+                "dateModified": "2023-10-05",
+            },
+            "name": "Homo sapiens",
+            "commonName": "Human",
+            "displayName": "Human | Homo sapiens",
+            "alternateName": [
+                "Human",
+                "Homo sapiens Linnaeus, 1758",
+                "human",
+                "Home sapiens",
+                "Homo sampiens",
+                "Homo sapeins",
+                "Homo sapian",
+                "Homo sapians",
+                "Homo sapien",
+                "Homo sapience",
+                "Homo sapiense",
+                "Homo sapients",
+                "Homo sapines",
+                "Homo spaiens",
+                "Homo spiens",
+                "Humo sapiens",
+            ],
+            "classification": "host",
+        }
+
         covid_infectious_agent = {
             "alternateName": [
                 "2019-nCoV",
@@ -69,7 +104,7 @@ class Covid_Radx_Uploader(NDESourceUploader):
 
         for doc in docs:
             # Make sure healthCondition and infectiousAgent are lists.
-            for field in ["healthCondition", "infectiousAgent"]:
+            for field in ["healthCondition", "infectiousAgent", "species"]:
                 if field not in doc:
                     doc[field] = []
                 elif not isinstance(doc[field], list):
@@ -86,5 +121,8 @@ class Covid_Radx_Uploader(NDESourceUploader):
                 isinstance(item, dict) and item.get("identifier") == "2697049" for item in doc["infectiousAgent"]
             ):
                 doc["infectiousAgent"].append(covid_infectious_agent)
+
+            # Overwrite the species field to homo sapiens
+            doc["species"] = [homo_sapiens]
 
             yield doc

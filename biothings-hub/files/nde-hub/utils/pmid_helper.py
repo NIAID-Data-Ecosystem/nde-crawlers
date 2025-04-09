@@ -32,6 +32,14 @@ from .utils import retry
 PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
 
 
+def remove_first_by_name(lst, target):
+    target_lower = target.lower()
+    for i, item in enumerate(lst):
+        if item.get("name", "").lower() == target_lower:
+            lst.pop(i)
+            break
+
+
 def update_species_and_disease(rec, pmids):
     species = get_data_for_pmids(pmids, "species")
     if species:
@@ -255,7 +263,6 @@ def update_record_disease(rec, disease_data):
 
     existing_diseases = {disease["name"].lower(): i for i, disease in enumerate(rec.get("healthCondition", []))}
 
-    # Fetch the abstract, description, and title for current record
     abstract = rec.get("abstract", "")
     description = rec.get("description", "")
     title = rec.get("name", "")
@@ -273,7 +280,6 @@ def update_record_disease(rec, disease_data):
         "ncp",
     ]
 
-    # Iterate over new disease data and update the record
     for mesh_id, diseases in disease_data.items():
         if "MESH" not in mesh_id:
             logger.warning(f"Invalid MeSH ID {mesh_id}")
@@ -305,18 +311,15 @@ def update_record_disease(rec, disease_data):
                     logger.warning(f"URL: https://id.nlm.nih.gov/mesh/{mesh_id}.json")
                     continue
 
-                if name.lower() in existing_diseases:
-                    del rec["healthCondition"][existing_diseases[name.lower()]]
+                if any(d.get("name", "").lower() == name.lower() for d in rec.get("healthCondition", [])):
+                    remove_first_by_name(rec["healthCondition"], name)
 
                 rec["healthCondition"] = rec.get("healthCondition", []) + [standardized_dict]
                 logger.info(f"Added disease {name} to record {rec['_id']}")
-
                 update_made = True
                 break
-
             else:
                 logger.info(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
-
         if update_made:
             continue
 
@@ -324,13 +327,7 @@ def update_record_disease(rec, disease_data):
 def update_record_species(rec, species_data):
     """
     Updates the species in a given record based on abstract, description, and title.
-
-    Parameters:
-    - rec (dict): The record to be updated.
-    - species_data (dict): Dictionary containing species data, with species id as key and lowercase names separated by a "|" as the value.
     """
-
-    # Convert species and infectiousAgent to lists if they are not already
     if isinstance(rec.get("species"), dict):
         rec["species"] = [rec["species"]]
     if isinstance(rec.get("infectiousAgent"), dict):
@@ -339,14 +336,12 @@ def update_record_species(rec, species_data):
     existing_species = {spec["name"].lower(): i for i, spec in enumerate(rec.get("species", []))}
     existing_infectious_agents = {spec["name"].lower(): i for i, spec in enumerate(rec.get("infectiousAgent", []))}
 
-    # Fetch the abstract, description, and title for current record
     abstract = rec.get("abstract", "")
     description = rec.get("description", "")
     title = rec.get("name", "")
 
     blacklist = ["PERCH", "D-FISH"]
 
-    # Iterate over new species data and update the record
     for taxonomy_id, species_names in species_data.items():
         update_made = False
         for name in species_names:
@@ -385,27 +380,23 @@ def update_record_species(rec, species_data):
                         logger.warning(f"URL: https://rest.uniprot.org/taxonomy/{taxonomy_id}")
                         continue
 
-                if name.lower() in existing_species:
-                    del rec["species"][existing_species[name.lower()]]
-                elif name.lower() in existing_infectious_agents:
-                    del rec["infectiousAgent"][existing_infectious_agents[name.lower()]]
+                if any(spec.get("name", "").lower() == name.lower() for spec in rec.get("species", [])):
+                    remove_first_by_name(rec["species"], name)
+                elif any(spec.get("name", "").lower() == name.lower() for spec in rec.get("infectiousAgent", [])):
+                    remove_first_by_name(rec["infectiousAgent"], name)
 
                 if "classification" not in standardized_dict:
                     logger.warning(f"Could not classify {name} with ID {taxonomy_id}")
                     rec["species"] = rec.get("species", []) + [standardized_dict]
                     logger.info(f"Added species {name} to record {rec['_id']}")
-
                 elif standardized_dict["classification"] == "host":
                     rec["species"] = rec.get("species", []) + [standardized_dict]
                     logger.info(f"Added species {name} to record {rec['_id']}")
-
                 elif standardized_dict["classification"] == "infectiousAgent":
                     rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
                     logger.info(f"Added infectious agent {name} to record {rec['_id']}")
-
                 update_made = True
                 break
-
             else:
                 logger.info(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
         if update_made:
