@@ -153,7 +153,7 @@ def parse():
         unique_id = study.get("cmc_unique_id")
         result["description"] = study.get("description")
         result["abstract"] = study.get("brief_study_description")
-        result["usageInfo"] = "https://accessclinicaldata.niaid.nih.gov/api/files/NIAIDDUAAccessclinicaldata@NIAID.pdf"
+        result["usageInfo"] = {"url":"https://accessclinicaldata.niaid.nih.gov/api/files/NIAIDDUAAccessclinicaldata@NIAID.pdf"}
 
         has_part_list = []
         for doc in study.get("study_documents", []):

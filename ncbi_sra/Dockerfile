@@ -62,7 +62,7 @@ RUN mv docker-entrypoint.sh / && \
 RUN mkdir -p /data && chown -R biothings:biothings /data && \
     mkdir -p /cache && chown -R biothings:biothings /cache
 ENV PYTHONPATH="."
-ARG buildtime_variable=default_value
+ARG buildtime_variable
 ENV NCBI_API_KEY=$buildtime_variable
 VOLUME [ "/data" ]
 VOLUME ["/cache"]

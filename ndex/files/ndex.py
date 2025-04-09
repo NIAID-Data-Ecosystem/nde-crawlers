@@ -459,11 +459,3 @@ def parse():
         start += 1
         logger.info(f"Retrieved {start * size} networks")
         networks = fetch_networks(start, size)
-
-
-count = 0
-for network in parse():
-    count += 1
-    if count % 1000 == 0:
-        logger.info(f"Processed {count} networks")
-logger.info(f"Total processed networks: {count}")
