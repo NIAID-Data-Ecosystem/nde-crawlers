@@ -85,6 +85,7 @@ def parse():
 
             if identifier := request.get("nctId"):
                 output["identifier"].append(identifier)
+                output["nctid"] = identifier
             if identifiers := request.get("secondaryIds"):
                 output["identifier"] += identifiers
 
