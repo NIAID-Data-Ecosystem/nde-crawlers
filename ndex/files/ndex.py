@@ -76,11 +76,9 @@ def get_valid_network_ids():
             if response.status_code == 200:
                 data = response.json()
                 valid_networks.extend(data.get("networks", []))
-                logger.info(
-                    f"Fetched {len(data.get('networks', []))} networks from {url}")
+                logger.info(f"Fetched {len(data.get('networks', []))} networks from {url}")
             else:
-                logger.error(
-                    f"Failed to fetch {url}: HTTP {response.status_code}")
+                logger.error(f"Failed to fetch {url}: HTTP {response.status_code}")
         except Exception as e:
             logger.error(f"Exception occurred while fetching {url}: {e}")
 
@@ -105,20 +103,14 @@ def convert_to_pmid(identifier: str) -> str:
 
     base_url = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/"
     email = os.environ.get("NDEX_EMAIL")
-    params = {
-        "ids": identifier,
-        "format": "json",
-        "tool": "niaid-data-ecosystem",
-        "email": email
-    }
+    params = {"ids": identifier, "format": "json", "tool": "niaid-data-ecosystem", "email": email}
     try:
         logger.info(f"Converting identifier {identifier} to PMID")
         response = requests.get(base_url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
             records = data.get("records", [])
-            logger.info(
-                f"Received {len(records)} records for identifier {identifier}")
+            logger.info(f"Received {len(records)} records for identifier {identifier}")
             if records:
                 logger.info(f"Records: {records}")
                 # The API returns a list of records; we take the first one.
@@ -135,51 +127,75 @@ def convert_to_pmid(identifier: str) -> str:
 def process_reference(ref: str) -> tuple:
     """
     Processes a reference string to extract identifiers and converts them
-    to PMIDs (if possible). Also extracts any URLs that are not DOIs, PMIDs, or PMCIDs.
+    to PMIDs (if possible). Also extracts any extra URL or non-PubMed identifiers.
     Returns a tuple of PMIDs (as a comma-separated string) and any extra URL found.
     """
     pmid_set = set()
     extra_url = None
     logger.info(f"Processing reference: {ref}")
-    with open("ref.txt", "a") as f:
-        f.write(ref + "\n")
 
-    # Look for a PMID in the reference
-    pmid_match = re.search(r'PMID[:\s]?(\d+)', ref, re.IGNORECASE)
+    # Capture a PubMed link (supporting both NCBI and pubmed domains).
+    pubmed_url_match = re.search(
+        r'href=["\']https?://(?:www\.)?(?:ncbi\.nlm\.nih\.gov/pubmed|pubmed\.ncbi\.nlm\.nih\.gov)/(\d+)(?:/?)["\']',
+        ref,
+        re.IGNORECASE,
+    )
+    if pubmed_url_match:
+        found_pmid = pubmed_url_match.group(1)
+        logger.info(f"Found PubMed URL PMID: {found_pmid}")
+        pmid_set.add(found_pmid)
+
+    # Capture a PMC link from the href attribute.
+    pmc_url_match = re.search(
+        r'href=["\']https?://(?:www\.)?ncbi\.nlm\.nih\.gov/pmc/articles/PMC(\d+)(?:/?)["\']', ref, re.IGNORECASE
+    )
+    if pmc_url_match:
+        found_pmcid = pmc_url_match.group(1)
+        logger.info(f"Found PMC URL PMCID: {found_pmcid}")
+        pmid_from_pmcid = convert_to_pmid(found_pmcid)
+        if pmid_from_pmcid:
+            pmid_set.add(pmid_from_pmcid)
+
+    # Strip HTML tags
+    clean_ref = re.sub(r"<[^>]+>", "", ref)
+
+    # Look for a textual PMID or pubmed identifier.
+    pmid_match = re.search(r"(?:PMID|pubmed)[:\s]*(\d+)", clean_ref, re.IGNORECASE)
     if pmid_match:
-        logger.info(f"Found PMID: {pmid_match.group(1)}")
-        pmid = pmid_match.group(1)
-        pmid_set.add(pmid)
+        found_pmid = pmid_match.group(1)
+        logger.info(f"Found textual PMID: {found_pmid}")
+        pmid_set.add(found_pmid)
 
-    # Look for a PubMed Central ID (PMCID) in the reference
-    pmcid_match = re.search(r'PMCID[:\s]?PMC(\d+)', ref, re.IGNORECASE)
+    # Look for a textual PMCID.
+    pmcid_match = re.search(r"PMCID[:\s]*PMC(\d+)", clean_ref, re.IGNORECASE)
     if pmcid_match:
-        logger.info(f"Found PMCID: {pmcid_match.group(1)}")
+        logger.info(f"Found textual PMCID: {pmcid_match.group(1)}")
         pmcid = pmcid_match.group(1)
         pmid_from_pmcid = convert_to_pmid(pmcid)
         if pmid_from_pmcid:
             pmid_set.add(pmid_from_pmcid)
 
-    # Look for a DOI in the reference
+    # Look for a DOI (allowing for URL-encoded characters and optional dx.).
     doi_match = re.search(
-        r'(10\.\d{4,9}/[-._;()/:A-Z0-9]+)', ref, re.IGNORECASE)
+        r"(?:https?://(?:dx\.)?(?:doi\.org)/)?(10\.\d{4,9}/[-._;()/:A-Z0-9%]+)", clean_ref, re.IGNORECASE
+    )
     if doi_match:
-        logger.info(f"Found DOI: {doi_match.group(1)}")
-        doi = doi_match.group(1)
-        pmid_from_doi = convert_to_pmid(doi)
+        found_doi = doi_match.group(1)
+        logger.info(f"Found DOI: {found_doi}")
+        pmid_from_doi = convert_to_pmid(found_doi)
         if pmid_from_doi:
             pmid_set.add(pmid_from_doi)
 
-    # Look for any other URLs in the reference
-    url_match = re.search(
-        r'(https?://[^\s]+)', ref, re.IGNORECASE)
+    # Look for any other URLs in the cleaned reference.
+    url_match = re.search(r'(https?://[^\s"<]+)', clean_ref, re.IGNORECASE)
     if url_match:
         url = url_match.group(1)
+        # Exclude URLs for DOI, PMC, or PubMed.
         if not any(x in url.lower() for x in ["doi", "pmc", "pubmed"]):
-            logger.info(f"Found URL: {url}")
+            logger.info(f"Found extra URL: {url}")
             extra_url = url
 
-    return ','.join(sorted(pmid_set)), extra_url
+    return ",".join(sorted(pmid_set)), extra_url
 
 
 def process_networks(networks, valid_network_ids):
@@ -223,8 +239,7 @@ def process_networks(networks, valid_network_ids):
         if external_id := get_value("externalId"):
             output["identifier"] = external_id
             output["url"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
-            output["includedInDataCatalog"][
-                "dataset"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
+            output["includedInDataCatalog"]["dataset"] = f"https://www.ndexbio.org/viewer/networks/{external_id}"
             output["_id"] = f"ndex_{external_id}"
         else:
             logger.warning("Network missing externalId")
@@ -241,12 +256,10 @@ def process_networks(networks, valid_network_ids):
             output["description"] = description
 
         if creation_time := get_value("creationTime"):
-            output["dateCreated"] = datetime.datetime.fromtimestamp(
-                int(creation_time) / 1000).isoformat()
+            output["dateCreated"] = datetime.datetime.fromtimestamp(int(creation_time) / 1000).isoformat()
 
         if modification_time := get_value("modificationTime"):
-            output["dateModified"] = datetime.datetime.fromtimestamp(
-                int(modification_time) / 1000).isoformat()
+            output["dateModified"] = datetime.datetime.fromtimestamp(int(modification_time) / 1000).isoformat()
         elif properties_modification_time := get_value("lastmodifieddate", "ndex:modificationTime"):
             output["dateModified"] = properties_modification_time
 
@@ -299,7 +312,9 @@ def process_networks(networks, valid_network_ids):
                 output["pmids"] = pmids
             if extra_url:
                 output["citation"] = {
-                    "url": extra_url, "description": f"{output['name']} is found accessible at {extra_url}"}
+                    "url": extra_url,
+                    "description": f"{output['name']} is found accessible at {extra_url}",
+                }
 
         # Process other related fields (still added as isRelatedTo)
         is_related_to_list = []
@@ -400,11 +415,9 @@ def process_networks(networks, valid_network_ids):
                 method = method.strip()
                 if method in technique_lookup:
                     measurement_technique = technique_lookup[method]
-                    identifier = (
-                        measurement_technique["name"], measurement_technique["url"])
+                    identifier = (measurement_technique["name"], measurement_technique["url"])
                     if identifier not in measurement_technique_identifiers:
-                        measurement_technique_list.append(
-                            measurement_technique)
+                        measurement_technique_list.append(measurement_technique)
                         measurement_technique_identifiers.add(identifier)
         if measurement_technique_list:
             output["measurementTechnique"] = measurement_technique_list
@@ -420,9 +433,10 @@ def process_networks(networks, valid_network_ids):
         ]
 
         # Only yield the record if it comes from one of the valid network sets or has a citation/pmid.
-        if output['identifier'] not in valid_network_ids and ("citation" not in output or "pmids" not in output):
+        if output["identifier"] not in valid_network_ids and ("citation" not in output or "pmids" not in output):
             logger.warning(
-                f"Skipping network {output.get('identifier')} because it is not in a valid network set and has no reference")
+                f"Skipping network {output.get('identifier')} because it is not in a valid network set and has no reference"
+            )
             continue
 
         yield output
@@ -441,8 +455,7 @@ def parse():
     networks_count = status.get("networkCount")
     users_count = status.get("userCount")
     groups_count = status.get("groupCount")
-    logger.info(
-        f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
+    logger.info(f"anon client: {networks_count} networks, {users_count} users, {groups_count} groups")
 
     start = 0
     size = 1000
