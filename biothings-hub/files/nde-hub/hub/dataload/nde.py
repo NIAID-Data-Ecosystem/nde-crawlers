@@ -943,12 +943,14 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "curatedBy": {
                         "properties": {
+                            "dateModified": {"type": "date"},
                             "name": {"type": "text", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
                     },
                     "description": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
                     "url": {"type": "keyword", "copy_to": ["all"]},
                 }

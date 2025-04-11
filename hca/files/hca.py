@@ -211,4 +211,10 @@ def parse():
                         output["datePublished"] = datetime.datetime.strptime(
                             submission_date, "%Y-%m-%dT%H:%M:%S.%f%z"
                         ).strftime("%Y-%m-%d")
+
+            if output.get("species"):
+                output["species"].append({"name": "homo sapiens"})
+            else:
+                output["species"] = {"name": "homo sapiens"}
+
         yield output

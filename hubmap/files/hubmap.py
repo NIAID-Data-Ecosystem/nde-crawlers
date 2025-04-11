@@ -7,6 +7,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
+
 def get_ids():
     logger.info("Getting datasets")
     url = "https://search.api.hubmapconsortium.org/v3/portal/search"
@@ -59,6 +60,42 @@ def parse():
         count += 1
         if count % 50 == 0:
             logger.info("Parsed %s out of %s datasets", count, len(datasets))
+
+        homo_sapiens = {
+            "identifier": "9606",
+            "inDefinedTermSet": "UniProt",
+            "url": "https://www.uniprot.org/taxonomy/9606",
+            "originalName": "homo sapiens",
+            "isCurated": True,
+            "curatedBy": {
+                "name": "PubTator",
+                "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
+                "dateModified": "2023-10-05",
+            },
+            "name": "Homo sapiens",
+            "commonName": "Human",
+            "displayName": "Human | Homo sapiens",
+            "alternateName": [
+                "Human",
+                "Homo sapiens Linnaeus, 1758",
+                "human",
+                "Home sapiens",
+                "Homo sampiens",
+                "Homo sapeins",
+                "Homo sapian",
+                "Homo sapians",
+                "Homo sapien",
+                "Homo sapience",
+                "Homo sapiense",
+                "Homo sapients",
+                "Homo sapines",
+                "Homo spaiens",
+                "Homo spiens",
+                "Humo sapiens",
+            ],
+            "classification": "host",
+        }
+
         output = {
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
@@ -67,6 +104,7 @@ def parse():
                 "versionDate": datetime.date.today().isoformat(),
             },
             "@type": "Dataset",
+            "species": homo_sapiens
         }
 
         keywords = []
