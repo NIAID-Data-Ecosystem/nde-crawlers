@@ -1,5 +1,6 @@
 import datetime
 import logging
+
 import requests
 
 logging.basicConfig(
@@ -15,9 +16,7 @@ class LINCS:
         # If there is only one author
         if "," not in authors_string:
             # Check for initials without periods and add periods if needed
-            authors_string = " ".join(
-                [name + "." if len(name) == 1 else name for name in authors_string.split()]
-            )
+            authors_string = " ".join([name + "." if len(name) == 1 else name for name in authors_string.split()])
             return [authors_string]
         else:
             # Handle multiple authors, first replace semicolons with commas if needed
@@ -36,14 +35,13 @@ class LINCS:
                     i += 1
                 i += 1
             authors = [
-                " ".join([name + "." if len(name) == 1 else name for name in author.split()])
-                for author in authors
+                " ".join([name + "." if len(name) == 1 else name for name in author.split()]) for author in authors
             ]
             return list(set(authors))
 
     def parser(self):
         lincsportal_url = "https://lincsportal.ccs.miami.edu/dcic/api/fetchdata?limit=1000&searchTerm=*"
-        lincsportal_res = requests.get(lincsportal_url)
+        lincsportal_res = requests.get(lincsportal_url, verify=False)
         logger.info(f"Started extraction of LINCS database: {lincsportal_url}.")
         logger.info(f"Request status: {lincsportal_res.status_code}")
         lincsportal_data = lincsportal_res.json()
@@ -183,9 +181,7 @@ class LINCS:
                 document.pop("tool")
                 document.pop("toollink")
             if "protocol" in document:
-                document.setdefault("isBasedOn", []).append(
-                    {"url": document.pop("protocol"), "name": "protocol"}
-                )
+                document.setdefault("isBasedOn", []).append({"url": document.pop("protocol"), "name": "protocol"})
 
             # Only change isRelatedTo: initially set it based on datasetgroup, then update later.
             if "datasetgroup" in document:
