@@ -192,7 +192,7 @@ def parse():
 
         date_modified = study.get("most_recent_update")
         if date_modified:
-            if "T" in date_modified:
+            if "T" in daPte_modified:
                 result["dateModified"] = datetime.fromisoformat(date_modified).strftime("%Y-%m-%d")
             else:
                 iso_date = datetime.strptime(date_modified, "%B %Y")
@@ -202,7 +202,7 @@ def parse():
 
         result["additionalType"] = study.get("data_available")
         result["funding"] = [{"funder": {"name": study.get("creator")}}]
-        if nct_number and nct_number is not "N/A":
+        if nct_number and nct_number != "N/A":
             result["nctid"] = nct_number
         result["healthCondition"] = {"name": study.get("condition")}
         result["mainEntityOfPage"] = study.get("clinical_trial_website")
