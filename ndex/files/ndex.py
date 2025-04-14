@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 import re
 
 import ndex2.client as nc
@@ -433,7 +434,7 @@ def process_networks(networks, valid_network_ids):
         ]
 
         # Only yield the record if it comes from one of the valid network sets or has a citation/pmid.
-        if output["identifier"] not in valid_network_ids and ("citation" not in output or "pmids" not in output):
+        if output['identifier'] not in valid_network_ids and ("citation" not in output and "pmids" not in output):
             logger.warning(
                 f"Skipping network {output.get('identifier')} because it is not in a valid network set and has no reference"
             )
