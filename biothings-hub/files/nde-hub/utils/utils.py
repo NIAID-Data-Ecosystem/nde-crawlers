@@ -280,9 +280,14 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             add_metadata_score(doc)
 
             # Remove HTML tags from description field
-            if doc.get("description"):
+            if description := doc.get("description"):
                 try:
-                    description = html.fromstring(doc["description"]).text_content()
+                    # Check if the description contains an XML declaration
+                    if isinstance(description, str) and description.strip().startswith("<?xml"):
+                        # Convert to bytes if it's an XML string
+                        description = description.encode("utf-8")
+                    # Parse the description (works for both bytes and strings)
+                    description = html.fromstring(description).text_content()
                     doc["description"] = description
                 except etree.ParserError as e:
                     # At minimum, prevent the lxml error object from escaping
