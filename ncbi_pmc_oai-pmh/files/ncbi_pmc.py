@@ -310,9 +310,7 @@ class NCBI_PMC(NDEDatabase):
                     funder_list.append({"funder": {"name": funder.text}})
                 else:
                     name = funder.find(".//institution")
-                    # institution_id = funder.find(
-                    #     './/institution-id')
-                    if name is not None:
+                    if name is not None and name.text is not None:
                         if name.text.strip() == "":
                             continue
                         funder_list.append({"funder": {"name": name.text}})
