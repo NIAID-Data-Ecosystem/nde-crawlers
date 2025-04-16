@@ -371,7 +371,6 @@ class OAIDatabase(NDEDatabase):
         """
         raise NotImplementedError("Define in Subclass")
 
-    @retry_oai(retry_num=5, retry_sleep_sec=10)
     def request_data(self, start, until, interval, granularity):
         """Request data from the sickle object
         Args:
@@ -394,7 +393,20 @@ class OAIDatabase(NDEDatabase):
             yield self.record_data(record)
         logger.info("Total Records for this interval: %s", count)
 
-    def load_cache(self, start=None):
+    def get_interval(self, interval):
+        if "minutes" in interval.keys() and ("hours" in self.INTERVAL.keys() or "days" in self.INTERVAL.keys() or "years" in self.INTERVAL.keys()):
+            interval = {"hours": 1}
+        elif "hours" in interval.keys() and ("days" in self.INTERVAL.keys() or "years" in self.INTERVAL.keys()):
+            interval = {"days": 1}
+        elif "days" in interval.keys() and ("years" in self.INTERVAL.keys()):
+            interval = {"years": 1}
+        else:
+            interval = self.INTERVAL.copy()
+
+        return interval
+
+    def load_cache(self, start=None, retry_num=5):
+        retry = retry_num
         if start:
             self.start = start
         # since dictionaries are mutable we need to make a copy
@@ -411,31 +423,51 @@ class OAIDatabase(NDEDatabase):
                 if e.response.status_code == 422 and "UNPROCESSABLE ENTITY" in e.response.reason:
                     logger.info("No records found for this url %s. Continue to next interval.", e.response.url)
                     self.start = until
-                    interval = self.INTERVAL.copy()
+                    interval = self.get_interval(interval)
                 else:
-                    # break the while loop failed to many times
-                    if self.granularity != "YYYY-MM-DDThh:mm:ssZ":
-                        if interval.get("days") and interval.get("days") // 2 == 0:
-                            logger.error(traceback.format_exc())
-                            raise e
-                    elif interval.get("hours") and interval.get("hours") // 2 == 0:
-                        logger.error(traceback.format_exc())
-                        raise e
                     # when querying by year fails change to days
                     if "years" in interval.keys():
                         if interval["years"] // 2 == 0:
-                            interval["days"] = 365
-                            del interval["years"]
-                    if "days" in interval.keys():
-                        if interval["days"] // 2 == 0:
-                            interval["hours"] = 24
-                            del interval["days"]
+                            interval = {"days": 365}
+                    if self.granularity == "YYYY-MM-DDThh:mm:ssZ":
+                        if "days" in interval.keys():
+                            if interval["days"] // 2 == 0:
+                                interval = {"hours": 24}
+                        if "hours" in interval.keys():
+                            if interval["hours"] // 2 == 0:
+                                interval = {"minutes": 60}
+
                     # cut interval in half every time it fails
-                    interval = {k: max(1, v // 2) for k, v in interval.items()}
+                    interval = {k: v // 2 for k, v in interval.items()}
+
+
+                    if self.granularity != "YYYY-MM-DDThh:mm:ssZ":
+                        if interval.get("days") == 0:
+                            interval = {"days": 1}
+                            if retry > 0:
+                                retry -= 1
+                                logger.error("Retrying. Retries left %s times", retry)
+                                time.sleep(5)
+                            else:
+                                logger.error(traceback.format_exc())
+                                logger.error("Failed to get records for Start: %s, Until: %s. Continue to next interval", self.start, until)
+                                self.start = until
+                    elif interval.get("minutes") == 0:
+                        interval = {"minutes": 1}
+                        if retry > 0:
+                            retry-= 1
+                            logger.error("Retrying. Retries left %s times", retry)
+                            time.sleep(5)
+                        else:
+                            logger.error(traceback.format_exc())
+                            logger.error("Failed to get records for Start: %s, Until: %s. Continue to next interval", self.start, until)
+                            self.start = until
             else:
                 self.insert_last_updated(until.isoformat())
                 self.start = until
-                interval = self.INTERVAL.copy()
+                interval = self.get_interval(interval)
+
+                retry = retry_num
 
     def update_cache(self):
         last_updated = self.retreive_last_updated()
