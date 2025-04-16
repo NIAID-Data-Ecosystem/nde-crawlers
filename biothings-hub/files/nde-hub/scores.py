@@ -39,8 +39,7 @@ RESOURCE_CATALOG_REQUIRED = [
     "name",
     "url",
     "about",
-    "genre",
-    "collectionType"
+    "genre"
 ]
 RESOURCE_CATALOG_RECOMMENDED = [
     "author",
@@ -68,6 +67,7 @@ RESOURCE_CATALOG_RECOMMENDED = [
     "collectionSize",
     "hasAPI",
     "hasDownload",
+    "collectionType"
 ]
 RESOURCE_CATALOG_REQUIRED_AUGMENTED = ["funding", "measurementTechnique"]
 RESOURCE_CATALOG_RECOMMENDED_AUGMENTED = [
