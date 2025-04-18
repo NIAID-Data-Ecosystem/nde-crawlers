@@ -129,7 +129,13 @@ def process_reference(ref: str) -> tuple:
     """
     Processes a reference string to extract identifiers and converts them
     to PMIDs (if possible). Also extracts any extra URL or non-PubMed identifiers.
-    Returns a tuple of PMIDs (as a comma-separated string) and any extra URL found.
+    If no identifier matches are found but there is still text remaining (after
+    stripping any HTML), then that text is returned as a description.
+
+    Returns a tuple of:
+      - PMIDs (as a comma-separated string)
+      - Extra URL found (if any)
+      - A fallback description (if no identifiers/URLs were found)
     """
     pmid_set = set()
     extra_url = None
@@ -157,7 +163,7 @@ def process_reference(ref: str) -> tuple:
         if pmid_from_pmcid:
             pmid_set.add(pmid_from_pmcid)
 
-    # Strip HTML tags
+    # Strip HTML tags from the reference
     clean_ref = re.sub(r"<[^>]+>", "", ref)
 
     # Look for a textual PMID or pubmed identifier.
@@ -170,9 +176,9 @@ def process_reference(ref: str) -> tuple:
     # Look for a textual PMCID.
     pmcid_match = re.search(r"PMCID[:\s]*PMC(\d+)", clean_ref, re.IGNORECASE)
     if pmcid_match:
-        logger.info(f"Found textual PMCID: {pmcid_match.group(1)}")
-        pmcid = pmcid_match.group(1)
-        pmid_from_pmcid = convert_to_pmid(pmcid)
+        found_pmcid = pmcid_match.group(1)
+        logger.info(f"Found textual PMCID: {found_pmcid}")
+        pmid_from_pmcid = convert_to_pmid(found_pmcid)
         if pmid_from_pmcid:
             pmid_set.add(pmid_from_pmcid)
 
@@ -196,22 +202,28 @@ def process_reference(ref: str) -> tuple:
             logger.info(f"Found extra URL: {url}")
             extra_url = url
 
-    return ",".join(sorted(pmid_set)), extra_url
+    # If no identifiers or URLs were found, use the remaining cleaned reference as a description.
+    description = ""
+    if not pmid_set and not extra_url:
+        remaining_text = clean_ref.strip()
+        if remaining_text:
+            description = remaining_text
+
+    return ",".join(sorted(pmid_set)), extra_url, description
 
 
 def process_networks(networks, valid_network_ids):
-    for network in networks.get("networks", []):
-        properties_dict = {}
-        if properties := network.get("properties"):
-            properties_dict = {prop["predicateString"]: prop["value"] for prop in properties}
+    for raw_network in networks.get("networks", []):
+        network = {k.lower(): v for k, v in raw_network.items()}
+        properties_dict = {prop["predicateString"].lower(): prop["value"] for prop in raw_network.get("properties", [])}
 
-        # Helper to search for keys in both network and its properties
         def get_value(*keys):
             for key in keys:
-                if value := network.get(key):
-                    return value
-                elif value := properties_dict.get(key):
-                    return value
+                lkey = key.lower()
+                if lkey in network:
+                    return network[lkey]
+                if lkey in properties_dict:
+                    return properties_dict[lkey]
             return None
 
         def add_species(raw_value, seen, species_list):
@@ -308,7 +320,7 @@ def process_networks(networks, valid_network_ids):
             output["species"] = species_list
 
         if reference := get_value("reference"):
-            pmids, extra_url = process_reference(reference)
+            pmids, extra_url, desc = process_reference(reference)
             if pmids:
                 output["pmids"] = pmids
             if extra_url:
@@ -316,6 +328,8 @@ def process_networks(networks, valid_network_ids):
                     "url": extra_url,
                     "description": f"{output['name']} is found accessible at {extra_url}",
                 }
+            elif desc:
+                output["citation"] = {"description": desc}
 
         # Process other related fields (still added as isRelatedTo)
         is_related_to_list = []
@@ -341,27 +355,25 @@ def process_networks(networks, valid_network_ids):
         if doi := get_value("doi"):
             output["doi"] = doi
 
+        def split_and_clean(raw_text):
+            # strip HTML then split on commas or semicolons
+            text = strip_html_tags(raw_text)
+            parts = re.split(r"\s*[,;]\s*", text)
+            return [p for p in parts if p]
+
+        fields = ["labels", "network type", "networkType", "dc:type"]
         keywords = []
-        if labels := get_value("labels"):
-            if isinstance(labels, list):
-                keywords.extend(labels.split(","))
-            else:
-                keywords.append(labels)
-        if network_type := get_value("network type"):
-            if isinstance(network_type, list):
-                keywords.extend(network_type)
-            else:
-                keywords.append(network_type)
-        if network_type2 := get_value("networkType"):
-            if isinstance(network_type2, list):
-                keywords.extend(network_type2)
-            else:
-                keywords.append(network_type2)
-        if properties_keywords := get_value("dc:type"):
-            if isinstance(properties_keywords, list):
-                keywords.extend(properties_keywords)
-            else:
-                keywords.append(properties_keywords)
+        seen = set()
+
+        for field in fields:
+            if value := get_value(field):
+                values = value if isinstance(value, list) else [value]
+                for raw in values:
+                    for kw in split_and_clean(raw):
+                        if kw not in seen:
+                            seen.add(kw)
+                            keywords.append(kw)
+
         if keywords:
             output["keywords"] = keywords
 
@@ -373,6 +385,7 @@ def process_networks(networks, valid_network_ids):
         if kegg_pathways := get_value("KEGG_PATHWAY_LINK"):
             same_as_list.append(kegg_pathways)
         if same_as_list:
+            same_as_list = [strip_html_tags(item) for item in same_as_list]
             output["sameAs"] = same_as_list
 
         sd_publisher_list = []
@@ -434,7 +447,7 @@ def process_networks(networks, valid_network_ids):
         ]
 
         # Only yield the record if it comes from one of the valid network sets or has a citation/pmid.
-        if output['identifier'] not in valid_network_ids and ("citation" not in output and "pmids" not in output):
+        if output["identifier"] not in valid_network_ids and ("citation" not in output and "pmids" not in output):
             logger.warning(
                 f"Skipping network {output.get('identifier')} because it is not in a valid network set and has no reference"
             )
