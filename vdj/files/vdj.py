@@ -1,5 +1,4 @@
 import datetime
-import json
 import logging
 import re
 
@@ -9,184 +8,257 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
-def retrieve_study_metadata():
-    logger.info("Retrieving study metadata from VDJ")
-    study_urls = [
-        "https://vdjserver.org/airr/v1/repertoire",
-        "https://vdj-staging.tacc.utexas.edu/airr/v1/repertoire",
-        "https://ipa3.ireceptor.org/airr/v1/repertoire",
-        "https://ipa4.ireceptor.org/airr/v1/repertoire",
-        "https://ipa1.ireceptor.org/airr/v1/repertoire",
-        "https://ipa2.ireceptor.org/airr/v1/repertoire",
-        "https://scireptor.dkfz.de/airr/v1/repertoire",
-    ]
+def retrieve_all_study_ids():
+    logger.info("Retrieving all study IDs from VDJ Server API")
+    study_url = "https://vdjserver.org/airr/v1/repertoire"
+    all_ids = set()
+    size, page = 100, 0
 
-    response_data = {}
-    for url in study_urls:
-        logger.info("Retrieving studies from %s", url)
+    while True:
+        q = {"from": page * size, "size": size}
         try:
-            r = requests.post(url)
+            resp = requests.post(study_url, json=q)
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Error paging study IDs: {e}")
+            break
+
+        hits = resp.json().get("Repertoire", [])
+        if not hits:
+            break
+        for rec in hits:
+            sid = rec.get("study", {}).get("study_id")
+            if sid:
+                all_ids.add(sid)
+        if len(hits) < size:
+            break
+        page += 1
+
+    logger.info(f"Retrieved {len(all_ids)} study IDs")
+    return all_ids
+
+
+def retrieve_study_metadata():
+    base = "https://vdjserver.org/airr/v1/repertoire"
+    ids = retrieve_all_study_ids()
+    meta = {}
+
+    for sid in ids:
+        logger.info(f"Fetching core record for study {sid}")
+        core_q = {
+            "filters": {"op": "=", "content": {"field": "study.study_id", "value": sid}},
+            "size": 1,
+            "include_fields": "airr-core",
+        }
+        try:
+            r = requests.post(base, json=core_q)
             r.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            logger.error("Error retrieving studies from %s", url)
-            logger.error(e)
+            logger.error(f"Core fetch failed for {sid}: {e}")
             continue
-        except requests.exceptions.SSLError as e:
-            logger.error("SSL issue from %s", url)
-            logger.error(e)
-            continue
-        data = r.json()["Repertoire"]
-        for study_dict in data:
-            id = study_dict["study"]["study_id"]
-            if id not in response_data:
-                if "ireceptor" in url:
-                    study_dict["publisher"] = "iReceptor"
-                elif "vdjserver" in url:
-                    study_dict["publisher"] = "VDJServer"
-                elif "scireptor" in url:
-                    study_dict["publisher"] = "sciReptor"
-                response_data[id] = study_dict
 
-    download_url = "https://vdj-staging.tacc.utexas.edu/api/v2/adc/cache/study"
+        reps = r.json().get("Repertoire", [])
+        if not reps:
+            continue
+
+        meta[sid] = {
+            "core": reps[0],
+            "disease_facet": get_disease_facet_data(sid),
+            "species_facet": get_species_facet_data(sid),
+        }
+
+    logger.info(f"Metadata collected for {len(meta)} studies")
+    return meta
+
+
+def get_disease_facet_data(sid):
+    return _facet(sid, "subject.diagnosis.disease_diagnosis")
+
+
+def get_species_facet_data(sid):
+    return _facet(sid, "subject.species")
+
+
+def _facet(sid, field):
+    q = {"filters": {"op": "=", "content": {"field": "study.study_id", "value": sid}}, "facets": field}
     try:
-        r = requests.get(download_url)
-        data = r.json()["result"]
-        for result in data:
-            if result["study_id"] in response_data:
-                response_data[result["study_id"]]["study"]["download_info"] = result
-    except requests.exceptions.SSLError as e:
-        logger.error("SSL issue from %s when getting download_info", url)
-        logger.error(e)
-
-    logger.info("Total number of studies: %s", len(response_data))
-
-    with open("vdj_studies.json", "w") as f:
-        json.dump(response_data, f, indent=4)
-
-    return response_data.values()
+        r = requests.post("https://vdjserver.org/airr/v1/repertoire", json=q)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Facet {field} failed for {sid}: {e}")
+        return {}
 
 
 def parse():
-    studies = retrieve_study_metadata()
-    count = 0
-    logger.info("Parsing study metadata")
-    for study in studies:
-        count += 1
-        logger.info(f"Parsing study {count} of {len(studies)}")
-        if count % 10 == 0:
-            logger.info("Parsed %s studies", count)
+    all_meta = retrieve_study_metadata()
+    total = len(all_meta)
 
-        output = {
-            "includedInDataCatalog": {
-                "@type": "DataCatalog",
-                "name": "VDJServer",
-                "url": "https://vdj-staging.tacc.utexas.edu/community/",
-                "versionDate": datetime.date.today().isoformat(),
-                "dataset": "https://vdj-staging.tacc.utexas.edu/community/",
-            },
-            "@type": "Dataset",
-            "url": "https://vdj-staging.tacc.utexas.edu/community/",
+    for idx, (sid, md) in enumerate(all_meta.items(), start=1):
+        logger.info(f"Parsing {idx}/{total}: {sid}")
+        core = md["core"]
+        out = {}
+
+        stud_url = f"https://vdjserver.org/community?study_id={sid}"
+        out["_id"] = f"vdj_{sid}"
+        out["url"] = stud_url
+        out["@type"] = "Dataset"
+        out["includedInDataCatalog"] = {
+            "@type": "DataCatalog",
+            "name": "VDJServer",
+            "url": stud_url,
+            "versionDate": datetime.date.today().isoformat(),
+            "dataset": stud_url,
         }
-        if study_info := study.get("study"):
-            if study_id := study_info.get("study_id"):
-                output["_id"] = f"vdj_{study_id}".replace(":", "_").replace(" ", "_").replace("/", "_")
+        if core.get("study", {}).get("study_title"):
+            out["name"] = core["study"]["study_title"]
 
-            if study_title := study_info.get("study_title"):
-                output["name"] = study_title
+        stype = core.get("study", {}).get("study_type", {})
+        if stype.get("id") or stype.get("label"):
+            out["measurementTechnique"] = {}
+            if stype.get("id"):
+                out["measurementTechnique"]["identifier"] = stype["id"]
+            if stype.get("label"):
+                out["measurementTechnique"]["name"] = stype["label"]
 
-            if study_type := study_info.get("study_type"):
-                measurement_technique = {}
-                if id := study_type.get("id"):
-                    measurement_technique["identifier"] = id
-                if label := study_type.get("label"):
-                    measurement_technique["name"] = label
-                if len(measurement_technique) > 0:
-                    measurement_technique["inDefinedTermSet"] = "NCI Thesaurus"
-                    output["measurementTechnique"] = measurement_technique
+        def flatten_text(x):
+            if isinstance(x, list):
+                return "".join(x)
+            return x or ""
 
-            if study_description := study_info.get("study_description"):
-                output["description"] = study_description
+        raw_desc = core.get("study", {}).get("study_description", "")
+        raw_inc_exc = core.get("study", {}).get("inclusion_exclusion_criteria", "")
 
-            if inclusion_exclusion_criteria := study_info.get("inclusion_exclusion_criteria"):
-                if output.get("description"):
-                    output["description"] += f"\n {inclusion_exclusion_criteria}"
-                else:
-                    output["description"] = inclusion_exclusion_criteria
+        desc = flatten_text(raw_desc)
+        inc_exc = flatten_text(raw_inc_exc)
 
-            authors = []
-            author_dict = {}
-            if lab_name := study_info.get("lab_name"):
-                author_dict["name"] = lab_name
+        out["description"] = " ".join(filter(None, [desc, inc_exc])).strip()
+        authors = []
+        lab = {}
+        if core.get("study", {}).get("lab_name"):
+            lab["name"] = core["study"]["lab_name"]
+        addr = core.get("study", {}).get("lab_address")
+        if addr:
+            lab.setdefault("affiliation", {})["name"] = addr
+        if lab:
+            authors.append(lab)
+        sub = core.get("study", {}).get("submitted_by")
+        if sub:
+            split = [s.strip() for s in re.split(r"[;,]", sub) if s.strip()]
+            if split:
+                sb = {"name": split[0]}
+                if len(split) > 1:
+                    sb.setdefault("affiliation", {})["name"] = split[1]
+                authors.append(sb)
+        coll = core.get("study", {}).get("collected_by", [])
+        if isinstance(coll, str):
+            coll = [coll]
+        if coll:
+            for name in coll:
+                authors.append({"name": name})
+        if authors:
+            out["author"] = authors
+        grants = core.get("study", {}).get("grants") or []
+        if isinstance(grants, str):
+            grants = [grants]
+        if grants:
+            extra = " ".join(grants)
+            out["description"] += " " + extra if out.get("description") else extra
+        if out.get("description") == "":
+            del out["description"]
+        pids = core.get("study", {}).get("pub_ids", [])
+        if isinstance(pids, str):
+            pids = [pids]
+        pmids, dois = [], []
+        if pids:
+            for pid in pids:
+                if pid.lower().startswith("pmid:") or re.match(r"^\d+$", pid):
+                    pmids.append(pid.replace("PMID:", ""))
+                elif "doi" in pid.lower():
+                    doi = pid.lower().replace("DOI:", "").strip()
+                    dois.append(doi)
+        if pmids:
+            out["pmids"] = ", ".join(pmids)
+        if dois:
+            out.setdefault("citation", {})["doi"] = dois if len(dois) > 1 else dois[0]
+        if core.get("study", {}).get("adc_publish_date"):
+            out["datePublished"] = core["study"]["adc_publish_date"].split("T")[0]
+        if core.get("study", {}).get("adc_update_date"):
+            out["dateModified"] = core["study"]["adc_update_date"].split("T")[0]
+        if core.get("study", {}).get("publisher"):
+            out.setdefault("sdPublisher", {})["name"] = core["study"]["publisher"]
+        dists = []
+        di = core.get("download_info", {})
+        if di.get("archive_file"):
+            dists.append({"contentUrl": di["archive_file"]})
+        if di.get("download_url"):
+            dists.append({"contentUrl": di["download_url"]})
+        if di.get("file_size"):
 
-            if lab_address := study_info.get("lab_address"):
-                author_dict["affiliation"] = {"name": lab_address}
+            for d in dists:
+                d["contentSize"] = di["file_size"]
+        if dists:
+            out["distribution"] = dists
 
-            if len(author_dict) > 0:
-                authors.append(author_dict)
+        data_processings = core.get("data_processing", [])
+        if isinstance(data_processings, dict):
+            data_processings = [data_processings]
 
-            if submitted_by := study_info.get("submitted_by"):
-                info = submitted_by.split(", ")
-                if len(info) == 2:
-                    authors.append({"name": info[0], "affiliation": {"name": info[1]}})
-                else:
-                    authors.append({"name": submitted_by})
+        for dp in data_processings:
+            for fn in dp.get("data_processing_files", []):
+                out.setdefault("distribution", []).append({"contentUrl": fn})
+        grants = core.get("study", {}).get("grants") or []
 
-            if collected_by := study_info.get("collected_by"):
-                info = collected_by.split(", ")
-                for author in info:
-                    # if author is an email address, skip
-                    if "@" not in author:
-                        authors.append({"name": author})
+        if isinstance(grants, str):
+            grants = [grants]
 
-            if len(authors) > 0:
-                output["author"] = authors
+        # for grant in grants:
+        # out.setdefault("funding", []).append({"description": grant})
+        samples = core.get("sample") or []
 
-            if grants := study_info.get("grants"):
-                if output.get("description"):
-                    output["description"] += f"\n {grants}"
-                else:
-                    output["description"] = grants
+        if isinstance(samples, dict):
+            samples = [samples]
 
-            # if grants := study_info.get('grants'):
-            #     output['funding'] = {'description': grants}
+        kw_n, kw_id = [], []
+        for sample in samples:
+            for fld in ("anatomic_site", "disease_state_sample", "template_class"):
+                v = sample.get(fld)
+                if v:
+                    kw_n.append(v)
+            for nested in ("cell_subset", "tissue"):
+                nested_obj = sample.get(nested) or {}
+                label = nested_obj.get("label")
+                if label:
+                    kw_n.append(label)
+                nid = nested_obj.get("id")
+                if nid:
+                    kw_id.append(nid)
 
-            if pub_ids := study_info.get("pub_ids"):
-                if "pmid" in pub_ids:
-                    output["pmids"] = pub_ids.split(":")[1].strip()
-                elif "doi" in pub_ids.lower():
-                    doi = re.search(r"10\.\d{4,9}\/[-._;()/:A-Z0-9]+", pub_ids, re.IGNORECASE)
-                    if doi:
-                        output["citation"] = {"doi": doi.group(0)}
-            if adc_publish_date := study_info.get("adc_publish_date"):
-                adc_publish_date = adc_publish_date.split(".")[0].strip()
-                output["datePublished"] = datetime.datetime.strptime(adc_publish_date, "%Y-%m-%dT%H:%M:%S").strftime(
-                    "%Y-%m-%d"
-                )
+        diagnosis = core.get("subject", {}).get("diagnosis", [])
+        if isinstance(diagnosis, dict):
+            diagnosis = [diagnosis]
+        for diag in diagnosis:
+            if diag.get("disease_stage"):
+                kw_n.append(diag["disease_stage"])
+                break
 
-            if adc_update_date := study_info.get("adc_update_date"):
-                adc_update_date = adc_update_date.split(".")[0].strip()
-                output["dateModified"] = datetime.datetime.strptime(adc_update_date, "%Y-%m-%dT%H:%M:%S").strftime(
-                    "%Y-%m-%d"
-                )
+        all_keywords = kw_n + kw_id
+        unique_keywords = list(dict.fromkeys(all_keywords))
+        if unique_keywords:
+            out["keywords"] = unique_keywords
 
-        if publisher := study.get("publisher"):
-            output["sdPublisher"] = {"name": publisher}
+        for b in md["species_facet"].get("facets", {}).get("subject.species", []):
+            lab = b.get("key") or b.get("value")
+            if lab:
+                out.setdefault("species", []).append({"name": lab})
+        cs = sample.get("cell_species", {})
+        if cs.get("label"):
+            out.setdefault("species", []).append({"name": cs["label"]})
+        for b in md["disease_facet"].get("facets", {}).get("subject.diagnosis.disease_diagnosis", []):
+            dnm = b.get("key") or b.get("value")
+            if dnm:
+                out.setdefault("healthCondition", []).append({"name": dnm})
 
-        if download_info := study.get("download_info"):
-            distribution_dict = {}
+        yield out
 
-            if archive_file := download_info.get("archive_file"):
-                distribution_dict["contentUrl"] = archive_file
-
-            if download_url := download_info.get("download_url"):
-                distribution_dict["contentUrl"] = download_url
-
-            if file_size := download_info.get("file_size"):
-                distribution_dict["contentSize"] = file_size
-
-            if len(distribution_dict) > 0:
-                output["distribution"] = distribution_dict
-
-        yield output
-
-    logger.info(f"Parsed {count} studies")
+    logger.info(f"Finished parsing {total} studies")
