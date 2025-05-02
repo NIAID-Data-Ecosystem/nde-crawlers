@@ -100,8 +100,9 @@ def parse():
         out = {}
 
         stud_url = f"https://vdjserver.org/community?study_id={sid}"
-        out["_id"] = f"vdj_{sid}"
+        out["_id"] = f"vdj_{sid}".replace(":", "_").replace(" ", "_").replace("/", "_")
         out["url"] = stud_url
+        out["identifier"] = sid
         out["@type"] = "Dataset"
         out["includedInDataCatalog"] = {
             "@type": "DataCatalog",
@@ -248,9 +249,16 @@ def parse():
             out["keywords"] = unique_keywords
 
         for b in md["species_facet"].get("facets", {}).get("subject.species", []):
-            lab = b.get("key") or b.get("value")
-            if lab:
-                out.setdefault("species", []).append({"name": lab})
+            sp = {}
+            species_id = b.get("id")
+            species_name = b.get("label")
+            if species_id:
+                sp["identifier"] = species_id
+            if species_name:
+                sp["name"] = species_name
+            if species_id or species_name:
+                out.setdefault("species", []).append(sp)
+
         cs = sample.get("cell_species", {})
         if cs.get("label"):
             out.setdefault("species", []).append({"name": cs["label"]})
@@ -258,6 +266,23 @@ def parse():
             dnm = b.get("key") or b.get("value")
             if dnm:
                 out.setdefault("healthCondition", []).append({"name": dnm})
+
+        out["conditionsOfAccess"] = "Open"
+        out["isAvailableForFree"] = True
+        out["variableMeasured"] = [
+                {
+                    "identifier": "C20971",
+                    "name": "V(D)J Recombination",
+                    "inDefinedTermSet": "NCIT",
+                    "url": "https://evsexplore.semantics.cancer.gov/evsexplore/concept/ncit/C20971",
+                },
+                {
+                    "identifier": "data_2977",
+                    "name": "Nucleic acid sequence",
+                    "inDefinedTermSet": "EDAM",
+                    "url": "https://edamontology.org/data_2977",
+                }
+            ]
 
         yield out
 
