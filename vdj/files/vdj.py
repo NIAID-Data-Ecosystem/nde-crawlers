@@ -268,7 +268,7 @@ def parse():
                 out.setdefault("healthCondition", []).append({"name": dnm})
 
         out["conditionsOfAccess"] = "Open"
-        out["isAvailableForFree"] = True
+        out["isAccessibleForFree"] = True
         out["variableMeasured"] = [
                 {
                     "identifier": "C20971",
