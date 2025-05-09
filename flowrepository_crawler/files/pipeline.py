@@ -57,6 +57,16 @@ class FlowRepositoryItemProcessorPipeline:
                 "versionDate": datetime.date.today().isoformat(),
                 "dataset": url,
             },
+            "measurementTechnique": {
+                "name": "flow cytometry method",
+                "url": "http://purl.obolibrary.org/obo/MMO_0000617",
+                "inDefinedTermSet": "MMO",
+                "curatedBy": {"name": "Flow Repository", "url": "http://flowrepository.org/", "dateModified": datetime.date.today().isoformat()},
+                "isCurated": True
+            },
+            "conditionsOfAccess": "Open",
+            "license": "http://flowrepository.org/terms_of_service"
+
         }
         """ These are the keys:
             ['Repository ID:', 'Experiment name:', 'MIFlowCyt score:', 'Primary researcher:', 'PI/manager:',
@@ -110,11 +120,11 @@ class FlowRepositoryItemProcessorPipeline:
             # check if there is more than one date
             if len(dates) > 1:
                 end_date = datetime.datetime.strptime(dates[1], "%Y-%m-%d").date().isoformat()
-                output["temporalCoverage"] = {"temporalInterval": {"startDate": date, "endDate": end_date}}
+                output["temporalCoverage"] = {"temporalInterval": {"@type": "TemporalInterval", "temporalType": "study date", "startDate": date, "endDate": end_date}}
             elif re.findall(r"\d+-\d+-\d+.*-", temp_dates):
-                output["temporalCoverage"] = {"temporalInterval": {"startDate": date}}
+                output["temporalCoverage"] = {"temporalInterval": {"@type": "TemporalInterval", "temporalType": "study date", "startDate": date}}
             else:
-                output["temporalCoverage"] = {"temporalInterval": {"endDate": date}}
+                output["temporalCoverage"] = {"temporalInterval": {"@type": "TemporalInterval", "temporalType": "study date", "endDate": date}}
                 # I have not found an example of an end date yet.
                 logger.info("There is only end date. URL: %s", output["url"])
 
@@ -148,9 +158,19 @@ class FlowRepositoryItemProcessorPipeline:
             if date_iso:
                 output["dateModified"] = date_iso
 
+            output["distribution"] = {
+                "@type": "DataDownload",
+                "name": "FCS files",
+                "contentUrl": "http://flowrepository.org/experiments/510/download_ziped_files",
+            }
+            if output.get("dateModified"):
+                output["distribution"]["dateModified"] = output["dateModified"]
+
         if keywords := item.pop("Keywords:", None):
             keywords = keywords.strip("[]").split("] [")
-            output["keywords"] = keywords
+            keywords = [keyword for keyword in keywords if keyword.casefold() != "none"]
+            if keywords:  # Only add to output if there are valid keywords
+                output["keywords"] = keywords
 
         # split manuscripts into two comma separated strings: pmids and pmcs
         if manuscripts := item.pop("Manuscripts:", None):

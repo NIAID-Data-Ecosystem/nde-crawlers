@@ -12,16 +12,16 @@ services:
     volumes:
       - data:/data
       - cache:/cache
-  omicsdi-crawler:
-    build:
-      context: omicsdi_crawler
-      dockerfile: Dockerfile
-      # uncomment to run development crontab
-      args:
-        CRONTAB: dev-crontab
-    volumes:
-      - data:/data
-      - cache:/cache
+  # omicsdi-crawler:
+  #   build:
+  #     context: omicsdi_crawler
+  #     dockerfile: Dockerfile
+  #     # uncomment to run development crontab
+  #     args:
+  #       CRONTAB: dev-crontab
+  #   volumes:
+  #     - data:/data
+  #     - cache:/cache
   mongodb:
     image: mongo:5.0
     ports:

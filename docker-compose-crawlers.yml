@@ -164,6 +164,12 @@ services:
         buildtime_variable: ${NDEX_EMAIL}
     volumes:
       - data:/data
+  omicsdi-crawler:
+    build:
+      context: omicsdi
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   qiita-crawler:
     build:
       context: qiita
