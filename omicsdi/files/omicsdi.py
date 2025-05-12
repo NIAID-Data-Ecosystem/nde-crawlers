@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 from parse import parse
-from tenacity import RetryCallState, retry, stop_after_attempt, wait_fixed
+from tenacity import RetryCallState, retry, retry_if_exception, stop_after_attempt, wait_fixed
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
@@ -21,16 +21,33 @@ def log_retry(retry_state: RetryCallState):
     logger.debug(f"Retrying URL: {url} (Attempt {retry_state.attempt_number})")
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2), reraise=True, before_sleep=log_retry)
+def should_retry(exception):
+    """
+    Custom retry condition: Retry only if the exception is not a 500 error.
+    """
+    if isinstance(exception, requests.exceptions.HTTPError):
+        # Check if the status code is 500
+        if exception.response.status_code == 500:
+            logger.error(f"Not retrying for 500 error: {exception.response.url}")
+            return False
+    return True
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(2),
+    reraise=True,
+    before_sleep=log_retry,
+    retry=retry_if_exception(should_retry),
+)
 def fetch_url(url):
     """
     Fetch the content of a URL with retry logic.
-    Retries up to 3 times with a 2-second wait between attempts.
+    Retries up to 3 times with a 2-second wait between attempts,
+    but does not retry for 500 errors.
     """
     response = requests.get(url, timeout=30)
     response.raise_for_status()  # Raise an error if the request fails
     return response
-
 
 def get_dataset_names():
     """
