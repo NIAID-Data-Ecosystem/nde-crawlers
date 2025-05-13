@@ -11,10 +11,12 @@ from utils.utils import nde_upload_wrapper
 class ImmPortUploader(NDESourceUploader):
     name = "immport"
     __metadata__ = {
+        "merger": "merge_struct",
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
         "src_meta": {
             "url": "https://www.immport.org/shared/home",
             "license_url": "https://docs.immport.org/home/agreement/",
-        }
+        },
     }
 
     @nde_upload_wrapper

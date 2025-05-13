@@ -48,7 +48,7 @@ def get_ids():
 
 def map_schema_json(schema_json):
     if _id := schema_json.get("url", None):
-        schema_json["_id"] = "IMMPORT_" + _id.rsplit("/", 1)[-1]
+        schema_json["_id"] = _id.rsplit("/", 1)[-1]
     if author := schema_json.pop("creator", None):
         for data in author:
             for key, value in data.items():
