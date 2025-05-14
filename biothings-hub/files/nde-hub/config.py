@@ -6,7 +6,7 @@ import urllib.parse
 from biothings.utils.loggers import setup_default_log
 from config_hub import *  # noqa
 
-mongo_host = os.environ.get("MONGO_HOST", "localhost:27017")
+mongo_host = os.environ.get("MONGO_HOST", "su09:27017")
 mongo_parsed = urllib.parse.urlparse(f"mongodb://{mongo_host}")
 data_folder = os.environ.get("DATA_FOLDER", "/data/nde-hub")
 
