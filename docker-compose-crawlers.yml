@@ -109,6 +109,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  immunespace-crawler:
+    build:
+      context: immunespace
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   lincs-crawler:
     build:
       context: lincs
