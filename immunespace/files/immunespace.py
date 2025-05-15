@@ -48,7 +48,7 @@ def parse():
             "_id": record["value"],
             "url": f"https://immunespace.org/query/study/{record['value']}",
             "sourceOrganization": source_organization,  # Add sourceOrganization here
-            "species": "Homo sapiens",
+            "species": {"name": "Homo sapiens"},
         }
         yield output
 
