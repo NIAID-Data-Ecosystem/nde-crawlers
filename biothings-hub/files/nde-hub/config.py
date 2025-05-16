@@ -54,7 +54,8 @@ logger = setup_default_log("hub", LOG_FOLDER)
 RUN_DIR = f"{data_folder}/run"
 
 DATA_SRC_SERVER = mongo_parsed.hostname or "localhost"
-DATA_SRC_PORT = mongo_parsed.port or 27017
+DATA_SRC_PORT = 27017
+# DATA_SRC_PORT = mongo_parsed.port or 27017
 DATA_SRC_DATABASE = "nde_hub_src"
 DATA_SRC_SERVER_USERNAME = urllib.parse.unquote(mongo_parsed.username) if mongo_parsed.username else ""
 DATA_SRC_SERVER_PASSWORD = urllib.parse.unquote(mongo_parsed.password) if mongo_parsed.password else ""
