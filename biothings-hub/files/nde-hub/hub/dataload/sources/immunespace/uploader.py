@@ -17,8 +17,7 @@ class ImmunespaceUploader(NDESourceUploader):
     @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = standardize_data(data_folder)
-        docs = corrections(data_folder)
-        docs = process_descriptions(docs)
+        docs = corrections(docs)
 
         for doc in docs:
             yield doc
