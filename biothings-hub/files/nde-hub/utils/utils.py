@@ -100,6 +100,14 @@ def add_date(doc: Dict) -> Dict:
         dates.append(doc.get("dateModified"))
     if doc.get("datePublished"):
         dates.append(doc.get("datePublished"))
+    dist = doc.get("distribution")
+    if dist:
+        # normalize to list
+        dists = dist if isinstance(dist, list) else [dist]
+        for d in dists:
+            dm = d.get("dateModified")
+            if dm:
+                dates.append(dm)
     if dates:
         dates.sort()
         date = datetime.datetime.fromisoformat(dates[-1]).date().isoformat()
