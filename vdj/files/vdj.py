@@ -270,19 +270,26 @@ def parse():
         out["conditionsOfAccess"] = "Open"
         out["isAccessibleForFree"] = True
         out["variableMeasured"] = [
-                {
-                    "identifier": "C20971",
-                    "name": "V(D)J Recombination",
-                    "inDefinedTermSet": "NCIT",
-                    "url": "https://evsexplore.semantics.cancer.gov/evsexplore/concept/ncit/C20971",
-                },
-                {
-                    "identifier": "data_2977",
-                    "name": "Nucleic acid sequence",
-                    "inDefinedTermSet": "EDAM",
-                    "url": "https://edamontology.org/data_2977",
-                }
-            ]
+            {
+                "identifier": "C20971",
+                "name": "V(D)J Recombination",
+                "inDefinedTermSet": "NCIT",
+                "url": "https://evsexplore.semantics.cancer.gov/evsexplore/concept/ncit/C20971",
+            },
+            {
+                "identifier": "data_2977",
+                "name": "Nucleic acid sequence",
+                "inDefinedTermSet": "EDAM",
+                "url": "https://edamontology.org/data_2977",
+            },
+        ]
+
+        out["license"] = "https://creativecommons.org/public-domain/"
+        out["usageInfo"] = {
+            "@type": "CreativeWork",
+            "name": "VDJ Server usage info",
+            "description": "The software is under the GNU Affero General Public License, the data is Public Domain",
+        }
 
         yield out
 

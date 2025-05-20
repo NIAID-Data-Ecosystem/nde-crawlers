@@ -100,23 +100,23 @@ class TychoItemProcessorPipeline:
                 "name": "Homo sapiens",
                 "originalName": "Homo sapiens",
                 "url": "https://www.uniprot.org/taxonomy/9606",
-                "topicCategory": [
-                    {
-                        "name": "Public health and epidemiology",
-                        "url": "http://edamontology.org/topic_3305",
-                        "identifier": "topic_3305",
-                        "inDefinedTermSet": "EDAM",
-                        "@type": "DefinedTerm",
-                    },
-                    {
-                        "name": "Infectious disease",
-                        "url": "http://edamontology.org/topic_3324",
-                        "identifier": "topic_3324",
-                        "inDefinedTermSet": "EDAM",
-                        "@type": "DefinedTerm",
-                    },
-                ],
             },
+            "topicCategory": [
+                {
+                    "name": "Public health and epidemiology",
+                    "url": "http://edamontology.org/topic_3305",
+                    "identifier": "topic_3305",
+                    "inDefinedTermSet": "EDAM",
+                    "@type": "DefinedTerm",
+                },
+                {
+                    "name": "Infectious disease",
+                    "url": "http://edamontology.org/topic_3324",
+                    "identifier": "topic_3324",
+                    "inDefinedTermSet": "EDAM",
+                    "@type": "DefinedTerm",
+                },
+            ],
         }
 
         if metadata.get("identifier") and metadata["identifier"].get("identifier"):

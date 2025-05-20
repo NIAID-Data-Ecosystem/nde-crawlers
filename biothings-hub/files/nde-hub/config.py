@@ -6,7 +6,7 @@ import urllib.parse
 from biothings.utils.loggers import setup_default_log
 from config_hub import *  # noqa
 
-mongo_host = os.environ.get("MONGO_HOST", "su09:27017")
+mongo_host = os.environ.get("MONGO_HOST", "su09:27017,su11:27017/?replicaSet=rs0biothings&readPreference=nearest")
 mongo_parsed = urllib.parse.urlparse(f"mongodb://{mongo_host}")
 data_folder = os.environ.get("DATA_FOLDER", "/data/nde-hub")
 
@@ -54,7 +54,8 @@ logger = setup_default_log("hub", LOG_FOLDER)
 RUN_DIR = f"{data_folder}/run"
 
 DATA_SRC_SERVER = mongo_parsed.hostname or "localhost"
-DATA_SRC_PORT = mongo_parsed.port or 27017
+DATA_SRC_PORT = 27017
+# DATA_SRC_PORT = mongo_parsed.port or 27017
 DATA_SRC_DATABASE = "nde_hub_src"
 DATA_SRC_SERVER_USERNAME = urllib.parse.unquote(mongo_parsed.username) if mongo_parsed.username else ""
 DATA_SRC_SERVER_PASSWORD = urllib.parse.unquote(mongo_parsed.password) if mongo_parsed.password else ""
