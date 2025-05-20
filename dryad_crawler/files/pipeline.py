@@ -178,6 +178,14 @@ class DryadItemProcessorPipeline:
                 fds.append(fd)
             output["funding"] = fds
 
+        if coa := item.pop("curationStatus", None):
+            if coa.casefold() == "published":
+                output["conditionsOfAccess"] = "Open"
+            elif coa.casefold() == "embargoed":
+                output["conditionsOfAccess"] = "Embargoed"
+            else:
+                output["conditionsOfAccess"] = "Restricted"
+
         # if date_pub := item.pop('datePublished'):
         #     date_pub = datetime.datetime.strptime(date_pub.split(': ')[1], '%B %d, %Y').date().isoformat()
         #     output['datePublished'] = date_pub
@@ -200,7 +208,6 @@ class DryadItemProcessorPipeline:
         item.pop("relatedWorks", None)
         item.pop("versionNumber", None)
         item.pop("versionStatus", None)
-        item.pop("curationStatus", None)
         item.pop("versionChanges", None)
         item.pop("lastModificationDate", None)
         item.pop("sharingLink", None)
