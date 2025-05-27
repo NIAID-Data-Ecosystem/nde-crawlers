@@ -51,7 +51,8 @@ class NDEDataBuilder(builder.DataBuilder):
             },
         ]
 
-        results = collection.aggregate(pipeline)
+        # Add allowDiskUse to handle large datasets
+        results = collection.aggregate(pipeline, allowDiskUse=True, batchSize=100)
 
         self.logger.info("Aggregation complete. Merging and deleting duplicate records")
 
@@ -61,7 +62,10 @@ class NDEDataBuilder(builder.DataBuilder):
         bulk_operations = []
         count = 0
 
+        # Process results in batches to avoid memory overflow
+        batch_count = 0
         for group, result in enumerate(results, start=1):
+            batch_count += 1
 
             # add all records that start with duplicate in _id to records_to_delete
             records_to_delete.extend(
@@ -110,23 +114,30 @@ class NDEDataBuilder(builder.DataBuilder):
             )
             bulk_operations.append(update_op)
 
-            if len(bulk_operations) == 10000:
+            # Process smaller batches more frequently
+            if len(bulk_operations) == 1000:  # Reduced from 10000
                 collection.bulk_write(bulk_operations)
                 bulk_operations = []
-                count += 10000
+                count += 1000
                 self.logger.info(f"{count} records updated")
+
+            # Also process deletion batches to free memory
+            if len(records_to_delete) >= 5000:
+                delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
+                self.logger.info(f"Deleted {delete_result.deleted_count} duplicate records in batch")
+                records_to_delete = []
 
         if bulk_operations:
             collection.bulk_write(bulk_operations)
             count += len(bulk_operations)
             self.logger.info(f"{count} records updated")
 
-        self.logger.info(f"Merging complete. {group} Groups found. Updated {count} records. Deleting duplicate records")
+        self.logger.info(f"Merging complete. {group} Groups found. Updated {count} records. Deleting remaining duplicate records")
 
-        # Perform bulk deletion of duplicate records
+        # Perform final bulk deletion of remaining duplicate records
         if records_to_delete:
             delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
-            self.logger.info(f"Deleted {delete_result.deleted_count} duplicate records")
+            self.logger.info(f"Deleted {delete_result.deleted_count} remaining duplicate records")
 
     def post_merge(self, source_names, batch_size, job_manager):
         duplicate = "zenodo"
