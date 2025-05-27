@@ -248,24 +248,41 @@ def parse():
         if unique_keywords:
             out["keywords"] = unique_keywords
 
-        for b in md["species_facet"].get("facets", {}).get("subject.species", []):
-            sp = {}
-            species_id = b.get("id")
-            species_name = b.get("label")
-            if species_id:
-                sp["identifier"] = species_id
-            if species_name:
-                sp["name"] = species_name
-            if species_id or species_name:
+        species_seen = set()
+        health_conditions_seen = set()
+
+        for b in md["species_facet"].get("Facet", []):
+            print("Processing species facet:", b)
+            species_data = b.get("subject.species", {})
+            species_id = species_data.get("id")
+            species_name = species_data.get("label")
+
+            unique_key = species_name or species_id
+            if unique_key and unique_key not in species_seen:
+                species_seen.add(unique_key)
+                sp = {}
+                if species_id:
+                    sp["identifier"] = species_id
+                if species_name:
+                    sp["name"] = species_name
                 out.setdefault("species", []).append(sp)
 
         cs = sample.get("cell_species", {})
-        if cs.get("label"):
+        if cs.get("label") and cs["label"] not in species_seen:
+            species_seen.add(cs["label"])
             out.setdefault("species", []).append({"name": cs["label"]})
-        for b in md["disease_facet"].get("facets", {}).get("subject.diagnosis.disease_diagnosis", []):
-            dnm = b.get("key") or b.get("value")
-            if dnm:
-                out.setdefault("healthCondition", []).append({"name": dnm})
+
+        for b in md["disease_facet"].get("Facet", []):
+            print("Processing disease facet:", b)
+            disease_data = b.get("subject.diagnosis.disease_diagnosis", {})
+            disease_name = disease_data.get("label") or disease_data.get("id")
+
+            if disease_name and disease_name not in health_conditions_seen:
+                health_conditions_seen.add(disease_name)
+                disease_entry = {"name": disease_name}
+                if disease_data.get("id"):
+                    disease_entry["identifier"] = disease_data["id"]
+                out.setdefault("healthCondition", []).append(disease_entry)
 
         out["conditionsOfAccess"] = "Open"
         out["isAccessibleForFree"] = True
