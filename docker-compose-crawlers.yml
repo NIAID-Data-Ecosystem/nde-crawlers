@@ -146,6 +146,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  ncbi_bioproject-crawler:
+    build:
+      context: ncbi_bioproject
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   ncbi_pmc-crawler:
     build:
       context: ncbi_pmc_oai-pmh
