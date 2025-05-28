@@ -73,7 +73,7 @@ def parse():
             output["identifier"] = biotools_id
             url = f"https://bio.tools/{biotools_id}"
             output["url"] = url
-            output["includedInDataCatalog"]["dataset"] = url
+            output["includedInDataCatalog"]["archivedAt"] = url
             output["_id"] = f"biotools_{biotools_id}"
         else:
             logger.warning("Skipping tool without biotoolsID")

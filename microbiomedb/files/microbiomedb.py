@@ -49,7 +49,7 @@ def parse():
                 logger.warning("More than one record id found. Using first record id.")
             record_id = record_id[0].get("value")
             output["url"] = f"https://microbiomedb.org/mbio/app/record/dataset/{record_id}"
-            output["includedInDataCatalog"]["dataset"] = output["url"]
+            output["includedInDataCatalog"]["archivedAt"] = output["url"]
 
         if record_name := record.get("displayName"):
             output["name"] = record_name

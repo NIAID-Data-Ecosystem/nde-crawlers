@@ -304,7 +304,7 @@ class Dataverse(NDEDatabase):
                         "name": "Harvard Dataverse",
                         "url": "https://dataverse.harvard.edu/",
                         "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
-                        "dataset": dataset_url,
+                        "archivedAt": dataset_url,
                     }
 
                     dataset.pop("@id")

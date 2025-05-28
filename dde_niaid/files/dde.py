@@ -187,14 +187,14 @@ def parse():
                     "name": "Data Discovery Engine",
                     "url": "https://discovery.biothings.io/",
                     "versionDate": datetime.date.today().isoformat(),
-                    "dataset": "https://discovery.biothings.io/resource/" + hit["_id"].lower(),
+                    "archivedAt": "https://discovery.biothings.io/resource/" + hit["_id"].lower(),
                 }
             ]
 
             # add sourceOrganization (as determined by the DDE portal to which the record was submitted) - this can be determined based on the @context
             # remove mentions of the NDE entry point in the DDE by commenting, who knows this could change again
             # resource_catalog_url = "https://discovery.biothings.io/" + hit["_id"].lower()
-            #if hit.get("@context") and "nde" in hit.get("@context"):
+            # if hit.get("@context") and "nde" in hit.get("@context"):
             #    source_organization = None
             #    included_in_data_catalog = [
             #        {
@@ -320,9 +320,9 @@ def parse():
                 url = "https://discovery.biothings.io/dataset/" + hit["_id"]
                 hit["url"] = url
                 if len(hit["includedInDataCatalog"]) == 1:
-                    hit["includedInDataCatalog"][0]["dataset"] = url
+                    hit["includedInDataCatalog"][0]["archivedAt"] = url
             elif hit["@type"] == "ComputationalTool":
-                hit["includedInDataCatalog"][0]["dataset"] = hit["url"]
+                hit["includedInDataCatalog"][0]["archivedAt"] = hit["url"]
                 logger.info("ComputationalTool: %s", hit["url"])
             hit["_id"] = "dde_" + hit["_id"].lower()
 

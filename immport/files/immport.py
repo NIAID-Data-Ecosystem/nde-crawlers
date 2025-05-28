@@ -116,7 +116,7 @@ def map_schema_json(schema_json):
 
     # set includedInDataCatalog.dataset
     if schema_json.get("includedInDataCatalog"):
-        schema_json["includedInDataCatalog"]["dataset"] = schema_json["url"]
+        schema_json["includedInDataCatalog"]["archivedAt"] = schema_json["url"]
         schema_json["includedInDataCatalog"]["@type"] = "DataCatalog"
     return schema_json
 

@@ -17,6 +17,7 @@ BIOPROJECT_SUMMARY_URL = "https://ftp.ncbi.nlm.nih.gov/bioproject/summary.txt"
 # Global variable to cache summary data
 _summary_data_cache = None
 
+
 def load_summary_data() -> Dict[str, Dict[str, str]]:
     """Load summary data as a lookup table for enrichment."""
     global _summary_data_cache
@@ -29,20 +30,20 @@ def load_summary_data() -> Dict[str, Dict[str, str]]:
 
     try:
         with urllib.request.urlopen(BIOPROJECT_SUMMARY_URL) as response:
-            lines = response.read().decode('utf-8').splitlines()
+            lines = response.read().decode("utf-8").splitlines()
 
         # Skip header line
         for line in lines[1:]:
-            parts = line.split('\t')
+            parts = line.split("\t")
             if len(parts) >= 7:
                 accession = parts[2]  # Project Accession
                 summary_data[accession] = {
-                    'organism_name': parts[0],
-                    'taxid': parts[1],
-                    'project_id': parts[3],
-                    'project_type': parts[4],
-                    'data_type': parts[5],
-                    'date': parts[6]
+                    "organism_name": parts[0],
+                    "taxid": parts[1],
+                    "project_id": parts[3],
+                    "project_type": parts[4],
+                    "data_type": parts[5],
+                    "date": parts[6],
                 }
 
         logger.info("Loaded summary data for %d BioProject records", len(summary_data))
@@ -53,6 +54,7 @@ def load_summary_data() -> Dict[str, Dict[str, str]]:
         logger.warning("Failed to load summary data: %s", e)
         return {}
 
+
 def enrich_with_summary_data(output: Dict[str, Any], accession: str, summary_data: Dict[str, Dict[str, str]]) -> None:
     """Enrich output with summary data if available and fields are missing."""
     if not accession or accession not in summary_data:
@@ -62,41 +64,38 @@ def enrich_with_summary_data(output: Dict[str, Any], accession: str, summary_dat
     enriched_fields = []
 
     # Fill in missing organism/species data
-    if 'species' not in output and summary.get('organism_name') and summary.get('taxid'):
-        output['species'] = {
-            'name': summary['organism_name'],
-            'identifier': f"NCBITaxon:{summary['taxid']}"
-        }
-        enriched_fields.append('species')
+    if "species" not in output and summary.get("organism_name") and summary.get("taxid"):
+        output["species"] = {"name": summary["organism_name"], "identifier": f"NCBITaxon:{summary['taxid']}"}
+        enriched_fields.append("species")
 
     # Fill in missing measurement technique from project type
-    if 'measurementTechnique' not in output and summary.get('project_type'):
-        project_type = summary['project_type'].lstrip('e').strip()
-        if project_type and project_type != 'Primary submission':
-            output['measurementTechnique'] = {'name': project_type}
-            enriched_fields.append('measurementTechnique')
+    if "measurementTechnique" not in output and summary.get("project_type"):
+        project_type = summary["project_type"].lstrip("e").strip()
+        if project_type and project_type != "Primary submission":
+            output["measurementTechnique"] = {"name": project_type}
+            enriched_fields.append("measurementTechnique")
 
     # Fill in missing variable measured from data type
-    if 'variableMeasured' not in output and summary.get('data_type'):
-        data_type = summary['data_type'].strip()
+    if "variableMeasured" not in output and summary.get("data_type"):
+        data_type = summary["data_type"].strip()
         if data_type:
-            output['variableMeasured'] = {'name': data_type}
-            enriched_fields.append('variableMeasured')
+            output["variableMeasured"] = {"name": data_type}
+            enriched_fields.append("variableMeasured")
 
     # Fill in missing creation date
-    if 'datePublished' not in output and summary.get('date'):
+    if "datePublished" not in output and summary.get("date"):
         try:
             # Convert YYYY/MM/DD to YYYY-MM-DD
-            date_str = summary['date'].replace('/', '-')
+            date_str = summary["date"].replace("/", "-")
             # Validate the date format
-            datetime.datetime.strptime(date_str, '%Y-%m-%d')
-            output['datePublished'] = date_str
-            enriched_fields.append('datePublished')
+            datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            output["datePublished"] = date_str
+            enriched_fields.append("datePublished")
         except ValueError:
             pass  # Skip invalid dates
 
     if enriched_fields:
-        logger.debug("Enriched %s with fields: %s", accession, ', '.join(enriched_fields))
+        logger.debug("Enriched %s with fields: %s", accession, ", ".join(enriched_fields))
 
 
 def download_bioproject_xml():
@@ -120,13 +119,13 @@ def get_related_sra_projects(accession: str) -> List[str]:
         # First, search for SRA studies linked to this BioProject
         search_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
         search_params = {
-            'db': 'sra',
-            'term': f'{accession}[BioProject]',
-            'retmax': '1000',  # Adjust as needed
-            'retmode': 'xml'
+            "db": "sra",
+            "term": f"{accession}[BioProject]",
+            "retmax": "1000",  # Adjust as needed
+            "retmode": "xml",
         }
 
-        search_query = search_url + '?' + urllib.parse.urlencode(search_params)
+        search_query = search_url + "?" + urllib.parse.urlencode(search_params)
 
         with urllib.request.urlopen(search_query) as response:
             search_result = response.read()
@@ -134,7 +133,7 @@ def get_related_sra_projects(accession: str) -> List[str]:
         search_root = ET.fromstring(search_result)
 
         # Extract the SRA UIDs
-        uids = [uid.text for uid in search_root.findall('.//Id')]
+        uids = [uid.text for uid in search_root.findall(".//Id")]
 
         if not uids:
             logger.info("No SRA projects found for BioProject %s", accession)
@@ -142,13 +141,9 @@ def get_related_sra_projects(accession: str) -> List[str]:
 
         # Now get the SRA study accessions using esummary
         summary_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
-        summary_params = {
-            'db': 'sra',
-            'id': ','.join(uids),
-            'retmode': 'xml'
-        }
+        summary_params = {"db": "sra", "id": ",".join(uids), "retmode": "xml"}
 
-        summary_query = summary_url + '?' + urllib.parse.urlencode(summary_params)
+        summary_query = summary_url + "?" + urllib.parse.urlencode(summary_params)
 
         with urllib.request.urlopen(summary_query) as response:
             summary_result = response.read()
@@ -157,16 +152,16 @@ def get_related_sra_projects(accession: str) -> List[str]:
 
         # Extract SRP accessions from the summary
         srp_accessions = []
-        for doc_sum in summary_root.findall('.//DocSum'):
-            for item in doc_sum.findall('.//Item'):
-                if item.get('Name') == 'ExpXml':
+        for doc_sum in summary_root.findall(".//DocSum"):
+            for item in doc_sum.findall(".//Item"):
+                if item.get("Name") == "ExpXml":
                     # Parse the ExpXml to find Study accession
                     exp_xml = item.text
                     if exp_xml:
                         try:
                             exp_root = ET.fromstring(exp_xml)
-                            study_acc = exp_root.findtext('.//Study/@acc')
-                            if study_acc and study_acc.startswith('SRP'):
+                            study_acc = exp_root.findtext(".//Study/@acc")
+                            if study_acc and study_acc.startswith("SRP"):
                                 srp_accessions.append(study_acc)
                         except ET.ParseError:
                             continue
@@ -184,12 +179,12 @@ def debug_xml_structure():
     """Debug function to inspect the XML structure."""
     try:
         # Parse just the beginning of the file to see structure
-        with open(BIOPROJECT_XML_PATH, 'rb') as f:
+        with open(BIOPROJECT_XML_PATH, "rb") as f:
             # Read first few KB to see the structure
-            sample = f.read(5000).decode('utf-8', errors='ignore')
+            sample = f.read(5000).decode("utf-8", errors="ignore")
             print("First 5000 characters of XML:")
             print(sample)
-            print("\n" + "="*50 + "\n")
+            print("\n" + "=" * 50 + "\n")
 
         # Try to parse and see what the root element actually is
         tree = ET.parse(BIOPROJECT_XML_PATH)
@@ -241,7 +236,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
                 "name": "NCBI BioProject",
                 "url": "https://www.ncbi.nlm.nih.gov/bioproject/",
                 "versionDate": datetime.date.today().isoformat(),
-            }
+            },
         }
 
         # Extract accession and build identifiers
@@ -252,7 +247,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
             output["identifier"] = accession
             output["_id"] = f"ncbi_bioproject_{accession}"
             output["url"] = f"https://www.ncbi.nlm.nih.gov/bioproject/{accession}"
-            output["includedInDataCatalog"]["dataset"] = output["url"]
+            output["includedInDataCatalog"]["archivedAt"] = output["url"]
 
         # Extract title and name
         title = project_elem.findtext(".//ProjectDescr/Title")
@@ -267,11 +262,11 @@ def parse() -> Generator[Dict[str, Any], None, None]:
             # Clean up HTML tags and formatting
             cleaned_desc = desc.strip()
             # Remove HTML tags
-            cleaned_desc = re.sub(r'<[^>]+>', '', cleaned_desc)
+            cleaned_desc = re.sub(r"<[^>]+>", "", cleaned_desc)
             # Replace multiple whitespace with single space
-            cleaned_desc = re.sub(r'\s+', ' ', cleaned_desc)
+            cleaned_desc = re.sub(r"\s+", " ", cleaned_desc)
             # Remove carriage returns and line feeds
-            cleaned_desc = cleaned_desc.replace('\r', '').replace('\n', ' ')
+            cleaned_desc = cleaned_desc.replace("\r", "").replace("\n", " ")
             # Final cleanup of extra spaces
             cleaned_desc = cleaned_desc.strip()
 
@@ -384,10 +379,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
         if target is not None:
             provider = target.findtext("Provider")
             if provider and provider.startswith("PI:"):
-                pi_author = {
-                    "@type": "Person",
-                    "name": provider.replace("PI:", "").strip()
-                }
+                pi_author = {"@type": "Person", "name": provider.replace("PI:", "").strip()}
                 author_list.append(pi_author)
 
         # Add organization

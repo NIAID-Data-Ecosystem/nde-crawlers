@@ -175,10 +175,7 @@ def parse_study_info(study_info):
                 continue
 
             if temporal_type not in temporal_intervals:
-                temporal_intervals[temporal_type] = {
-                    "temporalType": temporal_type,
-                    "@type": "TemporalInterval"
-                }
+                temporal_intervals[temporal_type] = {"temporalType": temporal_type, "@type": "TemporalInterval"}
 
             if "StartDate" in obj["propertyName"]:
                 temporal_intervals[temporal_type]["startDate"] = obj["storedValue"]
@@ -271,11 +268,13 @@ def parse():
                     continue
 
                 output = parsed_study.copy()
-                output["isPartOf"] = [{
-                    "name": output["name"],
-                    "identifier": "NICHD_DASH_Study_" + study_id,
-                    "url": f"https://dash.nichd.nih.gov/study/{study_id}",
-                }]
+                output["isPartOf"] = [
+                    {
+                        "name": output["name"],
+                        "identifier": "NICHD_DASH_Study_" + study_id,
+                        "url": f"https://dash.nichd.nih.gov/study/{study_id}",
+                    }
+                ]
 
                 output["includedInDataCatalog"] = {
                     "@type": "DataCatalog",
@@ -287,7 +286,7 @@ def parse():
                 output["_id"] = "NICHD_DASH_Dataset_" + dataset_id
                 url = f"https://dash.nichd.nih.gov/dataset/{dataset_id}"
                 output["url"] = url
-                output["includedInDataCatalog"]["dataset"] = url
+                output["includedInDataCatalog"]["archivedAt"] = url
 
                 # Use the cached publication_info for all datasets of this study
                 if publication_info:
@@ -296,7 +295,7 @@ def parse():
                         publication_dict = {
                             "name": publication["title"],
                             "url": publication["publicationUrl"],
-                            "datePublished": publication["date"]
+                            "datePublished": publication["date"],
                         }
                         cited_by_list.append(publication_dict)
                     if cited_by_list:
@@ -319,14 +318,18 @@ def parse():
         count = 0
         for dataset in related_datasets:
             count += 1
-            dataset["isRelatedTo"] = [{
-                "name": x["name"],
-                "identifier": x["_id"],
-                "hasPart": {"identifier": x["isPartOf"][0]["identifier"]},
-                "@type": "Dataset",
-                "includedInDataCatalog": {"name": "NICHD DASH"},
-                "relationship": "Datasets in the same study",
-            } for x in related_datasets if x != dataset and count < 100]  # limit to 100 related datasets
+            dataset["isRelatedTo"] = [
+                {
+                    "name": x["name"],
+                    "identifier": x["_id"],
+                    "hasPart": {"identifier": x["isPartOf"][0]["identifier"]},
+                    "@type": "Dataset",
+                    "includedInDataCatalog": {"name": "NICHD DASH"},
+                    "relationship": "Datasets in the same study",
+                }
+                for x in related_datasets
+                if x != dataset and count < 100
+            ]  # limit to 100 related datasets
 
             if "conditionsOfAccess" not in dataset:
                 dataset["conditionsOfAccess"] = "Closed"

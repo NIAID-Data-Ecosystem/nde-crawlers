@@ -82,7 +82,7 @@ def parse():
             output["identifier"] = identifier
             url = "https://bioconductor.org/packages/release/bioc/html/" + identifier + ".html"
             output["url"] = url
-            output["includedInDataCatalog"]["dataset"] = url
+            output["includedInDataCatalog"]["archivedAt"] = url
             output["doi"] = f"10.18129/B9.bioc.{identifier}"
 
             downloads_list = [d["Nb_of_downloads"] for d in download_stats_dicts if d["Package"] == identifier]

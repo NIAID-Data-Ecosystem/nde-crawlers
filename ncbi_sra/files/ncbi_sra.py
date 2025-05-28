@@ -185,7 +185,7 @@ class NCBI_SRA(NDEDatabase):
             if accession := ftp_info.get("ftp_acc"):
                 output["_id"] = "NCBI_SRA_" + accession
                 output["url"] = "https://www.ncbi.nlm.nih.gov/sra/" + accession
-                output["includedInDataCatalog"]["dataset"] = output["url"]
+                output["includedInDataCatalog"]["archivedAt"] = output["url"]
             if updated := ftp_info.get("ftp_updated"):
                 output["dateModified"] = datetime.datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ").strftime("%Y-%m-%d")
             if published := ftp_info.get("ftp_published"):
@@ -253,7 +253,7 @@ class NCBI_SRA(NDEDatabase):
                 # measurement techniques
                 if measurement_technique := run_metadata.get("library_strategy"):
                     if measurement_technique not in seen_measurements_techniques:
-                        logger.info(f'Adding measurement technique: {measurement_technique}')
+                        logger.info(f"Adding measurement technique: {measurement_technique}")
                         measurement_technique_dict = {"name": measurement_technique}
                         seen_measurements_techniques.add(measurement_technique)
                         measurement_technique_list.append(measurement_technique_dict)

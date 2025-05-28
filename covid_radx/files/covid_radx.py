@@ -144,7 +144,7 @@ def parse(hit):
     if study_id := hit.get("study_id"):
         url = base_url + str(study_id)
         output["url"] = url
-        output["includedInDataCatalog"]["dataset"] = url
+        output["includedInDataCatalog"]["archivedAt"] = url
 
     total_keywords = []
     if keywords := hit.get("population_focus_array"):

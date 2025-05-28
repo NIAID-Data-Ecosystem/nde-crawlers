@@ -79,7 +79,7 @@ def parse():
                 output["identifier"] = accession
                 url = f"https://www.ncbi.nlm.nih.gov/projects/gap/cgi-bin/study.cgi?study_id={accession}"
                 output["url"] = url
-                output["includedInDataCatalog"]["dataset"] = url
+                output["includedInDataCatalog"]["archivedAt"] = url
                 output["_id"] = accession.split(".")[0]
 
             if identifier := data.get("@parentstudy"):

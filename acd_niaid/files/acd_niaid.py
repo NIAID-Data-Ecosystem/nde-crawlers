@@ -234,7 +234,7 @@ def parse():
         result["_id"] = "accessclinicaldata_" + primary_id.lower()
         dataset_url = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + primary_id
         result["url"] = dataset_url
-        result["includedInDataCatalog"] = {"name": "AccessClinicalData@NIAID", "dataset": dataset_url}
+        result["includedInDataCatalog"] = {"name": "AccessClinicalData@NIAID", "archivedAt": dataset_url}
         result["@type"] = "Dataset"
 
         # Remove any keys with None values.

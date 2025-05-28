@@ -164,7 +164,7 @@ class Figshare(NDEDatabase):
             if relation := metadata.get("relation"):
                 url = relation[0]
                 output["url"] = url
-                output["includedInDataCatalog"]["dataset"] = url
+                output["includedInDataCatalog"]["archivedAt"] = url
                 output["_id"] = "Figshare_" + relation[0].split("/")[-1]
                 output["identifier"] = relation[0].split("/")[-1]
             if license := metadata.get("license"):

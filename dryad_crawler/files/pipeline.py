@@ -51,7 +51,7 @@ class DryadItemProcessorPipeline:
                 "name": "Dryad Digital Repository",
                 "url": "https://datadryad.org",
                 "versionDate": datetime.date.today().isoformat(),
-                "dataset": url,
+                "archivedAt": url,
             },
         }
 

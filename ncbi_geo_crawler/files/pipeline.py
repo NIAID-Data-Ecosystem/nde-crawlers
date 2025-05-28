@@ -39,7 +39,7 @@ class GeoItemProcessorPipeline:
                 "name": "NCBI GEO",
                 "url": "https://www.ncbi.nlm.nih.gov/geo/",
                 "versionDate": datetime.date.today().isoformat(),
-                "dataset": url,
+                "archivedAt": url,
             },
         }
 

@@ -30,7 +30,7 @@ class MalariaGenItemProcessorPipeline:
             "url": "https://www.malariagen.net/",
             "@type": "DataCatalog",
             "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),
-            "dataset": item["url"],
+            "archivedAt": item["url"],
         }
         item["@type"] = "Dataset"
 

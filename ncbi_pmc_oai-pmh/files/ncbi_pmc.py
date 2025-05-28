@@ -217,7 +217,7 @@ class NCBI_PMC(NDEDatabase):
                         output["identifier"] = identifier
                         output["url"] = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{identifier}"
                         output["includedInDataCatalog"][
-                            "dataset"
+                            "archivedAt"
                         ] = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{identifier}"
                         output["_id"] = "NCBI_PMC_" + identifier
                     elif identifier.startswith("10."):

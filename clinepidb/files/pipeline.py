@@ -90,7 +90,7 @@ def record_generator():
                     "name": "ClinEpiDB",
                     "url": "https://clinepidb.org/ce/app/",
                     "versionDate": datetime.date.today().isoformat(),
-                    "dataset": url,
+                    "archivedAt": url,
                 },
                 "url": url,
             }

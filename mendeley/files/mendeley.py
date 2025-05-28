@@ -204,7 +204,7 @@ def parse():
 
             if links := metadata.get("links"):
                 output["url"] = links["view"]
-                output["includedInDataCatalog"]["dataset"] = links["view"]
+                output["includedInDataCatalog"]["archivedAt"] = links["view"]
             if repository := metadata.get("repository"):
                 output["sdPublisher"] = {"name": repository["name"]}
 

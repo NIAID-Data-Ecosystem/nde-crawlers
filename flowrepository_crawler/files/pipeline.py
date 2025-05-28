@@ -55,7 +55,7 @@ class FlowRepositoryItemProcessorPipeline:
                 "name": "Flow Repository",
                 "url": "http://flowrepository.org/",
                 "versionDate": datetime.date.today().isoformat(),
-                "dataset": url,
+                "archivedAt": url,
             },
             "measurementTechnique": {
                 "name": "flow cytometry method",

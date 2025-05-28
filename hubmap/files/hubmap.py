@@ -7,7 +7,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
-
 def get_ids():
     logger.info("Getting datasets")
     url = "https://search.api.hubmapconsortium.org/v3/portal/search"
@@ -104,7 +103,7 @@ def parse():
                 "versionDate": datetime.date.today().isoformat(),
             },
             "@type": "Dataset",
-            "species": homo_sapiens
+            "species": homo_sapiens,
         }
 
         keywords = []
@@ -185,7 +184,7 @@ def parse():
         if uuid := metadata.get("uuid"):
             url = f"https://portal.hubmapconsortium.org/browse/dataset/{uuid}"
             output["url"] = url
-            output["includedInDataCatalog"]["dataset"] = url
+            output["includedInDataCatalog"]["archivedAt"] = url
             output["_id"] = "HUBMAP_" + uuid
 
         if files := metadata.get("files"):

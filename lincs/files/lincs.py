@@ -58,7 +58,7 @@ class LINCS:
             }
             url = f'https://lincsportal.ccs.miami.edu/datasets/view/{document["datasetid"]}'
             document["url"] = url
-            document["includedInDataCatalog"]["dataset"] = url
+            document["includedInDataCatalog"]["archivedAt"] = url
 
             if "assayoverview" in document:
                 document["description"] = document.pop("assayoverview")

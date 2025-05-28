@@ -41,7 +41,7 @@ def parse():
                 "name": "ImmuneSpace",
                 "url": "https://immunespace.org",
                 "versionDate": datetime.date.today().isoformat(),
-                "dataset": f"https://immunespace.org/query/study/{record['value']}",
+                "archivedAt": f"https://immunespace.org/query/study/{record['value']}",
             },
             "@context": "http://schema.org/",
             "@type": "Dataset",
