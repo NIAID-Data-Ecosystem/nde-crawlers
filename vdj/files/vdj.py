@@ -7,86 +7,131 @@ import requests
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
+# All AIRR endpoints to crawl
+AIRR_ENDPOINTS = [
+    "https://vdjserver.org/airr/v1/repertoire",
+    "https://roche-airr.ireceptor.org/airr/v1/repertoire",
+    "https://ipa1.ireceptor.org/airr/v1/repertoire",
+    "https://ipa4.ireceptor.org/airr/v1/repertoire",
+    "https://ipa5.ireceptor.org/airr/v1/repertoire",
+    "https://covid19-3.ireceptor.org/airr/v1/repertoire",
+    "https://covid19-1.ireceptor.org/airr/v1/repertoire",
+    "https://t1d-1.ireceptor.org/airr/v1/repertoire",
+    "https://ipa3.ireceptor.org/airr/v1/repertoire",
+    "https://ipa6.ireceptor.org/airr/v1/repertoire",
+    "https://ipa2.ireceptor.org/airr/v1/repertoire",
+    "https://covid19-2.ireceptor.org/airr/v1/repertoire",
+    "https://covid19-4.ireceptor.org/airr/v1/repertoire",
+    "https://scireptor.dkfz.de/airr/v1/repertoire",
+    "https://agschwab.uni-muenster.de/airr/v1/repertoire",
+]
+
 
 def retrieve_all_study_ids():
-    logger.info("Retrieving all study IDs from VDJ Server API")
-    study_url = "https://vdjserver.org/airr/v1/repertoire"
+    logger.info(f"Retrieving all study IDs from {len(AIRR_ENDPOINTS)} AIRR endpoints")
     all_ids = set()
+
+    for endpoint in AIRR_ENDPOINTS:
+        logger.info(f"Crawling endpoint: {endpoint}")
+        endpoint_ids = retrieve_study_ids_from_endpoint(endpoint)
+        all_ids.update(endpoint_ids)
+        logger.info(f"Found {len(endpoint_ids)} study IDs from {endpoint}")
+
+    logger.info(f"Retrieved {len(all_ids)} total unique study IDs")
+    return all_ids
+
+
+def retrieve_study_ids_from_endpoint(endpoint_url):
+    """Retrieve study IDs from a single AIRR endpoint"""
+    endpoint_ids = set()
     size, page = 100, 0
 
     while True:
         q = {"from": page * size, "size": size}
         try:
-            resp = requests.post(study_url, json=q)
+            resp = requests.post(endpoint_url, json=q, timeout=30)
             resp.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"Error paging study IDs: {e}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error paging study IDs from {endpoint_url}: {e}")
             break
 
-        hits = resp.json().get("Repertoire", [])
+        try:
+            hits = resp.json().get("Repertoire", [])
+        except ValueError as e:
+            logger.error(f"Invalid JSON response from {endpoint_url}: {e}")
+            break
+
         if not hits:
             break
+
         for rec in hits:
             sid = rec.get("study", {}).get("study_id")
             if sid:
-                all_ids.add(sid)
+                endpoint_ids.add(sid)
+
         if len(hits) < size:
             break
         page += 1
 
-    logger.info(f"Retrieved {len(all_ids)} study IDs")
-    return all_ids
+    return endpoint_ids
 
 
 def retrieve_study_metadata():
-    base = "https://vdjserver.org/airr/v1/repertoire"
     ids = retrieve_all_study_ids()
     meta = {}
 
     for sid in ids:
         logger.info(f"Fetching core record for study {sid}")
-        core_q = {
-            "filters": {"op": "=", "content": {"field": "study.study_id", "value": sid}},
-            "size": 1,
-            "include_fields": "airr-core",
-        }
-        try:
-            r = requests.post(base, json=core_q)
-            r.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"Core fetch failed for {sid}: {e}")
-            continue
 
-        reps = r.json().get("Repertoire", [])
-        if not reps:
-            continue
+        # Try each endpoint until we find the study
+        study_data = None
+        for endpoint in AIRR_ENDPOINTS:
+            core_q = {
+                "filters": {"op": "=", "content": {"field": "study.study_id", "value": sid}},
+                "size": 1,
+                "include_fields": "airr-core",
+            }
+            try:
+                r = requests.post(endpoint, json=core_q, timeout=30)
+                r.raise_for_status()
+                reps = r.json().get("Repertoire", [])
+                if reps:
+                    study_data = {
+                        "core": reps[0],
+                        "endpoint": endpoint,
+                        "disease_facet": get_disease_facet_data(sid, endpoint),
+                        "species_facet": get_species_facet_data(sid, endpoint),
+                    }
+                    break
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Failed to fetch {sid} from {endpoint}: {e}")
+                continue
 
-        meta[sid] = {
-            "core": reps[0],
-            "disease_facet": get_disease_facet_data(sid),
-            "species_facet": get_species_facet_data(sid),
-        }
+        if study_data:
+            meta[sid] = study_data
+        else:
+            logger.error(f"Could not find study {sid} in any endpoint")
 
     logger.info(f"Metadata collected for {len(meta)} studies")
     return meta
 
 
-def get_disease_facet_data(sid):
-    return _facet(sid, "subject.diagnosis.disease_diagnosis")
+def get_disease_facet_data(sid, endpoint):
+    return _facet(sid, "subject.diagnosis.disease_diagnosis", endpoint)
 
 
-def get_species_facet_data(sid):
-    return _facet(sid, "subject.species")
+def get_species_facet_data(sid, endpoint):
+    return _facet(sid, "subject.species", endpoint)
 
 
-def _facet(sid, field):
+def _facet(sid, field, endpoint):
     q = {"filters": {"op": "=", "content": {"field": "study.study_id", "value": sid}}, "facets": field}
     try:
-        r = requests.post("https://vdjserver.org/airr/v1/repertoire", json=q)
+        r = requests.post(endpoint, json=q, timeout=30)
         r.raise_for_status()
         return r.json()
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"Facet {field} failed for {sid}: {e}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Facet {field} failed for {sid} on {endpoint}: {e}")
         return {}
 
 
@@ -97,16 +142,30 @@ def parse():
     for idx, (sid, md) in enumerate(all_meta.items(), start=1):
         logger.info(f"Parsing {idx}/{total}: {sid}")
         core = md["core"]
+        endpoint = md["endpoint"]
         out = {}
 
-        stud_url = f"https://vdjserver.org/community?study_id={sid}"
-        out["_id"] = f"vdj_{sid}".replace(":", "_").replace(" ", "_").replace("/", "_")
+        # Determine the appropriate base URL for study links
+        if "vdjserver.org" in endpoint:
+            stud_url = f"https://vdjserver.org/community?study_id={sid}"
+            catalog_name = "VDJServer"
+        elif "ireceptor.org" in endpoint:
+            stud_url = f"https://gateway.ireceptor.org/search?study_id={sid}"
+            catalog_name = "iReceptor"
+        else:
+            # For other endpoints, use the base domain
+            from urllib.parse import urlparse
+            parsed = urlparse(endpoint)
+            stud_url = f"{parsed.scheme}://{parsed.netloc}/?study_id={sid}"
+            catalog_name = parsed.netloc
+
+        out["_id"] = f"airr_{sid}".replace(":", "_").replace(" ", "_").replace("/", "_")
         out["url"] = stud_url
         out["identifier"] = sid
         out["@type"] = "Dataset"
         out["includedInDataCatalog"] = {
             "@type": "DataCatalog",
-            "name": "VDJServer",
+            "name": catalog_name,
             "url": stud_url,
             "versionDate": datetime.date.today().isoformat(),
             "dataset": stud_url,
@@ -304,7 +363,7 @@ def parse():
         out["license"] = "https://creativecommons.org/public-domain/"
         out["usageInfo"] = {
             "@type": "CreativeWork",
-            "name": "VDJ Server usage info",
+            "name": "AIRR Data Commons usage info",
             "description": "The software is under the GNU Affero General Public License, the data is Public Domain",
         }
 
