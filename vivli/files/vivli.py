@@ -212,7 +212,7 @@ def parse():
 
             if url := output.get("doi"):
                 output["url"] = doi
-                output["includedInDataCatalog"]["dataset"] = doi
+                output["includedInDataCatalog"]["archivedAt"] = doi
 
             if description := request.get("description"):
                 output["description"] = description

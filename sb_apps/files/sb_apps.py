@@ -74,7 +74,7 @@ def parse():
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "PublicApps@SevenBridges",
-                "dataset": "https://cavatica.sbgenomics.com/public/apps/" + identifier,
+                "archivedAt": "https://cavatica.sbgenomics.com/public/apps/" + identifier,
             },
             "@type": "ComputationalTool",
             "url": "https://cavatica.sbgenomics.com/public/apps/" + identifier,

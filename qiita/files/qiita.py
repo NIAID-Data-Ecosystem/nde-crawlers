@@ -70,7 +70,7 @@ def parse():
 
         if study_id := study.get("study_id"):
             output["url"] = f"https://qiita.ucsd.edu/study/description/{study_id}"
-            output["includedInDataCatalog"]["dataset"] = f"https://qiita.ucsd.edu/study/description/{study_id}"
+            output["includedInDataCatalog"]["archivedAt"] = f"https://qiita.ucsd.edu/study/description/{study_id}"
             output["_id"] = f"qiita_{study_id}"
 
             # TODO use helper to import sample metadata to proper mapping

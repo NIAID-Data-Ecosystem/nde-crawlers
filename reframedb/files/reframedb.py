@@ -122,7 +122,7 @@ def parse():
                 output["identifier"] = assay_id
                 output["_id"] = "ReframeDB_" + id
                 output["url"] = "https://reframedb.org/assays/" + id
-                output["includedInDataCatalog"]["dataset"] = "https://reframedb.org/assays/" + id
+                output["includedInDataCatalog"]["archivedAt"] = "https://reframedb.org/assays/" + id
             if assay_title := metadata.get("assay_title"):
                 output["name"] = assay_title
             if title_short := metadata.get("title_short"):

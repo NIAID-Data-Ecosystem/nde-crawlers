@@ -290,7 +290,7 @@ class Zenodo(OAIDatabase):
                     "name": "Zenodo",
                     "url": "https://zenodo.org/",
                     "versionDate": datetime.date.today().isoformat(),
-                    "dataset": url,
+                    "archivedAt": url,
                 },
                 "_id": "ZENODO_" + identifier,
                 "name": data["metadata"].get("title")[0],
@@ -342,7 +342,6 @@ class Zenodo(OAIDatabase):
                         sdps.append(sdp)
                 if sdps:
                     output["sdPublisher"] = sdps
-
 
             output, missing_types = self.parse_xml(data["xml"], output, gen_type, missing_types, url, identifier)
 

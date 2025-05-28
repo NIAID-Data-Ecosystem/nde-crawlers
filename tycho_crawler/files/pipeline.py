@@ -61,7 +61,7 @@ class TychoItemProcessorPipeline:
                 "name": "Project Tycho",
                 "url": "https://www.tycho.pitt.edu/",
                 "versionDate": datetime.date.today().isoformat(),
-                "dataset": url,
+                "archivedAt": url,
             },
             "conditionsOfAccess": "Closed",
             "species": {

@@ -26,7 +26,8 @@ def record_generator():
                     "name": "VEuPathDB",
                     "url": "https://veupathdb.org/veupathdb/app",
                     "versionDate": datetime.date.today().isoformat(),
-                    "dataset": "https://veupathdb.org/veupathdb/app/record/dataset/" + _record_dict["id"][0]["value"],
+                    "archivedAt": "https://veupathdb.org/veupathdb/app/record/dataset/"
+                    + _record_dict["id"][0]["value"],
                 },
                 "url": "https://veupathdb.org/veupathdb/app/record/dataset/" + _record_dict["id"][0]["value"],
             }

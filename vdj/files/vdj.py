@@ -155,6 +155,7 @@ def parse():
         else:
             # For other endpoints, use the base domain
             from urllib.parse import urlparse
+
             parsed = urlparse(endpoint)
             stud_url = f"{parsed.scheme}://{parsed.netloc}/?study_id={sid}"
             catalog_name = parsed.netloc
@@ -168,7 +169,7 @@ def parse():
             "name": catalog_name,
             "url": stud_url,
             "versionDate": datetime.date.today().isoformat(),
-            "dataset": stud_url,
+            "archivedAt": stud_url,
         }
         if core.get("study", {}).get("study_title"):
             out["name"] = core["study"]["study_title"]

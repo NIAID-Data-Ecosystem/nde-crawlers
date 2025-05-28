@@ -189,7 +189,7 @@ def parse_metadata(metadata):
     if links := metadata.get("links"):
         if self_link := links.get("self"):
             output["url"] = f"https://workflowhub.eu{self_link}"
-            output["includedInDataCatalog"]["dataset"] = output["url"]
+            output["includedInDataCatalog"]["archivedAt"] = output["url"]
 
     return output
 

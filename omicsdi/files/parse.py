@@ -23,7 +23,7 @@ def parse(record, dataset_name, _id, url):
             "name": "Omics Discovery Index (OmicsDI)",
             "url": "https://www.omicsdi.org/",
             "versionDate": datetime.date.today().isoformat(),
-            "dataset": url,
+            "archivedAt": url,
         },
         "distribution": {
             "@type": "DataDownload",
@@ -73,9 +73,7 @@ def parse(record, dataset_name, _id, url):
         for key, output_field in date_fields.items():
             if date_value := dates.get(key):
                 try:
-                    parsed_date = (
-                        date_parse(date_value, ignoretz=True).date().isoformat()
-                    )
+                    parsed_date = date_parse(date_value, ignoretz=True).date().isoformat()
                     output[output_field] = parsed_date
                 except Exception as e:
                     logger.error(f"Error parsing date for {key}: {e}")
@@ -113,11 +111,7 @@ def parse(record, dataset_name, _id, url):
                 author["name"] = author_name
                 if affiliation:
                     author["affiliation"] = {
-                        "name": (
-                            affiliation[i]
-                            if len(affiliation) == len(author_names)
-                            else affiliation[0]
-                        )
+                        "name": (affiliation[i] if len(affiliation) == len(author_names) else affiliation[0])
                     }
                 if orcid:
                     author["identifier"] = (
@@ -130,9 +124,7 @@ def parse(record, dataset_name, _id, url):
 
         if author_names := additional.get("submitter"):
             orcid = None
-            if record.get("cross_references") and record.get("cross_references").get(
-                "ORCID"
-            ):
+            if record.get("cross_references") and record.get("cross_references").get("ORCID"):
                 orcid = record.get("cross_references").get("ORCID")
 
             affiliation = additional.get("submitter_affiliation")
@@ -240,10 +232,7 @@ def parse(record, dataset_name, _id, url):
 
         # Iterate over the lookup dictionary
         for prefix, value in imaging_protocols.items():
-            if any(
-                key.startswith(prefix) and additional.get(key)
-                for key in additional.keys()
-            ):
+            if any(key.startswith(prefix) and additional.get(key) for key in additional.keys()):
                 mt.append(value)
                 break
 
@@ -337,9 +326,7 @@ def parse(record, dataset_name, _id, url):
         if start_date := additional.get("study_start_year"):
             try:
                 start_date = date_parse(start_date[0], ignoretz=True).date().isoformat()
-                output["temporalCoverage"] = {
-                    "temporalInterval": {"startDate": start_date}
-                }
+                output["temporalCoverage"] = {"temporalInterval": {"startDate": start_date}}
             except Exception as e:
                 logger.error(f"Error parsing date for study_start_year: {e}")
 

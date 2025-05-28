@@ -56,7 +56,7 @@ def record_generator():
                     "name": site,
                     "url": f"https://{site.casefold()}.org/{webapps[i]}/app",
                     "versionDate": datetime.date.today().isoformat(),
-                    "dataset": url,
+                    "archivedAt": url,
                 },
                 "@context": "http://schema.org/",
                 "@type": "Dataset",
