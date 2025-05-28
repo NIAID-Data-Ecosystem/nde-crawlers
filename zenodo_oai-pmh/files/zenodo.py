@@ -343,9 +343,6 @@ class Zenodo(OAIDatabase):
                 if sdps:
                     output["sdPublisher"] = sdps
 
-            # temp fix for outbreak.info
-            if cb_outbreak := output.get("includedInDataCatalog"):
-                output["curatedBy"] = cb_outbreak
 
             output, missing_types = self.parse_xml(data["xml"], output, gen_type, missing_types, url, identifier)
 

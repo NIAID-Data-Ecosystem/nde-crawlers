@@ -279,12 +279,14 @@ def parse(record, dataset_name, _id, url):
                 ia.append({"name": infectious_agent})
         elif species_names := additional.get("GenotypeID_Systematic"):
             for species_name in species_names:
-                species.append({"name": species_name})
+                if species_name:
+                    species.append({"name": species_name})
 
         for key in ["condition", "disease"]:
             if hc_names := additional.get(key):
                 for hc_name in hc_names:
-                    hc.append({"name": hc_name})
+                    if hc_name:
+                        hc.append({"name": hc_name})
 
         if description := additional.get("description"):
             if output.get("description"):
@@ -400,9 +402,10 @@ def parse(record, dataset_name, _id, url):
                         }
                     )
 
-        if hc_names := cross_references.get("hp"):
-            for hc_name in hc_names:
-                hc.append({"identifier": hc_name})
+        # if hc_names := cross_references.get("hp"):
+        #     for hc_name in hc_names:
+        #         if hc_name:
+        #             hc.append({"identifier": hc_name})
 
     # add lists to output
     if keywords_set:
