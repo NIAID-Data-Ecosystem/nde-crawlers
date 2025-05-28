@@ -459,13 +459,13 @@ def parse() -> Generator[Dict[str, Any], None, None]:
                             part_of.append({"identifier": ref_acc})
 
         # Add related SRA projects to hasPart (Option 3 implementation)
-        if accession:
-            related_sra_projects = get_related_sra_projects(accession)
-            if related_sra_projects:
-                # Add SRA project IDs to hasPart
-                # Format them as portal URLs or identifiers as needed
-                sra_parts = [{"identifier": f"ncbi_sra_{srp_id}"} for srp_id in related_sra_projects]
-                has_parts.extend(sra_parts)
+        # if accession:
+        #     related_sra_projects = get_related_sra_projects(accession)
+        #     if related_sra_projects:
+        #         # Add SRA project IDs to hasPart
+        #         # Format them as portal URLs or identifiers as needed
+        #         sra_parts = [{"identifier": f"ncbi_sra_{srp_id}"} for srp_id in related_sra_projects]
+        #         has_parts.extend(sra_parts)
 
         if has_parts:
             output["hasPart"] = has_parts

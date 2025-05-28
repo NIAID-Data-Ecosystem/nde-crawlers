@@ -20,7 +20,7 @@ logger = logging.getLogger("nde-logger")
 class NCBI_SRA(NDEDatabase):
     # override variables
     SQL_DB = "ncbi_sra.db"
-    EXPIRE = datetime.timedelta(days=365)
+    EXPIRE = datetime.timedelta(days=1000)
 
     # Used for testing small chunks of data
     DATA_LIMIT = None
@@ -244,18 +244,17 @@ class NCBI_SRA(NDEDatabase):
                     distribution_list.append(distribution_dict)
 
                 # species
-                species_dict = {}
                 if taxon_name := run_metadata.get("taxon_name"):
                     if taxon_name not in seen_species:
-                        species_dict["name"] = taxon_name
+                        species_dict = {"name": taxon_name}
                         seen_species.add(taxon_name)
                         species_list.append(species_dict)
 
                 # measurement techniques
-                measurement_technique_dict = {}
                 if measurement_technique := run_metadata.get("library_strategy"):
                     if measurement_technique not in seen_measurements_techniques:
-                        measurement_technique_dict["name"] = measurement_technique
+                        logger.info(f'Adding measurement technique: {measurement_technique}')
+                        measurement_technique_dict = {"name": measurement_technique}
                         seen_measurements_techniques.add(measurement_technique)
                         measurement_technique_list.append(measurement_technique_dict)
 
@@ -385,6 +384,7 @@ class NCBI_SRA(NDEDatabase):
             if len(distribution_list):
                 output["distribution"] = distribution_list
             if len(measurement_technique_list):
+                logger.info(f"Total measurement techniques: {len(measurement_technique_list)}")
                 output["measurementTechnique"] = measurement_technique_list
 
             yield output
