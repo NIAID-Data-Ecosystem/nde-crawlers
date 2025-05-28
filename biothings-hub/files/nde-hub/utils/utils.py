@@ -72,10 +72,10 @@ def check_schema(doc: Dict) -> Dict:
     assert doc.get("includedInDataCatalog"), "includedInDataCatalog is None"
     if isinstance(doc["includedInDataCatalog"], list):
         assert all(
-            item.get("dataset") for item in doc["includedInDataCatalog"]
-        ), "includedInDataCatalog.dataset is None in one or more items"
+            item.get("archivedAt") for item in doc["includedInDataCatalog"]
+        ), "includedInDataCatalog.archivedAt is None in one or more items"
     else:
-        assert doc["includedInDataCatalog"].get("dataset"), "includedInDataCatalog.dataset is None"
+        assert doc["includedInDataCatalog"].get("archivedAt"), "includedInDataCatalog.archivedAt is None"
 
     assert doc.get("version", None) is None, "Remove version field"
     if coa := doc.get("conditionsOfAccess"):
