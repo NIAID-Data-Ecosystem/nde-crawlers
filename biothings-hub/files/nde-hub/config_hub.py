@@ -32,7 +32,7 @@ DATA_TARGET_MASTER_COLLECTION = "db_master"
 HUB_MAX_MEM_USAGE = None
 
 # Max number of *processes* hub can access to run jobs
-HUB_MAX_WORKERS = 14
+HUB_MAX_WORKERS = 8
 # Max number of *processes* used when syncing data
 # (applygin diff/incremental data)
 MAX_SYNC_WORKERS = HUB_MAX_WORKERS
@@ -339,3 +339,7 @@ DOCKER_CONFIG = {"localhost": {"client_url": "http://" + os.environ.get("DOCKER_
 
 # docker client to use from DOCKER_CONFIG. Add this as localhost in config_local to override.
 DOCKER_HOST = None
+
+APITEST_PATH = "/opt/home/nde/nde_hub/src/tests"
+
+APITEST_CONFIG = "config_web"
