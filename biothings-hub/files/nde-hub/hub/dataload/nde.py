@@ -284,8 +284,8 @@ class NDESourceUploader(BaseSourceUploader):
             "collectionSize": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "maxValue": {"type": "integer"},
-                    "minValue": {"type": "integer"},
+                    "maxValue": {"type": "double"},
+                    "minValue": {"type": "double"},
                     "unitText": {"type": "text"},
                     "value": {"type": "integer"},
                 }
