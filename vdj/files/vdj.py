@@ -142,31 +142,16 @@ def parse():
     for idx, (sid, md) in enumerate(all_meta.items(), start=1):
         logger.info(f"Parsing {idx}/{total}: {sid}")
         core = md["core"]
-        endpoint = md["endpoint"]
         out = {}
 
-        # Determine the appropriate base URL for study links
-        if "vdjserver.org" in endpoint:
-            stud_url = f"https://vdjserver.org/community?study_id={sid}"
-            catalog_name = "VDJServer"
-        elif "ireceptor.org" in endpoint:
-            stud_url = f"https://gateway.ireceptor.org/search?study_id={sid}"
-            catalog_name = "iReceptor"
-        else:
-            # For other endpoints, use the base domain
-            from urllib.parse import urlparse
-
-            parsed = urlparse(endpoint)
-            stud_url = f"{parsed.scheme}://{parsed.netloc}/?study_id={sid}"
-            catalog_name = parsed.netloc
-
-        out["_id"] = f"airr_{sid}".replace(":", "_").replace(" ", "_").replace("/", "_")
+        stud_url = f"https://vdjserver.org/community?study_id={sid}"
+        out["_id"] = f"vdj_{sid}".replace(":", "_").replace(" ", "_").replace("/", "_")
         out["url"] = stud_url
         out["identifier"] = sid
         out["@type"] = "Dataset"
         out["includedInDataCatalog"] = {
             "@type": "DataCatalog",
-            "name": catalog_name,
+            "name": "VDJServer",
             "url": stud_url,
             "versionDate": datetime.date.today().isoformat(),
             "archivedAt": stud_url,
