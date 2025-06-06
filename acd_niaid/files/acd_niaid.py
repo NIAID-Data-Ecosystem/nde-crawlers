@@ -192,7 +192,7 @@ def parse():
 
         date_modified = study.get("most_recent_update")
         if date_modified:
-            if "T" in daPte_modified:
+            if "T" in date_modified:
                 result["dateModified"] = datetime.fromisoformat(date_modified).strftime("%Y-%m-%d")
             else:
                 iso_date = datetime.strptime(date_modified, "%B %Y")

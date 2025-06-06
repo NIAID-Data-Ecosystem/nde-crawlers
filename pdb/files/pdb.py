@@ -106,7 +106,7 @@ def paginate_through_PDB_ids(index=0):
 
 
 def get_PDB_ids():
-    index = 103300
+    index = 0
     length = None
     while True:
         ids, length = paginate_through_PDB_ids(index)

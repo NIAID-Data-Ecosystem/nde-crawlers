@@ -70,7 +70,8 @@ def query_bioportal(iri):
         "isCurated": True,
     }
 
-    lookup["alternateName"] = data["collection"][0]["synonym"]
+    if data["collection"][0].get("synonym"):
+        lookup["alternateName"] = data["collection"][0]["synonym"]
 
     return lookup, True
 
@@ -179,8 +180,10 @@ def parse():
                     nde_type = "Dataset"
                 elif "ComputationalTool" in nde_type:
                     nde_type = "ComputationalTool"
+            else:
+                nde_type = "Dataset"
 
-                hit["@type"] = nde_type
+            hit["@type"] = nde_type
             included_in_data_catalog = [
                 {
                     "@type": "DataCatalog",
