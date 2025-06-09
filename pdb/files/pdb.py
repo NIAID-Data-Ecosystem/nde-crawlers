@@ -124,7 +124,8 @@ def get_PDB_ids():
 def parse():
     ids = get_PDB_ids()
     for i, id in enumerate(ids, start=1):
-        yield getPDBmetadata(id)
+        doc = getPDBmetadata(id)
+        yield doc
     logger.info(f"finished parsing {i} PDB metadata")
 
 
