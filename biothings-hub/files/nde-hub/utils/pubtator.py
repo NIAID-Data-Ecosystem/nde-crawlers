@@ -142,6 +142,7 @@ def get_species_details(original_name, identifier):
     species_info.raise_for_status()
     species_info = species_info.json()
     standard_dict = {
+        "@type": "DefinedTerm",
         "identifier": identifier,
         "inDefinedTermSet": "UniProt",
         "url": f"https://www.uniprot.org/taxonomy/{identifier}",
@@ -273,6 +274,7 @@ def create_return_object(hit, alternate_names, original_name):
     term_name = hit.get("label") or hit.get("name")
 
     standard_dict = {
+        "@type": "DefinedTerm",
         "identifier": identifier,
         "inDefinedTermSet": ontology,
         "isCurated": True,
