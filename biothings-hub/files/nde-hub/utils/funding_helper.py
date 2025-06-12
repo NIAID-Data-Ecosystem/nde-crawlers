@@ -288,7 +288,10 @@ def standardize_funder(funder, conn=None):
         result = cursor.fetchone()
         if result:
             logger.info(f"FOUND FUNDING INFORMATION FOR {funder} in SQLite cache")
-            return json.loads(result[0])
+            cached_data = json.loads(result[0])
+            if "@type" not in cached_data:
+                cached_data["@type"] = "Organization"
+            return cached_data
 
         funder_dict = {}
         funder_name = re.sub(r"\([^)]*\)", "", funder).strip()
@@ -319,6 +322,7 @@ def standardize_funder(funder, conn=None):
                     item["name"].lower() == funder_name.lower()
                     or funder_acronym.lower() in [alt_name.lower() for alt_name in item.get("alt-names", [])]
                 ):
+                    funder_dict["@type"] = "Organization"
                     funder_dict["name"] = item["name"]
                     funder_dict["alternateName"] = item.get("alt-names", [])
                     funder_dict["identifier"] = item["id"]
@@ -327,6 +331,9 @@ def standardize_funder(funder, conn=None):
         if not funder_dict:
             logger.info(f"NO FUNDING INFORMATION FOUND FOR {funder_name}, {url}")
             funder_dict = {"name": funder, "@type": "Organization"}
+
+        if "@type" not in funder_dict:
+            funder_dict["@type"] = "Organization"
 
         cursor.execute(
             "INSERT OR REPLACE INTO funder_cache (funder_name, funder_data) VALUES (?, ?)",
@@ -344,7 +351,7 @@ def build_funding_dict(funding_info):
     """
     Build a correctly mapped funding dictionary from the funding information.
     """
-    funding_dict = {}
+    funding_dict = {"@type": "MonetaryGrant"}
     funders = []
     if (appl_id := funding_info.get("appl_id")):
         funding_dict["url"] = f"https://reporter.nih.gov/project-details/{appl_id}"
