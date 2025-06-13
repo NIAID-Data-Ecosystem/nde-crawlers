@@ -222,6 +222,7 @@ def parse():
                     {
                         "@type": "ResearchProject",
                         "name": "NIAID CREID Network",
+                        "abstract": "The Centers for Research in Emerging Infectious Diseases (CREID) Network is a global consortium of research centers focused on studying emerging and re-emerging infectious diseases in regions prone to outbreaks. These centers conduct surveillance, research, and response efforts to better mitigate future infectious disease threats.",
                         "description": "The Centers for Research in Emerging Infectious Diseases (CREID) Network is a coordinated group of emerging infectious disease research centers situated in regions around the globe where emerging and re-emerging infectious disease outbreaks are likely to occur.",
                         "alternateName": ["CREID", "Centers for Research in Emerging Infectious Disease"],
                         "url": "https://creid-network.org/",
@@ -241,6 +242,7 @@ def parse():
                     {
                         "@type": "ResearchProject",
                         "name": "NIAID Systems Biology",
+                        "abstract": "The NIAID/Division of Microbiology and Infectious Diseases (DMID) Systems Biology Consortium for Infectious Diseases brings together interdisciplinary scientists across microbiology, immunology, infectious diseases, computational biology, and advanced data science. Their collaborative work integrates experimental and computational approaches, including machine learning and mathematical modeling.",
                         "description": "The NIAID/Division of Microbiology and Infectious Diseases (DMID) Systems Biology Consortium for Infectious Diseases is a group of interdisciplinary scientists that bridge disparate scientific disciplines including microbiology, immunology, infectious diseases, microbiome, mathematics, physics, bioinformatics, computational biology, machine learning, statistical methods, and mathematical modeling.",
                         "alternateName": ["NIAID Systems Biology Consortium for Infectious Diseases", "NIAID SysBio"],
                         "url": "https://www.niaid.nih.gov/research/systems-biology-consortium",
