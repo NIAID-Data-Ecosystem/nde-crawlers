@@ -185,6 +185,7 @@ def get_disease_details(identifier, original_name):
     disease_info.raise_for_status()
     disease_info = disease_info.json()
     standard_dict = {
+        "@type": "DefinedTerm",
         "identifier": identifier,
         "inDefinedTermSet": "MeSH",
         "url": f"https://id.nlm.nih.gov/mesh/{identifier}.html",

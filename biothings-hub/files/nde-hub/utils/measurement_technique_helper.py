@@ -29,6 +29,7 @@ def load_mapping(name):
                 manually_mapped = repo_technique
 
             entry = {
+                "@type": "DefinedTerm",
                 "name": manually_mapped,
                 "inDefinedTermSet": row["Ontology"].strip(),
                 "url": row["URL"].strip(),

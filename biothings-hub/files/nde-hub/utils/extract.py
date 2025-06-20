@@ -419,6 +419,7 @@ def get_species_details(original_name, identifier):
     species_info.raise_for_status()
     species_info = species_info.json()
     standard_dict = {
+        "@type": "DefinedTerm",
         "identifier": identifier,
         "inDefinedTermSet": "UniProt",
         "url": f"https://www.uniprot.org/taxonomy/{identifier}",

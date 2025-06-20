@@ -74,6 +74,7 @@ def add_topic_category(docs, source_name):
                     # Only add if this identifier is not already present
                     if identifier not in existing_ids:
                         new_topic = {
+                            "@type": "DefinedTerm",
                             "name": topic_cleaned,
                             "curatedBy": {"name": "GPT-4o-mini", "url": "https://openai.com/index/chatgpt"},
                             "identifier": identifier,

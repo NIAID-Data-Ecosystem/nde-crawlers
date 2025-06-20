@@ -91,6 +91,23 @@ def add_date(doc: Dict) -> Dict:
     :param func: a generator function that yields documents
     """
 
+    # Clone distribution.dateModified to dateModified if dateModified is missing
+    if not doc.get("dateModified"):
+        dist = doc.get("distribution")
+        if dist:
+            # normalize to list
+            dists = dist if isinstance(dist, list) else [dist]
+            distribution_dates = []
+            for d in dists:
+                dm = d.get("dateModified")
+                if dm:
+                    distribution_dates.append(dm)
+
+            if distribution_dates:
+                # Sort and use the most recent date
+                distribution_dates.sort()
+                doc["dateModified"] = distribution_dates[-1]
+
     dates = []
     if doc.get("date"):
         dates.append(doc.get("date"))

@@ -110,6 +110,7 @@ def get_measurement_technique(study_type, intervention_model, allocation, design
             ncit_name = get_ncit_name(iri)
             identifier = iri.split("_")[-1]
             measurement_obj = {
+                "@type": "DefinedTerm",
                 "identifier": identifier,
                 "inDefinedTermSet": "NCIT",
                 "isCurated": False,
