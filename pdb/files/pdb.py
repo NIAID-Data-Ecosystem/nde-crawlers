@@ -5,13 +5,8 @@ import requests
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 # Create a logger called "nde_crawlers"
-logger = logging.getLogger("nde_crawlers")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("nde-logger")
 
 PDB_API = "https://data.rcsb.org/rest/v1/core/entry"
 
@@ -30,14 +25,16 @@ def print_retry_message(retry_state):
 
 
 # Define a retryable function for making POST requests
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2), after=print_retry_message)
+@retry(stop=stop_after_attempt(5), wait=wait_fixed(2), after=print_retry_message)
 def retryable_post(url, payload):
     response = requests.post(url, json=payload)
-    response.raise_for_status()  # Raise an exception for HTTP errors
+    if response.status_code == 999:
+        logger.info("received end of PDB ids")
+        return None
     return response.json()
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+@retry(stop=stop_after_attempt(5), wait=wait_fixed(2))
 def retryable_get(url):
     return requests.get(url)
 
@@ -98,7 +95,7 @@ def paginate_through_PDB_ids(index=0):
     }
 
     response = retryable_post(url, payload)
-    if response.get("statusCode") == 999:
+    if response is None:
         return None, None
 
     ids = [i["identifier"] for i in response["result_set"]]
@@ -125,13 +122,19 @@ def parse():
     ids = get_PDB_ids()
     for i, id in enumerate(ids, start=1):
         doc = getPDBmetadata(id)
-        yield doc
+        if doc:
+            yield doc
+
     logger.info(f"finished parsing {i} PDB metadata")
 
 
 def getPDBmetadata(id):
-    resp = retryable_get(f"{PDB_API}/{id}")
-    logger.info(f"Fetching PDB metadata for ID: {PDB_API}/{id}")
+    logger.info(f"Parsing url: {PDB_API}/{id} for id: {id}")
+    try:
+        resp = retryable_get(f"{PDB_API}/{id}")
+    except Exception as e:
+        logger.error(f"Error fetching metadata for ID {id}: {e}")
+        return None
     if resp.status_code == 200:
         raw_data = resp.json()
 
@@ -157,7 +160,8 @@ def getPDBmetadata(id):
         if citations := raw_data.get("citation"):
             md["citedBy"] = [getCitation(citation) for citation in citations]
 
-        md["measurementTechnique"] = [technique["method"].lower() for technique in raw_data["exptl"]]
+        if raw_data.get("exptl"):
+            md["measurementTechnique"] = [technique["method"].lower() for technique in raw_data["exptl"]]
         if "pdbx_audit_support" in raw_data.keys():
             funding_list = []
             for funder in raw_data["pdbx_audit_support"]:
@@ -169,7 +173,8 @@ def getPDBmetadata(id):
 
         md["datePublished"] = raw_data["rcsb_accession_info"]["deposit_date"][0:10]
         md["dateModified"] = raw_data["rcsb_accession_info"]["revision_date"][0:10]
-        md["keywords"] = getKeywords(raw_data)
+        if raw_data.get("struct_keywords"):
+            md["keywords"] = getKeywords(raw_data)
         md["url"] = url
         md["curatedBy"] = {
             "@type": "Organization",
@@ -187,7 +192,8 @@ def getPDBmetadata(id):
 
 def getCitation(citation):
     cite = {"@type": "Publication"}
-    cite["journalNameAbbrev"] = citation["journal_abbrev"]
+    if citation.get("journal_abbrev"):
+        cite["journalNameAbbrev"] = citation["journal_abbrev"]
     if title := citation.get("title"):
         cite["name"] = title
 
