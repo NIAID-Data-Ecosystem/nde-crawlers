@@ -157,7 +157,7 @@ def getPDBmetadata(id):
         if citations := raw_data.get("citation"):
             md["citedBy"] = [getCitation(citation) for citation in citations]
 
-        md["measurementTechnique"] = [technique["method"].lower() for technique in raw_data["exptl"]]
+        md["measurementTechnique"] = [{"name": technique["method"].lower()} for technique in raw_data["exptl"]]
         if "pdbx_audit_support" in raw_data.keys():
             funding_list = []
             for funder in raw_data["pdbx_audit_support"]:
