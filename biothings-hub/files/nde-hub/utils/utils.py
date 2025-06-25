@@ -169,7 +169,12 @@ def is_purely_augmented(field: str, field_content) -> bool:
         # All items must be augmented dicts to consider it purely augmented
         return all(
             isinstance(item, dict)
-            and (item.get("fromPMID", False) or item.get("fromGPT", False) or item.get("fromEXTRACT", False) or item.get("fromNCT", False))
+            and (
+                item.get("fromPMID", False)
+                or item.get("fromGPT", False)
+                or item.get("fromEXTRACT", False)
+                or item.get("fromNCT", False)
+            )
             for item in field_content
         )
 
@@ -312,6 +317,7 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
                         # Convert to bytes if it's an XML string
                         description = description.encode("utf-8")
                     # Parse the description (works for both bytes and strings)
+                    description = re.sub(r"(<br\s*/?>|</p>)", "\n", description, flags=re.IGNORECASE)
                     description = html.fromstring(description).text_content()
                     doc["description"] = description
                 except etree.ParserError as e:
