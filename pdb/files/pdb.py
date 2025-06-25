@@ -98,8 +98,10 @@ def paginate_through_PDB_ids(index=0):
     if response is None:
         return None, None
 
-    ids = [i["identifier"] for i in response["result_set"]]
-    return set(ids), response["result_set_count"]
+    ids = [
+        (i["identifier"], i["data"].get("organisms")) for i in response["result_set"]
+    ]
+    return ids, response["result_set_count"]
 
 
 def get_PDB_ids():
@@ -110,25 +112,26 @@ def get_PDB_ids():
         if not ids:
             logger.warning(f"breaking index {index} length {length}, no new ids found")
             break
-        for _id in ids:
-            yield _id
+        for _id, organisms in ids:
+            yield _id, organisms
         index += 100
         logger.info(f"index: {index}")
         if length is not None and index >= length:
             break
+        break
 
 
 def parse():
     ids = get_PDB_ids()
-    for i, id in enumerate(ids, start=1):
-        doc = getPDBmetadata(id)
+    for i, (id, organisms) in enumerate(ids, start=1):
+        doc = getPDBmetadata(id, organisms)
         if doc:
             yield doc
 
     logger.info(f"finished parsing {i} PDB metadata")
 
 
-def getPDBmetadata(id):
+def getPDBmetadata(id, organisms):
     logger.info(f"Parsing url: {PDB_API}/{id} for id: {id}")
     try:
         resp = retryable_get(f"{PDB_API}/{id}")
@@ -151,17 +154,30 @@ def getPDBmetadata(id):
                 "versionDate": date.today().isoformat(),
             },
         }
+        if organisms:
+            species = []
+            for organism in organisms:
+                if organism:
+                    species.append({"name": organism})
+            if species:
+                md["species"] = species
+
         md["name"] = raw_data["struct"]["title"]
         md["description"] = raw_data["struct"]["title"]
         md["_id"] = f"pdb_{raw_data['rcsb_id']}"
         md["identifier"] = raw_data["rcsb_id"]
         md["doi"] = f"10.2210/{md['_id']}/pdb"
-        md["author"] = [{"@type": "Person", "name": author["name"]} for author in raw_data["audit_author"]]
+        md["author"] = [
+            {"@type": "Person", "name": author["name"]}
+            for author in raw_data["audit_author"]
+        ]
         if citations := raw_data.get("citation"):
             md["citedBy"] = [getCitation(citation) for citation in citations]
 
         if raw_data.get("exptl"):
-            md["measurementTechnique"] = [{"name": technique["method"].lower()} for technique in raw_data["exptl"]]
+            md["measurementTechnique"] = [
+                {"name": technique["method"].lower()} for technique in raw_data["exptl"]
+            ]
         if "pdbx_audit_support" in raw_data.keys():
             funding_list = []
             for funder in raw_data["pdbx_audit_support"]:
@@ -183,7 +199,9 @@ def getPDBmetadata(id):
             "versionDate": today,
         }
         if "rcsb_external_references" in raw_data.keys():
-            md["sameAs"] = [link["link"] for link in raw_data["rcsb_external_references"]]
+            md["sameAs"] = [
+                link["link"] for link in raw_data["rcsb_external_references"]
+            ]
         return md
     else:
         # logger.info(f"ID {id} returned an error from the API")

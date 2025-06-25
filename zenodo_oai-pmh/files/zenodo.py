@@ -18,7 +18,7 @@ class Zenodo(OAIDatabase):
     SQL_DB = "zenodo.db"
     EXPIRE = datetime.timedelta(days=180)
 
-    INTERVAL = {"days": 60}
+    INTERVAL = {"days": 5}
 
     HOST = "https://zenodo.org/oai2d"
     METADATA_PREFIX = "oai_datacite"

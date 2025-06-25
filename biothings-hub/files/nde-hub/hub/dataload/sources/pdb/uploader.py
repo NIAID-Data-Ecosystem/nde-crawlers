@@ -22,5 +22,6 @@ class PDB_Uploader(NDESourceUploader):
     @nde_upload_wrapper
     def load_data(self, data_folder):
         docs = corrections(data_folder)
+        docs = standardize_data(docs)
         for doc in docs:
             yield doc
