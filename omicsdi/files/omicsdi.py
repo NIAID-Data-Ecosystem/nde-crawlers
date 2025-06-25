@@ -32,6 +32,7 @@ def should_retry(exception):
             return False
     return True
 
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_fixed(2),
@@ -48,6 +49,7 @@ def fetch_url(url):
     response = requests.get(url, timeout=30)
     response.raise_for_status()  # Raise an error if the request fails
     return response
+
 
 def get_dataset_names():
     """
@@ -123,7 +125,9 @@ def process_dataset_records(dataset_name, queue):
         url = f"{base_url}{dataset_id}"
         try:
             response = fetch_url(url).json()
-            data = parse(response, dataset_name, dataset_id, url)
+            data = parse(
+                response, dataset_name, dataset_id, f"https://www.omicsdi.org/dataset/{dataset_name}/{dataset_id}"
+            )
             if data:
                 queue.put(data)
         except Exception as e:
