@@ -358,7 +358,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "analyzer": "nde_analyzer",
                 "copy_to": ["all"],
-                "fields": {"raw": {"type": "keyword"}},
+                "fields": {"raw": {"type": "text"}},
             },
             "disambiguatingDescription": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "discussionUrl": {"type": "text", "copy_to": ["all"]},
@@ -769,7 +769,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "copy_to": ["all"],
                 "fields": {
                     "phrase_suggester": {"type": "text", "analyzer": "phrase_suggester"},
-                    "raw": {"type": "keyword"},
+                    "raw": {"type": "text"},
                 },
             },
             "nctid": {"type": "keyword", "copy_to": ["all"]},
