@@ -15,6 +15,56 @@ logger = logging.getLogger("nde-logger")
 
 DB_PATH = "/data/nde-hub/standardizers/pubtator_lookup/pubtator_lookup.db"
 
+# Drop list for filtering out place names commonly confused with organisms
+DROP_LIST_TERMS = {
+    # Term names to filter (case-insensitive)
+    "sonoma": {
+        "id": "1535511"
+    },
+    "china": {
+        "id": "3034371"
+    },
+    "nevada": {
+        "id": "359889"
+    },
+    "montana": {
+        "id": "441235"
+    }
+}
+
+
+def should_filter_term(term_name, identifier=None):
+    """
+    Check if a term should be filtered based on the drop list.
+
+    Args:
+        term_name (str): The name of the term to check
+        identifier (str): The identifier of the term (optional)
+
+    Returns:
+        bool: True if the term should be filtered, False otherwise
+    """
+    if not term_name:
+        return False
+
+    term_lower = term_name.lower().strip()
+
+    # Check by term name
+    if term_lower in DROP_LIST_TERMS:
+        logger.info(f"Filtering term '{term_name}': place name")
+        return True
+
+    # Check by identifier if provided
+    if identifier:
+        # Clean identifier (remove any prefixes/suffixes)
+        clean_id = identifier.split("*")[-1].strip()
+        for term_config in DROP_LIST_TERMS.values():
+            if term_config["id"] == clean_id:
+                logger.info(f"Filtering term '{term_name}' by ID {clean_id}: place name")
+                return True
+
+    return False
+
 
 def extract_values(doc_list, key):
     # Initialize an empty list to store the extracted values
@@ -134,6 +184,12 @@ def classify_as_host_or_agent(lineage):
 
 def get_species_details(original_name, identifier):
     logger.info(f"Getting details for {original_name}")
+
+    # Check if this term should be filtered out
+    should_filter = should_filter_term(original_name, identifier)
+    if should_filter:
+        logger.info(f"Skipping {original_name}: filtered by drop list")
+        return None
 
     # Fetch details from the UniProt API
     identifier = identifier.split("*")[-1]
@@ -442,6 +498,10 @@ def get_new_species(species):
                 # identifier
                 remove_dupes[pubtator_species_name][0][1],
             )
+            # Skip if the species was filtered out
+            if result_dict is None:
+                logger.info(f"Skipping {pubtator_species_name}, filtered by drop list")
+                continue
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute(
@@ -503,7 +563,7 @@ def fetch_data_from_db():
     return hc_dict, species_dict
 
 
-def process_section(section, cursor_dict):
+def process_section(section, cursor_dict, is_species_section=False):
     new_section_list = []
     for original_obj in section:
         if isinstance(original_obj, str):
@@ -519,8 +579,23 @@ def process_section(section, cursor_dict):
             new_section_list.append(original_obj)
             continue
 
+        # Apply drop list filtering for species-related sections
+        if is_species_section:
+            should_filter = should_filter_term(original_name,
+                                               original_obj.get("identifier"))
+            if should_filter:
+                logger.info(f"Filtering out '{original_name}' from species section")
+                continue
+
         new_obj = lookup_item(original_name, cursor_dict)
         if new_obj:
+            # Check if the retrieved object should be filtered as well
+            if is_species_section:
+                should_filter = should_filter_term(new_obj.get("name"),
+                                                   new_obj.get("identifier"))
+                if should_filter:
+                    logger.info(f"Filtering out retrieved '{new_obj.get('name')}'")
+                    continue
             new_section_list.append(new_obj)
         else:
             new_section_list.append(original_obj)
@@ -545,7 +620,7 @@ def process_document(args):
 
     # Process sections using lookup dictionaries.
     new_health_conditions_list = process_section(health_conditions_list, hc_dict)
-    new_species_and_infectious_agents_list = process_section(species_list + infectious_agent_list, species_dict)
+    new_species_and_infectious_agents_list = process_section(species_list + infectious_agent_list, species_dict, is_species_section=True)
 
     def remove_duplicates_from_list(data_list):
         seen_identifiers = set()
@@ -689,3 +764,31 @@ def update_lookup_dict(health_conditions_list, species_list, infectious_agents_l
         logger.error(f"An error occurred while updating lookup dictionary: {e}")
         conn.close()
         raise
+
+
+def add_to_drop_list(term_name, ncbi_tax_id):
+    """
+    Add a new term to the drop list for filtering.
+
+    Args:
+        term_name (str): The name of the term to filter
+        ncbi_tax_id (str): The NCBI Taxonomy ID
+    """
+    DROP_LIST_TERMS[term_name.lower().strip()] = {
+        "id": str(ncbi_tax_id)
+    }
+    logger.info(f"Added '{term_name}' to drop list")
+
+
+def get_drop_list_summary():
+    """
+    Get a summary of all terms in the drop list.
+
+    Returns:
+        dict: Summary of drop list terms and their configurations
+    """
+    summary = {
+        "total_terms": len(DROP_LIST_TERMS),
+        "terms": DROP_LIST_TERMS
+    }
+    return summary
