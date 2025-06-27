@@ -769,7 +769,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "copy_to": ["all"],
                 "fields": {
                     "phrase_suggester": {"type": "text", "analyzer": "phrase_suggester"},
-                    "raw": {"type": "text"},
+                    "raw": {"type": "keyword"},
                 },
             },
             "nctid": {"type": "keyword", "copy_to": ["all"]},
