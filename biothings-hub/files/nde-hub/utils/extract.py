@@ -13,6 +13,45 @@ from .pubtator import DB_PATH as PUBTATOR_DB_PATH, query_condition
 
 DB_PATH = "/data/nde-hub/standardizers/extract_lookup/extract_lookup.db"
 
+# Advanced drop rules with NCBI Taxon IDs and filtering logic
+ADVANCED_DROP_RULES = {
+    "other sequences": {
+        "id": "28384",
+        "ignore_children": True,
+        "rationale": "EXTRACT does not do this well. PubTator seems to do better"
+    },
+    "collection": {
+        "id": "1768868",
+        "ignore_children": False,
+        "rationale": "too easy for EXTRACT to get this wrong"
+    },
+    "omicron": {
+        "id": "2613138",
+        "ignore_children": True,
+        "rationale": "COVID-19 confusion, EXTRACT will get it wrong"
+    },
+    "sonoma": {
+        "id": "1535511",
+        "ignore_children": False,
+        "rationale": "Likelihood it's a place rather than organism is very high"
+    },
+    "china": {
+        "id": "3034371",
+        "ignore_children": False,
+        "rationale": "Likelihood it's a place rather than organism is very high"
+    },
+    "nevada": {
+        "id": "359889",
+        "ignore_children": False,
+        "rationale": "Likelihood it's a place rather than organism is very high"
+    },
+    "montana": {
+        "id": "441235",
+        "ignore_children": False,
+        "rationale": "Likelihood it's a place rather than organism is very high"
+    }
+}
+
 
 # Function to query the EXTRACT API
 def query_extract_api(description, entity_type):
@@ -43,11 +82,44 @@ def parse_tsv(ndeid, text_response):
 def extract(doc_list):
     logger.info("Processing descriptions...")
     count = 0
+
+    # Enhanced drop list with specific filtering rules
     drop_list = {
-        "tonga", "alabama", "nevada", "argentina", "namibia", "panama",
-        "virginia", "bulgaria", "togo", "china", "serendip", "arizona",
-        "california", "montana",
+        "tonga", "alabama", "argentina", "namibia", "panama",
+        "virginia", "bulgaria", "togo", "serendip", "arizona",
+        "california", "omicron", "sonoma"
     }
+
+    def should_filter_entity(entity):
+        """
+        Check if an entity should be filtered based on drop rules.
+
+        Args:
+            entity: The extracted entity dict with 'extracted_text' and 'onto_id'
+
+        Returns:
+            tuple: (should_filter: bool, reason: str)
+        """
+        extracted_text = entity["extracted_text"].lower()
+        onto_id = entity.get("onto_id", "")
+
+        # Check simple drop list first
+        if extracted_text in drop_list:
+            return True, f"Found '{extracted_text}' in basic drop list"
+
+        # Check advanced drop rules
+        for term_name, rule in ADVANCED_DROP_RULES.items():
+            term_id = rule["id"]
+
+            # Check if this is the exact term we want to filter
+            if extracted_text == term_name.lower() or onto_id.endswith(term_id):
+                return True, f"Found '{extracted_text}' matching drop rule for '{term_name}': {rule['rationale']}"
+
+            # Check if we should filter children of this term
+            if rule["ignore_children"] and onto_id.endswith(term_id):
+                return True, f"Found child of '{term_name}' (ID: {term_id}): {rule['rationale']}"
+
+        return False, ""
 
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
@@ -87,11 +159,12 @@ def extract(doc_list):
                         logger.info(
                             f"Found {len(extracted_entities)} entities of type {entity_type}")
                     for entity in extracted_entities:
-                        extracted_text = entity["extracted_text"].lower()
-                        if extracted_text in drop_list:
-                            logger.info(
-                                f"Found {extracted_text} in drop list. Skipping...")
+                        # Check if entity should be filtered using enhanced rules
+                        should_filter, filter_reason = should_filter_entity(entity)
+                        if should_filter:
+                            logger.info(f"Filtering entity '{entity['extracted_text']}': {filter_reason}")
                             continue
+
                         if entity["entity_type"] == "-2":
                             # Add species from extraction and tag with fromEXTRACT=True
                             doc.setdefault("species", [])
@@ -259,6 +332,10 @@ def insert_species(doc_list, species_mapping):
             filtered_species_names = filter_species_terms_for_ancestors(
                 species_mapping, species_names, lineage_info)
 
+            # Apply advanced drop rules filtering
+            filtered_species_names = filter_species_by_advanced_rules(
+                species_mapping, filtered_species_names)
+
             for entry in combined_entries:
                 name = entry.get("name")
                 from_extract = entry.get("fromEXTRACT", False)
@@ -329,7 +406,6 @@ def insert_species(doc_list, species_mapping):
                 doc.pop("infectiousAgent", None)
 
             logger.info(f"Updated species in document {doc['_id']}")
-    logger.info(f"After reassigning, doc[{doc['_id']}]: species={doc.get('species')}, infectiousAgent={doc.get('infectiousAgent')}")
     return doc_list
 
 def insert_disease(doc_list, disease_mapping):
@@ -624,10 +700,39 @@ def deduplicate_species(species_list):
 def deduplicate_species_in_docs(doc_list):
     """
     Iterate over documents and deduplicate the 'species' field.
+    Also applies advanced filtering rules.
     """
     for doc in doc_list:
         if "species" in doc:
+            # First deduplicate
             doc["species"] = deduplicate_species(doc["species"])
+
+            # Then apply advanced filtering
+            filtered_species = []
+            for species_entry in doc["species"]:
+                should_filter, reason = should_filter_species_entry(species_entry)
+                if should_filter:
+                    logger.info(f"Filtering species '{species_entry.get('name')}' from document {doc['_id']}: {reason}")
+                else:
+                    filtered_species.append(species_entry)
+
+            doc["species"] = filtered_species
+            if not doc["species"]:
+                doc.pop("species", None)
+
+        # Apply same filtering to infectiousAgent
+        if "infectiousAgent" in doc:
+            filtered_agents = []
+            for agent_entry in doc["infectiousAgent"]:
+                should_filter, reason = should_filter_species_entry(agent_entry)
+                if should_filter:
+                    logger.info(f"Filtering infectiousAgent '{agent_entry.get('name')}' from document {doc['_id']}: {reason}")
+                else:
+                    filtered_agents.append(agent_entry)
+
+            doc["infectiousAgent"] = filtered_agents
+            if not doc["infectiousAgent"]:
+                doc.pop("infectiousAgent", None)
     return doc_list
 
 
@@ -825,3 +930,82 @@ def process_descriptions(data):
     updated_docs = deduplicate_diseases(updated_docs)
     for doc in updated_docs:
         yield doc
+
+def filter_species_by_advanced_rules(species_mapping, species_list):
+    """
+    Filter species based on advanced drop rules, checking both direct matches and lineage.
+
+    Args:
+        species_mapping: Dict mapping species names to their details
+        species_list: List of species names to filter
+
+    Returns:
+        List of species names that should be kept (not filtered)
+    """
+    to_remove = set()
+
+    for species in species_list:
+        details = species_mapping.get(species.lower())
+        if not details:
+            continue
+
+        identifier = details.get("identifier", "")
+        lineage = details.get("lineage", [])
+        lineage_ids = {str(item.get("taxId", "")) for item in lineage if item.get("taxId")}
+
+        # Check each advanced drop rule
+        for term_name, rule in ADVANCED_DROP_RULES.items():
+            term_id = rule["id"]
+
+            # Check if this species is the exact term we want to filter
+            if species.lower() == term_name.lower() or identifier == term_id:
+                logger.info(f"Filtering species '{species}' - matches drop rule for '{term_name}': {rule['rationale']}")
+                to_remove.add(species)
+                break
+
+            # Check if we should filter children of this term
+            if rule["ignore_children"] and term_id in lineage_ids:
+                logger.info(f"Filtering species '{species}' - child of '{term_name}' (ID: {term_id}): {rule['rationale']}")
+                to_remove.add(species)
+                break
+
+    filtered_species = [species for species in species_list if species not in to_remove]
+    if to_remove:
+        logger.info(f"Filtered out {len(to_remove)} species based on advanced drop rules: {to_remove}")
+
+    return filtered_species
+
+def should_filter_species_entry(entry, species_mapping=None):
+    """
+    Check if a species entry should be filtered based on advanced drop rules.
+
+    Args:
+        entry: Species entry dict with 'name', 'identifier', etc.
+        species_mapping: Optional mapping to get lineage info
+
+    Returns:
+        tuple: (should_filter: bool, reason: str)
+    """
+    name = entry.get("name", "").lower()
+    identifier = entry.get("identifier", "")
+
+    # Get lineage information if species_mapping is provided
+    lineage_ids = set()
+    if species_mapping and name in species_mapping:
+        details = species_mapping[name]
+        lineage = details.get("lineage", [])
+        lineage_ids = {str(item.get("taxId", "")) for item in lineage if item.get("taxId")}
+
+    # Check each advanced drop rule
+    for term_name, rule in ADVANCED_DROP_RULES.items():
+        term_id = rule["id"]
+
+        # Check if this species is the exact term we want to filter
+        if name == term_name.lower() or identifier == term_id:
+            return True, f"Matches drop rule for '{term_name}': {rule['rationale']}"
+
+        # Check if we should filter children of this term
+        if rule["ignore_children"] and term_id in lineage_ids:
+            return True, f"Child of '{term_name}' (ID: {term_id}): {rule['rationale']}"
+
+    return False, ""

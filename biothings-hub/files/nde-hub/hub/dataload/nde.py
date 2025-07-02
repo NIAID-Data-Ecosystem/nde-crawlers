@@ -354,7 +354,12 @@ class NDESourceUploader(BaseSourceUploader):
             "dateCreated": {"type": "date"},
             "dateModified": {"type": "date"},
             "datePublished": {"type": "date"},
-            "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+            "description": {
+                "type": "text",
+                "analyzer": "nde_analyzer",
+                "copy_to": ["all"],
+                "fields": {"raw": {"type": "text"}},
+            },
             "disambiguatingDescription": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "discussionUrl": {"type": "text", "copy_to": ["all"]},
             "distribution": {
@@ -382,7 +387,12 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "featureList": {
                 "properties": {
-                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"], "fields": {"raw": {"type": "keyword"}}},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
                     "url": {"type": "text", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                 }
@@ -516,7 +526,12 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "description": {"type": "text"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"], "fields": {"raw": {"type": "keyword"}}},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
                     "encodingFormat": {
                         "properties": {
                             "name": {
@@ -768,7 +783,12 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "keyword"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"], "fields": {"raw": {"type": "keyword"}}},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
                     "encodingFormat": {
                         "properties": {
                             "name": {
