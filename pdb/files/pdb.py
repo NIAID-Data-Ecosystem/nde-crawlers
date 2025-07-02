@@ -108,6 +108,7 @@ def get_PDB_ids():
     index = 0
     length = None
     while True:
+        logger.info(f"Fetching PDB IDs starting from index {index}")
         ids, length = paginate_through_PDB_ids(index)
         if not ids:
             logger.warning(f"breaking index {index} length {length}, no new ids found")
@@ -118,7 +119,6 @@ def get_PDB_ids():
         logger.info(f"index: {index}")
         if length is not None and index >= length:
             break
-        break
 
 
 def parse():

@@ -85,6 +85,7 @@ def parse_file(doc, accno):
                     continue
 
                 if key == "attachto":
+                    value = value.casefold().replace(" ", "")
                     output["url"] = f"https://www.ebi.ac.uk/{value}/studies/{accno}"
                     output["includedInDataCatalog"]["dataset"] = output["url"]
                 elif key == "releasedate":
@@ -150,7 +151,7 @@ def parse_file(doc, accno):
                             output["species"].append(species)
                         else:
                             output["species"] = [species]
-                    elif key == "method" or key == "study type" or "experimental design":
+                    elif key == "method" or key == "study type" or key == "experimental design":
                         attribute.pop("valqual", None)
                         mt = {"name": value}
                         if output.get("measurementTechnique"):
