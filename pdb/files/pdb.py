@@ -2,7 +2,7 @@ import logging
 from datetime import date
 
 import requests
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
 # Create a logger called "nde_crawlers"
 logging.basicConfig(level=logging.INFO)
@@ -25,13 +25,23 @@ def print_retry_message(retry_state):
 
 
 # Define a retryable function for making POST requests
-@retry(stop=stop_after_attempt(5), wait=wait_fixed(2), after=print_retry_message)
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_fixed(2),
+    after=print_retry_message,
+    retry=retry_if_result(lambda resp: resp is not None and resp.get("result_set") is None),
+)
 def retryable_post(url, payload):
     response = requests.post(url, json=payload)
     if response.status_code == 999:
         logger.info("received end of PDB ids")
         return None
-    return response.json()
+    try:
+        resp_json = response.json()
+    except Exception as e:
+        logger.error(f"Error decoding JSON: {e}")
+        return {"result_set": None}  # triggers retry
+    return resp_json
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_fixed(2))
