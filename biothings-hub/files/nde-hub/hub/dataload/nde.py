@@ -750,8 +750,10 @@ class NDESourceUploader(BaseSourceUploader):
             "license": {"type": "text"},
             "measurementTechnique": {
                 "properties": {
+                    "@type": {"type": "text"},
                     "description": {"type": "text"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",

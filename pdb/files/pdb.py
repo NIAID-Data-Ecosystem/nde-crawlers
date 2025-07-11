@@ -108,9 +108,7 @@ def paginate_through_PDB_ids(index=0):
     if response is None:
         return None, None
 
-    ids = [
-        (i["identifier"], i["data"].get("organisms")) for i in response["result_set"]
-    ]
+    ids = [(i["identifier"], i["data"].get("organisms")) for i in response["result_set"]]
     return ids, response["result_set_count"]
 
 
@@ -177,17 +175,108 @@ def getPDBmetadata(id, organisms):
         md["_id"] = f"pdb_{raw_data['rcsb_id']}"
         md["identifier"] = raw_data["rcsb_id"]
         md["doi"] = f"10.2210/{md['_id']}/pdb"
-        md["author"] = [
-            {"@type": "Person", "name": author["name"]}
-            for author in raw_data["audit_author"]
-        ]
+        md["author"] = [{"@type": "Person", "name": author["name"]} for author in raw_data["audit_author"]]
         if citations := raw_data.get("citation"):
             md["citedBy"] = [getCitation(citation) for citation in citations]
 
         if raw_data.get("exptl"):
-            md["measurementTechnique"] = [
-                {"name": technique["method"].lower()} for technique in raw_data["exptl"]
-            ]
+            mt_dict = {
+                "x-ray diffraction": {
+                    "@type": "DefinedTerm",
+                    "name": "X-ray diffraction",
+                    "url": "http://purl.obolibrary.org/obo/CHMO_0000156",
+                    "inDefinedTermSet": "CHMO",
+                },
+                "solution nmr": {
+                    "@type": "DefinedTerm",
+                    "name": "solution-state nuclear magnetic resonance spectroscopy",
+                    "url": "http://purl.obolibrary.org/obo/CHMO_0002397",
+                    "inDefinedTermSet": "CHMO",
+                },
+                "electron microscopy": {
+                    "@type": "DefinedTerm",
+                    "name": "electron microscopy",
+                    "url": "http://purl.obolibrary.org/obo/CHMO_0000068",
+                    "inDefinedTermSet": "CHMO",
+                },
+                "neutron diffraction": {
+                    "@type": "DefinedTerm",
+                    "name": "neutron diffraction",
+                    "url": "http://purl.obolibrary.org/obo/CHMO_0000698",
+                    "inDefinedTermSet": "CHMO",
+                },
+                "solid-state nmr": {
+                    "@type": "DefinedTerm",
+                    "name": "solid-state nuclear magnetic resonance spectroscopy",
+                    "url": "http://purl.obolibrary.org/obo/CHMO_0000614",
+                    "inDefinedTermSet": "CHMO",
+                },
+                "powder diffraction": {
+                    "@type": "DefinedTerm",
+                    "name": "powder X-ray diffraction",
+                    "url": "http://purl.obolibrary.org/obo/CHMO_0000158",
+                    "inDefinedTermSet": "CHMO",
+                },
+                "fluorescence transfer": {
+                    "@type": "DefinedTerm",
+                    "name": "fluorescence resonance energy transfer",
+                    "url": "http://purl.obolibrary.org/obo/CHMO_0000064",
+                    "inDefinedTermSet": "CHMO",
+                },
+                "epr": {
+                    "@type": "DefinedTerm",
+                    "name": "electron paramagnetic resonance spectroscopy",
+                    "url": "http://purl.obolibrary.org/obo/MMO_0000710",
+                    "inDefinedTermSet": "MMO",
+                },
+                "infrared spectroscopy": {
+                    "@type": "DefinedTerm",
+                    "name": "Infrared Spectroscopy",
+                    "url": "http://purl.uniprot.org/core/Fiber_Diffraction",
+                    "inDefinedTermSet": "UNIPROT",
+                },
+                "fiber diffraction": {
+                    "@type": "DefinedTerm",
+                    "name": "Fiber Diffraction",
+                    "url": "http://purl.uniprot.org/core/Fiber_Diffraction",
+                    "inDefinedTermSet": "UNIPROT",
+                },
+                "electron crystallography": [
+                    {
+                        "@type": "DefinedTerm",
+                        "name": "electron diffraction",
+                        "url": "http://purl.obolibrary.org/obo/CHMO_0000142",
+                        "inDefinedTermSet": "CHMO",
+                    },
+                    {
+                        "@type": "DefinedTerm",
+                        "name": "Crystallography",
+                        "url": "http://purl.obolibrary.org/obo/NCIT_C16476",
+                        "inDefinedTermSet": "NCIT",
+                    },
+                ],
+                "solution scattering": {
+                    "@type": "DefinedTerm",
+                    "name": "small-angle scattering 3D molecular structure determination assay",
+                    "url": "http://purl.obolibrary.org/obo/OBI_0002108",
+                    "inDefinedTermSet": "OBI",
+                },
+                "theoretical model": {
+                    "@type": "DefinedTerm",
+                    "name": "In Silico Modeling",
+                    "url": "http://purl.obolibrary.org/obo/NCIT_C189092",
+                    "inDefinedTermSet": "CHMO",
+                },
+            }
+            for technique in raw_data["exptl"]:
+                if technique["method"].lower() in mt_dict:
+                    if isinstance(mt_dict[technique["method"].lower()], list):
+                        # If the technique has multiple entries, extend the list
+                        md.setdefault("measurementTechnique", []).extend(mt_dict[technique["method"].lower()])
+                    else:
+                        # Otherwise, just append the single entry
+                        md.setdefault("measurementTechnique", []).append(mt_dict[technique["method"].lower()])
+
         if "pdbx_audit_support" in raw_data.keys():
             funding_list = []
             for funder in raw_data["pdbx_audit_support"]:
@@ -209,9 +298,7 @@ def getPDBmetadata(id, organisms):
             "versionDate": today,
         }
         if "rcsb_external_references" in raw_data.keys():
-            md["sameAs"] = [
-                link["link"] for link in raw_data["rcsb_external_references"]
-            ]
+            md["sameAs"] = [link["link"] for link in raw_data["rcsb_external_references"]]
         return md
     else:
         # logger.info(f"ID {id} returned an error from the API")
