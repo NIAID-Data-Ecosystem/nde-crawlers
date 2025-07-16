@@ -24,4 +24,5 @@ class PDB_Uploader(NDESourceUploader):
         docs = corrections(data_folder)
         docs = standardize_data(docs)
         for doc in docs:
-            yield doc
+            if doc.get("infectiousAgent"):
+                yield doc
