@@ -966,6 +966,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "topicCategory": {
                 "properties": {
+                    "@type": {"type": "text"},
                     "curatedBy": {
                         "properties": {
                             "dateModified": {"type": "date"},

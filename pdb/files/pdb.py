@@ -161,6 +161,11 @@ def getPDBmetadata(id, organisms):
                 "url": "https://www.rcsb.org/",
                 "versionDate": date.today().isoformat(),
             },
+            "topicCategory": {
+                "@type": "DefinedTerm",
+                "url": "http://edamontology.org/topic_2814",
+                "inDefinedTermSet": "EDAM",
+            },
         }
         if organisms:
             species = []
