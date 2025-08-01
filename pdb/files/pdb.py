@@ -182,7 +182,7 @@ def getPDBmetadata(id, organisms):
         md["doi"] = f"10.2210/{md['_id']}/pdb"
         md["author"] = [{"@type": "Person", "name": author["name"]} for author in raw_data["audit_author"]]
         if citations := raw_data.get("citation"):
-            md["citedBy"] = [getCitation(citation) for citation in citations]
+            md["citation"] = [getCitation(citation) for citation in citations]
 
         if raw_data.get("exptl"):
             mt_dict = {
