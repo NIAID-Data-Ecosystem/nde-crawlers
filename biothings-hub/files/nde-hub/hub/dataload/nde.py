@@ -820,7 +820,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "keyword", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "keyword"},
                 }
             },
