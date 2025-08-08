@@ -44,5 +44,23 @@ class MalariaGenItemProcessorPipeline:
 
         item["isAccessibleForFree"] = True
 
+        item["topicCategory"] = [
+            {
+                "@type": "DefinedTerm",
+                "url": "http://edamontology.org/topic_0199",
+                "inDefinedTermSet": "EDAM",
+            },
+            {
+                "@type": "DefinedTerm",
+                "url": "http://edamontology.org/topic_0622",
+                "inDefinedTermSet": "EDAM",
+            },
+            {
+                "@type": "DefinedTerm",
+                "url": "http://edamontology.org/topic_3324",
+                "inDefinedTermSet": "EDAM",
+            },
+        ]
+
         cleaned_item = dict_sweep(item, vals=[None, "", [], {}])
         return cleaned_item

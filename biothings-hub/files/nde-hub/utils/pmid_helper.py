@@ -422,6 +422,27 @@ def _convert_pmc(pmc_list, pmc_dict):
     time.sleep(0.5)
 
 
+@retry(7, 5)
+def _convert_doi(doi, doi_dict):
+    api_key = GEO_API_KEY
+    email = GEO_EMAIL
+    Entrez.email = email
+    if api_key:
+        Entrez.api_key = api_key
+
+    if doi not in doi_dict:
+        term = f"{doi}[DOI]"
+        handle = Entrez.esearch(db="pubmed", term=term, retmode="json")
+        data = json.loads(handle.read())
+        handle.close()
+        pmids = data.get("esearchresult", {}).get("idlist", [])
+        doi_dict[doi] = pmids[0] if pmids else None
+        if api_key:
+            time.sleep(0.05)
+        else:
+            time.sleep(0.35)
+
+
 def _get_pub_date(date: str):
     """helper method to solve the problem transforming dates such as "2000 Spring" into date().isoformat dates
 
@@ -628,6 +649,8 @@ def load_pmid_ctfd(data_folder):
             pmid_list = []
             # docs to yield for each batch query
             doc_list = []
+            # dict to convert dois to pmids
+            doi_pmid = {}
 
             # to make batch api query take the next 1000 docs and collect all the pmids
             next_n_lines = list(islice(f, 1000))
@@ -646,6 +669,13 @@ def load_pmid_ctfd(data_folder):
                         _convert_pmc(pmc_list, pmc_pmid)
                     pmc_list += pmcs
 
+                if citations := doc.get("citation"):
+                    if not isinstance(citations, list):
+                        citations = [citations]
+                    for citation in citations:
+                        if doi := citation.get("doi"):
+                            _convert_doi(doi, doi_pmid)
+
             # make request to pmc convertor
             if pmc_list:
                 _convert_pmc(pmc_list, pmc_pmid)
@@ -659,6 +689,14 @@ def load_pmid_ctfd(data_folder):
                             doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
                         else:
                             logger.info("There is an issue with this PMCID. PMCID: %s, rec_id: %s", pmc, doc["_id"])
+                if citations := doc.get("citation", None):
+                    if not isinstance(citations, list):
+                        citations = [citations]
+                    for citation in citations:
+                        if doi := citation.get("doi"):
+                            if pmid := doi_pmid.get(doi):
+                                doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
+
                     doc_list[loc] = doc
                 if pmids := doc.get("pmids"):
                     pmid_list += [pmid.strip() for pmid in pmids.split(",")]
@@ -765,6 +803,8 @@ def load_pmid_ctfd_wrapper(func):
             pmid_list = []
             # docs to yield for each batch query
             doc_list = []
+            # dict to convert dois to pmids
+            doi_pmid = {}
 
             # to make batch api query take the next 1000 docs and collect all the pmids
             next_n_lines = list(islice(data, 1000))
@@ -782,6 +822,12 @@ def load_pmid_ctfd_wrapper(func):
                     if (len(pmc_list) + len(pmcs)) >= 200:
                         _convert_pmc(pmc_list, pmc_pmid)
                     pmc_list += pmcs
+                if citations := doc.get("citation"):
+                    if not isinstance(citations, list):
+                        citations = [citations]
+                    for citation in citations:
+                        if doi := citation.get("doi"):
+                            _convert_doi(doi, doi_pmid)
 
             # make request to pmc convertor
             if pmc_list:
@@ -796,6 +842,14 @@ def load_pmid_ctfd_wrapper(func):
                             doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
                         else:
                             logger.info("There is an issue with this PMCID. PMCID: %s, rec_id: %s", pmc, doc["_id"])
+                if citations := doc.get("citation", None):
+                    if not isinstance(citations, list):
+                        citations = [citations]
+                    for citation in citations:
+                        if doi := citation.get("doi"):
+                            if pmid := doi_pmid.get(doi):
+                                doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
+
                     doc_list[loc] = doc
                 if pmids := doc.get("pmids"):
                     pmid_list += [pmid.strip() for pmid in pmids.split(",")]
