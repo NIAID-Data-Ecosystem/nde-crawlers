@@ -3,6 +3,7 @@ import json
 
 # import time
 import logging
+import re
 
 # from xml.etree import ElementTree
 from oai_helper import oai_helper
@@ -171,12 +172,67 @@ class Figshare(NDEDatabase):
                 output["license"] = license[0]
             if issued := metadata.get("issued"):
                 output["datePublished"] = issued[0]
-            if sponsor := metadata.get("sponsor"):
-                grantnumber = metadata.get("grantnumber")
-                if grantnumber:
-                    output["funding"] = {"funder": {"name": sponsor[0], "identifier": grantnumber[0]}}
-                else:
-                    output["funding"] = {"funder": {"name": sponsor[0]}}
+
+            # Funding extraction:
+            # Figshare's uketd_dc sometimes places the actual grant identifier in the <sponsor> tag
+            # while <grantnumber> can be missing or a placeholder like "0". We attempt to:
+            #  1. Use grantnumber as identifier when it looks valid.
+            #  2. Detect NIH-style (or similar) grant identifiers inside sponsor when grantnumber is invalid.
+            #  3. Support multiple sponsors/grantnumbers, returning a list if >1.
+            #  4. Only include fields that have content.
+            if sponsors := metadata.get("sponsor"):
+                grantnumbers = metadata.get("grantnumber") or []
+
+                def is_invalid(val: str) -> bool:
+                    return val is None or val.strip().lower() in {"0", "na", "n/a", "", "none", "null"}
+
+                # Regex: two letters followed by 6 digits (basic IC code + project number pattern)
+                grant_pattern = re.compile(r"\b[A-Za-z]{2}\d{6}\b")
+
+                fundings = []
+                for idx, sponsor_val in enumerate(sponsors):
+                    sponsor_val = sponsor_val.strip() if sponsor_val else sponsor_val
+                    grant_val = grantnumbers[idx] if idx < len(grantnumbers) else None
+                    grant_val = grant_val.strip() if isinstance(grant_val, str) else grant_val
+
+                    funding_record = {}
+
+                    # Case 1: valid grantnumber provided
+                    if grant_val and not is_invalid(grant_val):
+                        # sponsor is treated as funder name
+                        if sponsor_val:
+                            funding_record["funder"] = {"name": sponsor_val}
+                        funding_record["identifier"] = grant_val
+                    else:
+                        # grantnumber invalid. Check if sponsor itself contains a grant id.
+                        identifier_match = None
+                        if sponsor_val:
+                            # direct entire sponsor value matches the pattern
+                            if grant_pattern.fullmatch(sponsor_val):
+                                identifier_match = sponsor_val
+                            else:
+                                # search inside sponsor string
+                                inner = grant_pattern.search(sponsor_val)
+                                if inner:
+                                    identifier_match = inner.group(0)
+                        if identifier_match:
+                            # Use detected identifier. If sponsor contained extra text, keep as funder name too.
+                            funding_record["identifier"] = identifier_match
+                            # If sponsor has more than just the identifier, store original as name
+                            if sponsor_val and sponsor_val != identifier_match:
+                                funding_record["funder"] = {"name": sponsor_val}
+                        else:
+                            # No identifier; just treat sponsor as funder name
+                            if sponsor_val:
+                                funding_record["funder"] = {"name": sponsor_val}
+
+                    # Only append if we captured something meaningful
+                    if funding_record:
+                        fundings.append(funding_record)
+
+                if fundings:
+                    # Flatten to single dict if only one funding entry
+                    output["funding"] = fundings[0] if len(fundings) == 1 else fundings
 
             yield output
 
