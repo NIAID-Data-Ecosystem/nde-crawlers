@@ -161,11 +161,28 @@ def getPDBmetadata(id, organisms):
                 "url": "https://www.rcsb.org/",
                 "versionDate": date.today().isoformat(),
             },
+            "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+            "conditionsOfAccess": "Open",
+            "usageInfo": "https://www.rcsb.org/pages/policies",
             "topicCategory": {
                 "@type": "DefinedTerm",
                 "url": "http://edamontology.org/topic_2814",
                 "inDefinedTermSet": "EDAM",
             },
+            "variableMeasured": [
+                {
+                    "@type": "DefinedTerm",
+                    "name": "Resolution",
+                    "url": "http://purl.obolibrary.org/obo/NCIT_C47876",
+                    "inDefinedTermSet": "NCIT",
+                },
+                {
+                    "@type": "DefinedTerm",
+                    "name": "Protein Structure",
+                    "url": "http://edamontology.org/data_1460",
+                    "inDefinedTermSet": "EDAM",
+                },
+            ],
         }
         if organisms:
             species = []
@@ -293,6 +310,26 @@ def getPDBmetadata(id, organisms):
 
         md["datePublished"] = raw_data["rcsb_accession_info"]["deposit_date"][0:10]
         md["dateModified"] = raw_data["rcsb_accession_info"]["revision_date"][0:10]
+        md["distribution"] = [
+            {
+                "@type": "DataDownload",
+                "contentUrl": f"https://www.rcsb.org/fasta/entry/{id}",
+                "encodingFormat": "FASTA",
+                "dateModified": md["dateModified"],
+            },
+            {
+                "@type": "DataDownload",
+                "contentUrl": f"https://files.rcsb.org/download/{id}.cif",
+                "encodingFormat": "PDBx/mmCIF",
+                "dateModified": md["dateModified"],
+            },
+            {
+                "@type": "DataDownload",
+                "contentUrl": f"https://files.rcsb.org/download/{id}.xml.gz",
+                "encodingFormat": "PDB XML",
+                "dateModified": md["dateModified"],
+            },
+        ]
         if raw_data.get("struct_keywords"):
             md["keywords"] = getKeywords(raw_data)
         md["url"] = url
