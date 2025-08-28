@@ -371,7 +371,18 @@ def getCitation(citation):
 
 def getFunding(funding):
     if name := funding.get("funding_organization"):
-        funder = {"@type": "Organization", "name": name}
+        # Clean up NIH funder names
+        cleaned_name = name
+
+        # Remove "National Institutes of Health/" prefix
+        if cleaned_name.startswith("National Institutes of Health/"):
+            cleaned_name = cleaned_name.replace("National Institutes of Health/", "")
+
+        # Remove "NIH/" from within parentheses but keep the parentheses and acronym
+        import re
+        cleaned_name = re.sub(r'\(NIH/([^)]*)\)', r'(\1)', cleaned_name)
+
+        funder = {"@type": "Organization", "name": cleaned_name.strip()}
         obj = {"@type": "MonetaryGrant", "funder": funder}
         if "grant_number" in funding.keys():
             obj["identifier"] = funding["grant_number"]
