@@ -1,5 +1,6 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.corrections import corrections
+from utils.funding_helper import standardize_funding
 from utils.pubtator import standardize_data
 from utils.utils import nde_upload_wrapper
 
@@ -23,6 +24,7 @@ class PDB_Uploader(NDESourceUploader):
     def load_data(self, data_folder):
         docs = corrections(data_folder)
         docs = standardize_data(docs)
+        docs = standardize_funding(docs)
         for doc in docs:
             if doc.get("infectiousAgent"):
                 yield doc
