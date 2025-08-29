@@ -29,7 +29,7 @@ class PDB_Uploader(NDESourceUploader):
             if doc.get("infectiousAgent") or any(
                 funder.get("identifier") == "https://ror.org/043z4tv69"
                 for funding in doc.get("funding", [])
-                for funder in (funding.get("funder"),)
+                for funder in funding.get("funder", [])
                 if isinstance(funder, dict)
             ):
                 yield doc
