@@ -163,12 +163,21 @@ def getPDBmetadata(id, organisms):
             },
             "license": "https://creativecommons.org/publicdomain/zero/1.0/",
             "conditionsOfAccess": "Open",
-            "usageInfo": "https://www.rcsb.org/pages/policies",
-            "topicCategory": {
+            "usageInfo": {"url": "https://www.rcsb.org/pages/policies"},
+            "topicCategory": [
+                {
                 "@type": "DefinedTerm",
                 "url": "http://edamontology.org/topic_2814",
-                "inDefinedTermSet": "EDAM",
-            },
+                "name": "Protein structure analysis",
+                "inDefinedTermSet": "EDAM"
+                },
+                {
+                "@type": "DefinedTerm",
+                "url": "http://edamontology.org/topic_0123",
+                "name": "Protein properties",
+                "inDefinedTermSet": "EDAM"
+                }
+            ],
             "variableMeasured": [
                 {
                     "@type": "DefinedTerm",
