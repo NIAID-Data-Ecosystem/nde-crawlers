@@ -178,7 +178,7 @@ def parse():
                             fundings.append(funding)
                         else:
                             author = {
-                                "@type": ("Organization" if title.casefold() in organization_list else "person"),
+                                "@type": ("Organization" if title.casefold() in organization_list else "Person"),
                                 "name": name,
                                 "affiliation": {"name": institution},
                             }
