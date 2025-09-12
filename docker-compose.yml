@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   # when updating changes to code: "docker-compose up --detach --build nde-hub"
   ncbi_geo-crawler:
