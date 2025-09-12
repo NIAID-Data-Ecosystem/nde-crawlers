@@ -120,11 +120,11 @@ class FlowRepositoryItemProcessorPipeline:
             # check if there is more than one date
             if len(dates) > 1:
                 end_date = datetime.datetime.strptime(dates[1], "%Y-%m-%d").date().isoformat()
-                output["temporalCoverage"] = {"temporalInterval": {"@type": "TemporalInterval", "temporalType": "study date", "startDate": date, "endDate": end_date}}
+                output["temporalCoverage"] = {"@type": "TemporalInterval", "temporalType": "study date", "startDate": date, "endDate": end_date}
             elif re.findall(r"\d+-\d+-\d+.*-", temp_dates):
-                output["temporalCoverage"] = {"temporalInterval": {"@type": "TemporalInterval", "temporalType": "study date", "startDate": date}}
+                output["temporalCoverage"] = {"@type": "TemporalInterval", "temporalType": "study date", "startDate": date}
             else:
-                output["temporalCoverage"] = {"temporalInterval": {"@type": "TemporalInterval", "temporalType": "study date", "endDate": date}}
+                output["temporalCoverage"] = {"@type": "TemporalInterval", "temporalType": "study date", "endDate": date}
                 # I have not found an example of an end date yet.
                 logger.info("There is only end date. URL: %s", output["url"])
 

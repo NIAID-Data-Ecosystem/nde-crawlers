@@ -948,16 +948,12 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "temporalCoverage": {
                 "properties": {
-                    "temporalInterval": {
-                        "properties": {
-                            "@type": {"type": "text"},
-                            "duration": {"type": "text", "copy_to": ["all"]},
-                            "endDate": {"type": "date"},
-                            "name": {"type": "text"},
-                            "startDate": {"type": "date"},
-                            "temporalType": {"type": "text"},
-                        }
-                    }
+                    "@type": {"type": "text"},
+                    "duration": {"type": "text", "copy_to": ["all"]},
+                    "endDate": {"type": "date"},
+                    "name": {"type": "text"},
+                    "startDate": {"type": "date"},
+                    "temporalType": {"type": "text"},
                 }
             },
             "thumbnailUrl": {

@@ -184,7 +184,7 @@ def parse_study_info(study_info):
 
         if temporal_intervals:
             study_dict["temporalCoverage"] = [
-                {"temporalInterval": interval} for interval in temporal_intervals.values()
+                {"@type": "TemporalInterval", **interval} for interval in temporal_intervals.values()
             ]
 
     if approval_date := study_info.get("approvalDate"):

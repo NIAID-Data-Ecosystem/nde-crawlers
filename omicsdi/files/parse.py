@@ -326,7 +326,7 @@ def parse(record, dataset_name, _id, url):
         if start_date := additional.get("study_start_year"):
             try:
                 start_date = date_parse(start_date[0], ignoretz=True).date().isoformat()
-                output["temporalCoverage"] = {"temporalInterval": {"startDate": start_date}}
+                output["temporalCoverage"] = {"@type": "TemporalInterval", "startDate": start_date}
             except Exception as e:
                 logger.error(f"Error parsing date for study_start_year: {e}")
 

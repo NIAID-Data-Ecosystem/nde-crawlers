@@ -157,14 +157,14 @@ def parse(hit):
     if main_entity_of_page := hit.get("study_website_url"):
         output["mainEntityOfPage"] = main_entity_of_page.strip("{}")
 
-    temporal_coverage = {"@type": "temporalInterval", "temporalType": "study date"}
+    temporal_coverage = {"@type": "TemporalInterval", "temporalType": "study date"}
     if start_date := hit.get("studystartdate"):
         temporal_coverage["startDate"] = dateutil.parser.parse(start_date).date().isoformat()
     if end_date := hit.get("studyenddate"):
         temporal_coverage["endDate"] = dateutil.parser.parse(end_date).date().isoformat()
 
     if temporal_coverage.get("startDate") or temporal_coverage.get("endDate"):
-        output["temporalCoverage"] = {"temporalInterval": temporal_coverage}
+        output["temporalCoverage"] = {"@type": "TemporalInterval", **temporal_coverage}
 
     if variable_measured := hit.get("subject_array"):
         vms = []

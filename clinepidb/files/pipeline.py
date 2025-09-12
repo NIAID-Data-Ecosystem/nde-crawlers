@@ -124,17 +124,15 @@ def record_generator():
 
             temp_cov = record["attributes"].pop("Years")
             record["temporalCoverage"] = {
-                "temporalInterval": {
-                    "startDate": (temp_cov.split(" ")[0].replace(",", "")),
-                    "endDate": (temp_cov.split(" ")[-1]),
-                }
+                "@type": "TemporalInterval",
+                "startDate": (temp_cov.split(" ")[0].replace(",", "")),
+                "endDate": (temp_cov.split(" ")[-1]),
             }
             if not temp_cov:
                 record["temporalCoverage"] = {
-                    "temporalInterval": {
-                        "startDate": record["tables"]["StudyCharacteristicTable"][0]["Years"][0].replace(",", ""),
-                        "endDate": record["tables"]["StudyCharacteristicTable"][0]["Years"][-1],
-                    }
+                    "@type": "TemporalInterval",
+                    "startDate": record["tables"]["StudyCharacteristicTable"][0]["Years"][0].replace(",", ""),
+                    "endDate": record["tables"]["StudyCharacteristicTable"][0]["Years"][-1],
                 }
 
             # tables.StudyCharacteriticTable -- get these variables if the variables above are missing

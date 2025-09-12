@@ -120,14 +120,14 @@ class DryadItemProcessorPipeline:
                 for tc in temp_cov:
                     # we assume there will be a format 2-4 in a list
                     if date := self.format_date(tc):
-                        output["temporalCoverage"] = {"temporalInterval": {"endDate": date}}
+                        output["temporalCoverage"] = {"@type": "TemporalInterval", "endDate": date}
             else:
                 # we cannot assume format 2-4 is in the no list
                 if date := self.format_date(temp_cov):
                     pass
                 else:
                     date = datetime.datetime.strptime(temp_cov, "%Y").date().isoformat()
-                output["temporalCoverage"] = {"temporalInterval": {"endDate": date}}
+                output["temporalCoverage"] = {"@type": "TemporalInterval", "endDate": date}
 
             if not output.get("temporalCoverage"):
                 logger.info("No temporal coverage: " + " ".join(temp_cov))

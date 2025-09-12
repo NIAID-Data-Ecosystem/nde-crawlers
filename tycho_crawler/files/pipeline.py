@@ -140,10 +140,9 @@ class TychoItemProcessorPipeline:
                     elif date["type"]["value"].casefold() == "intervalequals":
                         output["temporalCoverage"] = [
                             {
-                                "temporalInterval": {
-                                    "startDate": date["date"].split("-")[0],
-                                    "endDate": date["date"].split("-")[1],
-                                }
+                                "@type": "TemporalInterval",
+                                "startDate": date["date"].split("-")[0],
+                                "endDate": date["date"].split("-")[1],
                             }
                         ]
                     elif date["type"]["value"].casefold() == "created":
@@ -156,7 +155,7 @@ class TychoItemProcessorPipeline:
                         if date["type"]["value"].casefold() == "available":
                             output["datePublished"] = date["date"]
                         elif date["type"]["value"].casefold() == "intervalequals":
-                            output["temporalCoverage"] = {"temporalInterval": {"startDate": date["date"]}}
+                            output["temporalCoverage"] = {"@type": "TemporalInterval", "startDate": date["date"]}
                         elif date["type"]["value"].casefold() == "created":
                             output["dateCreated"] = date["date"]
 
@@ -443,13 +442,12 @@ class TychoItemProcessorPipeline:
                         start_date = dateutil.parser.parse(start_date, ignoretz=True).date()
                         end_date = dateutil.parser.parse(end_date, ignoretz=True).date()
                         tc = {
-                            "temporalInterval": {
-                                "startDate": start_date.isoformat(),
-                                "endDate": end_date.isoformat(),
-                                "duration": str(end_date - start_date),
-                                "name": "count period",
-                                "temporalType": "other",
-                            }
+                            "@type": "TemporalInterval",
+                            "startDate": start_date.isoformat(),
+                            "endDate": end_date.isoformat(),
+                            "duration": str(end_date - start_date),
+                            "name": "count period",
+                            "temporalType": "other",
                         }
                         if output.get("temporalCoverage"):
                             output["temporalCoverage"].append(tc)

@@ -131,18 +131,18 @@ def parse():
             if funding:
                 output["funding"] = funding
 
-            temporal_coverage = {"temporalInterval": {}}
+            temporal_coverage = {"@type": "TemporalInterval"}
             if start_date := request.get("studyStartDate"):
-                temporal_coverage["temporalInterval"]["startDate"] = (
+                temporal_coverage["startDate"] = (
                     datetime.datetime.fromisoformat(start_date).date().isoformat()
                 )
 
             if end_date := request.get("actualStudyCompletionDate"):
-                temporal_coverage["temporalInterval"]["endDate"] = (
+                temporal_coverage["endDate"] = (
                     datetime.datetime.fromisoformat(end_date).date().isoformat()
                 )
 
-            if temporal_coverage["temporalInterval"]:
+            if len(temporal_coverage) > 1:  # More than just @type
                 output["temporalCoverage"] = temporal_coverage
 
             if locations := request.get("locationsOfStudySites"):

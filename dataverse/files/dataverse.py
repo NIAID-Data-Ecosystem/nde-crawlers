@@ -270,7 +270,7 @@ class Dataverse(NDEDatabase):
 
                     if "temporalCoverage" in dataset and dataset["temporalCoverage"]:
                         dataset["temporalCoverage"] = [
-                            {"temporalInterval": {"duration": dataset["temporalCoverage"][0]}}
+                            {"@type": "TemporalInterval", "duration": dataset["temporalCoverage"][0]}
                         ]
 
                     if "spatialCoverage" in dataset:

@@ -407,9 +407,9 @@ def parse():
             # fix temporalCoverage
             if temporalCoverage := hit.pop("temporalCoverage", None):
                 if isinstance(temporalCoverage, list):
-                    hit["temporalCoverage"] = [{"temporalInterval": tc} for tc in temporalCoverage]
+                    hit["temporalCoverage"] = [{"@type": "TemporalInterval", **tc} for tc in temporalCoverage]
                 else:
-                    hit["temporalCoverage"] = {"temporalInterval": temporalCoverage}
+                    hit["temporalCoverage"] = {"@type": "TemporalInterval", **temporalCoverage}
 
             # fix topicCategory
             if topicCategory := hit.pop("topicCategory", None):
