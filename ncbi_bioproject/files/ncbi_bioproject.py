@@ -326,53 +326,61 @@ def parse() -> Generator[Dict[str, Any], None, None]:
             if species:
                 output["species"] = species
 
-        # Extract funding information
-        grant = project_elem.find(".//ProjectDescr/Grant")
-        if grant is not None:
-            funding = {}
-            if grant_id := grant.get("GrantId"):
-                funding["identifier"] = grant_id
-                logger.debug(f"Found grant ID: {grant_id}")
-            if gtitle := grant.findtext("Title"):
-                funding["name"] = gtitle
-                logger.debug(f"Found grant title: {gtitle}")
+        # Extract funding information - handle multiple grants
+        grants = project_elem.findall(".//ProjectDescr/Grant")
+        if grants:
+            funding_list = []
+            for grant in grants:
+                funding = {}
+                if grant_id := grant.get("GrantId"):
+                    funding["identifier"] = grant_id
+                    logger.debug(f"Found grant ID: {grant_id}")
+                if gtitle := grant.findtext("Title"):
+                    funding["name"] = gtitle
+                    logger.debug(f"Found grant title: {gtitle}")
 
-            agency = grant.find("Agency")
-            if agency is not None:
-                funder = {}
-                if abbr := agency.get("abbr"):
-                    funder["alternateName"] = abbr
-                    logger.debug(f"Found agency abbr: {abbr}")
-                if agency.text:
-                    funder["name"] = agency.text
-                    logger.debug(f"Found agency name: {agency.text}")
-                if funder:
-                    funding["funder"] = funder
+                agency = grant.find("Agency")
+                if agency is not None:
+                    funder = {}
+                    if abbr := agency.get("abbr"):
+                        funder["alternateName"] = abbr
+                        logger.debug(f"Found agency abbr: {abbr}")
+                    if agency.text:
+                        funder["name"] = agency.text
+                        logger.debug(f"Found agency name: {agency.text}")
+                    if funder:
+                        funding["funder"] = funder
 
-            if funding:
-                output["funding"] = funding
-                logger.debug(f"Added funding to output: {funding}")
+                if funding:
+                    funding_list.append(funding)
+                    logger.debug(f"Added funding to list: {funding}")
+
+            if funding_list:
+                # If only one grant, store as single object; if multiple, store as array
+                output["funding"] = funding_list[0] if len(funding_list) == 1 else funding_list
+                logger.debug(f"Added {len(funding_list)} funding record(s) to output")
             else:
-                logger.debug("No funding data found - empty funding dict")
+                logger.debug("No funding data found - empty funding list")
         else:
-            logger.debug("No Grant element found")
+            logger.debug("No Grant elements found")
 
         # Extract authors
         author_list = []
 
-        # Add PI from grant
-        if grant is not None:
-            pi = grant.find("PI")
-            if pi is not None:
-                pi_author = {"@type": "Person"}
-                if given := pi.findtext("Given"):
-                    pi_author["givenName"] = given
-                if last := pi.findtext("Last"):
-                    pi_author["familyName"] = last
-                if affil := pi.get("affil"):
-                    pi_author["affiliation"] = {"name": affil}
-                if len(pi_author) > 1:  # More than just @type
-                    author_list.append(pi_author)
+        # Add PI from grants
+        if grants:
+            for grant in grants:
+                pi = grant.find("PI")
+                if pi is not None:
+                    pi_author = {"@type": "Person"}
+                    if given := pi.findtext("Given"):
+                        pi_author["givenName"] = given
+                    if last := pi.findtext("Last"):
+                        pi_author["familyName"] = last
+                    if affil := pi.get("affil"):
+                        pi_author["affiliation"] = {"name": affil}
+                    if len(pi_author) > 1:  # More than just @type
+                        author_list.append(pi_author)
 
         # Also check Provider field for PI information
         target = project_elem.find(".//ProjectTypeSubmission/Target")
