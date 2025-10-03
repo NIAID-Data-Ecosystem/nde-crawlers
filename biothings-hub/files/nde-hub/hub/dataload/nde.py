@@ -14,6 +14,7 @@ from utils.utils import nde_upload_wrapper
 __all__ = [
     "NDEFileSystemDumper",
     "NDESourceUploader",
+    "NDESourceSampleUploader",
 ]
 
 
@@ -1027,3 +1028,690 @@ class NDESourceUploader(BaseSourceUploader):
         }
 
         return mapping
+
+
+class NDESourceSampleUploader(BaseSourceUploader):
+    storage_class = IgnoreDuplicatedStorage
+
+    @nde_upload_wrapper
+    def load_data(self, data_folder):
+        with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
+            for line in f:
+                doc = orjson.loads(line)
+                yield doc
+
+    @classmethod
+    def get_mapping(cls):
+        mapping = {
+            "_meta": {
+                "properties": {
+                    "completeness": {
+                        "properties": {
+                            "augmented_recommended_ratio": {"type": "float"},
+                            "augmented_required_ratio": {"type": "float"},
+                            "recommended_max_score": {"type": "integer"},
+                            "recommended_score": {"type": "integer"},
+                            "recommended_score_ratio": {"type": "float"},
+                            "required_max_score": {"type": "integer"},
+                            "required_ratio": {"type": "float"},
+                            "required_score": {"type": "integer"},
+                            "total_max_score": {"type": "integer"},
+                            "total_recommended_augmented": {"type": "integer"},
+                            "total_required_augmented": {"type": "integer"},
+                            "total_score": {"type": "integer"},
+                            "weighted_score": {"type": "float"},
+                        }
+                    },
+                    "lineage": {
+                        "type": "nested",
+                        "include_in_root": True,
+                        "properties": {"taxon": {"type": "integer"}, "parent_taxon": {"type": "integer"}},
+                    },
+                    "recommended_augmented_fields": {"type": "keyword"},
+                    "required_augmented_fields": {"type": "keyword"},
+                    "recommended_fields": {"type": "keyword"},
+                    "required_fields": {"type": "keyword"},
+                }
+            },
+            "@context": {
+                "type": "text",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+            },
+            "@id": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer"},
+            "@type": {"type": "keyword", "copy_to": ["all"]},
+            "additionalProperty": {"type": "text"},
+            "alternateIdentifier": {"type": "keyword", "copy_to": ["all"]},
+            "anatomicalStructure": {"type": "text"},
+            "anatomicalSystem": {"type": "text"},
+            "associatedGenotype": {"type": "text"},
+            "associatedPhenotype": {"type": "text"},
+            "cellType": {"type": "text", "copy_to": ["all"]},
+            "citation": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "abstract": {"type": "text"},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "citation": {"type": "text"},
+                    "datePublished": {"type": "date"},
+                    "description": {"type": "text"},
+                    "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "issueNumber": {"type": "text"},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "journalNameAbbrev": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "pagination": {"type": "text"},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                    "volumeNumber": {"type": "text"},
+                }
+            },
+            "citedBy": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "abstract": {"type": "text"},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "citation": {"type": "text"},
+                    "datePublished": {"type": "date"},
+                    "description": {"type": "text"},
+                    "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "issueNumber": {"type": "text"},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "journalNameAbbrev": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "pagination": {"type": "text"},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                    "volumeNumber": {"type": "text"},
+                }
+            },
+            "collectionMethod": {"type": "text"},
+            "collector": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "familyName": {"type": "text", "copy_to": ["all"]},
+                    "givenName": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "contributor": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "familyName": {"type": "text", "copy_to": ["all"]},
+                    "givenName": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "conditionsOfAccess": {"type": "keyword"},
+            "creditText": {"type": "text"},
+            "dateCollected": {"type": "date"},
+            "dateCreated": {"type": "date"},
+            "dateModified": {"type": "date"},
+            "dateProcessed": {"type": "date"},
+            "datePublished": {"type": "date"},
+            "description": {
+                "type": "text",
+                "analyzer": "nde_analyzer",
+                "copy_to": ["all"],
+                "fields": {"raw": {"type": "text"}},
+            },
+            "developmentalStage": {
+                "properties": {
+                    "maxValue": {"type": "double"},
+                    "minValue": {"type": "double"},
+                    "name": {"type": "text"},
+                    "value": {"type": "integer"},
+
+                }
+            },
+            "distribution": {
+                "properties": {
+                    "@id": {"type": "keyword"},
+                    "@type": {"type": "keyword"},
+                    "contentUrl": {"type": "text"},
+                    "dateCreated": {"type": "date"},
+                    "dateModified": {"type": "date"},
+                    "datePublished": {"type": "date"},
+                    "description": {"type": "text", "analyzer": "nde_analyzer"},
+                    "encodingFormat": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "contentSize": {"type": "text"},
+                    "name": {"type": "keyword"},
+                }
+            },
+            "environmentalSystem": {"type": "text"},
+            "experimentalPurpose": {"type": "text"},
+            "funding": {
+                "properties": {
+                    "identifier": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "endDate": {"type": "date"},
+                    "startDate": {"type": "date"},
+                    "projectNumSplit": {
+                        "properties": {
+                            "applTypeCode": {"type": "text", "copy_to": ["all"]},
+                            "activityCode": {"type": "text", "copy_to": ["all"]},
+                            "icCode": {"type": "text", "copy_to": ["all"]},
+                            "serialNum": {"type": "text", "copy_to": ["all"]},
+                            "supportYear": {"type": "text", "copy_to": ["all"]},
+                            "fullSupportYear": {"type": "text", "copy_to": ["all"]},
+                            "suffixCode": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "isBasedOn": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "funder": {
+                        "properties": {
+                            "alternateName": {"type": "keyword", "copy_to": ["all"]},
+                            "class": {"type": "keyword"},
+                            "description": {"type": "text", "copy_to": ["all"]},
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                                "fields": {"raw": {"type": "keyword"}},
+                            },
+                            "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
+                            "role": {"type": "keyword"},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "employee": {
+                                "properties": {
+                                    "givenName": {"type": "text", "copy_to": ["all"]},
+                                    "familyName": {"type": "text", "copy_to": ["all"]},
+                                    "name": {
+                                        "type": "keyword",
+                                        "normalizer": "keyword_lowercase_normalizer",
+                                        "copy_to": ["all"],
+                                    },
+                                }
+                            },
+                        },
+                    },
+                }
+            },
+            "hasPart": {
+                "properties": {
+                    "@id": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "@type": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "additionalType": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
+                    },
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "datePublished": {"type": "date"},
+                    "encodingFormat": {"type": "text"},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                }
+            },
+            "healthCondition": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
+                    "url": {"type": "text", "copy_to": ["all"]},
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"},
+                        }
+                    },
+                }
+            },
+            "identifier": {"type": "text", "copy_to": ["all"]},
+            "includedInDataCatalog": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "archivedAt": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                    "versionDate": {"type": "date"},
+                }
+            },
+            "infectiousAgent": {
+                "properties": {
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "commonName": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "displayName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
+                    "isCurated": {"type": "boolean"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"},
+                        }
+                    },
+                }
+            },
+            "instrument": {
+                "properties": {
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "isAccessibleForFree": {"type": "boolean"},
+            "isBasedOn": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "abstract": {"type": "text"},
+                    "additionalType": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
+                    },
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "citation": {"type": "text"},
+                    "datePublished": {"type": "date"},
+                    "description": {"type": "text", "analyzer": "nde_analyzer"},
+                    "doi": {"type": "text", "copy_to": ["all"]},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer"},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                }
+            },
+            "isBasisFor": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "datePublished": {"type": "date"},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                }
+            },
+            "isControl": {"type": "boolean"},
+            "isPartOf": {
+                "properties": {
+                    "@id": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "@type": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "alternateName": {"type": "text", "copy_to": ["all"]},
+                    "author": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "familyName": {"type": "text", "copy_to": ["all"]},
+                            "givenName": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "datePublished": {"type": "date"},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
+                    "journalName": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "pmid": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                }
+            },
+            "isRelatedTo": {
+                "properties": {
+                    "@type": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "citation": {
+                        "properties": {
+                            "pmid": {"type": "text", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
+                    },
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"], "normalizer": "keyword_lowercase_normalizer"},
+                    "includedInDataCatalog": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                            "versionDate": {"type": "date"},
+                        }
+                    },
+                    "hasPart": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "identifier": {
+                                "type": "keyword",
+                                "copy_to": ["all"],
+                                "normalizer": "keyword_lowercase_normalizer",
+                            },
+                        }
+                    },
+                    "relationship": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text"},
+                }
+            },
+            "itemLocation": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "geo": {
+                        "properties": {
+                            "@type": {
+                                "type": "text",
+                                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                            },
+                            "latitude": {"type": "float"},
+                            "longitude": {"type": "float"},
+                        }
+                    },
+                }
+            },
+            "keywords": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+            "license": {"type": "text"},
+            "locationOfOrigin": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "geo": {
+                        "properties": {
+                            "@type": {
+                                "type": "text",
+                                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                            },
+                            "latitude": {"type": "float"},
+                            "longitude": {"type": "float"},
+                        }
+                    },
+                }
+            },
+            "maintainer": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "familyName": {"type": "text", "copy_to": ["all"]},
+                    "givenName": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "measurementTechnique": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "description": {"type": "text"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "name": {
+                "type": "text",
+                "analyzer": "nde_analyzer",
+                "copy_to": ["all"],
+                "fields": {
+                    "phrase_suggester": {"type": "text", "analyzer": "phrase_suggester"},
+                    "raw": {"type": "keyword"},
+                },
+            },
+            "project": {"type": "text", "copy_to": ["all"]},
+            "sameAs": {
+                "type": "text",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+            },
+            "sampleAvailability": {"type": "boolean"},
+            "sampleProcess": {"type": "text", "copy_to": ["all"]},
+            "sampleQuantity": {
+                "properties": {
+                    "maxValue": {"type": "double"},
+                    "minValue": {"type": "double"},
+                    "unitText": {"type": "text"},
+                    "value": {"type": "integer"},
+                }
+            },
+            "sampleState": {"type": "text"},
+            "storageTemperature": {
+                "properties": {
+                    "maxValue": {"type": "double"},
+                    "minValue": {"type": "double"},
+                    "unitText": {"type": "text"},
+                    "value": {"type": "integer"},
+                }
+            },
+            "sampleType": {
+                "properties": {
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "sex": {"type": "keyword", "copy_to": ["all"]},
+            "spatialCoverage": {
+                "properties": {
+                    "@type": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "geo": {
+                        "properties": {
+                            "@type": {
+                                "type": "text",
+                                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                            },
+                            "latitude": {"type": "float"},
+                            "longitude": {"type": "float"},
+                        }
+                    },
+                    "name": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                    "identifier": {
+                        "type": "text",
+                        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    },
+                }
+            },
+            "species": {
+                "properties": {
+                    "additionalType": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                        }
+                    },
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "classification": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "commonName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"},
+                        }
+                    },
+                    "displayName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "isCurated": {"type": "boolean"},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "studyTitle": {"type": "text"},
+            "studyID": {
+                "properties": {
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "url": {"type": "text", "copy_to": ["all"]},
+            "variableMeasured": {
+                "properties": {
+                    "alternateName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "curatedBy": {
+                        "properties": {
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "dateModified": {"type": "date"},
+                        }
+                    },
+                    "description": {"type": "text"},
+                    "fromEXTRACT": {"type": "boolean"},
+                    "fromPMID": {"type": "boolean"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                    "isCurated": {"type": "boolean"},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
+                    "originalName": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "usageInfo": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "description": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+        }

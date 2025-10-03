@@ -79,8 +79,7 @@ def fetch_correction_files(correction_name):
         records_file_path = prod_records_file
     except Exception as prod_error:
         logging.info(
-            f"Production file for '{correction_name}' not found or error encountered: {
-                     prod_error}. Trying staging folder."
+            f"Production file for '{correction_name}' not found or error encountered: {prod_error}. Trying staging folder."
         )
         correction_content = get_github_file_content(owner, repo, staging_correction_file)
         correction_json = json.loads(correction_content)
