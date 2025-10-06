@@ -133,16 +133,13 @@ class New_NCBI_Geo_Dumper(dumper.BaseDumper):
 
             total_count = self.count_all_acc(term)
             self.logger.info(f"Total {term} records to download: {total_count}")
-            retmax = 10  # for testing
+            retmax = 9999
             count = 0   # for testing
             for retstart in range(0, total_count, retmax):
                 self.logger.info(f"Preparing to dump {term} files to {new_localfile}, start at {retstart}")
                 remote = [term, retstart, retmax]
                 self.to_dump.append({"remote": remote, "local": new_localfile})
-                # for testing, remove this to fetch all
-                count += 1
-                if count == 2:
-                    break
+
 
     def create_subdir(self, localfile, acc):
         # Extract prefix (GSE/GSM) and numeric part

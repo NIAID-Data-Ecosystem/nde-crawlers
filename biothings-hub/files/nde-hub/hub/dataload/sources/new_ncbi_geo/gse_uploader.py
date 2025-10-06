@@ -1,9 +1,9 @@
-from hub.dataload.nde import NDESourceSampleUploader
+from hub.dataload.nde import NDESourceUploader
 
 from .parser import parse_gse
 
 
-class GSE_Uploader(NDESourceSampleUploader):
+class GSE_Uploader(NDESourceUploader):
     name = "gse_ncbi_geo"
     main_source = "new_ncbi_geo"
 

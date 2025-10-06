@@ -1715,3 +1715,5 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 }
             },
         }
+
+        return mapping
