@@ -134,7 +134,6 @@ class NCBI_Geo_Dumper(dumper.BaseDumper):
             total_count = self.count_all_acc(term)
             self.logger.info(f"Total {term} records to download: {total_count}")
             retmax = 9999
-            count = 0   # for testing
             for retstart in range(0, total_count, retmax):
                 self.logger.info(f"Preparing to dump {term} files to {new_localfile}, start at {retstart}")
                 remote = [term, retstart, retmax]
