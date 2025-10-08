@@ -357,7 +357,7 @@ def getPDBmetadata(id, organisms):
 
 
 def getCitation(citation):
-    cite = {"@type": "Publication"}
+    cite = {"@type": "ScholarlyArticle"}
     if citation.get("journal_abbrev"):
         cite["journalNameAbbrev"] = citation["journal_abbrev"]
     if title := citation.get("title"):
