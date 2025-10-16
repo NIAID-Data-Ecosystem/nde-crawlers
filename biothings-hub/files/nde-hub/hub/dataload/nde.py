@@ -400,6 +400,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "funding": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
@@ -423,6 +424,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "funder": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
                             "description": {"type": "text", "copy_to": ["all"]},
@@ -490,6 +492,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "healthCondition": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {
@@ -573,6 +576,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "infectiousAgent": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
@@ -895,6 +899,7 @@ class NDESourceUploader(BaseSourceUploader):
             },
             "species": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "additionalType": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -1202,6 +1207,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "experimentalPurpose": {"type": "text"},
             "funding": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
@@ -1225,6 +1231,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     },
                     "funder": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "alternateName": {"type": "keyword", "copy_to": ["all"]},
                             "class": {"type": "keyword"},
                             "description": {"type": "text", "copy_to": ["all"]},
@@ -1289,6 +1296,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "healthCondition": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {
@@ -1332,6 +1340,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "infectiousAgent": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
@@ -1612,6 +1621,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "species": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "additionalType": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
