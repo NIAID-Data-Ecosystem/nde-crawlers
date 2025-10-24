@@ -3,15 +3,20 @@ import os
 
 import dateutil.parser
 
+try:
+    from config import logger
+except ImportError:
+    import logging
+
+    logger = logging.getLogger(__name__)
+
 
 def get_full_name(name):
     parts = name.split(",")
     while len(parts) < 3:
         parts.append("")
     first, middle, last = parts
-    full_name = " ".join(
-        [part.strip() for part in [first, middle, last] if part.strip()]
-    )
+    full_name = " ".join([part.strip() for part in [first, middle, last] if part.strip()])
     return full_name
 
 
@@ -101,13 +106,10 @@ def parse_sample_characteristics(output, value):
                 else:
                     output[mapping[0]] = [{"duration": field_value}]
             else:
-                print(mapping, subproperty)
                 if mapping[0] == "sampleProcess":
                     if "sampleProcess" in output and output["sampleProcess"]:
                         # If sampleProcess already exists, append new info
-                        output["sampleProcess"] = (
-                            output["sampleProcess"] + " " + field_value
-                        )
+                        output["sampleProcess"] = output["sampleProcess"] + " " + field_value
                     else:
                         output["sampleProcess"] = field_value
                 else:
@@ -160,29 +162,21 @@ def parse_gsm(data_folder):
                 dt = dateutil.parser.parse(date_str, ignoretz=True).date().isoformat()
                 output["datePublished"] = dt
             except Exception as e:
-                print(f"Error parsing date '{date_str}': {e}")
+                logger.warning(f"Error parsing date '{date_str}': {e}")
 
         if date_created := item.get("!Sample_submission_date"):
             try:
-                dt = (
-                    dateutil.parser.parse(date_created, ignoretz=True)
-                    .date()
-                    .isoformat()
-                )
+                dt = dateutil.parser.parse(date_created, ignoretz=True).date().isoformat()
                 output["dateCreated"] = dt
             except Exception as e:
-                print(f"Error parsing date '{date_created}': {e}")
+                logger.warning(f"Error parsing date '{date_created}': {e}")
 
         if date_modified := item.get("!Sample_last_update_date"):
             try:
-                dt = (
-                    dateutil.parser.parse(date_modified, ignoretz=True)
-                    .date()
-                    .isoformat()
-                )
+                dt = dateutil.parser.parse(date_modified, ignoretz=True).date().isoformat()
                 output["dateModified"] = dt
             except Exception as e:
-                print(f"Error parsing date '{date_modified}': {e}")
+                logger.warning(f"Error parsing date '{date_modified}': {e}")
 
         if sample_type := item.get("!Sample_type"):
             if isinstance(sample_type, list):
@@ -249,8 +243,7 @@ def parse_gsm(data_folder):
                     {
                         "@type": "Dataset",
                         "identifier": sid,
-                        "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
-                        + sid,
+                        "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + sid,
                     }
                     for sid in is_basis_for
                 ]
@@ -258,8 +251,7 @@ def parse_gsm(data_folder):
                 output["isBasisFor"] = {
                     "@type": "Dataset",
                     "identifier": is_basis_for,
-                    "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
-                    + is_basis_for,
+                    "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + is_basis_for,
                 }
 
         for key, value in item.items():
@@ -273,9 +265,7 @@ def parse_gsm(data_folder):
                     sample_process = value
                 if "sampleProcess" in output and output["sampleProcess"]:
                     # If sampleProcess already exists, append new info
-                    output["sampleProcess"] = (
-                        output["sampleProcess"] + " " + sample_process
-                    )
+                    output["sampleProcess"] = output["sampleProcess"] + " " + sample_process
                 else:
                     output["sampleProcess"] = sample_process
 
@@ -284,13 +274,9 @@ def parse_gsm(data_folder):
                     output["distribution"] = []
                 if isinstance(value, list):
                     for v in value:
-                        output["distribution"].append(
-                            {"@type": "dataDownload", "contentUrl": v}
-                        )
+                        output["distribution"].append({"@type": "dataDownload", "contentUrl": v})
                 else:
-                    output["distribution"].append(
-                        {"@type": "dataDownload", "contentUrl": value}
-                    )
+                    output["distribution"].append({"@type": "dataDownload", "contentUrl": value})
 
         yield output
 
@@ -298,17 +284,17 @@ def parse_gsm(data_folder):
 def get_records(data_folder):
     for root, dirs, _ in os.walk(data_folder):
         for dir in dirs:
-            print(dir)
+            logger.info(dir)
             dirpath = os.path.join(root, dir)
             for file in os.listdir(dirpath):
-                print(file)
+                logger.info(file)
                 if file.endswith(".txt"):
                     fpath = os.path.join(dirpath, file)
                     try:
                         item = parse_soft_series(fpath)
                         yield item
                     except Exception as e:
-                        print(f"Error parsing {fpath}: {e}")
+                        logger.error(f"Error parsing {fpath}: {e}")
 
 
 def parse_gse(data_folder):
@@ -349,29 +335,21 @@ def parse_gse(data_folder):
                 dt = dateutil.parser.parse(date_str, ignoretz=True).date().isoformat()
                 output["datePublished"] = dt
             except Exception as e:
-                print(f"Error parsing date '{date_str}': {e}")
+                logger.warning(f"Error parsing date '{date_str}': {e}")
 
         if date_created := item.get("!Series_submission_date"):
             try:
-                dt = (
-                    dateutil.parser.parse(date_created, ignoretz=True)
-                    .date()
-                    .isoformat()
-                )
+                dt = dateutil.parser.parse(date_created, ignoretz=True).date().isoformat()
                 output["dateCreated"] = dt
             except Exception as e:
-                print(f"Error parsing date '{date_created}': {e}")
+                logger.warning(f"Error parsing date '{date_created}': {e}")
 
         if date_modified := item.get("!Series_last_update_date"):
             try:
-                dt = (
-                    dateutil.parser.parse(date_modified, ignoretz=True)
-                    .date()
-                    .isoformat()
-                )
+                dt = dateutil.parser.parse(date_modified, ignoretz=True).date().isoformat()
                 output["dateModified"] = dt
             except Exception as e:
-                print(f"Error parsing date '{date_modified}': {e}")
+                logger.warning(f"Error parsing date '{date_modified}': {e}")
 
         if pmids := item.get("!Series_pubmed_id"):
             if isinstance(pmids, list):
@@ -387,13 +365,9 @@ def parse_gse(data_folder):
 
         if description := item.get("!Series_overall_design"):
             if isinstance(description, list):
-                output["description"] = (
-                    output.get("description", "") + " " + " ".join(description)
-                ).strip()
+                output["description"] = (output.get("description", "") + " " + " ".join(description)).strip()
             else:
-                output["description"] = (
-                    output.get("description", "") + " " + description
-                ).strip()
+                output["description"] = (output.get("description", "") + " " + description).strip()
 
         if mt := item.get("!Series_type"):
             if isinstance(mt, list):
@@ -402,18 +376,18 @@ def parse_gse(data_folder):
                 output["measurementTechnique"] = {"name": mt}
 
         if authors := item.get("!Series_contributor"):
-            if isinstance(authors, list):
-                output["author"] = [
-                    {"@type": "Person", "name": get_full_name(a)} for a in authors
-                ]
-            else:
-                output["author"] = [{"@type": "Person", "name": get_full_name(authors)}]
+            try:
+                if isinstance(authors, list):
+                    output["author"] = [{"@type": "Person", "name": get_full_name(a)} for a in authors]
+                else:
+                    output["author"] = [{"@type": "Person", "name": get_full_name(authors)}]
+            except Exception as e:
+                logger.warning(f"Error parsing author '{authors}': {e} in accession {_id}")
+                raise e
 
         if publishers := item.get("!Series_contact_institute"):
             if isinstance(publishers, list):
-                output["publisher"] = [
-                    {"@type": "Organization", "name": p} for p in publishers
-                ]
+                output["publisher"] = [{"@type": "Organization", "name": p} for p in publishers]
             else:
                 output["publisher"] = [{"@type": "Organization", "name": publishers}]
 
@@ -424,5 +398,3 @@ def parse_gse(data_folder):
                 output["species"] = [{"name": species}]
 
         yield output
-
-
