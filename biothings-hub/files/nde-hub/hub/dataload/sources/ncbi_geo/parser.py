@@ -15,6 +15,8 @@ def get_full_name(name):
     parts = name.split(",")
     while len(parts) < 3:
         parts.append("")
+    if len(parts) > 3:
+        parts = [parts[0], "".join(parts[1:-1]), parts[-1]]
     first, middle, last = parts
     full_name = " ".join([part.strip() for part in [first, middle, last] if part.strip()])
     return full_name
@@ -376,14 +378,10 @@ def parse_gse(data_folder):
                 output["measurementTechnique"] = {"name": mt}
 
         if authors := item.get("!Series_contributor"):
-            try:
-                if isinstance(authors, list):
-                    output["author"] = [{"@type": "Person", "name": get_full_name(a)} for a in authors]
-                else:
-                    output["author"] = [{"@type": "Person", "name": get_full_name(authors)}]
-            except Exception as e:
-                logger.warning(f"Error parsing author '{authors}': {e} in accession {_id}")
-                raise e
+            if isinstance(authors, list):
+                output["author"] = [{"@type": "Person", "name": get_full_name(a)} for a in authors]
+            else:
+                output["author"] = [{"@type": "Person", "name": get_full_name(authors)}]
 
         if publishers := item.get("!Series_contact_institute"):
             if isinstance(publishers, list):
