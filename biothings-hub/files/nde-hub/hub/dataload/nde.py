@@ -1081,6 +1081,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "@type": {"type": "keyword", "copy_to": ["all"]},
             "additionalProperty": {"type": "text"},
             "alternateIdentifier": {"type": "keyword", "copy_to": ["all"]},
+            "alternateName": {"type": "text", "copy_to": ["all"]},
             "anatomicalStructure": {"type": "text"},
             "anatomicalSystem": {"type": "text"},
             "associatedGenotype": {"type": "text"},
@@ -1178,7 +1179,6 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "minValue": {"type": "double"},
                     "name": {"type": "text"},
                     "value": {"type": "integer"},
-
                 }
             },
             "distribution": {
@@ -1509,6 +1509,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "text"},
                     "name": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "geo": {
                         "properties": {
                             "@type": {
@@ -1669,6 +1670,16 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "temporalCoverage": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "duration": {"type": "text", "copy_to": ["all"]},
+                    "endDate": {"type": "date"},
+                    "name": {"type": "text"},
+                    "startDate": {"type": "date"},
+                    "temporalType": {"type": "text"},
                 }
             },
             "url": {"type": "text", "copy_to": ["all"]},
