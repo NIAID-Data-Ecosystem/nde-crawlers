@@ -90,6 +90,10 @@ def parse_sample_characteristics(output, value):
     for v in values:
         # Split by ":", strip whitespace, and only split on the first ":"
         parts = [p.strip() for p in v.split(":", 1)]
+        if len(parts) != 2:
+            logger.warning(f"Invalid sample characteristic format: {v}")
+            continue
+
         subproperty, field_value = parts[0], parts[1]
 
         if subproperty in sample_mapping:
