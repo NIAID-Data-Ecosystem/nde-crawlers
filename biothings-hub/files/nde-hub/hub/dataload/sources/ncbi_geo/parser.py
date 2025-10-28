@@ -98,7 +98,14 @@ def parse_sample_characteristics(output, value):
 
         if subproperty in sample_mapping:
             mapping = sample_mapping[subproperty]
-            if mapping[0] in ["species", "healthCondition", "developmentalStage"]:
+            if mapping[0] in [
+                "species",
+                "healthCondition",
+                "developmentalStage",
+                "cellType",
+                "anatomicalStructure",
+                "associatedPhenotype",
+            ]:
                 if not mapping[0] in output:
                     output[mapping[0]] = []
                 if isinstance(field_value, list):

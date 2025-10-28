@@ -1087,11 +1087,35 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "additionalProperty": {"type": "text"},
             "alternateIdentifier": {"type": "keyword", "copy_to": ["all"]},
             "alternateName": {"type": "text", "copy_to": ["all"]},
-            "anatomicalStructure": {"type": "text"},
-            "anatomicalSystem": {"type": "text"},
-            "associatedGenotype": {"type": "text"},
-            "associatedPhenotype": {"type": "text"},
-            "cellType": {"type": "text", "copy_to": ["all"]},
+            "anatomicalStructure": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                }
+            },
+            "anatomicalSystem": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                }
+            },
+            "associatedGenotype": {"type": "text", "copy_to": ["all"]},
+            "associatedPhenotype": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                }
+            },
+            "cellType": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                }
+            },
             "citation": {
                 "properties": {
                     "@type": {"type": "keyword"},
