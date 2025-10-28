@@ -11,7 +11,7 @@ class NDEDataBuilder(builder.DataBuilder):
         # Priority list of sources to merge from highest to lowest
         priority = [
             "massive",
-            "ncbi_geo",
+            "gse_ncbi_geo",
             "lincs",
             "omicsdi",
             "immport",
@@ -132,7 +132,9 @@ class NDEDataBuilder(builder.DataBuilder):
             count += len(bulk_operations)
             self.logger.info(f"{count} records updated")
 
-        self.logger.info(f"Merging complete. {group} Groups found. Updated {count} records. Deleting remaining duplicate records")
+        self.logger.info(
+            f"Merging complete. {group} Groups found. Updated {count} records. Deleting remaining duplicate records"
+        )
 
         # Perform final bulk deletion of remaining duplicate records
         if records_to_delete:
