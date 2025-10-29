@@ -639,7 +639,7 @@ def load_pmid_ctfd(data):
         stream_and_store(disease_filename, "disease")
 
     # process the file
-    def process_data(d):
+    def process_data(d, is_file: bool = False):
         count = 0
         while True:
             # dict to convert pmcs to pmids
@@ -661,7 +661,8 @@ def load_pmid_ctfd(data):
                 count += 1
                 if count % 1000 == 0:
                     logger.info("Processed %s documents", count)
-                doc = orjson.loads(line)
+                if is_file:
+                    doc = orjson.loads(line)
                 doc_list.append(doc)
                 if pmcs := doc.get("pmcs"):
                     pmcs = [pmc.strip() for pmc in pmcs.split(",")]
@@ -752,9 +753,9 @@ def load_pmid_ctfd(data):
 
     if isinstance(data, str):
         with open(os.path.join(data, "data.ndjson"), "rb") as f:
-            yield from process_data(f)
+            yield from process_data(f, True)
     else:
-        yield from process_data(data)  # yields each document individually
+        yield from process_data(data, False)  # yields each document individually
 
 
 def load_pmid_ctfd_wrapper(func):
