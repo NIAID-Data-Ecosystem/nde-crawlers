@@ -1593,11 +1593,13 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "sampleAvailability": {"type": "boolean"},
+            "sampleList": {"type": "text", "copy_to": ["all"]},
             "sampleProcess": {"type": "text", "copy_to": ["all"]},
             "sampleQuantity": {
                 "properties": {
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
+                    "name": {"type": "text"},
                     "unitText": {"type": "text"},
                     "value": {"type": "integer"},
                 }
