@@ -598,7 +598,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     return ct_fd
 
 
-def load_pmid_ctfd(data_folder):
+def load_pmid_ctfd(data):
     """Takes 1000 documents at a time and batch queries all of the pmids in the documents to improve runtime.
     If there are any pmcids, convert all of them into pmids before running the batch query.
     Loads the citation and funding into the documents.
@@ -638,7 +638,8 @@ def load_pmid_ctfd(data_folder):
         logger.info("Unzipping and storing disease data...")
         stream_and_store(disease_filename, "disease")
 
-    with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
+    # process the file
+    def process_data(d):
         count = 0
         while True:
             # dict to convert pmcs to pmids
@@ -653,7 +654,7 @@ def load_pmid_ctfd(data_folder):
             doi_pmid = {}
 
             # to make batch api query take the next 1000 docs and collect all the pmids
-            next_n_lines = list(islice(f, 1000))
+            next_n_lines = list(islice(d, 1000))
             if not next_n_lines:
                 break
             for line in next_n_lines:
@@ -748,6 +749,12 @@ def load_pmid_ctfd(data_folder):
                                 else:
                                     rec["funding"] = copy(funding)
                 yield rec
+
+    if isinstance(data, str):
+        with open(os.path.join(data, "data.ndjson"), "rb") as f:
+            yield from process_data(f)
+    else:
+        yield from process_data(data)  # yields each document individually
 
 
 def load_pmid_ctfd_wrapper(func):

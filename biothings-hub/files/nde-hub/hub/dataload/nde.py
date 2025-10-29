@@ -1207,6 +1207,8 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
                     "name": {"type": "text"},
+                    "unitCode": {"type": "keyword"},
+                    "unitText": {"type": "text"},
                     "value": {"type": "integer"},
                 }
             },
