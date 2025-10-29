@@ -663,6 +663,8 @@ def load_pmid_ctfd(data):
                     logger.info("Processed %s documents", count)
                 if is_file:
                     doc = orjson.loads(line)
+                else:
+                    doc = line
                 doc_list.append(doc)
                 if pmcs := doc.get("pmcs"):
                     pmcs = [pmc.strip() for pmc in pmcs.split(",")]
