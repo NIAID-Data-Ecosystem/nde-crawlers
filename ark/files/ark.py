@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""
-Fetch ARK Portal dataset metadata using Synapse client and map it to NDE fields.
-
-This cleaner implementation uses the Synapse Python client to query the ARK datasets
-table directly, avoiding the need for multiple REST API calls.
-"""
 from __future__ import annotations
 
 import logging
@@ -94,27 +88,7 @@ IDENTIFIER_BASE_URLS = (
 )
 
 
-def clean_value(value: Any) -> Optional[Any]:
-    """Clean pandas values, converting NaN to None."""
-    if pd.isna(value):
-        return None
-    return value
 
-
-def ensure_list(value: Any) -> List[Any]:
-    """Convert value to list if it isn't already."""
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [v for v in value if v is not None and not (isinstance(v, float) and pd.isna(v))]
-    # For scalar values, check if it's NaN
-    try:
-        if pd.isna(value):
-            return []
-    except (TypeError, ValueError):
-        # pd.isna might fail on some types, just proceed
-        pass
-    return [value]
 
 
 def read_token_from_file(token_file: str = TOKEN_FILE) -> Optional[str]:
@@ -160,13 +134,25 @@ def fetch_publication_details(syn: Synapse, pub_syn_id: str) -> Optional[Dict]:
     """Fetch publication metadata from Synapse."""
     try:
         annotations = syn.get_annotations(pub_syn_id)
-        return {
-            "synapseId": pub_syn_id,
-            "pmid": clean_value(annotations.get("PMID", [None])[0] if annotations.get("PMID") else None),
-            "doi": clean_value(annotations.get("DOI", [None])[0] if annotations.get("DOI") else None),
-            "url": clean_value(annotations.get("URL", [None])[0] if annotations.get("URL") else None),
-            "title": clean_value(annotations.get("title", [None])[0] if annotations.get("title") else None),
-        }
+        pub: Dict[str, Any] = {"synapseId": pub_syn_id}
+
+        pmid = annotations.get("PMID", [None])[0] if annotations.get("PMID") else None
+        if pmid and not pd.isna(pmid):
+            pub["pmid"] = pmid
+
+        doi = annotations.get("DOI", [None])[0] if annotations.get("DOI") else None
+        if doi and not pd.isna(doi):
+            pub["doi"] = doi
+
+        url = annotations.get("URL", [None])[0] if annotations.get("URL") else None
+        if url and not pd.isna(url):
+            pub["url"] = url
+
+        title = annotations.get("title", [None])[0] if annotations.get("title") else None
+        if title and not pd.isna(title):
+            pub["title"] = title
+
+        return pub
     except Exception as error:
         logger.warning("Failed to load publication %s: %s", pub_syn_id, error)
         return None
@@ -202,64 +188,125 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     doc: Dict = {
         "_id": syn_id,
         "url": ARK_PORTAL_DATASET_URL.format(syn_id=syn_id),
-        "name": clean_value(row["name"]),
-        "description": clean_value(row["description"]),
-        "dateCreated": clean_value(row["createdOn"]),
-        "dateModified": clean_value(row["modifiedOn"]),
         # Assigned fields from mapping
         "license": "https://arkportal.synapse.org/Data%20Access",
         "usageInfo": "https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement",
         "genre": "IID",
     }
 
+    # Add name if present
+    name = row.get("name")
+    if name and not pd.isna(name) and str(name).strip():
+        doc["name"] = str(name).strip()
+
+    # Add description if present
+    description = row.get("description")
+    if description and not pd.isna(description) and str(description).strip():
+        doc["description"] = str(description).strip()
+
+    # Add dates if present
+    date_created = row.get("createdOn")
+    if date_created and not pd.isna(date_created):
+        doc["dateCreated"] = date_created
+
+    date_modified = row.get("modifiedOn")
+    if date_modified and not pd.isna(date_modified):
+        doc["dateModified"] = date_modified
+
     # Add program as author (Organization type)
-    program = clean_value(row.get("program"))
-    if program is not None:
+    program = row.get("program")
+    if program and not pd.isna(program) and str(program).strip():
         doc["author"] = {
             "@type": "Organization",
-            "name": program,
+            "name": str(program).strip(),
         }
 
     # Conditions of access (mapped from datasetStatus)
-    status = clean_value(row.get("datasetStatus"))
-    if status is not None:
-        mapped = CONDITIONS_OF_ACCESS.get(status.lower())
+    status = row.get("datasetStatus")
+    if status and not pd.isna(status):
+        mapped = CONDITIONS_OF_ACCESS.get(str(status).lower())
         if mapped:
             doc["conditionsOfAccess"] = mapped
 
     # Keywords
     keywords: List[str] = []
-    dataset_type = clean_value(row.get("datasetType"))
-    if dataset_type is not None:
-        keywords.append(dataset_type)
-    data_subtype = clean_value(row.get("dataSubtype"))
-    if data_subtype is not None:
-        keywords.append(data_subtype)
+    dataset_type = row.get("datasetType")
+    if dataset_type and not pd.isna(dataset_type) and str(dataset_type).strip():
+        keywords.append(str(dataset_type).strip())
+
+    data_subtype = row.get("dataSubtype")
+    if data_subtype and not pd.isna(data_subtype) and str(data_subtype).strip():
+        keywords.append(str(data_subtype).strip())
 
     # Measurement techniques (assay + dataType)
-    measurement_values = ensure_list(row.get("assay")) + ensure_list(row.get("dataType"))
-    measurement = list(dict.fromkeys(measurement_values))  # Remove duplicates while preserving order
+    measurement_values: List[str] = []
+
+    assay = row.get("assay")
+    if assay is not None and not pd.isna(assay):
+        if isinstance(assay, (list, tuple)):
+            for item in assay:
+                if item and not pd.isna(item) and str(item).strip():
+                    measurement_values.append(str(item).strip())
+        elif str(assay).strip():
+            measurement_values.append(str(assay).strip())
+
+    data_type = row.get("dataType")
+    if data_type is not None and not pd.isna(data_type):
+        if isinstance(data_type, (list, tuple)):
+            for item in data_type:
+                if item and not pd.isna(item) and str(item).strip():
+                    measurement_values.append(str(item).strip())
+        elif str(data_type).strip():
+            measurement_values.append(str(data_type).strip())
+
+    # Remove duplicates while preserving order
+    measurement = list(dict.fromkeys(measurement_values))
     if len(measurement) > 0:
         doc["measurementTechnique"] = [{"name": value} for value in measurement]
 
     # Sample/biospecimen information
-    biospecimen_type = ensure_list(row.get("biospecimenType"))
-    biospecimen_subtype = ensure_list(row.get("biospecimenSubtype"))
-    if len(biospecimen_type) > 0 or len(biospecimen_subtype) > 0:
+    biospecimen_type_values: List[str] = []
+    biospecimen_type = row.get("biospecimenType")
+    if biospecimen_type is not None and not pd.isna(biospecimen_type):
+        if isinstance(biospecimen_type, (list, tuple)):
+            for item in biospecimen_type:
+                if item and not pd.isna(item) and str(item).strip():
+                    biospecimen_type_values.append(str(item).strip())
+        elif str(biospecimen_type).strip():
+            biospecimen_type_values.append(str(biospecimen_type).strip())
+
+    biospecimen_subtype_values: List[str] = []
+    biospecimen_subtype = row.get("biospecimenSubtype")
+    if biospecimen_subtype is not None and not pd.isna(biospecimen_subtype):
+        if isinstance(biospecimen_subtype, (list, tuple)):
+            for item in biospecimen_subtype:
+                if item and not pd.isna(item) and str(item).strip():
+                    biospecimen_subtype_values.append(str(item).strip())
+        elif str(biospecimen_subtype).strip():
+            biospecimen_subtype_values.append(str(biospecimen_subtype).strip())
+
+    if len(biospecimen_type_values) > 0 or len(biospecimen_subtype_values) > 0:
         anatomical_structure: Dict[str, Any] = {}
-        if len(biospecimen_type) > 0:
-            anatomical_structure["name"] = biospecimen_type
-        if len(biospecimen_subtype) > 0:
-            anatomical_structure["sampleType"] = biospecimen_subtype
+        if len(biospecimen_type_values) > 0:
+            anatomical_structure["name"] = biospecimen_type_values
+        if len(biospecimen_subtype_values) > 0:
+            anatomical_structure["sampleType"] = biospecimen_subtype_values
         doc["sample"] = {"anatomicalStructure": anatomical_structure}
 
     # Health conditions from diagnosis
-    diagnosis_values = ensure_list(row.get("diagnosis"))
+    diagnosis = row.get("diagnosis")
+    diagnosis_values: List[str] = []
+    if diagnosis is not None and not pd.isna(diagnosis):
+        if isinstance(diagnosis, (list, tuple)):
+            for item in diagnosis:
+                if item and not pd.isna(item) and str(item).strip():
+                    diagnosis_values.append(str(item).strip())
+        elif str(diagnosis).strip():
+            diagnosis_values.append(str(diagnosis).strip())
+
     health_condition: List[Dict] = []
     for value in diagnosis_values:
-        if not value:
-            continue
-        normalized = str(value).strip()
+        normalized = value.strip()
         # "At-Risk RA" is not an official diagnosis, add to keywords
         if normalized.lower() == "at-risk ra":
             keywords.append(normalized)
@@ -276,27 +323,34 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         doc["healthCondition"] = health_condition
 
     # DOI
-    doi = clean_value(row.get("doi"))
-    if doi is not None:
-        doc["doi"] = doi
+    doi = row.get("doi")
+    if doi and not pd.isna(doi) and str(doi).strip():
+        doc["doi"] = str(doi).strip()
 
     # Credit/acknowledgment statement
-    acknowledgment_ref = clean_value(row.get("acknowledgmentStatement"))
-    if acknowledgment_ref is not None and hasattr(entity, "parentId"):
-        credit_text = fetch_wiki_content(syn, entity.parentId, acknowledgment_ref.split("/")[-1])
+    acknowledgment_ref = row.get("acknowledgmentStatement")
+    if acknowledgment_ref and not pd.isna(acknowledgment_ref) and str(acknowledgment_ref).strip() and hasattr(entity, "parentId"):
+        credit_text = fetch_wiki_content(syn, entity.parentId, str(acknowledgment_ref).split("/")[-1])
         if credit_text:
             doc["creditText"] = credit_text
         else:
             doc["creditText"] = SYNAPSE_OBJECT_URL.format(
-                syn_id=f"{entity.parentId}/wiki/{acknowledgment_ref.split('/')[-1]}"
+                syn_id=f"{entity.parentId}/wiki/{str(acknowledgment_ref).split('/')[-1]}"
             )
 
     # Publications (citation field)
-    pub_syn_ids = ensure_list(row.get("publicationSynID"))
+    publication_syn_id = row.get("publicationSynID")
+    pub_syn_ids: List[str] = []
+    if publication_syn_id is not None and not pd.isna(publication_syn_id):
+        if isinstance(publication_syn_id, (list, tuple)):
+            for item in publication_syn_id:
+                if item and not pd.isna(item) and str(item).strip():
+                    pub_syn_ids.append(str(item).strip())
+        elif str(publication_syn_id).strip():
+            pub_syn_ids.append(str(publication_syn_id).strip())
+
     publications: List[Dict] = []
     for pub_syn_id in pub_syn_ids:
-        if not pub_syn_id:
-            continue
         pub_details = fetch_publication_details(syn, pub_syn_id)
         if pub_details:
             publications.append(pub_details)
@@ -304,23 +358,32 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         doc["citation"] = publications
 
     # Associated code repositories (isRelatedTo with ComputationalTool type)
-    code_urls = ensure_list(row.get("associatedCodeURL"))
+    code_url = row.get("associatedCodeURL")
+    code_urls: List[str] = []
+    if code_url is not None and not pd.isna(code_url):
+        if isinstance(code_url, (list, tuple)):
+            for item in code_url:
+                if item and not pd.isna(item) and str(item).strip():
+                    code_urls.append(str(item).strip())
+        elif str(code_url).strip():
+            code_urls.append(str(code_url).strip())
+
     if len(code_urls) > 0:
         doc["isRelatedTo"] = [
             {"@type": "ComputationalTool", "codeRepository": url}
-            for url in code_urls if url
+            for url in code_urls
         ]
 
     # Identifiers (dbGap, ImmPort)
     identifiers: List[Dict] = []
     for key, template in IDENTIFIER_BASE_URLS:
-        value = clean_value(row.get(key))
-        if value is not None:
+        value = row.get(key)
+        if value and not pd.isna(value) and str(value).strip():
             identifiers.append(
                 {
                     "type": key,
-                    "value": value,
-                    "url": template.format(value=value),
+                    "value": str(value).strip(),
+                    "url": template.format(value=str(value).strip()),
                 }
             )
     if len(identifiers) > 0:
