@@ -23,6 +23,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  biosample-crawler:
+    build:
+      context: biosample
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   biotools-crawler:
     build:
       context: biotools

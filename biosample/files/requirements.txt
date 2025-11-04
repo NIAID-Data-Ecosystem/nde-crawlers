@@ -1,0 +1,7 @@
+requests
+orjson
+datetime
+biopython
+xmltodict
+python-dateutil
+tenacity

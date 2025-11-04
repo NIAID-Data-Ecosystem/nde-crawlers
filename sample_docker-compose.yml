@@ -1,6 +1,4 @@
 # docker-compose -f sample_docker-compose.yml up --detach --build
-version: '3'
-
 services:
   # when updating changes to code: "docker-compose -f sample_docker-compose.yml up --detach --build nde-hub"
   mongodb:
