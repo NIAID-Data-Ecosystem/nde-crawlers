@@ -67,7 +67,8 @@ def fetch_all_samples():
     for retstart in range(0, total, retmax):
         accs = query_acc("all[filter]", retstart, retmax)
         yield accs
-        logger.info(f"Fetched {retstart + retmax} of {total} records")
+        if (retstart + retmax) % 10000 == 0:
+            logger.info(f"Fetched {retstart + retmax} of {total} records")
 
 
 def parse_xml(sample_dict, output):
@@ -280,7 +281,10 @@ def parse_xml(sample_dict, output):
         insert_value(output, "sampleProcess", sample_process)
 
     if date_processed := attributes.get("cult_isol_date"):
-        output["dateProcessed"] = dateutil.parser.parse(date_processed, ignoretz=True).date().isoformat()
+        try:
+            output["dateProcessed"] = dateutil.parser.parse(date_processed, ignoretz=True).date().isoformat()
+        except Exception as e:
+            logger.warning(f"Failed to parse cult_isol_date: {date_processed} Error: {e}")
 
     if is_based_on := attributes.get("derived from assembly"):
         is_based_on = {"identifier": is_based_on}

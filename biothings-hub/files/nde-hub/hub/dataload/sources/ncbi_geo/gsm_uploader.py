@@ -16,7 +16,7 @@ class GSM_Uploader(NDESourceSampleUploader):
     def load_data(self, data_folder):
         docs = parse_gsm(data_folder)
         docs = standardize_data(docs)
-        docs = process_descriptions(docs)
+        # docs = process_descriptions(docs)
         docs = corrections(docs)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
