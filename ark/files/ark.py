@@ -27,6 +27,33 @@ CONDITIONS_OF_ACCESS = {
     "deprecated": "Deprecated",
 }
 
+TOPIC_CATEGORY_MAPPING = {
+    "genomics": {
+        "name": "Genomics",
+        "identifier": "topic_0622",
+        "url": "http://edamontology.org/topic_0622",
+        "inDefinedTermSet": "EDAM",
+    },
+    "proteomics": {
+        "name": "Proteomics",
+        "identifier": "topic_0121",
+        "url": "http://edamontology.org/topic_0121",
+        "inDefinedTermSet": "EDAM",
+    },
+    "transcriptomics": {
+        "name": "Transcriptomics",
+        "identifier": "topic_3308",
+        "url": "http://edamontology.org/topic_3308",
+        "inDefinedTermSet": "EDAM",
+    },
+    "epigenomics": {
+        "name": "Epigenomics",
+        "identifier": "topic_3173",
+        "url": "http://edamontology.org/topic_3173",
+        "inDefinedTermSet": "EDAM",
+    },
+}
+
 DIAGNOSIS_TERMS = {
     # "control": {
     #     "identifier": "C61299",
@@ -291,7 +318,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         "url": ARK_PORTAL_DATASET_URL.format(syn_id=syn_id),
         # Assigned fields from mapping
         "license": "https://arkportal.synapse.org/Data%20Access",
-        "usageInfo": "https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement",
+        "usageInfo": {"url":"https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement"},
         "includedInDataCatalog": {
             "@type": "DataCatalog",
             "name": "SAGE ARK Portal",
@@ -370,6 +397,26 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     measurement = list(dict.fromkeys(measurement_values))
     if len(measurement) > 0:
         doc["measurementTechnique"] = [{"name": value} for value in measurement]
+
+    # Topic categories based on measurement techniques
+    topic_categories: List[Dict] = []
+    for value in measurement_values:
+        normalized = value.lower().strip()
+        if normalized in TOPIC_CATEGORY_MAPPING:
+            topic_term = TOPIC_CATEGORY_MAPPING[normalized].copy()
+            topic_term["@type"] = "DefinedTerm"
+            topic_categories.append(topic_term)
+
+    # Remove duplicates based on identifier while preserving order
+    seen_identifiers = set()
+    unique_topics = []
+    for topic in topic_categories:
+        if topic["identifier"] not in seen_identifiers:
+            seen_identifiers.add(topic["identifier"])
+            unique_topics.append(topic)
+
+    if len(unique_topics) > 0:
+        doc["topicCategory"] = unique_topics
 
     # Sample/biospecimen information
     biospecimen_type_values: List[str] = []
