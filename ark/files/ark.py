@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import datetime
 import logging
-import os
+import re
 from typing import Any, Dict, Generator, List, Optional
 
 import pandas as pd
 import synapseclient
+from api_secret import SYNAPSE_TOKEN
 from synapseclient import Synapse
 
 # Synapse table containing ARK datasets
 ARK_DATASETS_TABLE = "syn68554562"
 ARK_PORTAL_DATASET_URL = "https://arkportal.synapse.org/Explore/Datasets/DetailsPage?id={syn_id}"
 SYNAPSE_OBJECT_URL = "https://www.synapse.org/Synapse:{syn_id}"
-
-# Path to local file containing Synapse auth token
-TOKEN_FILE = ".synapse_token"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -29,53 +28,101 @@ CONDITIONS_OF_ACCESS = {
 }
 
 DIAGNOSIS_TERMS = {
-    "control": {
-        "identifier": "http://purl.obolibrary.org/obo/NCIT_C61299",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/ncit.owl",
-    },
+    # "control": {
+    #     "identifier": "C61299",
+    #     "inDefinedTermSet": "NCIT",
+    #     "isCurated": False,
+    #     "name": "control",
+    #     "url": "http://purl.obolibrary.org/obo/NCIT_C61299",
+    #     "alternateName": ["Control Group"],
+    # },
     "sle": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0007915",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0007915",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "systemic lupus erythematosus",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0007915",
+        "alternateName": ["SLE", "lupus erythematosus, systemic"],
     },
     "ra": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0008383",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0008383",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "rheumatoid arthritis",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0008383",
+        "alternateName": ["RA", "rheumatoid arthritis (disease)"],
     },
     "vitiligo": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0008661",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0008661",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "vitiligo",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0008661",
+        "alternateName": ["vitiligo (disease)"],
     },
     "dermatomyositis": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0016367",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0016367",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "dermatomyositis",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0016367",
+        "alternateName": ["dermatomyositis (disease)"],
     },
     "pso": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0005083",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0005083",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "psoriasis",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0005083",
+        "alternateName": ["PSO", "psoriasis (disease)"],
     },
     "psa": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0011849",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0011849",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "psoriatic arthritis",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0011849",
+        "alternateName": ["PSA", "arthritis, psoriatic", "psoriatic arthropathy"],
     },
     "scleroderma": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0019340",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0019340",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "scleroderma",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0019340",
+        "alternateName": ["systemic sclerosis", "systemic scleroderma"],
     },
     "sjd": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0010030",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0010030",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "Sjogren syndrome",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0010030",
+        "alternateName": ["SJD", "Sjögren's syndrome", "Sjogren's syndrome"],
     },
     "ln": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0005556",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0005556",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "lupus nephritis",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0005556",
+        "alternateName": ["LN", "nephritis, lupus"],
     },
     "cle": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0005282",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0005282",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "cutaneous lupus erythematosus",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0005282",
+        "alternateName": ["CLE", "lupus erythematosus, cutaneous"],
     },
     "oa": {
-        "identifier": "http://purl.obolibrary.org/obo/MONDO_0005178",
-        "inDefinedTermSet": "http://purl.obolibrary.org/obo/mondo.owl",
+        "identifier": "0005178",
+        "inDefinedTermSet": "MONDO",
+        "isCurated": False,
+        "name": "osteoarthritis",
+        "url": "http://purl.obolibrary.org/obo/MONDO_0005178",
+        "alternateName": ["OA", "osteoarthritis (disease)", "arthrosis"],
     },
 }
 
@@ -88,41 +135,39 @@ IDENTIFIER_BASE_URLS = (
 )
 
 
+def extract_grant_ids(credit_text: str) -> List[Dict[str, str]]:
+    """
+    Extract NIH grant IDs from acknowledgment/credit text.
 
+    Args:
+        credit_text: The acknowledgment statement containing grant information
 
+    Returns:
+        List of funding objects with identifier field containing grant IDs
+    """
+    if not credit_text:
+        return []
 
-def read_token_from_file(token_file: str = TOKEN_FILE) -> Optional[str]:
-    """Read auth token from a local file."""
-    # Try to read from the script's directory first
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    token_path = os.path.join(script_dir, token_file)
+    # Pattern to match NIH grant IDs (e.g., UH2-AR067676, UM2-AR067678)
+    # Matches formats like: UH2-AR067676, R01-GM123456, etc.
+    grant_pattern = r'\b([A-Z]{1,3}\d{1,2}-[A-Z]{2}\d{6})\b'
 
-    if os.path.exists(token_path):
-        try:
-            with open(token_path, 'r') as f:
-                token = f.read().strip()
-                if token:
-                    return token
-        except Exception as error:
-            logger.warning("Failed to read token from %s: %s", token_path, error)
+    matches = re.findall(grant_pattern, credit_text)
 
-    # Fallback to current working directory
-    if os.path.exists(token_file):
-        try:
-            with open(token_file, 'r') as f:
-                token = f.read().strip()
-                if token:
-                    return token
-        except Exception as error:
-            logger.warning("Failed to read token from %s: %s", token_file, error)
+    if not matches:
+        return []
 
-    return None
+    # Remove duplicates while preserving order
+    unique_grants = list(dict.fromkeys(matches))
+
+    # Return as list of funding objects
+    return [{"identifier": grant_id} for grant_id in unique_grants]
 
 
 def get_synapse_client(auth_token: Optional[str] = None) -> Synapse:
     """Initialize and login to Synapse client."""
     syn = synapseclient.Synapse()
-    token = auth_token or read_token_from_file()
+    token = auth_token or SYNAPSE_TOKEN
     if token:
         syn.login(authToken=token)
     else:
@@ -173,6 +218,61 @@ def fetch_wiki_content(syn: Synapse, entity_id: str, wiki_id: Optional[str] = No
         return None
 
 
+def build_sample_record(dataset_doc: Dict, biospecimen_type_values: List[str], biospecimen_subtype_values: List[str]) -> Optional[Dict]:
+    """Build a separate Sample record from dataset information."""
+    if len(biospecimen_type_values) == 0 and len(biospecimen_subtype_values) == 0:
+        return None
+
+    dataset_id = dataset_doc.get("_id", "").replace("ark_", "")
+    dataset_identifier = dataset_doc.get("identifier") or dataset_id
+    dataset_url = dataset_doc.get("url")
+    dataset_name = dataset_doc.get("name")
+
+    sample_record = {
+        "_id": f"{dataset_doc['_id']}_sample",
+        "@type": "Sample",
+        "identifier": f"{dataset_identifier}_sample",
+        "name": f"{dataset_name} - Sample" if dataset_name else "Sample",
+        "url": dataset_url,
+        "isPartOf": {
+            "@type": "Dataset",
+            "identifier": dataset_identifier,
+            "url": dataset_url,
+        },
+    }
+
+    if dataset_name:
+        sample_record["isPartOf"]["name"] = dataset_name
+
+    # Copy relevant fields from dataset
+    if dataset_doc.get("includedInDataCatalog"):
+        sample_record["includedInDataCatalog"] = dataset_doc["includedInDataCatalog"]
+    if dataset_doc.get("conditionsOfAccess"):
+        sample_record["conditionsOfAccess"] = dataset_doc["conditionsOfAccess"]
+    if dataset_doc.get("license"):
+        sample_record["license"] = dataset_doc["license"]
+    if dataset_doc.get("usageInfo"):
+        # usageInfo.url
+        sample_record["usageInfo"] = {
+            "url": dataset_doc["usageInfo"]
+        }
+    if dataset_doc.get("measurementTechnique"):
+        sample_record["measurementTechnique"] = dataset_doc["measurementTechnique"]
+    if dataset_doc.get("healthCondition"):
+        sample_record["healthCondition"] = dataset_doc["healthCondition"]
+
+    # Add anatomical structure
+    anatomical_structure: Dict[str, Any] = {}
+    if len(biospecimen_type_values) > 0:
+        anatomical_structure["name"] = biospecimen_type_values
+    if len(biospecimen_subtype_values) > 0:
+        anatomical_structure["sampleType"] = biospecimen_subtype_values
+
+    sample_record["anatomicalStructure"] = anatomical_structure
+
+    return sample_record
+
+
 def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     """Convert a Synapse table row to NDE format."""
     syn_id = row["id"]
@@ -186,12 +286,19 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         raise
 
     doc: Dict = {
-        "_id": syn_id,
+        "_id": f'ark_{syn_id}',
+        "identifier": syn_id,
         "url": ARK_PORTAL_DATASET_URL.format(syn_id=syn_id),
         # Assigned fields from mapping
         "license": "https://arkportal.synapse.org/Data%20Access",
         "usageInfo": "https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement",
-        "genre": "IID",
+        "includedInDataCatalog": {
+            "@type": "DataCatalog",
+            "name": "SAGE ARK Portal",
+            "url": "https://arkportal.synapse.org/",
+            "versionDate": datetime.date.today().isoformat()
+        },
+        "@type": "Dataset",
     }
 
     # Add name if present
@@ -204,14 +311,14 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     if description and not pd.isna(description) and str(description).strip():
         doc["description"] = str(description).strip()
 
-    # Add dates if present
+    # Add dates if present (convert from Unix timestamp in milliseconds to YYYY-MM-DD)
     date_created = row.get("createdOn")
     if date_created and not pd.isna(date_created):
-        doc["dateCreated"] = date_created
+        doc["dateCreated"] = datetime.datetime.fromtimestamp(int(date_created) / 1000).strftime("%Y-%m-%d")
 
     date_modified = row.get("modifiedOn")
     if date_modified and not pd.isna(date_modified):
-        doc["dateModified"] = date_modified
+        doc["dateModified"] = datetime.datetime.fromtimestamp(int(date_modified) / 1000).strftime("%Y-%m-%d")
 
     # Add program as author (Organization type)
     program = row.get("program")
@@ -242,21 +349,21 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     measurement_values: List[str] = []
 
     assay = row.get("assay")
-    if assay is not None and not pd.isna(assay):
-        if isinstance(assay, (list, tuple)):
+    if assay is not None:
+        if isinstance(assay, (list, tuple, pd.Series)):
             for item in assay:
-                if item and not pd.isna(item) and str(item).strip():
+                if item is not None and not pd.isna(item) and str(item).strip():
                     measurement_values.append(str(item).strip())
-        elif str(assay).strip():
+        elif not pd.isna(assay) and str(assay).strip():
             measurement_values.append(str(assay).strip())
 
     data_type = row.get("dataType")
-    if data_type is not None and not pd.isna(data_type):
-        if isinstance(data_type, (list, tuple)):
+    if data_type is not None:
+        if isinstance(data_type, (list, tuple, pd.Series)):
             for item in data_type:
-                if item and not pd.isna(item) and str(item).strip():
+                if item is not None and not pd.isna(item) and str(item).strip():
                     measurement_values.append(str(item).strip())
-        elif str(data_type).strip():
+        elif not pd.isna(data_type) and str(data_type).strip():
             measurement_values.append(str(data_type).strip())
 
     # Remove duplicates while preserving order
@@ -267,41 +374,39 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     # Sample/biospecimen information
     biospecimen_type_values: List[str] = []
     biospecimen_type = row.get("biospecimenType")
-    if biospecimen_type is not None and not pd.isna(biospecimen_type):
-        if isinstance(biospecimen_type, (list, tuple)):
+    if biospecimen_type is not None:
+        if isinstance(biospecimen_type, (list, tuple, pd.Series)):
             for item in biospecimen_type:
-                if item and not pd.isna(item) and str(item).strip():
+                if item is not None and not pd.isna(item) and str(item).strip():
                     biospecimen_type_values.append(str(item).strip())
-        elif str(biospecimen_type).strip():
+        elif not pd.isna(biospecimen_type) and str(biospecimen_type).strip():
             biospecimen_type_values.append(str(biospecimen_type).strip())
 
     biospecimen_subtype_values: List[str] = []
     biospecimen_subtype = row.get("biospecimenSubtype")
-    if biospecimen_subtype is not None and not pd.isna(biospecimen_subtype):
-        if isinstance(biospecimen_subtype, (list, tuple)):
+    if biospecimen_subtype is not None:
+        if isinstance(biospecimen_subtype, (list, tuple, pd.Series)):
             for item in biospecimen_subtype:
-                if item and not pd.isna(item) and str(item).strip():
+                if item is not None and not pd.isna(item) and str(item).strip():
                     biospecimen_subtype_values.append(str(item).strip())
-        elif str(biospecimen_subtype).strip():
+        elif not pd.isna(biospecimen_subtype) and str(biospecimen_subtype).strip():
             biospecimen_subtype_values.append(str(biospecimen_subtype).strip())
 
-    if len(biospecimen_type_values) > 0 or len(biospecimen_subtype_values) > 0:
-        anatomical_structure: Dict[str, Any] = {}
-        if len(biospecimen_type_values) > 0:
-            anatomical_structure["name"] = biospecimen_type_values
-        if len(biospecimen_subtype_values) > 0:
-            anatomical_structure["sampleType"] = biospecimen_subtype_values
-        doc["sample"] = {"anatomicalStructure": anatomical_structure}
+    # Store sample data for separate Sample record generation
+    sample_data = {
+        "biospecimen_type_values": biospecimen_type_values,
+        "biospecimen_subtype_values": biospecimen_subtype_values,
+    }
 
     # Health conditions from diagnosis
     diagnosis = row.get("diagnosis")
     diagnosis_values: List[str] = []
-    if diagnosis is not None and not pd.isna(diagnosis):
-        if isinstance(diagnosis, (list, tuple)):
+    if diagnosis is not None:
+        if isinstance(diagnosis, (list, tuple, pd.Series)):
             for item in diagnosis:
-                if item and not pd.isna(item) and str(item).strip():
+                if item is not None and not pd.isna(item) and str(item).strip():
                     diagnosis_values.append(str(item).strip())
-        elif str(diagnosis).strip():
+        elif not pd.isna(diagnosis) and str(diagnosis).strip():
             diagnosis_values.append(str(diagnosis).strip())
 
     health_condition: List[Dict] = []
@@ -313,9 +418,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
             continue
         lookup = DIAGNOSIS_TERMS.get(normalized.lower())
         if lookup:
-            entry = {"name": normalized}
-            entry.update(lookup)
-            health_condition.append(entry)
+            health_condition.append(lookup)
         else:
             # Unknown diagnosis terms go to keywords
             keywords.append(normalized)
@@ -333,6 +436,10 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         credit_text = fetch_wiki_content(syn, entity.parentId, str(acknowledgment_ref).split("/")[-1])
         if credit_text:
             doc["creditText"] = credit_text
+            # Extract grant IDs from credit text and add to funding
+            funding_list = extract_grant_ids(credit_text)
+            if funding_list:
+                doc["funding"] = funding_list
         else:
             doc["creditText"] = SYNAPSE_OBJECT_URL.format(
                 syn_id=f"{entity.parentId}/wiki/{str(acknowledgment_ref).split('/')[-1]}"
@@ -341,12 +448,12 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     # Publications (citation field)
     publication_syn_id = row.get("publicationSynID")
     pub_syn_ids: List[str] = []
-    if publication_syn_id is not None and not pd.isna(publication_syn_id):
-        if isinstance(publication_syn_id, (list, tuple)):
+    if publication_syn_id is not None:
+        if isinstance(publication_syn_id, (list, tuple, pd.Series)):
             for item in publication_syn_id:
-                if item and not pd.isna(item) and str(item).strip():
+                if item is not None and not pd.isna(item) and str(item).strip():
                     pub_syn_ids.append(str(item).strip())
-        elif str(publication_syn_id).strip():
+        elif not pd.isna(publication_syn_id) and str(publication_syn_id).strip():
             pub_syn_ids.append(str(publication_syn_id).strip())
 
     publications: List[Dict] = []
@@ -360,12 +467,12 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     # Associated code repositories (isRelatedTo with ComputationalTool type)
     code_url = row.get("associatedCodeURL")
     code_urls: List[str] = []
-    if code_url is not None and not pd.isna(code_url):
-        if isinstance(code_url, (list, tuple)):
+    if code_url is not None:
+        if isinstance(code_url, (list, tuple, pd.Series)):
             for item in code_url:
-                if item and not pd.isna(item) and str(item).strip():
+                if item is not None and not pd.isna(item) and str(item).strip():
                     code_urls.append(str(item).strip())
-        elif str(code_url).strip():
+        elif not pd.isna(code_url) and str(code_url).strip():
             code_urls.append(str(code_url).strip())
 
     if len(code_urls) > 0:
@@ -379,13 +486,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     for key, template in IDENTIFIER_BASE_URLS:
         value = row.get(key)
         if value and not pd.isna(value) and str(value).strip():
-            identifiers.append(
-                {
-                    "type": key,
-                    "value": str(value).strip(),
-                    "url": template.format(value=str(value).strip()),
-                }
-            )
+            identifiers.append(str(value).strip())
     if len(identifiers) > 0:
         doc["identifier"] = identifiers
 
@@ -393,7 +494,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     if len(keywords) > 0:
         doc["keywords"] = sorted(set(keywords))
 
-    return doc
+    return doc, sample_data
 
 
 def parse(
@@ -403,7 +504,7 @@ def parse(
     Fetch and parse ARK datasets from Synapse.
 
     Args:
-        auth_token: Synapse authentication token. If not provided, reads from TOKEN_FILE.
+        auth_token: Synapse authentication token. If not provided, uses SYNAPSE_TOKEN from api_secret.
 
     Yields:
         Parsed dataset documents in NDE format.
@@ -427,9 +528,21 @@ def parse(
     processed = 0
     for _, row in df.iterrows():
         try:
-            doc = process_dataset_row(syn, row)
+            dataset_doc, sample_data = process_dataset_row(syn, row)
             processed += 1
-            yield doc
+
+            # Yield the dataset record
+            yield dataset_doc
+
+            # Build and yield the sample record if we have sample data
+            sample_record = build_sample_record(
+                dataset_doc,
+                sample_data["biospecimen_type_values"],
+                sample_data["biospecimen_subtype_values"]
+            )
+            if sample_record:
+                yield sample_record
+
         except Exception as error:
             logger.error("Failed to process dataset %s: %s", row.get("id", "unknown"), error, exc_info=True)
             continue
@@ -439,5 +552,8 @@ def parse(
 
 if __name__ == "__main__":
     # Example usage
-    for dataset in parse():
-        print(f"Processed: {dataset['_id']} - {dataset['name']}")
+    for record in parse():
+        record_type = record.get("@type", "Unknown")
+        record_id = record.get("_id", "unknown")
+        record_name = record.get("name", "")
+        print(f"Processed {record_type}: {record_id} - {record_name}")
