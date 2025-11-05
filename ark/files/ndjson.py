@@ -13,7 +13,7 @@ logger = logging.getLogger("nde-logger")
 # set the release string to be ISO date format
 # minute precision is good enough but feel free to change
 release_string = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-dirname = os.path.join("/data", "ark_data")
+dirname = os.path.join("/data", "ark_crawled")
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(dirname, "release.txt")
 # so that updates are as atomic as possible, using rename
