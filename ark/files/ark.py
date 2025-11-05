@@ -323,7 +323,8 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
             "@type": "DataCatalog",
             "name": "SAGE ARK Portal",
             "url": "https://arkportal.synapse.org/",
-            "versionDate": datetime.date.today().isoformat()
+            "versionDate": datetime.date.today().isoformat(),
+            "archivedAt": ARK_PORTAL_DATASET_URL.format(syn_id=syn_id),
         },
         "@type": "Dataset",
     }
