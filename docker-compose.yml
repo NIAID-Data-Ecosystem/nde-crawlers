@@ -1,5 +1,5 @@
 services:
-  # when updating changes to code: "docker-compose up --detach --build nde-hub"
+  # when updating changes to code: "docker compose up --detach --build nde-hub"
   ncbi_geo-crawler:
     build:
       context: ncbi_geo_crawler

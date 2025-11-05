@@ -21,6 +21,6 @@ class NCBI_SRA_Dumper(DockerContainerDumper):
     UNCOMPRESS = True
     VOLUMES = {"/opt/nde/cache": {"bind": "/cache", "mode": "rw"}}
     SRC_URLS = [
-        f'docker://su07?image=nde-crawlers_{SRC_NAME}-crawler&tag=latest&path=/data/{SRC_NAME}_crawled/data.ndjson&dump_command="/home/biothings/run-api-crawler.sh"&container_name={SRC_NAME}_dumper&volumes={json.dumps(VOLUMES)}'
+        f'docker://su07?image=nde-crawlers-{SRC_NAME}-crawler&tag=latest&path=/data/{SRC_NAME}_crawled/data.ndjson&dump_command="/home/biothings/run-api-crawler.sh"&container_name={SRC_NAME}_dumper&volumes={json.dumps(VOLUMES)}'
         # &custom_cmd="/usr/bin/wget https://s3.pgkb.org/data/annotations.zip -O /tmp/annotations.zip"'
     ]

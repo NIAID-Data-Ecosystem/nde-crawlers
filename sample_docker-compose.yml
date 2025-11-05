@@ -1,6 +1,6 @@
-# docker-compose -f sample_docker-compose.yml up --detach --build
+# docker compose -f sample_docker-compose.yml up --detach --build
 services:
-  # when updating changes to code: "docker-compose -f sample_docker-compose.yml up --detach --build nde-hub"
+  # when updating changes to code: "docker compose -f sample_docker-compose.yml up --detach --build nde-hub"
   mongodb:
     image: mongo:5.0
     ports:
