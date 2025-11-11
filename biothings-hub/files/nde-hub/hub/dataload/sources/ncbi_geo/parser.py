@@ -110,9 +110,11 @@ def parse_sample_characteristics(output, value):
                     output[mapping[0]] = []
                 if isinstance(field_value, list):
                     for fv in field_value:
-                        output[mapping[0]].append({"name": fv})
+                        if not {"name": fv} in output[mapping[0]]:
+                            output[mapping[0]].append({"name": fv})
                 else:
-                    output[mapping[0]].append({"name": field_value})
+                    if not {"name": field_value} in output[mapping[0]]:
+                        output[mapping[0]].append({"name": field_value})
             elif mapping[0] == "temporalCoverage":
                 if isinstance(field_value, list):
                     output[mapping[0]] = [{"duration": fv} for fv in field_value]
@@ -134,7 +136,10 @@ def parse_sample_characteristics(output, value):
                     else:
                         output[mapping[0]].append(field_value)
         else:
-            output.setdefault("variableMeasured", []).append({"name": subproperty})
+            if not "variableMeasured" in output:
+                output["variableMeasured"] = []
+            if not {"name": subproperty} in output["variableMeasured"]:
+                output["variableMeasured"].append({"name": subproperty})
 
 
 def parse_gsm(data_folder):
