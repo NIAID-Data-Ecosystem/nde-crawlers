@@ -206,11 +206,14 @@ def fetch_publication_details(syn: Synapse, pub_syn_id: str) -> Optional[Dict]:
     """Fetch publication metadata from Synapse."""
     try:
         annotations = syn.get_annotations(pub_syn_id)
-        pub: Dict[str, Any] = {"synapseId": pub_syn_id}
 
         pmid = annotations.get("PMID", [None])[0] if annotations.get("PMID") else None
         if pmid and not pd.isna(pmid):
-            pub["pmid"] = pmid
+            # If PMID exists, return only the PMID (util handles the rest)
+            return {"pmids": pmid}
+
+        # If no PMID, parse publication details as normal
+        pub: Dict[str, Any] = {"synapseId": pub_syn_id}
 
         doi = annotations.get("DOI", [None])[0] if annotations.get("DOI") else None
         if doi and not pd.isna(doi):
@@ -222,7 +225,7 @@ def fetch_publication_details(syn: Synapse, pub_syn_id: str) -> Optional[Dict]:
 
         title = annotations.get("title", [None])[0] if annotations.get("title") else None
         if title and not pd.isna(title):
-            pub["title"] = title
+            pub["name"] = title
 
         return pub
     except Exception as error:
@@ -245,61 +248,6 @@ def fetch_wiki_content(syn: Synapse, entity_id: str, wiki_id: Optional[str] = No
         return None
 
 
-def build_sample_record(dataset_doc: Dict, biospecimen_type_values: List[str], biospecimen_subtype_values: List[str]) -> Optional[Dict]:
-    """Build a separate Sample record from dataset information."""
-    if len(biospecimen_type_values) == 0 and len(biospecimen_subtype_values) == 0:
-        return None
-
-    dataset_id = dataset_doc.get("_id", "").replace("ark_", "")
-    dataset_identifier = dataset_doc.get("identifier") or dataset_id
-    dataset_url = dataset_doc.get("url")
-    dataset_name = dataset_doc.get("name")
-
-    sample_record = {
-        "_id": f"{dataset_doc['_id']}_sample",
-        "@type": "Sample",
-        "identifier": f"{dataset_identifier}_sample",
-        "name": f"{dataset_name} - Sample" if dataset_name else "Sample",
-        "url": dataset_url,
-        "isPartOf": {
-            "@type": "Dataset",
-            "identifier": dataset_identifier,
-            "url": dataset_url,
-        },
-    }
-
-    if dataset_name:
-        sample_record["isPartOf"]["name"] = dataset_name
-
-    # Copy relevant fields from dataset
-    if dataset_doc.get("includedInDataCatalog"):
-        sample_record["includedInDataCatalog"] = dataset_doc["includedInDataCatalog"]
-    if dataset_doc.get("conditionsOfAccess"):
-        sample_record["conditionsOfAccess"] = dataset_doc["conditionsOfAccess"]
-    if dataset_doc.get("license"):
-        sample_record["license"] = dataset_doc["license"]
-    if dataset_doc.get("usageInfo"):
-        # usageInfo.url
-        sample_record["usageInfo"] = {
-            "url": dataset_doc["usageInfo"]
-        }
-    if dataset_doc.get("measurementTechnique"):
-        sample_record["measurementTechnique"] = dataset_doc["measurementTechnique"]
-    if dataset_doc.get("healthCondition"):
-        sample_record["healthCondition"] = dataset_doc["healthCondition"]
-
-    # Add anatomical structure
-    anatomical_structure: Dict[str, Any] = {}
-    if len(biospecimen_type_values) > 0:
-        anatomical_structure["name"] = biospecimen_type_values
-    if len(biospecimen_subtype_values) > 0:
-        anatomical_structure["sampleType"] = biospecimen_subtype_values
-
-    sample_record["anatomicalStructure"] = anatomical_structure
-
-    return sample_record
-
-
 def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     """Convert a Synapse table row to NDE format."""
     syn_id = row["id"]
@@ -312,19 +260,21 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         logger.error("Failed to get entity %s: %s", syn_id, error)
         raise
 
+    digits_only_id = re.sub(r"\D", "", str(syn_id))
+
     doc: Dict = {
         "_id": f'ark_{syn_id}',
         "identifier": syn_id,
-        "url": ARK_PORTAL_DATASET_URL.format(syn_id=syn_id),
+        "url": ARK_PORTAL_DATASET_URL.format(syn_id=digits_only_id),
         # Assigned fields from mapping
-        "license": "https://arkportal.synapse.org/Data%20Access",
-        "usageInfo": {"url":"https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement"},
+    "license": "https://arkportal.synapse.org/Data%20Access",
+    "usageInfo": {"url": "https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement"},
         "includedInDataCatalog": {
             "@type": "DataCatalog",
             "name": "SAGE ARK Portal",
             "url": "https://arkportal.synapse.org/",
             "versionDate": datetime.date.today().isoformat(),
-            "archivedAt": ARK_PORTAL_DATASET_URL.format(syn_id=syn_id),
+            "archivedAt": ARK_PORTAL_DATASET_URL.format(syn_id=digits_only_id),
         },
         "@type": "Dataset",
     }
@@ -440,11 +390,19 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         elif not pd.isna(biospecimen_subtype) and str(biospecimen_subtype).strip():
             biospecimen_subtype_values.append(str(biospecimen_subtype).strip())
 
-    # Store sample data for separate Sample record generation
-    sample_data = {
-        "biospecimen_type_values": biospecimen_type_values,
-        "biospecimen_subtype_values": biospecimen_subtype_values,
-    }
+    sample_components: Dict[str, Any] = {}
+    if len(biospecimen_type_values) > 0:
+        sample_components["anatomicalStructure"] = [
+            {"@type": "DefinedTerm", "name": value}
+            for value in dict.fromkeys(biospecimen_type_values)
+        ]
+    if len(biospecimen_subtype_values) > 0:
+        sample_components["sampleType"] = [
+            {"@type": "DefinedTerm", "name": value}
+            for value in dict.fromkeys(biospecimen_subtype_values)
+        ]
+    if sample_components:
+        doc["sample"] = sample_components
 
     # Health conditions from diagnosis
     diagnosis = row.get("diagnosis")
@@ -505,10 +463,22 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
             pub_syn_ids.append(str(publication_syn_id).strip())
 
     publications: List[Dict] = []
+    pmids: List[str] = []
     for pub_syn_id in pub_syn_ids:
         pub_details = fetch_publication_details(syn, pub_syn_id)
         if pub_details:
-            publications.append(pub_details)
+            # Check if this publication has a PMID
+            if "pmids" in pub_details:
+                pmids.append(pub_details["pmids"])
+            else:
+                # No PMID, add full publication details to citation
+                publications.append(pub_details)
+
+    # Add PMIDs to document if any were found
+    if len(pmids) > 0:
+        doc["pmids"] = pmids
+
+    # Add citation for publications without PMIDs
     if len(publications) > 0:
         doc["citation"] = publications
 
@@ -530,19 +500,21 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         ]
 
     # Identifiers (dbGap, ImmPort)
-    identifiers: List[Dict] = []
+    additional_identifiers: List[str] = []
     for key, template in IDENTIFIER_BASE_URLS:
         value = row.get(key)
         if value and not pd.isna(value) and str(value).strip():
-            identifiers.append(str(value).strip())
-    if len(identifiers) > 0:
-        doc["identifier"] = identifiers
+            additional_identifiers.append(str(value).strip())
+    if len(additional_identifiers) > 0:
+        identifier_values = [doc["identifier"]] + additional_identifiers
+        # Remove duplicates while preserving order
+        doc["identifier"] = list(dict.fromkeys(identifier_values))
 
     # Add keywords
     if len(keywords) > 0:
         doc["keywords"] = sorted(set(keywords))
 
-    return doc, sample_data
+    return doc
 
 
 def parse(
@@ -576,20 +548,11 @@ def parse(
     processed = 0
     for _, row in df.iterrows():
         try:
-            dataset_doc, sample_data = process_dataset_row(syn, row)
+            dataset_doc = process_dataset_row(syn, row)
             processed += 1
 
             # Yield the dataset record
             yield dataset_doc
-
-            # Build and yield the sample record if we have sample data
-            sample_record = build_sample_record(
-                dataset_doc,
-                sample_data["biospecimen_type_values"],
-                sample_data["biospecimen_subtype_values"]
-            )
-            if sample_record:
-                yield sample_record
 
         except Exception as error:
             logger.error("Failed to process dataset %s: %s", row.get("id", "unknown"), error, exc_info=True)
