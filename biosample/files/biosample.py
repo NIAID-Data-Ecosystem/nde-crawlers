@@ -2,17 +2,24 @@ import datetime
 import json
 import logging
 import re
+import socket
 
 import dateutil.parser
 import xmltodict
 from Bio import Entrez
 from tenacity import retry, stop_after_attempt, wait_fixed
 
+DEFAULT_TIMEOUT = 30  # seconds
+socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 GEO_API_KEY = "3048f6bdb7c91cc8ad7af802559ec470e609"
 GEO_EMAIL = "cwu@scripps.edu"
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 Entrez.email = GEO_EMAIL
@@ -31,7 +38,7 @@ def insert_value(d, key, value):
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), reraise=True)
 def query_acc(term, retstart, retmax):
-    handle = Entrez.esearch(db="biosample", term=term, usehistory="y")
+    handle = Entrez.esearch(db="biosample", term=term, usehistory="y", timeout=DEFAULT_TIMEOUT)
     record = Entrez.read(handle)
     handle.close()
     webenv = record["WebEnv"]
@@ -43,6 +50,7 @@ def query_acc(term, retstart, retmax):
         retmode="json",
         retmax=retmax,
         retstart=retstart,
+        timeout=DEFAULT_TIMEOUT,
     )
 
     records = json.load(handle)
@@ -57,7 +65,7 @@ def fetch_all_samples():
     """
 
     # First, get total count
-    handle = Entrez.esearch(db="biosample", term="all[filter]", usehistory="y")
+    handle = Entrez.esearch(db="biosample", term="all[filter]", usehistory="y", timeout=DEFAULT_TIMEOUT)
     record = Entrez.read(handle)
     total = int(record["Count"])
     logger.info(f"Total records to download: {total}")
@@ -104,6 +112,10 @@ def parse_xml(sample_dict, output):
                         "restricted access",
                         "unspecified",
                         "not determined",
+                        "not recorded",
+                        "unk",
+                        "blank",
+                        "null"
                     ]
                     if (
                         not attributes.get(key)
