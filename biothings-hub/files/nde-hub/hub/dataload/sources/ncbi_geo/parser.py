@@ -110,11 +110,17 @@ def parse_sample_characteristics(output, value):
                     output[mapping[0]] = []
                 if isinstance(field_value, list):
                     for fv in field_value:
-                        if not {"name": fv} in output[mapping[0]]:
-                            output[mapping[0]].append({"name": fv})
+                        d = {"name": fv}
+                        if "anatomicalStructure" == mapping[0]:
+                            d["@type"] = "DefinedTerm"
+                        if not d in output[mapping[0]]:
+                            output[mapping[0]].append(d)
                 else:
-                    if not {"name": field_value} in output[mapping[0]]:
-                        output[mapping[0]].append({"name": field_value})
+                    d = {"name": field_value}
+                    if "anatomicalStructure" == mapping[0]:
+                        d["@type"] = "DefinedTerm"
+                    if not d in output[mapping[0]]:
+                        output[mapping[0]].append(d)
             elif mapping[0] == "temporalCoverage":
                 if isinstance(field_value, list):
                     output[mapping[0]] = [{"duration": fv} for fv in field_value]
@@ -138,8 +144,9 @@ def parse_sample_characteristics(output, value):
         else:
             if not "variableMeasured" in output:
                 output["variableMeasured"] = []
-            if not {"name": subproperty} in output["variableMeasured"]:
-                output["variableMeasured"].append({"name": subproperty})
+            d = {"name": subproperty, "@type": "DefinedTerm"}
+            if not d in output["variableMeasured"]:
+                output["variableMeasured"].append(d)
 
 
 def parse_gsm(data_folder):
@@ -198,9 +205,9 @@ def parse_gsm(data_folder):
 
         if sample_type := item.get("!Sample_type"):
             if isinstance(sample_type, list):
-                output["sampleType"] = [{"name": s} for s in sample_type]
+                output["sampleType"] = [{"name": s, "@type": "DefinedTerm"} for s in sample_type]
             else:
-                output["sampleType"] = [{"name": sample_type}]
+                output["sampleType"] = [{"name": sample_type, "@type": "DefinedTerm"}]
 
         if description := item.get("!Sample_description"):
             if isinstance(description, list):
@@ -248,9 +255,9 @@ def parse_gsm(data_folder):
             if "sampleType" not in output:
                 output["sampleType"] = []
             if isinstance(sample_type, list):
-                output["sampleType"].extend([{"name": s} for s in sample_type])
+                output["sampleType"].extend([{"name": s, "@type": "DefinedTerm"} for s in sample_type])
             else:
-                output["sampleType"].append({"name": sample_type})
+                output["sampleType"].append({"name": sample_type, "@type": "DefinedTerm"})
 
         if same_as := item.get("!Sample_relation"):
             output["sameAs"] = same_as
