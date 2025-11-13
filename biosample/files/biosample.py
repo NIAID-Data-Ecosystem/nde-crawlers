@@ -115,7 +115,8 @@ def parse_xml(sample_dict, output):
                         "not recorded",
                         "unk",
                         "blank",
-                        "null"
+                        "null",
+                        "not appicable"
                     ]
                     if (
                         not attributes.get(key)

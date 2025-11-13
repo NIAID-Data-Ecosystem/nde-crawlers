@@ -8,6 +8,7 @@ import orjson
 from biothings.hub.dataload.dumper import BaseDumper
 from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
+from biothings.hub.utils.dataload import merge_struct
 from config import CRAWLER_OUTPUT_DATA_ROOT, DATA_ARCHIVE_ROOT
 from utils.utils import nde_upload_wrapper
 
@@ -821,6 +822,88 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
+            "sample": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "associatedGenotype": {"type": "text", "copy_to": ["all"]},
+                    "associatedPhenotype": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "keyword"},
+                        }
+                    },
+                    "anatomicalStructure": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "keyword"},
+                        }
+                    },
+                    "anatomicalSystem": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "keyword"},
+                        }
+                    },
+                    "cellType": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "keyword"},
+                        }
+                    },
+                    "collectionSize": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "maxValue": {"type": "double"},
+                            "minValue": {"type": "double"},
+                            "unitText": {"type": "text"},
+                            "value": {"type": "integer"},
+                        }
+                    },
+                    "developmentalStage": {
+                        "properties": {
+                            "maxValue": {"type": "double"},
+                            "minValue": {"type": "double"},
+                            "name": {"type": "text"},
+                            "unitCode": {"type": "keyword"},
+                            "unitText": {"type": "text"},
+                            "value": {"type": "integer"},
+                        }
+                    },
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "includedInDataCatalog": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "archivedAt": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                            "versionDate": {"type": "date"},
+                        }
+                    },
+                    "sampleAvailability": {"type": "boolean"},
+                    "sampleList": {"type": "text", "copy_to": ["all"]},
+                    "sampleQuantity": {
+                        "properties": {
+                            "maxValue": {"type": "double"},
+                            "minValue": {"type": "double"},
+                            "name": {"type": "text"},
+                            "unitText": {"type": "text"},
+                            "value": {"type": "integer"},
+                        }
+                    },
+                    "sampleType": {
+                        "properties": {
+                            "name": {"type": "text", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "sex": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "sdPublisher": {
                 "properties": {
                     "@type": {"type": "keyword", "copy_to": ["all"]},
@@ -1173,6 +1256,15 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 }
             },
             "collectionMethod": {"type": "text"},
+            "collectionSize": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "maxValue": {"type": "double"},
+                    "minValue": {"type": "double"},
+                    "unitText": {"type": "text"},
+                    "value": {"type": "integer"},
+                }
+            },
             "collector": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -1766,3 +1858,22 @@ class NDESourceSampleUploader(BaseSourceUploader):
         }
 
         return mapping
+
+class NDECombinedUploader(NDESourceUploader, NDESourceSampleUploader):
+    """
+    Combines both NDESourceUploader and NDESourceSampleUploader
+    """
+    storage_class = IgnoreDuplicatedStorage
+
+    def load_data(self, data_folder):
+        return super().load_data(data_folder)
+
+    @classmethod
+    def get_mapping(cls):
+        # Merge mappings from both parents
+        mapping1 = NDESourceUploader.get_mapping()
+        mapping2 = NDESourceSampleUploader.get_mapping()
+
+        # Use merge_struct to combine them
+        combined_mapping = merge_struct(mapping1, mapping2)
+        return combined_mapping
