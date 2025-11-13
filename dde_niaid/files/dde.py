@@ -52,15 +52,26 @@ def query_bioportal(iri):
             f"Error fetching page: {base_url}/search?q={iri}&require_exact_match=true HTTP: {response.status_code}"
         )
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        logger.error("Non-JSON response returned from BioPortal for %s", iri)
+        return iri, False
 
-    # Check if the response is for a single concept or a list
-    if data == []:
+    collection = data.get("collection") if isinstance(data, dict) else None
+    if not collection:
         logger.info("Could not find alternateNames in bioportal for: %s", iri)
         return iri, False
 
+    concept = collection[0] if isinstance(collection, list) else collection
+
+    pref_label = concept.get("prefLabel")
+    if not pref_label:
+        logger.info("BioPortal result missing prefLabel for: %s", iri)
+        return iri, False
+
     lookup = {
-        "name": data["collection"][0]["prefLabel"],
+        "name": pref_label,
         "url": iri,
         "curatedBy": {
             "name": "Data Discovery Engine",
@@ -70,8 +81,9 @@ def query_bioportal(iri):
         "isCurated": True,
     }
 
-    if data["collection"][0].get("synonym"):
-        lookup["alternateName"] = data["collection"][0]["synonym"]
+    synonyms = concept.get("synonym")
+    if synonyms:
+        lookup["alternateName"] = synonyms
 
     return lookup, True
 
