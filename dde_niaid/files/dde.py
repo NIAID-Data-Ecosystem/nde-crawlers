@@ -45,17 +45,21 @@ def query_bioportal(iri):
     base_url = "https://data.bioontology.org"
     headers = {"Authorization": f"apikey token={API_KEY}"}
 
-    response = requests.get(f"{base_url}/search?q={iri}&require_exact_match=true", headers=headers)
-
-    if response.status_code != 200:
-        logger.error(
-            f"Error fetching page: {base_url}/search?q={iri}&require_exact_match=true HTTP: {response.status_code}"
-        )
-
     try:
+        response = requests.get(f"{base_url}/search?q={iri}&require_exact_match=true", headers=headers)
+
+        if response.status_code != 200:
+            logger.error(
+                f"Error fetching page: {base_url}/search?q={iri}&require_exact_match=true HTTP: {response.status_code}"
+            )
+            return iri, False
+
         data = response.json()
-    except ValueError:
-        logger.error("Non-JSON response returned from BioPortal for %s", iri)
+    except (requests.exceptions.JSONDecodeError, ValueError) as e:
+        logger.error("Non-JSON response returned from BioPortal for %s: %s", iri, e)
+        return iri, False
+    except requests.exceptions.RequestException as e:
+        logger.error("Request failed for BioPortal %s: %s", iri, e)
         return iri, False
 
     collection = data.get("collection") if isinstance(data, dict) else None
@@ -109,7 +113,12 @@ def query_ols(iri):
         else:
             return iri, False
 
-        request = requests.get(url, params).json()
+        try:
+            response = requests.get(url, params)
+            request = response.json()
+        except (requests.exceptions.JSONDecodeError, ValueError) as e:
+            logger.warning("Failed to get valid JSON from OLS for %s: %s. Querying bioportal.", iri, e)
+            return query_bioportal(iri)
         # no documentation on how many requests can be made
         time.sleep(0.5)
 
@@ -145,11 +154,15 @@ def format_query_ols(iri):
     Formats the query_ols return value to fit our schema for variableMeasured, measurementTechnique, infectiousAgent, infectiousDisease, and species
     Returns the formatted dictionary {name: ####, url: ####} if an url was given or {name: ####}
     """
-    info, is_url = query_ols(iri)
-    if is_url:
-        return info
-    else:
-        return {"name": info}
+    try:
+        info, is_url = query_ols(iri)
+        if is_url:
+            return info
+        else:
+            return {"name": info}
+    except Exception as e:
+        logger.error("Unexpected error in format_query_ols for %s: %s. Returning simple name format.", iri, e)
+        return {"name": str(iri)}
 
 
 def format_query_ky(iri):
@@ -157,11 +170,15 @@ def format_query_ky(iri):
     Formats the query_ols return value to fit our schema for keywords
     Returns the formatted keyword
     """
-    info, is_url = query_ols(iri)
-    if is_url:
-        return info["name"]
-    else:
-        return info
+    try:
+        info, is_url = query_ols(iri)
+        if is_url:
+            return info["name"]
+        else:
+            return info
+    except Exception as e:
+        logger.error("Unexpected error in format_query_ky for %s: %s. Returning original value.", iri, e)
+        return str(iri)
 
 
 def parse():
