@@ -1087,6 +1087,81 @@ def build_sample_collection_records(sid, metadata, dataset_record):
     return records
 
 
+def aggregate_sample_properties_to_dataset(dataset_record, sample_collections):
+    """
+    Aggregate sample-level properties to the dataset record for search purposes.
+    Properties like species, healthCondition, cellType, etc. are collected from all
+    sample collections and added to the dataset if not already present.
+    """
+    if not sample_collections:
+        return
+
+    # Properties to aggregate from samples to dataset
+    properties_to_aggregate = {
+        "cellType": set(),
+        "anatomicalStructure": set(),
+        "sex": set(),
+        "developmentalStage": set(),
+        "associatedGenotype": set(),
+        "spatialCoverage": set(),
+        "temporalCoverage": set(),
+    }
+
+    # Collect unique values from all sample collections
+    for sample_coll in sample_collections:
+        for prop_name in properties_to_aggregate.keys():
+            prop_value = sample_coll.get(prop_name)
+            if prop_value:
+                # Handle both single values and arrays
+                values_list = prop_value if isinstance(prop_value, list) else [prop_value]
+                for val in values_list:
+                    if isinstance(val, dict):
+                        # For dict values, create a hashable key
+                        key = json.dumps(val, sort_keys=True, default=str)
+                        properties_to_aggregate[prop_name].add(key)
+                    elif val not in (None, ""):
+                        properties_to_aggregate[prop_name].add(val if isinstance(val, str) else json.dumps(val, sort_keys=True, default=str))
+
+    # Add aggregated properties to dataset if they have values and aren't already more complete
+    for prop_name, values_set in properties_to_aggregate.items():
+        if not values_set:
+            continue
+
+        # Convert back from JSON strings to dicts where needed
+        aggregated_values = []
+        for val_str in values_set:
+            try:
+                # Try to parse as JSON for dict values
+                parsed = json.loads(val_str) if isinstance(val_str, str) and (val_str.startswith("{") or val_str.startswith("[")) else val_str
+                aggregated_values.append(parsed)
+            except (json.JSONDecodeError, ValueError):
+                aggregated_values.append(val_str)
+
+        # Check if dataset already has this property with sufficient data
+        existing_value = dataset_record.get(prop_name)
+        if existing_value:
+            # If dataset already has values, merge with sample values
+            existing_list = existing_value if isinstance(existing_value, list) else [existing_value]
+            existing_keys = {json.dumps(v, sort_keys=True, default=str) for v in existing_list}
+
+            for new_val in aggregated_values:
+                new_key = json.dumps(new_val, sort_keys=True, default=str)
+                if new_key not in existing_keys:
+                    existing_list.append(new_val)
+                    existing_keys.add(new_key)
+
+            if len(existing_list) > 1:
+                dataset_record[prop_name] = existing_list
+            elif len(existing_list) == 1:
+                dataset_record[prop_name] = existing_list[0]
+        else:
+            # Add new aggregated values to dataset
+            if len(aggregated_values) == 1:
+                dataset_record[prop_name] = aggregated_values[0]
+            elif len(aggregated_values) > 1:
+                dataset_record[prop_name] = aggregated_values
+
+
 def parse():
     all_meta = retrieve_study_metadata()
     total = len(all_meta)
@@ -1445,6 +1520,9 @@ def parse():
         }
 
         sample_collections = build_sample_collection_records(sid, md, out)
+
+        # Aggregate sample properties to dataset level for search purposes
+        aggregate_sample_properties_to_dataset(out, sample_collections)
 
         yield out
 
