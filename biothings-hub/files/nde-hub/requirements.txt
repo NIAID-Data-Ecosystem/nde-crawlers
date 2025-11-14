@@ -4,3 +4,4 @@ biopython>=1.79     # for pmids to make citation/funding in utils (ncbi_geo craw
 text2term       # for topic_category helper in utils
 timeout-decorator   # for timeout in biostudies
 lxml        # for utils to remove html tags
+rdflib      # for parsing RDF/OWL ontology data

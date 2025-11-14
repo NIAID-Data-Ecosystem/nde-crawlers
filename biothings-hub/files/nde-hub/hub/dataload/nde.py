@@ -192,7 +192,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "keyword",
                 "normalizer": "keyword_lowercase_normalizer",
                 "copy_to": ["all"],
-                "fields": {"raw": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer"}},
+                "fields": {"raw": {"type": "keyword"}},
             },
             "applicationSubCategory": {
                 "properties": {
@@ -393,7 +393,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "url": {"type": "text", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
@@ -434,7 +434,7 @@ class NDESourceUploader(BaseSourceUploader):
                                 "type": "keyword",
                                 "normalizer": "keyword_lowercase_normalizer",
                                 "copy_to": ["all"],
-                                "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                                "fields": {"raw": {"type": "keyword"}},
                             },
                             "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                             "role": {"type": "keyword"},
@@ -500,7 +500,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "url": {"type": "text", "copy_to": ["all"]},
                     "alternateName": {
@@ -535,7 +535,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "encodingFormat": {
                         "properties": {
@@ -597,7 +597,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "isCurated": {"type": "boolean"},
                     "fromEXTRACT": {"type": "boolean"},
@@ -764,7 +764,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
@@ -777,7 +777,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "copy_to": ["all"],
                 "fields": {
                     "phrase_suggester": {"type": "text", "analyzer": "phrase_suggester"},
-                    "raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"},
+                    "raw": {"type": "keyword"},
                 },
             },
             "nctid": {"type": "keyword", "copy_to": ["all"]},
@@ -785,7 +785,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "keyword",
                 "normalizer": "keyword_lowercase_normalizer",
                 "copy_to": ["all"],
-                "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                "fields": {"raw": {"type": "keyword"}},
             },
             "output": {
                 "properties": {
@@ -795,7 +795,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "encodingFormat": {
                         "properties": {
@@ -815,7 +815,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "type": "keyword",
                 "normalizer": "keyword_lowercase_normalizer",
                 "copy_to": ["all"],
-                "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                "fields": {"raw": {"type": "keyword"}},
             },
             "relationship": {"type": "text", "copy_to": ["all"]},
             "sameAs": {
@@ -947,7 +947,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "description": {"type": "text"},
                     "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
@@ -1015,7 +1015,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "fromEXTRACT": {"type": "boolean"},
                     "fromPMID": {"type": "boolean"},
@@ -1099,7 +1099,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "originalName": {
                         "type": "keyword",
@@ -1358,7 +1358,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                                 "type": "keyword",
                                 "normalizer": "keyword_lowercase_normalizer",
                                 "copy_to": ["all"],
-                                "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                                "fields": {"raw": {"type": "keyword"}},
                             },
                             "parentOrganization": {"type": "keyword", "copy_to": ["all"]},
                             "role": {"type": "keyword"},
@@ -1421,7 +1421,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "url": {"type": "text", "copy_to": ["all"]},
                     "alternateName": {
@@ -1478,7 +1478,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "isCurated": {"type": "boolean"},
                     "fromEXTRACT": {"type": "boolean"},
@@ -1667,7 +1667,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
@@ -1775,7 +1775,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "fromEXTRACT": {"type": "boolean"},
                     "fromPMID": {"type": "boolean"},
@@ -1837,7 +1837,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
-                        "fields": {"raw": {"type": "keyword","normalizer": "keyword_lowercase_normalizer"}},
+                        "fields": {"raw": {"type": "keyword"}},
                     },
                     "originalName": {
                         "type": "keyword",

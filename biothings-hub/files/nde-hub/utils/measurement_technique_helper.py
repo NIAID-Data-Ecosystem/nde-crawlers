@@ -1,7 +1,10 @@
 import csv
 import os
+from functools import lru_cache
 
 import orjson
+import requests
+from rdflib import Graph
 
 
 def get_identifier(url):
@@ -12,28 +15,111 @@ def get_identifier(url):
     return parts[-1] if parts[-1] else "0000"
 
 
+@lru_cache(maxsize=500)
+def fetch_term_name_from_url(url):
+    """
+    Fetches the proper term name from an ontology URL.
+    Caches results to minimize API calls.
+    Returns None if the fetch fails.
+    """
+    try:
+        from urllib.parse import quote
+
+        from rdflib import URIRef
+        from rdflib.namespace import RDFS, SKOS
+
+        # Special handling for Ontobee URLs (extract IRI and use OLS)
+        if 'ontobee.org' in url:
+            # Extract the actual ontology IRI from the URL
+            if '?iri=' in url:
+                actual_iri = url.split('?iri=')[-1]
+                # Try OLS API for Ontobee URLs
+                ols_url = f"https://www.ebi.ac.uk/ols4/api/terms?iri={quote(actual_iri, safe='')}"
+                response = requests.get(ols_url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('_embedded') and data['_embedded'].get('terms'):
+                        terms = data['_embedded']['terms']
+                        if terms and len(terms) > 0:
+                            label = terms[0].get('label')
+                            if label:
+                                return label
+            return None
+
+        # Try OLS API first for all URLs (it's the most reliable and comprehensive)
+        ols_url = f"https://www.ebi.ac.uk/ols4/api/terms?iri={quote(url, safe='')}"
+        response = requests.get(ols_url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('_embedded') and data['_embedded'].get('terms'):
+                terms = data['_embedded']['terms']
+                if terms and len(terms) > 0:
+                    label = terms[0].get('label')
+                    if label:
+                        return label
+
+        # Fallback: Try to fetch RDF/OWL content directly
+        response = requests.get(url, timeout=10, headers={'Accept': 'application/rdf+xml, text/turtle, application/ld+json'})
+        response.raise_for_status()
+
+        # Parse the RDF/OWL content
+        g = Graph()
+        try:
+            g.parse(data=response.text, format='xml')
+        except Exception:
+            # Try turtle format if XML fails
+            try:
+                g.parse(data=response.text, format='turtle')
+            except Exception:
+                return None
+
+        # Create a URIRef for the term we're looking for
+        term_uri = URIRef(url)
+
+        # Try to find the label for this specific term (rdfs:label or skos:prefLabel)
+        for s, p, o in g.triples((term_uri, RDFS.label, None)):
+            if o and str(o).strip():  # Make sure we have a non-empty value
+                return str(o)
+
+        for s, p, o in g.triples((term_uri, SKOS.prefLabel, None)):
+            if o and str(o).strip():  # Make sure we have a non-empty value
+                return str(o)
+
+        return None
+    except Exception as e:
+        print(f"Warning: Failed to fetch term from {url}: {e}")
+        return None
+
+
 def load_mapping(name):
     """
     Loads mappings from the CSV and groups multiple mappings (if any) for the same repository technique.
     If the "Field" column is missing or empty, defaults to "measurementTechnique".
     If "Manually Mapped Term" is empty, uses the "Repository Technique" for the name.
+    Fetches the actual term name from the URL if possible, falling back to the manually mapped term.
     """
-    csv_file = f"/data/nde-hub/standardizers/measurement_technique_lookup/{name}.csv"
+    csv_file = f".ark_data/measurement_technique_lookup/{name}.csv"
     mapping = {}
     with open(csv_file, "r", newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             repo_technique = row["Repository Technique"].strip()
             manually_mapped = row["Manually Mapped Term"].strip() if row["Manually Mapped Term"] else ""
-            if not manually_mapped:
-                manually_mapped = repo_technique
+            url = row["URL"].strip()
+
+            # Try to fetch the term name from the URL
+            term_name = fetch_term_name_from_url(url)
+
+            # Fallback to manually mapped term if URL fetch failed
+            if not term_name:
+                term_name = manually_mapped if manually_mapped else repo_technique
 
             entry = {
                 "@type": "DefinedTerm",
-                "name": manually_mapped,
+                "name": term_name,
                 "inDefinedTermSet": row["Ontology"].strip(),
-                "url": row["URL"].strip(),
-                "identifier": get_identifier(row["URL"].strip()),
+                "url": url,
+                "identifier": get_identifier(url),
                 "isCurated": True,
                 "field": row.get("Field", "measurementTechnique").strip() or "measurementTechnique",
             }
