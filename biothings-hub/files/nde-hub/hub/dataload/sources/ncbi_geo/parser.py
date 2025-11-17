@@ -471,6 +471,8 @@ def parse_gse(data_folder):
 
         if gsm_ids := item.get("!Series_sample_id"):
             gsm_dir = os.path.join(data_folder, "gsm")
+            if not isinstance(gsm_ids, list):
+                gsm_ids = [gsm_ids]
             for gsm_id in gsm_ids:
                 gsm_file = find_gsm_file(gsm_dir, gsm_id)
                 try:

@@ -36,7 +36,7 @@ def insert_value(d, key, value):
         d[key] = value
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2), reraise=True)
+@retry(stop=stop_after_attempt(5), wait=wait_fixed(5), reraise=True)
 def query_acc(term, retstart, retmax):
     handle = Entrez.esearch(db="biosample", term=term, usehistory="y", timeout=DEFAULT_TIMEOUT)
     record = Entrez.read(handle)
@@ -117,6 +117,8 @@ def parse_xml(sample_dict, output):
                         "blank",
                         "null",
                         "not appicable"
+                        "not recorded",
+                        "?",
                     ]
                     if (
                         not attributes.get(key)
