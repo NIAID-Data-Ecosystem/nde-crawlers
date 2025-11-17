@@ -321,6 +321,124 @@ def get_records(data_folder):
                     except Exception as e:
                         logger.error(f"Error parsing {fpath}: {e}")
 
+def find_gsm_file(data_folder, acc):
+    # Extract prefix (GSE/GSM) and numeric part
+    prefix = acc[:3]
+    num = acc[3:]
+    # Pad numeric part to at least 3 digits for nnn, or 6 for full
+    padded = num.zfill(6)
+    subdir = prefix + padded[:3] + "nnn"
+    subdir_path = os.path.join(data_folder, subdir)
+    file_path = os.path.join(subdir_path, f"{acc}.txt")
+    if os.path.exists(file_path):
+        return file_path
+    else:
+        logger.warning(f"GSM file not found: {file_path}")
+        return None
+
+def parse_series_sample_characteristics(output, value):
+    sample_mapping = {
+        "tissue": ("anatomicalStructure", "field_value"),
+        "tissue id": ("anatomicalStructure", "field_value"),
+        "organ": ("anatomicalStructure", "field_value"),
+        "tissue type": ("anatomicalStructure", "field_value"),
+        "genotype": ("associatedGenotype", "field_value"),
+        "genotype/variation": ("associatedGenotype", "field_value"),
+        "ctnnb1 genotype": ("associatedGenotype", "field_value"),
+        "mouse line": ("associatedGenotype", "field_value"),
+        "phenotype": ("associatedPhenotype", "field_value"),
+        "cell type": ("cellType", "field_value"),
+        "cell line": ("cellType", "field_value"),
+        "cell subset": ("cellType", "field_value"),
+        "age": ("developmentalStage", "field_value"),
+        "time of_larval_development": ("developmentalStage", "field_value"),
+        "age group": ("developmentalStage", "field_value"),
+        "age (months)": ("developmentalStage", "field_value"),
+        "gestational age": ("developmentalStage", "field_value"),
+        "pistil development stage": ("developmentalStage", "field_value"),
+        "developmental stage": ("developmentalStage", "field_value"),
+        "sex": ("sex", "field_value"),
+    }
+    values = value if isinstance(value, list) else [value]
+    for v in values:
+        # Split by ":", strip whitespace, and only split on the first ":"
+        parts = [p.strip() for p in v.split(":", 1)]
+        if len(parts) != 2:
+            logger.warning(f"Invalid sample characteristic format: {v}")
+            continue
+
+        subproperty, field_value = parts[0].casefold(), parts[1].casefold()
+
+        if subproperty in sample_mapping:
+            mapping = sample_mapping[subproperty]
+            if mapping[0] in [
+                "developmentalStage",
+                "cellType",
+                "anatomicalStructure",
+                "associatedPhenotype",
+            ]:
+                if not mapping[0] in output:
+                    output[mapping[0]] = []
+                if isinstance(field_value, list):
+                    for fv in field_value:
+                        d = {"name": fv}
+                        if "anatomicalStructure" == mapping[0]:
+                            d["@type"] = "DefinedTerm"
+                        if not d in output[mapping[0]]:
+                            output[mapping[0]].append(d)
+                else:
+                    d = {"name": field_value}
+                    if "anatomicalStructure" == mapping[0]:
+                        d["@type"] = "DefinedTerm"
+                    if not d in output[mapping[0]]:
+                        output[mapping[0]].append(d)
+            else:
+                if not mapping[0] in output:
+                    output[mapping[0]] = []
+
+                if mapping[1] == "subproperty":
+                    output[mapping[0]].append(subproperty)
+                else:
+                    output[mapping[0]].append(field_value)
+
+
+def parse_series_sample(item, output):
+    """
+    Given a GEO Series item and an output dictionary, parse for the sample field in the dataset
+    """
+    if not item.get("!Sample_geo_accession"):
+        return
+    identifier = item.get("!Sample_geo_accession")
+    url = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + identifier
+    sample = {
+        "@type": "Sample",
+        "identifier": identifier,
+        "url": url,
+        "includedInDataCatalog": {
+            "@type": "DataCatalog",
+            "name": "NCBI GEO",
+            "url": "https://www.ncbi.nlm.nih.gov/geo/",
+            "versionDate": datetime.date.today().isoformat(),
+            "archivedAt": url,
+        },
+    }
+    if sample_type := item.get("!Sample_type"):
+        if isinstance(sample_type, list):
+            sample["sampleType"] = [{"name": s, "@type": "DefinedTerm"} for s in sample_type]
+        else:
+            sample["sampleType"] = [{"name": sample_type, "@type": "DefinedTerm"}]
+
+    if sample_type := item.get("!Sample_library_source"):
+        if "sampleType" not in output:
+            output["sampleType"] = []
+        if isinstance(sample_type, list):
+            output["sampleType"].extend([{"name": s, "@type": "DefinedTerm"} for s in sample_type])
+        else:
+            output["sampleType"].append({"name": sample_type, "@type": "DefinedTerm"})
+
+    for key, value in item.items():
+        if key.startswith("!Sample_characteristics"):
+            parse_series_sample_characteristics(output, value)
 
 def parse_gse(data_folder):
     """
@@ -350,6 +468,16 @@ def parse_gse(data_folder):
                 "archivedAt": url,
             },
         }
+
+        if gsm_ids := item.get("!Series_sample_id"):
+            gsm_dir = os.path.join(data_folder, "gsm")
+            for gsm_id in gsm_ids:
+                gsm_file = find_gsm_file(gsm_dir, gsm_id)
+                try:
+                    item = parse_soft_series(gsm_file)
+                except Exception as e:
+                    logger.error(f"Error parsing GSM file {gsm_file}: {e}")
+                    continue
 
         if name := item.get("!Series_title"):
             output["name"] = name

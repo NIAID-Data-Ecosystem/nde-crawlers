@@ -8,7 +8,7 @@ import orjson
 from biothings.hub.dataload.dumper import BaseDumper
 from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
-from biothings.hub.utils.dataload import merge_struct
+from biothings.utils.dataload import merge_struct
 from config import CRAWLER_OUTPUT_DATA_ROOT, DATA_ARCHIVE_ROOT
 from utils.utils import nde_upload_wrapper
 
