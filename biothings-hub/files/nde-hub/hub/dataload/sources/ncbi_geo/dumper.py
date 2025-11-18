@@ -33,6 +33,7 @@ class NCBI_Geo_Dumper(dumper.BaseDumper):
     def set_release(self):
         self.release = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    @retry(5, 5)
     def query_acc(self, term, retstart, retmax):
         handle = Entrez.esearch(db="gds", term=term, usehistory="y")
         record = Entrez.read(handle)
@@ -53,7 +54,7 @@ class NCBI_Geo_Dumper(dumper.BaseDumper):
         accs = [rec["Accession"] for rec in records]
         return accs
 
-    @retry(3, 5)
+    @retry(5, 5)
     def wget_download(self, url, output_path):
         subprocess.run(["wget", url, "-O", output_path], check=True)
 

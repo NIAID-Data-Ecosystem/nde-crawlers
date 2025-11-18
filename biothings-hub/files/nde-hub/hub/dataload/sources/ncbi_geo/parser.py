@@ -477,6 +477,7 @@ def parse_gse(data_folder):
                 gsm_file = find_gsm_file(gsm_dir, gsm_id)
                 try:
                     item = parse_soft_series(gsm_file)
+                    parse_series_sample(item, output)
                 except Exception as e:
                     logger.error(f"Error parsing GSM file {gsm_file}: {e}")
                     continue
