@@ -98,7 +98,7 @@ def load_mapping(name):
     If "Manually Mapped Term" is empty, uses the "Repository Technique" for the name.
     Fetches the actual term name from the URL if possible, falling back to the manually mapped term.
     """
-    csv_file = f".ark_data/measurement_technique_lookup/{name}.csv"
+    csv_file = f"/data/nde-hub/standardizers/measurement_technique_lookup/{name}.csv"
     mapping = {}
     with open(csv_file, "r", newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
