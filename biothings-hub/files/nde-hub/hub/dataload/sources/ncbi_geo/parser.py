@@ -336,7 +336,7 @@ def find_gsm_file(data_folder, acc):
         logger.warning(f"GSM file not found: {file_path}")
         return None
 
-def parse_series_sample_characteristics(output, value):
+def parse_series_sample_characteristics(sample, value):
     sample_mapping = {
         "tissue": ("anatomicalStructure", "field_value"),
         "tissue id": ("anatomicalStructure", "field_value"),
@@ -377,29 +377,29 @@ def parse_series_sample_characteristics(output, value):
                 "anatomicalStructure",
                 "associatedPhenotype",
             ]:
-                if not mapping[0] in output:
-                    output[mapping[0]] = []
+                if not mapping[0] in sample:
+                    sample[mapping[0]] = []
                 if isinstance(field_value, list):
                     for fv in field_value:
                         d = {"name": fv}
                         if "anatomicalStructure" == mapping[0]:
                             d["@type"] = "DefinedTerm"
-                        if not d in output[mapping[0]]:
-                            output[mapping[0]].append(d)
+                        if not d in sample[mapping[0]]:
+                            sample[mapping[0]].append(d)
                 else:
                     d = {"name": field_value}
                     if "anatomicalStructure" == mapping[0]:
                         d["@type"] = "DefinedTerm"
-                    if not d in output[mapping[0]]:
-                        output[mapping[0]].append(d)
+                    if not d in sample[mapping[0]]:
+                        sample[mapping[0]].append(d)
             else:
-                if not mapping[0] in output:
-                    output[mapping[0]] = []
+                if not mapping[0] in sample:
+                    sample[mapping[0]] = []
 
                 if mapping[1] == "subproperty":
-                    output[mapping[0]].append(subproperty)
+                    sample[mapping[0]].append(subproperty)
                 else:
-                    output[mapping[0]].append(field_value)
+                    sample[mapping[0]].append(field_value)
 
 
 def parse_series_sample(item, output):
@@ -438,7 +438,9 @@ def parse_series_sample(item, output):
 
     for key, value in item.items():
         if key.startswith("!Sample_characteristics"):
-            parse_series_sample_characteristics(output, value)
+            parse_series_sample_characteristics(sample, value)
+
+    output["sample"] = sample
 
 def parse_gse(data_folder):
     """
