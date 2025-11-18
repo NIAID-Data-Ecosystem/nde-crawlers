@@ -440,7 +440,13 @@ def parse_series_sample(item, output):
         if key.startswith("!Sample_characteristics"):
             parse_series_sample_characteristics(sample, value)
 
-    output["sample"] = sample
+    if output.get("sample"):
+        if isinstance(output["sample"], list):
+            output["sample"].append(sample)
+        else:
+            output["sample"] = [output["sample"], sample]
+    else:
+        output["sample"] = sample
 
 def parse_gse(data_folder):
     """
