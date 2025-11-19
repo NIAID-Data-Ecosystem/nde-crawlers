@@ -429,12 +429,12 @@ def parse_series_sample(item, output):
             sample["sampleType"] = [{"name": sample_type, "@type": "DefinedTerm"}]
 
     if sample_type := item.get("!Sample_library_source"):
-        if "sampleType" not in output:
-            output["sampleType"] = []
+        if "sampleType" not in sample:
+            sample["sampleType"] = []
         if isinstance(sample_type, list):
-            output["sampleType"].extend([{"name": s, "@type": "DefinedTerm"} for s in sample_type])
+            sample["sampleType"].extend([{"name": s, "@type": "DefinedTerm"} for s in sample_type])
         else:
-            output["sampleType"].append({"name": sample_type, "@type": "DefinedTerm"})
+            sample["sampleType"].append({"name": sample_type, "@type": "DefinedTerm"})
 
     for key, value in item.items():
         if key.startswith("!Sample_characteristics"):
