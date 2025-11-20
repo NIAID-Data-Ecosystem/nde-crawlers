@@ -884,7 +884,12 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "sampleAvailability": {"type": "boolean"},
-                    "sampleList": {"type": "text", "copy_to": ["all"]},
+                    "sampleList": {
+                        "properties": {
+                            "identifier": {"type": "text"},
+                            "url": {"type": "text"}
+                        }
+                    },
                     "sampleQuantity": {
                         "properties": {
                             "maxValue": {"type": "double"},
@@ -1062,7 +1067,12 @@ class NDESourceUploader(BaseSourceUploader):
                     "description": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer", "copy_to": ["all"]},
+                    "name": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                        "fields": {"raw": {"type": "keyword"}},
+                    },
                     "url": {"type": "keyword", "copy_to": ["all"]},
                 }
             },
@@ -1687,7 +1697,12 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "sampleAvailability": {"type": "boolean"},
-            "sampleList": {"type": "text", "copy_to": ["all"]},
+            "sampleList": {
+                "properties": {
+                    "identifier": {"type": "text"},
+                    "url": {"type": "text"}
+                }
+            },
             "sampleProcess": {"type": "text", "copy_to": ["all"]},
             "sampleQuantity": {
                 "properties": {
