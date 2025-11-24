@@ -22,6 +22,7 @@ SAMPLE_ONLY_DATASET_FIELDS = {
 }
 
 SAMPLE_ALLOWED_FIELDS = {
+    "@type",
     "associatedPhenotype",
     "associatedGenotype",
     "cellType",
@@ -389,19 +390,40 @@ def build_dataset_sample_objects(sample_collections):
 
         if isinstance(entry, dict):
             sanitized = {}
-            source_identifier = None
-            for candidate in ("_id", "identifier", "sample_id", "sample_processing_id", "vdjserver_uuid", "name"):
-                candidate_value = entry.get(candidate)
-                text = _stringify(candidate_value)
-                if text:
-                    source_identifier = text
-                    break
-            if not source_identifier:
+
+            def _extract_identifier(*fields):
+                for candidate in fields:
+                    candidate_value = entry.get(candidate)
+                    text = _stringify(candidate_value)
+                    if text:
+                        return text
+                return None
+
+            primary_id = _stringify(entry.get("_id")) or _extract_identifier(
+                "sample_id",
+                "sample_processing_id",
+                "vdjserver_uuid",
+                "identifier",
+                "name",
+            )
+            if not primary_id:
                 fingerprint = _sample_entry_fingerprint(entry)
-                source_identifier = _stringify(fingerprint)
-            if source_identifier:
-                sanitized["_id"] = source_identifier
-                sanitized["identifier"] = source_identifier
+                primary_id = _stringify(fingerprint)
+
+            identifier_value = _stringify(entry.get("identifier")) or _extract_identifier(
+                "name",
+                "sample_id",
+                "sample_processing_id",
+                "vdjserver_uuid",
+            )
+            if not identifier_value:
+                identifier_value = primary_id
+
+            if primary_id:
+                sanitized["_id"] = primary_id
+            if identifier_value:
+                sanitized["identifier"] = identifier_value
+
             url_value = entry.get("url") or sample_list_context.get("parent_url")
             url_text = _stringify(url_value)
             if url_text:
