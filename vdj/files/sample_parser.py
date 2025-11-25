@@ -706,6 +706,10 @@ def _build_sample_record(
         return str(entry)
 
     sample_objects.sort(key=_sample_sort_key)
+    if sample_objects:
+        # Preserve the normalized raw samples temporarily so dataset.sample.sampleList can
+        # enumerate every underlying sample rather than just the aggregate Sample record.
+        sample_record["sample"] = sample_objects
     sample_record["collectionSize"] = {
         "value": len(sample_objects) if sample_objects else len(samples)
     }

@@ -321,6 +321,7 @@ def build_dataset_sample_objects(sample_collections):
         "@type",
         "isPartOf",
         "sampleList",
+        "sample",
         "collectionSize",
         "identifier",
         "url",
@@ -651,19 +652,23 @@ def build_dataset_sample_objects(sample_collections):
 
     for sample_coll in valid_collections:
         _update_sample_list_context(sample_coll)
+        explicit_samples = sample_coll.get("sample")
+        has_explicit_samples = bool(_ensure_list(explicit_samples))
         _merge_list_field("sampleList", sample_coll.get("sampleList"))
+        _merge_list_field("sampleList", explicit_samples)
 
         # Always expose the generated Sample record itself so dataset.sample.sampleList references the
         # actual Sample documents (e.g., vdj_* identifiers) instead of only the raw source labels.
-        derived_sample_entry = {
-            "_id": sample_coll.get("_id"),
-            "identifier": sample_coll.get("identifier"),
-            "url": sample_coll.get("url"),
-            "name": sample_coll.get("name"),
-        }
-        derived_sample_entry = {k: v for k, v in derived_sample_entry.items() if v not in EMPTY_VALUES}
-        if derived_sample_entry:
-            _merge_list_field("sampleList", [derived_sample_entry])
+        if not has_explicit_samples:
+            derived_sample_entry = {
+                "_id": sample_coll.get("_id"),
+                "identifier": sample_coll.get("identifier"),
+                "url": sample_coll.get("url"),
+                "name": sample_coll.get("name"),
+            }
+            derived_sample_entry = {k: v for k, v in derived_sample_entry.items() if v not in EMPTY_VALUES}
+            if derived_sample_entry:
+                _merge_list_field("sampleList", [derived_sample_entry])
 
         size_value = _coerce_collection_size(sample_coll.get("collectionSize"))
         if size_value is not None:
