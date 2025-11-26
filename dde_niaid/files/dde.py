@@ -183,7 +183,7 @@ def format_query_ky(iri):
 
 def parse():
     # initial request to find total number of hits
-    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22%20OR%20_meta.guide:%22/guide/creid%22&sort=-_ts.last_updated"
+    url = "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22%20OR%20_meta.guide:%22/guide/creid%22%20OR%20_meta.guide:%22/guide/revampp%22&sort=-_ts.last_updated"
     request = requests.get(url).json()
     # get the number of pages to paginate through
     total = request["total"]
@@ -193,7 +193,7 @@ def parse():
     # paginate through the requests
     for page in range(pages + 1):
         url = (
-            "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22%20OR%20_meta.guide:%22/guide/creid%22&sort=-_ts.last_updated&size=1000&from="
+            "https://discovery.biothings.io/api/dataset/query?q=_meta.guide:%22/guide/niaid/ComputationalTool%22%20OR%20_meta.guide:%22/guide/niaid%22%20OR%20_meta.guide:%22/guide/nde/ResourceCatalog%22%20OR%20_meta.guide:%22/guide/creid%22%20OR%20_meta.guide:%22/guide/revampp%22&sort=-_ts.last_updated&size=1000&from="
             + str(page * 1000)
         )
         request = requests.get(url).json()
@@ -258,7 +258,7 @@ def parse():
                         "parentOrganization": ["NIAID"]
                     }
                 ]
-            
+
             # add creid to included in sourceOrganization
             if hit.get("@context") and "creid" in hit.get("@context"):
                 source_organization = [
