@@ -245,6 +245,20 @@ def parse():
             #        }
             #    ]
             source_organization = None
+            # add revampp to included in sourceOrganization
+            if hit.get("@context") and "revampp" in hit.get("@context"):
+                source_organization = [
+                    {
+                        "@type": "ResearchProject",
+                        "name": "NIAID ReVAMPP Network",
+                        "abstract": "Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness (ReVAMPP) is a research network dedicated to developing vaccines and monoclonal antibodies for pandemic preparedness by studying \"prototype pathogens\" from virus families with high pandemic potential. The network conducts fundamental research to accelerate the development of countermeasures against emerging viral threats.",
+                        "description": "Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness (ReVAMPP) is a pandemic preparedness research network designed to conduct fundamental basic through IND-enabling translational research on representative viruses, or \u201cprototype pathogens,\u201d within specific virus families. The virus families that the ReVAMPP network study contain many viruses that have caused human disease for millennia\u2014many of which have a high likelihood of becoming pandemic threats in the future. For more information, visit the NIAID program page: https://www.niaid.nih.gov/research/vaccines-and-monoclonal-antibodies-pandemic-preparedness-revampp",
+                        "alternateName": ["ReVAMPP", "Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness"],
+                        "url": "https://revampp.org/",
+                        "parentOrganization": ["NIAID"]
+                    }
+                ]
+            
             # add creid to included in sourceOrganization
             if hit.get("@context") and "creid" in hit.get("@context"):
                 source_organization = [
