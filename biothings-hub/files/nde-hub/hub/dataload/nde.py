@@ -825,36 +825,75 @@ class NDESourceUploader(BaseSourceUploader):
             "sample": {
                 "properties": {
                     "@type": {"type": "keyword"},
-                    "associatedGenotype": {"type": "text", "copy_to": ["all"]},
-                    "associatedPhenotype": {
+                    "aggregateElement": {
                         "properties": {
-                            "identifier": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "keyword"},
+                            "associatedGenotype": {"type": "text", "copy_to": ["all"]},
+                            "associatedPhenotype": {
+                                "properties": {
+                                    "identifier": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "copy_to": ["all"]},
+                                    "url": {"type": "keyword"},
+                                }
+                            },
+                            "anatomicalStructure": {
+                                "properties": {
+                                    "identifier": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "copy_to": ["all"]},
+                                    "url": {"type": "keyword"},
+                                }
+                            },
+                            "anatomicalSystem": {
+                                "properties": {
+                                    "identifier": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "copy_to": ["all"]},
+                                    "url": {"type": "keyword"},
+                                }
+                            },
+                            "cellType": {
+                                "properties": {
+                                    "identifier": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "copy_to": ["all"]},
+                                    "url": {"type": "keyword"},
+                                }
+                            },
+                            "developmentalStage": {
+                                "properties": {
+                                    "maxValue": {"type": "double"},
+                                    "minValue": {"type": "double"},
+                                    "name": {"type": "text"},
+                                    "unitCode": {"type": "keyword"},
+                                    "unitText": {"type": "text"},
+                                    "value": {"type": "integer"},
+                                }
+                            },
+                            "sampleAvailability": {"type": "boolean"},
+                            "sampleQuantity": {
+                                "properties": {
+                                    "maxValue": {"type": "double"},
+                                    "minValue": {"type": "double"},
+                                    "name": {"type": "text"},
+                                    "unitText": {"type": "text"},
+                                    "value": {"type": "integer"},
+                                }
+                            },
+                            "sampleType": {
+                                "properties": {
+                                    "name": {"type": "text", "copy_to": ["all"]},
+                                    "url": {"type": "text", "copy_to": ["all"]},
+                                }
+                            },
+                            "sex": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                        },
+                    },
+                    "itemListElement": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "identifier": {"type": "text"},
+                            "url": {"type": "text"},
                         }
                     },
-                    "anatomicalStructure": {
-                        "properties": {
-                            "identifier": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "keyword"},
-                        }
-                    },
-                    "anatomicalSystem": {
-                        "properties": {
-                            "identifier": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "keyword"},
-                        }
-                    },
-                    "cellType": {
-                        "properties": {
-                            "identifier": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "keyword"},
-                        }
-                    },
-                    "collectionSize": {
+                    "numberOfItems": {
                         "properties": {
                             "@type": {"type": "keyword"},
                             "maxValue": {"type": "double"},
@@ -863,50 +902,6 @@ class NDESourceUploader(BaseSourceUploader):
                             "value": {"type": "integer"},
                         }
                     },
-                    "developmentalStage": {
-                        "properties": {
-                            "maxValue": {"type": "double"},
-                            "minValue": {"type": "double"},
-                            "name": {"type": "text"},
-                            "unitCode": {"type": "keyword"},
-                            "unitText": {"type": "text"},
-                            "value": {"type": "integer"},
-                        }
-                    },
-                    "identifier": {"type": "text", "copy_to": ["all"]},
-                    "includedInDataCatalog": {
-                        "properties": {
-                            "@type": {"type": "text"},
-                            "archivedAt": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "text"},
-                            "versionDate": {"type": "date"},
-                        }
-                    },
-                    "sampleAvailability": {"type": "boolean"},
-                    "sampleList": {
-                        "properties": {
-                            "identifier": {"type": "text"},
-                            "url": {"type": "text"}
-                        }
-                    },
-                    "sampleQuantity": {
-                        "properties": {
-                            "maxValue": {"type": "double"},
-                            "minValue": {"type": "double"},
-                            "name": {"type": "text"},
-                            "unitText": {"type": "text"},
-                            "value": {"type": "integer"},
-                        }
-                    },
-                    "sampleType": {
-                        "properties": {
-                            "name": {"type": "text", "copy_to": ["all"]},
-                            "url": {"type": "text", "copy_to": ["all"]},
-                        }
-                    },
-                    "sex": {"type": "keyword", "copy_to": ["all"]},
-                    "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "sdPublisher": {
@@ -1697,12 +1692,6 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "sampleAvailability": {"type": "boolean"},
-            "sampleList": {
-                "properties": {
-                    "identifier": {"type": "text"},
-                    "url": {"type": "text"}
-                }
-            },
             "sampleProcess": {"type": "text", "copy_to": ["all"]},
             "sampleQuantity": {
                 "properties": {
@@ -1874,10 +1863,12 @@ class NDESourceSampleUploader(BaseSourceUploader):
 
         return mapping
 
+
 class NDECombinedUploader(NDESourceUploader, NDESourceSampleUploader):
     """
     Combines both NDESourceUploader and NDESourceSampleUploader
     """
+
     storage_class = IgnoreDuplicatedStorage
 
     def load_data(self, data_folder):
