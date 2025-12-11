@@ -1,5 +1,5 @@
 # Quick way to be able to build all the images with the command below. Do not use docker-compose up.
-# docker compose -f docker-compose-crawlers.yml build --no-cache
+# docker compose -f docker-compose-crawlers.yml build
 # MAKE SURE WHEN YOU NAME YOUR CRAWLER SERVICE THAT IT MATCHES SRC_NAME IN YOUR DUMPER CLASS BIOTHINGS_HUB. Example: "SRC_NAME-crawler"
 services:
   # when updating changes to code: "docker compose -f docker-compose-crawlers.yml build --no-cache dde-crawler"

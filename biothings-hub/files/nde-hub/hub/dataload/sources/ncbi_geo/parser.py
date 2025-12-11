@@ -321,6 +321,7 @@ def get_records(data_folder):
                     except Exception as e:
                         logger.error(f"Error parsing {fpath}: {e}")
 
+
 def find_gsm_file(data_folder, acc):
     # Extract prefix (GSE/GSM) and numeric part
     prefix = acc[:3]
@@ -336,7 +337,18 @@ def find_gsm_file(data_folder, acc):
         logger.warning(f"GSM file not found: {file_path}")
         return None
 
-def parse_series_sample_characteristics(sample, value):
+
+def insert_value(d, key, value):
+    if key in d:
+        if isinstance(d[key], list) and value not in d[key]:
+            d[key].append(value)
+        elif d[key] != value:
+            d[key] = [d[key], value]
+    else:
+        d[key] = value
+
+
+def parse_series_sample_characteristics(sample_elements, value):
     sample_mapping = {
         "tissue": ("anatomicalStructure", "field_value"),
         "tissue id": ("anatomicalStructure", "field_value"),
@@ -377,76 +389,54 @@ def parse_series_sample_characteristics(sample, value):
                 "anatomicalStructure",
                 "associatedPhenotype",
             ]:
-                if not mapping[0] in sample:
-                    sample[mapping[0]] = []
+
                 if isinstance(field_value, list):
                     for fv in field_value:
                         d = {"name": fv}
                         if "anatomicalStructure" == mapping[0]:
                             d["@type"] = "DefinedTerm"
-                        if not d in sample[mapping[0]]:
-                            sample[mapping[0]].append(d)
+                        insert_value(sample_elements, mapping[0], d)
                 else:
                     d = {"name": field_value}
                     if "anatomicalStructure" == mapping[0]:
                         d["@type"] = "DefinedTerm"
-                    if not d in sample[mapping[0]]:
-                        sample[mapping[0]].append(d)
+                    insert_value(sample_elements, mapping[0], d)
             else:
-                if not mapping[0] in sample:
-                    sample[mapping[0]] = []
-
                 if mapping[1] == "subproperty":
-                    sample[mapping[0]].append(subproperty)
+                    insert_value(sample_elements, mapping[0], subproperty)
                 else:
-                    sample[mapping[0]].append(field_value)
+                    if isinstance(field_value, list):
+                        for fv in field_value:
+                            insert_value(sample_elements, mapping[0], fv)
+                    else:
+                        insert_value(sample_elements, mapping[0], field_value)
 
 
-def parse_series_sample(item, output):
+def parse_series_sample(item, sample):
     """
     Given a GEO Series item and an output dictionary, parse for the sample field in the dataset
     """
     if not item.get("!Sample_geo_accession"):
         return
-    identifier = item.get("!Sample_geo_accession")
-    url = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + identifier
-    sample = {
-        "@type": "Sample",
-        "identifier": identifier,
-        "url": url,
-        "includedInDataCatalog": {
-            "@type": "DataCatalog",
-            "name": "NCBI GEO",
-            "url": "https://www.ncbi.nlm.nih.gov/geo/",
-            "versionDate": datetime.date.today().isoformat(),
-            "archivedAt": url,
-        },
-    }
+    sample_elements = sample["aggregateElement"]
     if sample_type := item.get("!Sample_type"):
         if isinstance(sample_type, list):
-            sample["sampleType"] = [{"name": s, "@type": "DefinedTerm"} for s in sample_type]
+            for s in sample_type:
+                insert_value(sample_elements, "sampleType", {"name": s, "@type": "DefinedTerm"})
         else:
-            sample["sampleType"] = [{"name": sample_type, "@type": "DefinedTerm"}]
+            insert_value(sample_elements, "sampleType", {"name": sample_type, "@type": "DefinedTerm"})
 
     if sample_type := item.get("!Sample_library_source"):
-        if "sampleType" not in sample:
-            sample["sampleType"] = []
         if isinstance(sample_type, list):
-            sample["sampleType"].extend([{"name": s, "@type": "DefinedTerm"} for s in sample_type])
+            for s in sample_type:
+                insert_value(sample_elements, "sampleType", {"name": s, "@type": "DefinedTerm"})
         else:
-            sample["sampleType"].append({"name": sample_type, "@type": "DefinedTerm"})
+            insert_value(sample_elements, "sampleType", {"name": sample_type, "@type": "DefinedTerm"})
 
     for key, value in item.items():
         if key.startswith("!Sample_characteristics"):
-            parse_series_sample_characteristics(sample, value)
+            parse_series_sample_characteristics(sample_elements, value)
 
-    if output.get("sample"):
-        if isinstance(output["sample"], list):
-            output["sample"].append(sample)
-        else:
-            output["sample"] = [output["sample"], sample]
-    else:
-        output["sample"] = sample
 
 def parse_gse(data_folder):
     """
@@ -478,17 +468,35 @@ def parse_gse(data_folder):
         }
 
         if gsm_ids := item.get("!Series_sample_id"):
+            sample = {
+                "@type": "SampleCollection",
+                "itemListElement": [],
+                "aggregateElement": [],
+                "numberOfItems": {"value": 0, "unitText": "sample"},
+            }
             gsm_dir = os.path.join(data_folder, "gsm")
             if not isinstance(gsm_ids, list):
                 gsm_ids = [gsm_ids]
             for gsm_id in gsm_ids:
+                sample["itemListElement"].append(
+                    {
+                        "@type": "Sample",
+                        "identifier": gsm_id,
+                        "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + gsm_id,
+                        "_id": gsm_id.casefold(),
+                    }
+                )
+                sample["numberOfItems"]["value"] += 1
                 gsm_file = find_gsm_file(gsm_dir, gsm_id)
                 try:
                     sample_item = parse_soft_series(gsm_file)
-                    parse_series_sample(sample_item, output)
+                    parse_series_sample(sample_item, sample)
                 except Exception as e:
                     logger.error(f"Error parsing GSM file {gsm_file}: {e}")
                     continue
+
+            if sample.get("itemListElement"):
+                output["sample"] = sample
 
         if name := item.get("!Series_title"):
             output["name"] = name
