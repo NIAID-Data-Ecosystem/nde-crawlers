@@ -1,5 +1,6 @@
 import datetime
 import os
+import traceback
 
 import dateutil.parser
 
@@ -493,6 +494,7 @@ def parse_gse(data_folder):
                     parse_series_sample(sample_item, sample)
                 except Exception as e:
                     logger.error(f"Error parsing GSM file {gsm_file}: {e}")
+                    logger.error(traceback.format_exc())
                     continue
 
             if sample.get("itemListElement"):
