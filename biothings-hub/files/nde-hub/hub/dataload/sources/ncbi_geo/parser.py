@@ -343,7 +343,7 @@ def insert_value(d, key, value):
     if key in d:
         if isinstance(d[key], list) and value not in d[key]:
             d[key].append(value)
-        elif d[key] != value:
+        if not isinstance(d[key], list) and d[key] != value:
             d[key] = [d[key], value]
     else:
         d[key] = value
@@ -498,6 +498,8 @@ def parse_gse(data_folder):
                     continue
 
             if sample.get("itemListElement"):
+                logger.info(f"gse_id: {output['_id']}")
+                logger.info(f"sample: {sample}")
                 output["sample"] = sample
 
         if name := item.get("!Series_title"):
