@@ -472,7 +472,7 @@ def parse_gse(data_folder):
             sample = {
                 "@type": "SampleCollection",
                 "itemListElement": [],
-                "aggregateElement": [],
+                "aggregateElement": {},
                 "numberOfItems": {"value": 0, "unitText": "sample"},
             }
             gsm_dir = os.path.join(data_folder, "gsm")
