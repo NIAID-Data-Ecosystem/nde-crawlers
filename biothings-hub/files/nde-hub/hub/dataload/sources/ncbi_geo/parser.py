@@ -498,8 +498,8 @@ def parse_gse(data_folder):
                     continue
 
             if sample.get("itemListElement"):
-                logger.info(f"gse_id: {output['_id']}")
-                logger.info(f"sample: {sample}")
+                # logger.info(f"gse_id: {output['_id']}")
+                # logger.info(f"sample: {sample}")
                 output["sample"] = sample
 
         if name := item.get("!Series_title"):
