@@ -191,6 +191,51 @@ def parse():
                 for condition in conditions:
                     output["healthCondition"].append({"name": condition})
 
+            sample = {
+                "@type": "Sample",
+                "sampleType": {
+                    "@type": "DefinedTerm",
+                    "name": "Study Subject",
+                    "url": "http://purl.obolibrary.org/obo/NCIT_C41189",
+                    "inDefinedTermSet": "NCIT",
+                    "termCode": "NCIT_C41189",
+                },
+            }
+
+            if (actual_enrollment := request.get("actualEnrollment")) is not None:
+                sample["sampleQuantity"] = {
+                    "@type": "QuantitativeValue",
+                    "value": actual_enrollment,
+                    "unitText": "enrolled subjects",
+                    "unitCode": "http://purl.obolibrary.org/obo/NCIT_C207572",
+                }
+
+            if participant_eligibility := request.get("participantEligibility"):
+                if sex := participant_eligibility.get("sex"):
+                    sample["sex"] = sex
+
+                developmental_stage = {"@type": "QuantitativeValue"}
+
+                if minimum_age := participant_eligibility.get("minimumAge"):
+                    if min_age := minimum_age.get("ageNum"):
+                        developmental_stage["minValue"] = min_age
+                    if unit := minimum_age.get("timeUnit"):
+                        developmental_stage["unitText"] = unit
+
+                if maximum_age := participant_eligibility.get("maximumAge"):
+                    if max_age := maximum_age.get("ageNum"):
+                        developmental_stage["maxValue"] = max_age
+                    if not developmental_stage.get("unitText") and (unit := maximum_age.get("timeUnit")):
+                        developmental_stage["unitText"] = unit
+
+                if age_description := participant_eligibility.get("ageDescription"):
+                    developmental_stage["name"] = age_description
+
+                if len(developmental_stage) > 1:  # More than just @type
+                    sample["developmentalStage"] = developmental_stage
+
+            output["sample"] = sample
+
             vm = []
             if variable_measured := request.get("outcomeNames"):
                 vm.append({"name": variable_measured})
