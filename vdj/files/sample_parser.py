@@ -67,6 +67,204 @@ def _build_sample_record(
     if dataset_record.get("measurementTechnique"):
         sample_record["measurementTechnique"] = copy.deepcopy(dataset_record["measurementTechnique"])
 
+    def _split_defined_term_set(identifier):
+        if not isinstance(identifier, str):
+            return None
+        text = identifier.strip()
+        if ":" not in text:
+            return None
+        prefix = text.split(":", 1)[0].strip()
+        return prefix or None
+
+    def _as_defined_term(entry):
+        if not isinstance(entry, dict):
+            return None
+        cleaned = {k: v for k, v in entry.items() if v not in (None, "", [], {}, set())}
+        if not cleaned:
+            return None
+        identifier = cleaned.get("identifier")
+        name = cleaned.get("name")
+
+        out = {"@type": "DefinedTerm"}
+        if identifier is not None:
+            out["identifier"] = identifier
+            term_set = _split_defined_term_set(identifier)
+            if term_set:
+                out["inDefinedTermSet"] = term_set
+        if name is not None:
+            out["name"] = name
+        if cleaned.get("description") is not None:
+            out["description"] = cleaned["description"]
+        return out
+
+    def _dedupe_prefer_identified(entries):
+        """Drop duplicates where one entry is just the label of an identified entry."""
+        if not entries:
+            return []
+
+        by_name = {}
+        fallbacks = []
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            identifier = entry.get("identifier")
+            key = name.strip().lower() if isinstance(name, str) and name.strip() else None
+            if key is None:
+                fallbacks.append(entry)
+                continue
+
+            existing = by_name.get(key)
+            if existing is None:
+                by_name[key] = entry
+                continue
+
+            existing_has_id = bool(existing.get("identifier"))
+            current_has_id = bool(identifier)
+
+            # Prefer the identified term over label-only.
+            if current_has_id and not existing_has_id:
+                by_name[key] = entry
+            elif existing_has_id and not current_has_id:
+                continue
+            else:
+                # If both have ids (or both don't), keep the richer one.
+                if len(entry.keys()) > len(existing.keys()):
+                    by_name[key] = entry
+
+        results = list(by_name.values()) + fallbacks
+        # Stabilize order
+        def _sort_key(x):
+            if isinstance(x, dict):
+                return str(x.get("name") or x.get("identifier") or json.dumps(x, sort_keys=True, default=str))
+            return str(x)
+
+        results.sort(key=_sort_key)
+        return results
+
+    def _normalize_defined_term_list(entries):
+        deduped = _dedupe_prefer_identified(entries)
+        normalized = []
+        seen = set()
+        for entry in deduped:
+            term = _as_defined_term(entry)
+            if not term:
+                continue
+            key = tuple(sorted((k, v) for k, v in term.items() if v not in (None, "")))
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(term)
+        return normalized
+
+    def _infer_agent_type(agent):
+        if not isinstance(agent, dict):
+            return None
+        if agent.get("@type"):
+            return agent
+        # Per spec request: if affiliation exists treat as Organization.
+        if agent.get("affiliation") is not None:
+            agent["@type"] = "Organization"
+        else:
+            agent["@type"] = "Person"
+        return agent
+
+    def _normalize_temporal_coverage(entries):
+        normalized = []
+        for entry in _ensure_list(entries):
+            if not isinstance(entry, dict):
+                continue
+            cleaned = {k: v for k, v in entry.items() if v not in (None, "", [], {}, set())}
+            if not cleaned:
+                continue
+            cleaned.setdefault("@type", "TemporalInterval")
+            normalized.append(cleaned)
+        return normalized
+
+    def _normalize_distribution(entries):
+        normalized = []
+        for entry in _ensure_list(entries):
+            if not isinstance(entry, dict):
+                continue
+            cleaned = {k: v for k, v in entry.items() if v not in (None, "", [], {}, set())}
+            if not cleaned:
+                continue
+            cleaned.setdefault("@type", "DataDownload")
+            normalized.append(cleaned)
+        return normalized
+
+    def _normalize_quantitative_values(entries):
+        normalized = []
+        for entry in _ensure_list(entries):
+            if not isinstance(entry, dict):
+                continue
+            cleaned = {k: v for k, v in entry.items() if v not in (None, "", [], {}, set())}
+            if not cleaned:
+                continue
+            cleaned.setdefault("@type", "QuantitativeValue")
+            normalized.append(cleaned)
+        return normalized
+
+    def _normalize_variable_measured(entries):
+        normalized = []
+        for entry in _ensure_list(entries):
+            if not isinstance(entry, dict):
+                continue
+            cleaned = {k: v for k, v in entry.items() if v not in (None, "", [], {}, set())}
+            if not cleaned:
+                continue
+            if cleaned.get("identifier") is not None and not cleaned.get("@type"):
+                cleaned["@type"] = "DefinedTerm"
+            normalized.append(cleaned)
+        return normalized
+
+    def _normalize_measurement_techniques(entries):
+        normalized = []
+        for entry in _ensure_list(entries):
+            if isinstance(entry, dict):
+                cleaned = {k: v for k, v in entry.items() if v not in (None, "", [], {}, set())}
+                if not cleaned:
+                    continue
+                identifier = cleaned.get("identifier")
+                name = cleaned.get("name")
+                description = cleaned.get("description")
+
+                if identifier is not None:
+                    term = _as_defined_term(cleaned)
+                    if term:
+                        normalized.append(term)
+                    continue
+
+                # Heuristic: if it's essentially unstructured narrative, model as CreativeWork.
+                text_blob = None
+                if isinstance(name, str) and len(name.strip()) > 200 and description is None:
+                    text_blob = name.strip()
+                elif isinstance(description, str) and len(description.strip()) > 0 and name is None:
+                    text_blob = description.strip()
+
+                if text_blob:
+                    normalized.append({"@type": "CreativeWork", "name": "library preparation", "description": text_blob})
+                    continue
+
+                # Default: treat as a DefinedTerm-like entry with optional description.
+                term = _as_defined_term(cleaned)
+                if term:
+                    normalized.append(term)
+            elif isinstance(entry, str) and entry.strip():
+                normalized.append({"@type": "DefinedTerm", "name": entry.strip()})
+
+        # Dedupe
+        seen = set()
+        out = []
+        for item in normalized:
+            key = tuple(sorted((k, v) for k, v in item.items() if v not in (None, "")))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+        return out
+
     sample_objects = []
     sample_seen_keys = set()
     anatomical_structures = []
@@ -707,16 +905,17 @@ def _build_sample_record(
 
     sample_objects.sort(key=_sample_sort_key)
     if sample_objects:
-        # Preserve the normalized raw samples temporarily so dataset.sample.sampleList can
+        # Preserve the normalized raw samples temporarily so dataset.sample.itemListElement can
         # enumerate every underlying sample rather than just the aggregate Sample record.
         sample_record["sample"] = sample_objects
-    sample_record["collectionSize"] = {
-        "value": len(sample_objects) if sample_objects else len(samples)
-    }
+
+    # Note: "collectionSize" is a legacy artifact of the old SampleCollection model and is not
+    # a valid property on schema.org Sample.
 
     if developmental_stages:
+        normalized_stages = _normalize_quantitative_values(developmental_stages)
         sample_record["developmentalStage"] = (
-            developmental_stages[0] if len(developmental_stages) == 1 else developmental_stages
+            normalized_stages[0] if len(normalized_stages) == 1 else normalized_stages
         )
     if locations_of_origin:
         sample_record["locationOfOrigin"] = (
@@ -730,9 +929,9 @@ def _build_sample_record(
         sample_record["associatedGenotype"] = associated_genotypes
 
     if anatomical_structures:
-        sample_record["anatomicalStructure"] = anatomical_structures
+        sample_record["anatomicalStructure"] = _normalize_defined_term_list(anatomical_structures)
     if collectors:
-        sample_record["collector"] = collectors
+        sample_record["collector"] = [_infer_agent_type(copy.deepcopy(c)) for c in collectors if isinstance(c, dict)]
     if collection_methods:
         sample_record["collectionMethod"] = collection_methods
     if sample_processes:
@@ -740,33 +939,31 @@ def _build_sample_record(
     if sample_states:
         sample_record["sampleState"] = sample_states
     if sample_types:
-        sample_record["sampleType"] = sample_types
+        # Keep the existing mapping but add missing @type; we'll revisit identifier mapping later.
+        sample_record["sampleType"] = _normalize_defined_term_list(sample_types)
     if measurement_techniques:
         existing_measurements = sample_record.get("measurementTechnique", [])
         if isinstance(existing_measurements, dict):
             existing_measurements = [existing_measurements]
         elif not isinstance(existing_measurements, list):
             existing_measurements = []
-        existing_keys = {
-            tuple(sorted((k, v) for k, v in ((key, val) for key, val in item.items() if val not in (None, ""))))
-            for item in existing_measurements
-            if isinstance(item, dict)
-        }
-        for entry in measurement_techniques:
-            key = tuple(sorted((k, v) for k, v in entry.items()))
-            if key not in existing_keys:
-                existing_measurements.append(entry)
-                existing_keys.add(key)
-        if existing_measurements:
-            sample_record["measurementTechnique"] = existing_measurements
+        merged = []
+        for item in existing_measurements:
+            if isinstance(item, dict):
+                merged.append(item)
+        merged.extend([m for m in measurement_techniques if isinstance(m, dict)])
+
+        normalized = _normalize_measurement_techniques(merged)
+        if normalized:
+            sample_record["measurementTechnique"] = normalized
     if phenotypes:
         sample_record["associatedPhenotype"] = phenotypes
     if species_entries:
-        sample_record["species"] = species_entries
+        sample_record["species"] = _normalize_defined_term_list(species_entries)
     if cell_types:
-        sample_record["cellType"] = cell_types
+        sample_record["cellType"] = _normalize_defined_term_list(cell_types)
     if temporal_coverages:
-        sample_record["temporalCoverage"] = temporal_coverages
+        sample_record["temporalCoverage"] = _normalize_temporal_coverage(temporal_coverages)
     if health_conditions:
         sample_record.setdefault("healthCondition", [])
         existing = {
@@ -774,14 +971,15 @@ def _build_sample_record(
             for entry in sample_record["healthCondition"]
             if isinstance(entry, dict)
         }
-        for entry in health_conditions:
+        normalized_conditions = _normalize_defined_term_list(health_conditions)
+        for entry in normalized_conditions:
             key = tuple(sorted((k, v) for k, v in entry.items()))
             if key not in existing:
                 sample_record["healthCondition"].append(entry)
                 existing.add(key)
     if distribution_entries:
         sample_record.setdefault("distribution", [])
-        sample_record["distribution"].extend(distribution_entries)
+        sample_record["distribution"].extend(_normalize_distribution(distribution_entries))
     if instruments:
         sample_record["instrument"] = instruments
     if dates_processed:
@@ -789,7 +987,7 @@ def _build_sample_record(
     if alternate_identifiers:
         sample_record["alternateIdentifier"] = alternate_identifiers
     if sample_quantities:
-        sample_record["sampleQuantity"] = sample_quantities
+        sample_record["sampleQuantity"] = _normalize_quantitative_values(sample_quantities)
     if extra_variables:
         existing_variables = sample_record.get("variableMeasured", [])
         if not isinstance(existing_variables, list):
@@ -805,6 +1003,9 @@ def _build_sample_record(
                 existing_variables.append(entry)
                 existing_keys.add(key)
         sample_record["variableMeasured"] = existing_variables
+
+    if sample_record.get("variableMeasured"):
+        sample_record["variableMeasured"] = _normalize_variable_measured(sample_record["variableMeasured"])
 
     return sample_record
 

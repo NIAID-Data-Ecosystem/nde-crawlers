@@ -23,18 +23,9 @@ SAMPLE_ONLY_DATASET_FIELDS = {
 
 SAMPLE_ALLOWED_FIELDS = {
     "@type",
-    "associatedPhenotype",
-    "associatedGenotype",
-    "cellType",
-    "anatomicalSystem",
-    "anatomicalStructure",
-    "sex",
-    "developmentalStage",
-    "sampleAvailability",
-    "sampleQuantity",
-    "sampleType",
-    "sampleList",
-    "collectionSize",
+    "aggregateElement",
+    "itemListElement",
+    "numberOfItems",
 }
 
 
@@ -73,9 +64,11 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
 
     stype = core.get("study", {}).get("study_type", {})
     if stype.get("id") or stype.get("label"):
-        out["measurementTechnique"] = {}
+        out["measurementTechnique"] = {"@type": "DefinedTerm"}
         if stype.get("id"):
             out["measurementTechnique"]["identifier"] = stype["id"]
+            if isinstance(stype["id"], str) and ":" in stype["id"]:
+                out["measurementTechnique"]["inDefinedTermSet"] = stype["id"].split(":", 1)[0]
         if stype.get("label"):
             out["measurementTechnique"]["name"] = stype["label"]
 
@@ -321,8 +314,10 @@ def build_dataset_sample_objects(sample_collections):
         "@type",
         "isPartOf",
         "sampleList",
+        "itemListElement",
         "sample",
         "collectionSize",
+        "numberOfItems",
         "identifier",
         "url",
         "includedInDataCatalog",
@@ -338,11 +333,11 @@ def build_dataset_sample_objects(sample_collections):
         "sampleQuantity",
         "sampleType",
         "includedInDataCatalog",
-        "sampleList",
     }
 
     list_trackers = {}
     sample_collection = {"@type": "SampleCollection"}
+    aggregate_data = {}
     collection_size_total = 0
     collection_size_found = False
     EMPTY_VALUES = (None, "", [], {}, set())
@@ -564,39 +559,39 @@ def build_dataset_sample_objects(sample_collections):
             results.append(entry)
         return results
 
-    def _set_collection_size(value):
-        sample_collection["collectionSize"] = {"value": value, "unitText": "sample"}
+    def _set_number_of_items(value):
+        sample_collection["numberOfItems"] = {"value": value, "unitText": "sample"}
 
-    def _merge_list_field(field, values):
+    def _merge_list_field(field, values, target):
         if _is_empty(values):
             return
         entries = _ensure_list(values)
-        trackers = list_trackers.setdefault(field, {"dict": set(), "value": set(), "sample_keys": set()})
-        target = sample_collection.get(field)
-        if not isinstance(target, list):
+        trackers = list_trackers.setdefault((id(target), field), {"dict": set(), "value": set(), "sample_keys": set()})
+        current = target.get(field)
+        if not isinstance(current, list):
             normalized = []
-            if isinstance(target, dict):
-                if field == "sampleList":
-                    sanitized_target = _sanitize_sample_list_entry(target)
+            if isinstance(current, dict):
+                if field == "itemListElement":
+                    sanitized_target = _sanitize_sample_list_entry(current)
                     if sanitized_target:
                         fingerprint = _sample_entry_fingerprint(sanitized_target)
                         if fingerprint not in trackers["sample_keys"]:
                             trackers["sample_keys"].add(fingerprint)
                             normalized.append(sanitized_target)
                 else:
-                    _add_unique_dict(normalized, trackers["dict"], target)
-            elif not _is_empty(target):
-                _add_unique_value(normalized, trackers["value"], target)
-            sample_collection[field] = normalized
-            target = normalized
+                    _add_unique_dict(normalized, trackers["dict"], current)
+            elif not _is_empty(current):
+                _add_unique_value(normalized, trackers["value"], current)
+            target[field] = normalized
+            current = normalized
         for entry in entries:
             if _is_empty(entry):
                 continue
             if isinstance(entry, list):
-                _merge_list_field(field, entry)
+                _merge_list_field(field, entry, target)
                 continue
             if isinstance(entry, dict):
-                if field == "sampleList":
+                if field == "itemListElement":
                     sanitized_entry = _sanitize_sample_list_entry(entry)
                     if not sanitized_entry:
                         continue
@@ -604,28 +599,28 @@ def build_dataset_sample_objects(sample_collections):
                     if fingerprint in trackers["sample_keys"]:
                         continue
                     trackers["sample_keys"].add(fingerprint)
-                    target.append(sanitized_entry)
+                    current.append(sanitized_entry)
                 else:
-                    _add_unique_dict(target, trackers["dict"], entry)
+                    _add_unique_dict(current, trackers["dict"], entry)
             else:
-                _add_unique_value(target, trackers["value"], entry)
+                _add_unique_value(current, trackers["value"], entry)
 
-    def _merge_scalar_field(field, value):
+    def _merge_scalar_field(field, value, target):
         if _is_empty(value):
             return
         if field in multi_value_fields:
-            _merge_list_field(field, value)
+            _merge_list_field(field, value, target)
             return
         if field == "sampleAvailability":
-            sample_collection[field] = bool(sample_collection.get(field)) or bool(value)
+            target[field] = bool(target.get(field)) or bool(value)
             return
 
-        existing = sample_collection.get(field)
+        existing = target.get(field)
         if existing is None:
-            sample_collection[field] = copy.deepcopy(value)
+            target[field] = copy.deepcopy(value)
             return
         if isinstance(existing, list):
-            _merge_list_field(field, value)
+            _merge_list_field(field, value, target)
             return
         if isinstance(existing, dict) and isinstance(value, dict):
             for key, val in value.items():
@@ -633,11 +628,11 @@ def build_dataset_sample_objects(sample_collections):
                     existing[key] = copy.deepcopy(val)
             return
         if isinstance(existing, bool) and isinstance(value, bool):
-            sample_collection[field] = existing or value
+            target[field] = existing or value
             return
         if existing == value:
             return
-        _merge_list_field(field, [existing, value])
+        _merge_list_field(field, [existing, value], target)
 
     def _coerce_collection_size(size_value):
         if isinstance(size_value, dict):
@@ -654,10 +649,10 @@ def build_dataset_sample_objects(sample_collections):
         _update_sample_list_context(sample_coll)
         explicit_samples = sample_coll.get("sample")
         has_explicit_samples = bool(_ensure_list(explicit_samples))
-        _merge_list_field("sampleList", sample_coll.get("sampleList"))
-        _merge_list_field("sampleList", explicit_samples)
+        _merge_list_field("itemListElement", sample_coll.get("sampleList"), sample_collection)
+        _merge_list_field("itemListElement", explicit_samples, sample_collection)
 
-        # Always expose the generated Sample record itself so dataset.sample.sampleList references the
+        # Always expose the generated Sample record itself so dataset.sample.itemListElement references the
         # actual Sample documents (e.g., vdj_* identifiers) instead of only the raw source labels.
         if not has_explicit_samples:
             derived_sample_entry = {
@@ -668,9 +663,9 @@ def build_dataset_sample_objects(sample_collections):
             }
             derived_sample_entry = {k: v for k, v in derived_sample_entry.items() if v not in EMPTY_VALUES}
             if derived_sample_entry:
-                _merge_list_field("sampleList", [derived_sample_entry])
+                _merge_list_field("itemListElement", [derived_sample_entry], sample_collection)
 
-        size_value = _coerce_collection_size(sample_coll.get("collectionSize"))
+        size_value = _coerce_collection_size(sample_coll.get("numberOfItems") or sample_coll.get("collectionSize"))
         if size_value is not None:
             collection_size_total += size_value
             collection_size_found = True
@@ -678,7 +673,7 @@ def build_dataset_sample_objects(sample_collections):
         for field, value in sample_coll.items():
             if field in excluded_keys:
                 continue
-            _merge_scalar_field(field, value)
+            _merge_scalar_field(field, value, aggregate_data)
 
     def _sample_sort_key(entry):
         if isinstance(entry, dict):
@@ -692,46 +687,51 @@ def build_dataset_sample_objects(sample_collections):
                 return str(entry)
         return str(entry)
 
-    if sample_collection.get("sampleList"):
-        sample_list_entries = sample_collection["sampleList"]
-        if all(isinstance(entry, dict) for entry in sample_list_entries):
-            sample_list_entries.sort(key=_sample_sort_key)
+    if sample_collection.get("itemListElement"):
+        item_list_entries = sample_collection["itemListElement"]
+        if all(isinstance(entry, dict) for entry in item_list_entries):
+            item_list_entries.sort(key=_sample_sort_key)
         else:
-            sample_collection["sampleList"] = sorted(sample_list_entries)
+            sample_collection["itemListElement"] = sorted(item_list_entries)
 
-    if collection_size_found:
-        _set_collection_size(collection_size_total)
-    elif sample_collection.get("sampleList"):
-        _set_collection_size(len(sample_collection["sampleList"]))
+    if sample_collection.get("itemListElement"):
+        _set_number_of_items(len(sample_collection["itemListElement"]))
+    elif collection_size_found:
+        _set_number_of_items(collection_size_total)
     else:
-        _set_collection_size(len(valid_collections))
+        _set_number_of_items(len(valid_collections))
 
-    if sample_collection.get("sex"):
-        normalized_sex = _normalize_unique_string_list(sample_collection["sex"])
+    if aggregate_data.get("sex"):
+        normalized_sex = _normalize_unique_string_list(aggregate_data["sex"])
         if normalized_sex:
-            sample_collection["sex"] = normalized_sex
+            aggregate_data["sex"] = normalized_sex
         else:
-            sample_collection.pop("sex", None)
+            aggregate_data.pop("sex", None)
 
-    if sample_collection.get("sampleQuantity"):
-        aggregated_quantities = _aggregate_sample_quantities(sample_collection["sampleQuantity"])
+    if aggregate_data.get("sampleQuantity"):
+        aggregated_quantities = _aggregate_sample_quantities(aggregate_data["sampleQuantity"])
         if aggregated_quantities:
-            sample_collection["sampleQuantity"] = aggregated_quantities
+            aggregate_data["sampleQuantity"] = aggregated_quantities
         else:
-            sample_collection.pop("sampleQuantity", None)
+            aggregate_data.pop("sampleQuantity", None)
 
-    if sample_collection.get("developmentalStage"):
-        aggregated_stages = _aggregate_developmental_stages(sample_collection["developmentalStage"])
+    if aggregate_data.get("developmentalStage"):
+        aggregated_stages = _aggregate_developmental_stages(aggregate_data["developmentalStage"])
         if aggregated_stages:
-            sample_collection["developmentalStage"] = aggregated_stages
+            aggregate_data["developmentalStage"] = aggregated_stages
         else:
-            sample_collection.pop("developmentalStage", None)
+            aggregate_data.pop("developmentalStage", None)
+
+    if aggregate_data:
+        aggregate_element = {"@type": "Sample"}
+        aggregate_element.update(aggregate_data)
+        sample_collection["aggregateElement"] = aggregate_element
 
     for key in list(sample_collection.keys()):
         if key not in SAMPLE_ALLOWED_FIELDS:
             sample_collection.pop(key, None)
 
-    if not sample_collection:
+    if not sample_collection.get("aggregateElement") and not sample_collection.get("itemListElement"):
         return {}
 
     return sample_collection

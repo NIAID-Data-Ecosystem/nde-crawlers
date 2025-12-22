@@ -284,6 +284,7 @@ def parse():
         yield dataset_record
 
         for sample_collection in sample_records:
+            sample_collection.pop("sample", None)
             yield sample_collection
 
     logger.info(f"Finished parsing {total} studies")

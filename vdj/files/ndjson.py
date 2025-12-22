@@ -34,12 +34,12 @@ try:
         fd.write(line)
     is_parsed = True
 # parser failed
-except Exception as e:
+except Exception:
     fd.close()
     logger.warning("Errors occurred while running, so not saving potentially corrupt data.")
     os.unlink(tmp_filename)
     os.unlink(rl_tmp_filename)
-    logger.error(e)
+    logger.exception("Parser raised an unhandled exception")
 finally:
     fd.close()
 
