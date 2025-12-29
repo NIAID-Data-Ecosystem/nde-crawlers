@@ -123,22 +123,25 @@ def extract(doc_list):
 
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
+        # Avoid repeated DDL when caching
+        c.execute("CREATE TABLE IF NOT EXISTS species (ndeid TEXT PRIMARY KEY, text_response TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS disease (ndeid TEXT PRIMARY KEY, text_response TEXT)")
         for doc in doc_list:
             count += 1
-            if count % 100 == 0:
+            if count % 1000 == 0:
                 logger.info(f"Extracted {count} documents")
-            logger.info(f"Processing document {doc['_id']}...")
+            logger.debug(f"Processing document {doc['_id']}...")
 
             for entity_type in ["-2", "-26"]:
                 # For species (entity type "-2") skip if the record already contains species or infectiousAgent.
                 if entity_type == "-2" and ("species" in doc or "infectiousAgent" in doc):
-                    logger.info(
+                    logger.debug(
                         f"Species or infectiousAgent already present in document {doc['_id']}. Skipping species extraction..."
                     )
                     continue
                 # For diseases (entity type "-26") skip if healthCondition is present.
                 if entity_type == "-26" and "healthCondition" in doc:
-                    logger.info(
+                    logger.debug(
                         f"HealthCondition already present in document {doc['_id']}. Skipping disease extraction..."
                     )
                     continue
@@ -151,18 +154,18 @@ def extract(doc_list):
                         response_text = query_extract_api(doc["description"], entity_type)
                         cache_description(doc["_id"].lower(), response_text, entity_type, c)
                     elif response_text == "":
-                        logger.info(f"Cached entry for {doc['_id']} is empty. Skipping...")
+                        logger.debug(f"Cached entry for {doc['_id']} is empty. Skipping...")
                         continue
                     extracted_entities = parse_tsv(
                         doc["_id"].lower(), response_text)
                     if extracted_entities:
-                        logger.info(
+                        logger.debug(
                             f"Found {len(extracted_entities)} entities of type {entity_type}")
                     for entity in extracted_entities:
                         # Check if entity should be filtered using enhanced rules
                         should_filter, filter_reason = should_filter_entity(entity)
                         if should_filter:
-                            logger.info(f"Filtering entity '{entity['extracted_text']}': {filter_reason}")
+                            logger.debug(f"Filtering entity '{entity['extracted_text']}': {filter_reason}")
                             continue
 
                         if entity["entity_type"] == "-2":
@@ -173,7 +176,7 @@ def extract(doc_list):
                                 or entity["extracted_text"] in s.get("alternateName", [])
                                 for s in doc["species"]
                             ):
-                                logger.info(f"Adding species {entity['extracted_text']} to document {doc['_id']}")
+                                logger.debug(f"Adding species {entity['extracted_text']} to document {doc['_id']}")
                                 doc["species"].append(
                                     {
                                         "name": entity["extracted_text"],
@@ -188,7 +191,7 @@ def extract(doc_list):
                                 or entity["extracted_text"] in d.get("alternateName", [])
                                 for d in doc["healthCondition"]
                             ):
-                                logger.info(
+                                logger.debug(
                                     f"Adding disease {entity['extracted_text']} to document {doc['_id']}")
                                 doc["healthCondition"].append(
                                     {"name": entity["extracted_text"]})
@@ -199,7 +202,7 @@ def extract(doc_list):
 
 
 def get_cached_description(ndeid, entity_type, cursor):
-    logger.info(f"Checking cache for {ndeid}...")
+    logger.debug(f"Checking cache for {ndeid}...")
     table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
     if table:
         cursor.execute(
@@ -209,11 +212,9 @@ def get_cached_description(ndeid, entity_type, cursor):
 
 
 def cache_description(ndeid, text_response, entity_type, cursor):
-    logger.info(f"Caching description for {ndeid}...")
+    logger.debug(f"Caching description for {ndeid}...")
     table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
     if table:
-        cursor.execute(
-            f"CREATE TABLE IF NOT EXISTS {table} (ndeid TEXT PRIMARY KEY, text_response TEXT)")
         cursor.execute(
             f"INSERT OR REPLACE INTO {table} VALUES (?, ?)", (ndeid, text_response))
 
@@ -535,6 +536,9 @@ def process_species(doc_list):
     # Fetch species from the SQLite database.
     species_dict = fetch_species_from_db()
 
+    # We iterate multiple times; force materialization to avoid consuming generators.
+    doc_list = list(doc_list)
+
 
     for doc in doc_list:
         # Normalize "species"
@@ -574,11 +578,11 @@ def process_species(doc_list):
         if "infectiousAgent" in doc:
             combined.extend(doc["infectiousAgent"])
         if not combined:
-            logger.info(f"Document {doc['_id']} has no species or infectiousAgent. Skipping standardization.")
+            logger.debug(f"Document {doc['_id']} has no species or infectiousAgent. Skipping standardization.")
             continue
 
         if any(not term.get("fromEXTRACT", False) for term in combined):
-            logger.info(
+            logger.debug(
                 f"Document {doc['_id']} already contains curated species/infectiousAgent. Skipping standardization."
             )
             continue
@@ -590,11 +594,11 @@ def process_species(doc_list):
         if "species" in doc:
             names = [s["name"] for s in doc["species"] if s.get("fromEXTRACT", False)]
             term_names.update(names)
-            logger.info(f"Document {doc['_id']} has {len(names)} species from EXTRACT.")
+            logger.debug(f"Document {doc['_id']} has {len(names)} species from EXTRACT.")
         if "infectiousAgent" in doc:
             names = [a["name"] for a in doc["infectiousAgent"] if a.get("fromEXTRACT", False)]
             term_names.update(names)
-            logger.info(f"Document {doc['_id']} has {len(names)} infectiousAgent from EXTRACT.")
+            logger.debug(f"Document {doc['_id']} has {len(names)} infectiousAgent from EXTRACT.")
 
     unique_term_names = list(term_names)
     logger.info(f"Total unique species/infectiousAgent to process: {len(unique_term_names)}")
@@ -602,33 +606,38 @@ def process_species(doc_list):
     formatted_species = []
     if unique_term_names:
         try:
-            logger.info("Processing species/infectiousAgent with Text2Term...")
-            if not os.path.exists("cache/ncbitaxon"):
-                text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
-            t2t_results = text2term.map_terms(unique_term_names, "ncbitaxon", use_cache=True)
-            logger.info(f"Found {len(t2t_results)} results from Text2Term")
-            t2t_results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
-
-            for index, row in t2t_results.iterrows():
-                identifier = row["Mapped Term CURIE"].split(":")[1]  # e.g., 'NCBITAXON:ID'
-                original_name = row["Source Term"]
-                logger.info(f"Processing species/infectiousAgent: {original_name}")
-
-                # Look up in the in-memory species cache first.
+            # Fast path: if terms are already cached in sqlite, skip Text2Term entirely.
+            missing_terms = []
+            for original_name in unique_term_names:
                 standardized_species = lookup_species_in_db(original_name, species_dict)
                 if standardized_species:
-                    logger.info(f"Found {original_name} in the database.")
                     standardized_species["fromEXTRACT"] = True
                     standardized_species["originalName"] = original_name
                     formatted_species.append(standardized_species)
                 else:
-                    logger.info(f"Unable to find {original_name} in the database, retrieving from external API...")
+                    missing_terms.append(original_name)
+
+            if not missing_terms:
+                logger.info("All species/infectiousAgent terms found in sqlite cache; skipping Text2Term")
+            else:
+                logger.info(f"Processing {len(missing_terms)} uncached species/infectiousAgent terms with Text2Term...")
+                if not os.path.exists("cache/ncbitaxon"):
+                    text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
+                t2t_results = text2term.map_terms(missing_terms, "ncbitaxon", use_cache=True)
+                logger.info(f"Found {len(t2t_results)} results from Text2Term")
+                t2t_results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
+
+                for _, row in t2t_results.iterrows():
+                    identifier = row["Mapped Term CURIE"].split(":")[1]  # e.g., 'NCBITAXON:ID'
+                    original_name = row["Source Term"]
+                    logger.debug(f"Processing uncached species/infectiousAgent: {original_name}")
+
+                    logger.info(f"Retrieving taxonomy details for uncached term: {original_name}")
                     try:
                         species_details = get_species_details(original_name, identifier)
                         if species_details:
                             species_details["fromEXTRACT"] = True
                             formatted_species.append(species_details)
-                            # Remove the flag before caching
                             species_details.pop("fromEXTRACT")
                             cache_species_in_db(species_details)
                             species_dict[original_name.lower().strip()] = species_details
@@ -666,16 +675,13 @@ def lookup_species_in_db(original_name, species_dict):
 
 
 def cache_species_in_db(species_details):
-    # conn = sqlite3.connect(DB_PATH)
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
         c.execute(
             "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
-            (species_details["originalName"].lower().strip(),
-             json.dumps(species_details)),
+            (species_details["originalName"].lower().strip(), json.dumps(species_details)),
         )
         conn.commit()
-    # conn.close()
 
 
 def deduplicate_species(species_list):
@@ -686,14 +692,12 @@ def deduplicate_species(species_list):
     seen = set()
     deduped = []
     for sp in species_list:
-        identifier = sp.get('identifier')
-        # If identifier exists and we haven't seen it, add it.
+        identifier = sp.get("identifier")
         if identifier is not None:
             if identifier not in seen:
                 seen.add(identifier)
                 deduped.append(sp)
         else:
-            # If no identifier is found, simply include the record.
             deduped.append(sp)
     return deduped
 
@@ -824,8 +828,8 @@ def process_diseases(doc_list):
     # Fetch diseases from the SQLite database
     disease_dict = fetch_diseases_from_db()
 
+    doc_list = list(doc_list)
     for doc in doc_list:
-        logger.info(f"Processing document {doc['_id']}...")
         if "healthCondition" in doc:
             if isinstance(doc["healthCondition"], dict):
                 doc["healthCondition"] = [doc["healthCondition"]]
@@ -833,7 +837,7 @@ def process_diseases(doc_list):
             disease_in_doc = [s["name"]
                               for s in doc["healthCondition"] if "isCurated" not in s]
             disease_names.update(disease_in_doc)
-            logger.info(f"Found {len(disease_in_doc)} new diseases to process")
+            logger.debug(f"Found {len(disease_in_doc)} new diseases to process")
 
     unique_disease_names = list(disease_names)
     logger.info(
