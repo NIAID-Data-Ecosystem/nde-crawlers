@@ -44,7 +44,7 @@ def process_documents(documents, mapping_index):
                             if replacement not in unique_names:
                                 unique_names.add(replacement)
                                 topic_terms.append((replacement, "Plant biology"))
-                            logging.debug(f"Keyword '{keyword}' is obsolete. Using replacement '{replacement}'.")
+                            # logging.debug(f"Keyword '{keyword}' is obsolete. Using replacement '{replacement}'.")
                     else:
                         label = mapping["Mapped Term Label"]
                         if label.lower() != "ignored" and label not in unique_names:
@@ -54,13 +54,13 @@ def process_documents(documents, mapping_index):
                     better_mapping = mapping.get("Better mapping")
                     if better_mapping == "Ignore":
                         remaining_keywords.append(keyword)
-                        logging.debug(f"Keyword '{keyword}' ignored due to mapping decision.")
+                        # logging.debug(f"Keyword '{keyword}' ignored due to mapping decision.")
                     else:
                         # Only add if not ignored and not duplicated
                         if better_mapping and better_mapping.lower() != "ignored" and better_mapping not in unique_names:
                             unique_names.add(better_mapping)
                             topic_terms.append((better_mapping, mapping["Mapped Term CURIE"]))
-                            logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")
+                            # logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")
             else:
                 # Handle unmapped terms
                 if not contains_special_characters(keyword) and "years" not in keyword_lc:
@@ -122,7 +122,7 @@ class FigshareUploader(NDESourceUploader):
             if source_term and source_term not in mapping_index:
                 mapping_index[source_term] = m
 
-        logging.debug(f"Loaded mappings: {mappings[:5]}")  # Print first 5 mappings for debugging
+        # logging.debug(f"Loaded mappings: {mappings[:5]}")
 
         processed_documents = process_documents(_iter_docs(data_folder), mapping_index)
 

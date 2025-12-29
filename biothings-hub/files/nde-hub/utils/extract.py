@@ -70,17 +70,62 @@ def parse_tsv(ndeid, text_response):
     for record in records:
         if record:
             parts = record.split("\t")
-            dictlist.append({
-                "_id": ndeid,
-                "extracted_text": parts[0],
-                "entity_type": parts[1],
-                "onto_id": parts[2]
-            })
+            # Be defensive: EXTRACT sometimes returns malformed/short lines.
+            # Avoid raising and forcing the caller down a slow exception path.
+            if len(parts) < 3:
+                continue
+            dictlist.append(
+                {
+                    "_id": ndeid,
+                    "extracted_text": parts[0],
+                    "entity_type": parts[1],
+                    "onto_id": parts[2],
+                }
+            )
     return dictlist
 
 
+def _iter_extract_tsv_lines(text_response):
+    """Yield (extracted_text, entity_type, onto_id) from EXTRACT TSV text.
+
+    This is intentionally allocation-light for large runs.
+    """
+    if not text_response:
+        return
+    for line in text_response.splitlines():
+        if not line:
+            continue
+        # We only care about the first 3 columns.
+        parts = line.split("\t", 2)
+        if len(parts) < 3:
+            continue
+        yield parts[0], parts[1], parts[2]
+
+
+def _fetch_cached_descriptions_many(cursor, entity_type, ndeids, max_vars=900):
+    """Fetch cached EXTRACT TSV responses for many ndeids.
+
+    SQLite defaults to a max of 999 bound variables; keep headroom.
+    Returns a dict: ndeid -> text_response.
+    """
+    table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
+    if not table or not ndeids:
+        return {}
+
+    out = {}
+    for i in range(0, len(ndeids), max_vars):
+        chunk = ndeids[i : i + max_vars]
+        placeholders = ",".join(["?"] * len(chunk))
+        cursor.execute(
+            f"SELECT ndeid, text_response FROM {table} WHERE ndeid IN ({placeholders})",
+            chunk,
+        )
+        out.update(cursor.fetchall())
+    return out
+
+
 def extract(doc_list):
-    logger.info("Processing descriptions...")
+    # logger.info("Processing descriptions...")
     count = 0
 
     # Enhanced drop list with specific filtering rules
@@ -121,88 +166,104 @@ def extract(doc_list):
 
         return False, ""
 
+    # SQLite read path dominates when all responses are cached.
+    # Reduce per-row overhead by fetching cached rows in batches.
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
         # Avoid repeated DDL when caching
         c.execute("CREATE TABLE IF NOT EXISTS species (ndeid TEXT PRIMARY KEY, text_response TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS disease (ndeid TEXT PRIMARY KEY, text_response TEXT)")
-        for doc in doc_list:
-            count += 1
-            if count % 1000 == 0:
-                logger.info(f"Extracted {count} documents")
-            logger.debug(f"Processing document {doc['_id']}...")
+        # Keep below SQLite's variable limit (default 999).
+        max_vars = 900
+        chunk_size = 5000
 
-            for entity_type in ["-2", "-26"]:
-                # For species (entity type "-2") skip if the record already contains species or infectiousAgent.
-                if entity_type == "-2" and ("species" in doc or "infectiousAgent" in doc):
-                    logger.debug(
-                        f"Species or infectiousAgent already present in document {doc['_id']}. Skipping species extraction..."
-                    )
+        for start in range(0, len(doc_list), chunk_size):
+            chunk_docs = doc_list[start : start + chunk_size]
+
+            # Precompute ids that actually need extraction for each entity type.
+            species_ids = []
+            disease_ids = []
+            for doc in chunk_docs:
+                ndeid_lower = doc["_id"].lower()
+                if "description" not in doc or not doc["description"]:
                     continue
-                # For diseases (entity type "-26") skip if healthCondition is present.
-                if entity_type == "-26" and "healthCondition" in doc:
-                    logger.debug(
-                        f"HealthCondition already present in document {doc['_id']}. Skipping disease extraction..."
-                    )
-                    continue
+                if "species" not in doc and "infectiousAgent" not in doc:
+                    species_ids.append(ndeid_lower)
+                if "healthCondition" not in doc:
+                    disease_ids.append(ndeid_lower)
+
+            cached_species = _fetch_cached_descriptions_many(c, "-2", species_ids, max_vars=max_vars)
+            cached_disease = _fetch_cached_descriptions_many(c, "-26", disease_ids, max_vars=max_vars)
+
+            for doc in chunk_docs:
+                count += 1
+                if count % 1000 == 0:
+                    logger.info(f"Extracted {count} documents")
 
                 try:
-                    response_text = get_cached_description(
-                        doc["_id"].lower(), entity_type, c)
-                    if response_text is None:
-                        logger.info(f"No cached entry for {doc['_id']}. Pinging API...")
-                        response_text = query_extract_api(doc["description"], entity_type)
-                        cache_description(doc["_id"].lower(), response_text, entity_type, c)
-                    elif response_text == "":
-                        logger.debug(f"Cached entry for {doc['_id']} is empty. Skipping...")
+                    ndeid_lower = doc["_id"].lower()
+                    description = doc.get("description")
+                    if not description:
                         continue
-                    extracted_entities = parse_tsv(
-                        doc["_id"].lower(), response_text)
-                    if extracted_entities:
-                        logger.debug(
-                            f"Found {len(extracted_entities)} entities of type {entity_type}")
-                    for entity in extracted_entities:
-                        # Check if entity should be filtered using enhanced rules
-                        should_filter, filter_reason = should_filter_entity(entity)
-                        if should_filter:
-                            logger.debug(f"Filtering entity '{entity['extracted_text']}': {filter_reason}")
-                            continue
 
-                        if entity["entity_type"] == "-2":
-                            # Add species from extraction and tag with fromEXTRACT=True
-                            doc.setdefault("species", [])
-                            if not any(
-                                s.get("name") == entity["extracted_text"]
-                                or entity["extracted_text"] in s.get("alternateName", [])
-                                for s in doc["species"]
-                            ):
-                                logger.debug(f"Adding species {entity['extracted_text']} to document {doc['_id']}")
-                                doc["species"].append(
-                                    {
-                                        "name": entity["extracted_text"],
-                                        "identifier": entity["onto_id"],
-                                        "fromEXTRACT": True,
-                                    }
-                                )
-                        elif entity["entity_type"] == "-26":
-                            doc.setdefault("healthCondition", [])
-                            if not any(
-                                d.get("name") == entity["extracted_text"]
-                                or entity["extracted_text"] in d.get("alternateName", [])
-                                for d in doc["healthCondition"]
-                            ):
-                                logger.debug(
-                                    f"Adding disease {entity['extracted_text']} to document {doc['_id']}")
-                                doc["healthCondition"].append(
-                                    {"name": entity["extracted_text"]})
+                    # Species (entity type "-2")
+                    if "species" not in doc and "infectiousAgent" not in doc:
+                        response_text = cached_species.get(ndeid_lower)
+                        if response_text is None:
+                            response_text = get_cached_description(ndeid_lower, "-2", c)
+                        if response_text is None:
+                            response_text = query_extract_api(description, "-2")
+                            cache_description(ndeid_lower, response_text, "-2", c)
+                        if response_text:
+                            for extracted_text, entity_type, onto_id in _iter_extract_tsv_lines(response_text):
+                                entity = {"extracted_text": extracted_text, "onto_id": onto_id}
+                                should_filter, _ = should_filter_entity(entity)
+                                if should_filter:
+                                    continue
+                                if entity_type == "-2":
+                                    doc.setdefault("species", [])
+                                    if not any(
+                                        s.get("name") == extracted_text
+                                        or extracted_text in s.get("alternateName", [])
+                                        for s in doc["species"]
+                                    ):
+                                        doc["species"].append(
+                                            {
+                                                "name": extracted_text,
+                                                "identifier": onto_id,
+                                                "fromEXTRACT": True,
+                                            }
+                                        )
+
+                    # Disease (entity type "-26")
+                    if "healthCondition" not in doc:
+                        response_text = cached_disease.get(ndeid_lower)
+                        if response_text is None:
+                            response_text = get_cached_description(ndeid_lower, "-26", c)
+                        if response_text is None:
+                            response_text = query_extract_api(description, "-26")
+                            cache_description(ndeid_lower, response_text, "-26", c)
+                        if response_text:
+                            for extracted_text, entity_type, onto_id in _iter_extract_tsv_lines(response_text):
+                                entity = {"extracted_text": extracted_text, "onto_id": onto_id}
+                                should_filter, _ = should_filter_entity(entity)
+                                if should_filter:
+                                    continue
+                                if entity_type == "-26":
+                                    doc.setdefault("healthCondition", [])
+                                    if not any(
+                                        d.get("name") == extracted_text
+                                        or extracted_text in d.get("alternateName", [])
+                                        for d in doc["healthCondition"]
+                                    ):
+                                        doc["healthCondition"].append({"name": extracted_text})
                 except Exception as e:
-                    logger.error(
-                        f"Error processing document {doc['_id']}: {e}")
+                    logger.error(f"Error processing document {doc['_id']}: {e}")
     return doc_list
 
 
 def get_cached_description(ndeid, entity_type, cursor):
-    logger.debug(f"Checking cache for {ndeid}...")
+    # logger.debug(f"Checking cache for {ndeid}...")
     table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
     if table:
         cursor.execute(
@@ -212,7 +273,7 @@ def get_cached_description(ndeid, entity_type, cursor):
 
 
 def cache_description(ndeid, text_response, entity_type, cursor):
-    logger.debug(f"Caching description for {ndeid}...")
+    # logger.debug(f"Caching description for {ndeid}...")
     table = "species" if entity_type == "-2" else "disease" if entity_type == "-26" else None
     if table:
         cursor.execute(
@@ -252,7 +313,7 @@ def apply_heuristics(df):
 def build_species_lineage_info(species_list, species_mapping):
     lineage_info = {}
     for species in species_list:
-        logger.info(f"Building lineage info for {species}")
+        # logger.info(f"Building lineage info for {species}")
         details = species_mapping.get(species.lower())
         if details and "lineage" in details:
             scientific_name = details["name"].lower()
@@ -266,29 +327,29 @@ def filter_species_terms_for_ancestors(species_mapping, species_list, lineage_in
     to_remove = set()
 
     if "mus" in species_list and "mus sp." in species_list:
-        logger.info(
-            "Found both 'mus' and 'mus sp.' in species list. Removing 'mus sp.'...")
+        # logger.info(
+        #     "Found both 'mus' and 'mus sp.' in species list. Removing 'mus sp.'...")
         to_remove.add("mus sp.")
 
     for species in species_list:
         details = species_mapping.get(species.lower())
         if not details:
-            logger.info(f"Unable to find species details for {species}")
+            # logger.info(f"Unable to find species details for {species}")
             continue
-        logger.info(f"Building lineage info for {species}")
+        # logger.info(f"Building lineage info for {species}")
         scientific_name = details["name"].lower()
 
         for other_species in species_list:
             other_details = species_mapping.get(other_species.lower())
             if not other_details:
-                logger.info(
-                    f"Unable to find other species details for {other_species}")
+                # logger.info(
+                #     f"Unable to find other species details for {other_species}")
                 continue
             other_scientific_name = other_details["name"].lower()
 
             if other_species != species and scientific_name in lineage_info.get(other_scientific_name, set()):
-                logger.info(
-                    f"Found {scientific_name} as ancestor of {other_scientific_name}. Removing...")
+                # logger.info(
+                #     f"Found {scientific_name} as ancestor of {other_scientific_name}. Removing...")
                 to_remove.add(scientific_name)
 
     filtered_species = [
@@ -340,14 +401,14 @@ def insert_species(doc_list, species_mapping):
             for entry in combined_entries:
                 name = entry.get("name")
                 from_extract = entry.get("fromEXTRACT", False)
-                logger.info(f"Processing entry: name='{name}', fromEXTRACT={from_extract}")
+                # logger.info(f"Processing entry: name='{name}', fromEXTRACT={from_extract}")
                 if not name:
-                    logger.info("Skipping entry without a name.")
+                    # logger.info("Skipping entry without a name.")
                     continue
 
                 # If the entry is not curated and its name is not in the filtered list, skip it.
                 if not entry.get("curatedBy") and name not in filtered_species_names:
-                    logger.info(f"Skipping '{name}' because it is not in the filtered species list: {filtered_species_names}")
+                    # logger.info(f"Skipping '{name}' because it is not in the filtered species list: {filtered_species_names}")
                     continue
 
                 # Process curated entries (those that did NOT come from extraction)
@@ -356,11 +417,11 @@ def insert_species(doc_list, species_mapping):
                     lower_name = name.lower()
                     identifier = entry.get("identifier")
                     if classification == "host":
-                        logger.info(f"Preserving host: {name}")
+                        # logger.info(f"Preserving host: {name}")
                         preserved_hosts.append(entry)
                         existing_host_names.add(lower_name)
                     elif classification == "infectiousAgent":
-                        logger.info(f"Preserving infectiousAgent: {name}")
+                        # logger.info(f"Preserving infectiousAgent: {name}")
                         preserved_infectious_agents.append(entry)
                         existing_infectious_agent_names.add(lower_name)
                     existing_identifiers.add(identifier)
@@ -370,9 +431,9 @@ def insert_species(doc_list, species_mapping):
                     lower_name = original_name.lower()
                     new_obj = species_mapping.get(lower_name)
                     if not new_obj:
-                        logger.info(f"Unable to find species details for {original_name}")
+                        # logger.info(f"Unable to find species details for {original_name}")
                         continue
-                    logger.info(f"Adding extracted entry for '{original_name}' with classification '{new_obj.get('classification')}'")
+                    # logger.info(f"Adding extracted entry for '{original_name}' with classification '{new_obj.get('classification')}'")
                     classification = new_obj.get("classification")
                     identifier = new_obj.get("identifier")
                     if classification == "infectiousAgent":
@@ -381,16 +442,19 @@ def insert_species(doc_list, species_mapping):
                             existing_infectious_agent_names.add(lower_name)
                             existing_identifiers.add(identifier)
                         else:
-                            logger.info(f"Duplicate or conflict for infectiousAgent {original_name} in document {doc['_id']}")
+                            # logger.info(f"Duplicate or conflict for infectiousAgent {original_name} in document {doc['_id']}")
+                            pass
                     elif classification == "host":
                         if lower_name not in existing_host_names and identifier not in existing_identifiers:
                             updated_hosts.append(new_obj)
                             existing_host_names.add(lower_name)
                             existing_identifiers.add(identifier)
                         else:
-                            logger.info(f"Duplicate or conflict for host {original_name} in document {doc['_id']}")
+                            # logger.info(f"Duplicate or conflict for host {original_name} in document {doc['_id']}")
+                            pass
                     else:
-                        logger.info(f"Unknown classification for {original_name} in document {doc['_id']}")
+                        # logger.info(f"Unknown classification for {original_name} in document {doc['_id']}")
+                        pass
 
             # Reassign fields based on classification.
             all_hosts = preserved_hosts + updated_hosts
@@ -406,7 +470,7 @@ def insert_species(doc_list, species_mapping):
             else:
                 doc.pop("infectiousAgent", None)
 
-            logger.info(f"Updated species in document {doc['_id']}")
+            # logger.info(f"Updated species in document {doc['_id']}")
     return doc_list
 
 def insert_disease(doc_list, disease_mapping):
@@ -436,7 +500,7 @@ def insert_disease(doc_list, disease_mapping):
                     updated_disease.append(disease_obj)
 
             doc["healthCondition"] = preserved_diseases + updated_disease
-            logger.info(f"Updated diseases in document {doc['_id']}")
+            # logger.info(f"Updated diseases in document {doc['_id']}")
 
     return doc_list
 
@@ -444,52 +508,52 @@ def insert_disease(doc_list, disease_mapping):
 def classify_as_host_or_agent(scientific_name, lineage):
     hosts = ["Deuterostomia", "Embryophyta", "Arthropoda", "Archaea", "Mollusca"]
     if scientific_name in hosts:
-        logger.info(f"Found {scientific_name}, classifying as host")
+        # logger.info(f"Found {scientific_name}, classifying as host")
         return "host"
     scientific_names = [item["scientificName"] for item in lineage]
     if "Viruses" in scientific_names:
-        logger.info(
-            f"Found Viruses in {scientific_names}, classifying as infectiousAgent")
+        # logger.info(
+        #     f"Found Viruses in {scientific_names}, classifying as infectiousAgent")
         return "infectiousAgent"
     elif "Archaea" in scientific_names:
-        logger.info(
-            f"Found Archaea in {scientific_names}, classifying as host")
+        # logger.info(
+        #     f"Found Archaea in {scientific_names}, classifying as host")
         return "host"
     elif "Mollusca" in scientific_names:
-        logger.info(
-            f"Found Mollusca in {scientific_names}, classifying as host")
+        # logger.info(
+        #     f"Found Mollusca in {scientific_names}, classifying as host")
         return "host"
     if "Deuterostomia" in scientific_names:
-        logger.info(
-            f"Found Deuterostomia in {scientific_names}, classifying as host")
+        # logger.info(
+        #     f"Found Deuterostomia in {scientific_names}, classifying as host")
         return "host"
     elif "Embryophyta" in scientific_names and not any(
         parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
     ):
-        logger.info(
-            f"Found Embryophyta in {scientific_names}, classifying as host")
+        # logger.info(
+        #     f"Found Embryophyta in {scientific_names}, classifying as host")
         return "host"
     elif "Arthropoda" in scientific_names:
         if "Acari" in scientific_names:
             if "Ixodida" in scientific_names or "Ixodes" in scientific_names:
-                logger.info(
-                    f"Found Ixodida or Ixodes in {scientific_names}, classifying as host")
+                # logger.info(
+                #     f"Found Ixodida or Ixodes in {scientific_names}, classifying as host")
                 return "host"
             else:
-                logger.info(
-                    f"Found Acari in {scientific_names}, classifying as infectiousAgent")
+                # logger.info(
+                #     f"Found Acari in {scientific_names}, classifying as infectiousAgent")
                 return "infectiousAgent"
         else:
-            logger.info(
-                f"Found Arthropoda in {scientific_names}, classifying as host")
+            # logger.info(
+            #     f"Found Arthropoda in {scientific_names}, classifying as host")
             return "host"
     else:
-        logger.info(f"Found {scientific_names}, classifying as infectiousAgent")
+        # logger.info(f"Found {scientific_names}, classifying as infectiousAgent")
         return "infectiousAgent"
 
 
 def get_species_details(original_name, identifier):
-    logger.info(f"Getting details for {original_name}")
+    # logger.info(f"Getting details for {original_name}")
     identifier = str(identifier)
     identifier = identifier.split("*")[-1]
     species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
@@ -532,7 +596,7 @@ def get_species_details(original_name, identifier):
 
 
 def process_species(doc_list):
-    logger.info("Processing species and infectiousAgent...")
+    # logger.info("Processing species and infectiousAgent...")
     # Fetch species from the SQLite database.
     species_dict = fetch_species_from_db()
 
@@ -578,13 +642,13 @@ def process_species(doc_list):
         if "infectiousAgent" in doc:
             combined.extend(doc["infectiousAgent"])
         if not combined:
-            logger.debug(f"Document {doc['_id']} has no species or infectiousAgent. Skipping standardization.")
+            # logger.debug(f"Document {doc['_id']} has no species or infectiousAgent. Skipping standardization.")
             continue
 
         if any(not term.get("fromEXTRACT", False) for term in combined):
-            logger.debug(
-                f"Document {doc['_id']} already contains curated species/infectiousAgent. Skipping standardization."
-            )
+            # logger.debug(
+            #     f"Document {doc['_id']} already contains curated species/infectiousAgent. Skipping standardization."
+            # )
             continue
         else:
             docs_to_standardize.append(doc)
@@ -594,14 +658,14 @@ def process_species(doc_list):
         if "species" in doc:
             names = [s["name"] for s in doc["species"] if s.get("fromEXTRACT", False)]
             term_names.update(names)
-            logger.debug(f"Document {doc['_id']} has {len(names)} species from EXTRACT.")
+            # logger.debug(f"Document {doc['_id']} has {len(names)} species from EXTRACT.")
         if "infectiousAgent" in doc:
             names = [a["name"] for a in doc["infectiousAgent"] if a.get("fromEXTRACT", False)]
             term_names.update(names)
-            logger.debug(f"Document {doc['_id']} has {len(names)} infectiousAgent from EXTRACT.")
+            # logger.debug(f"Document {doc['_id']} has {len(names)} infectiousAgent from EXTRACT.")
 
     unique_term_names = list(term_names)
-    logger.info(f"Total unique species/infectiousAgent to process: {len(unique_term_names)}")
+    # logger.info(f"Total unique species/infectiousAgent to process: {len(unique_term_names)}")
 
     formatted_species = []
     if unique_term_names:
@@ -618,21 +682,22 @@ def process_species(doc_list):
                     missing_terms.append(original_name)
 
             if not missing_terms:
-                logger.info("All species/infectiousAgent terms found in sqlite cache; skipping Text2Term")
+                # logger.info("All species/infectiousAgent terms found in sqlite cache; skipping Text2Term")
+                pass
             else:
-                logger.info(f"Processing {len(missing_terms)} uncached species/infectiousAgent terms with Text2Term...")
+                # logger.info(f"Processing {len(missing_terms)} uncached species/infectiousAgent terms with Text2Term...")
                 if not os.path.exists("cache/ncbitaxon"):
                     text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
                 t2t_results = text2term.map_terms(missing_terms, "ncbitaxon", use_cache=True)
-                logger.info(f"Found {len(t2t_results)} results from Text2Term")
+                # logger.info(f"Found {len(t2t_results)} results from Text2Term")
                 t2t_results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
 
                 for _, row in t2t_results.iterrows():
                     identifier = row["Mapped Term CURIE"].split(":")[1]  # e.g., 'NCBITAXON:ID'
                     original_name = row["Source Term"]
-                    logger.debug(f"Processing uncached species/infectiousAgent: {original_name}")
+                    # logger.debug(f"Processing uncached species/infectiousAgent: {original_name}")
 
-                    logger.info(f"Retrieving taxonomy details for uncached term: {original_name}")
+                    # logger.info(f"Retrieving taxonomy details for uncached term: {original_name}")
                     try:
                         species_details = get_species_details(original_name, identifier)
                         if species_details:
@@ -642,7 +707,7 @@ def process_species(doc_list):
                             cache_species_in_db(species_details)
                             species_dict[original_name.lower().strip()] = species_details
                     except Exception as e:
-                        logger.info(f"An error occurred while processing {original_name}: {e}")
+                        # logger.info(f"An error occurred while processing {original_name}: {e}")
                         continue
         except Exception as e:
             logger.error(f"Error during Text2Term processing: {e}")
@@ -716,7 +781,8 @@ def deduplicate_species_in_docs(doc_list):
             for species_entry in doc["species"]:
                 should_filter, reason = should_filter_species_entry(species_entry)
                 if should_filter:
-                    logger.info(f"Filtering species '{species_entry.get('name')}' from document {doc['_id']}: {reason}")
+                    # logger.info(f"Filtering species '{species_entry.get('name')}' from document {doc['_id']}: {reason}")
+                    pass
                 else:
                     filtered_species.append(species_entry)
 
@@ -730,7 +796,8 @@ def deduplicate_species_in_docs(doc_list):
             for agent_entry in doc["infectiousAgent"]:
                 should_filter, reason = should_filter_species_entry(agent_entry)
                 if should_filter:
-                    logger.info(f"Filtering infectiousAgent '{agent_entry.get('name')}' from document {doc['_id']}: {reason}")
+                    # logger.info(f"Filtering infectiousAgent '{agent_entry.get('name')}' from document {doc['_id']}: {reason}")
+                    pass
                 else:
                     filtered_agents.append(agent_entry)
 
@@ -747,7 +814,7 @@ def remove_redundant_species(doc_list):
     For each document, if there is at least one curated infectiousAgent (i.e. where "isCurated" is True),
     then remove any species entry whose "name" matches the infectiousAgent name.
     """
-    logger.info("Removing redundant species entries based on curated infectiousAgent...")
+    # logger.info("Removing redundant species entries based on curated infectiousAgent...")
     for doc in doc_list:
         if "infectiousAgent" in doc and "species" in doc:
             curated_names = {
@@ -763,7 +830,8 @@ def remove_redundant_species(doc_list):
                     if sp.get("name", "").strip().lower() not in curated_names
                 ]
                 if len(original_species) != len(doc["species"]):
-                    logger.info(f"Removed redundant species from document {doc['_id']}")
+                    # logger.info(f"Removed redundant species from document {doc['_id']}")
+                    pass
     return doc_list
 
 
@@ -780,7 +848,7 @@ def deduplicate_diseases(doc_list):
       2. Otherwise compare ontology priorities (inDefinedTermSet).
       3. If still tied, keep the first one encountered.
     """
-    logger.info("Deduplicating diseases...")
+    # logger.info("Deduplicating diseases...")
     for doc in doc_list:
         if "healthCondition" not in doc:
             continue
@@ -822,7 +890,7 @@ def deduplicate_diseases(doc_list):
 
 
 def process_diseases(doc_list):
-    logger.info("Processing diseases...")
+    # logger.info("Processing diseases...")
     disease_names = set()  # Using a set to avoid duplicates
 
     # Fetch diseases from the SQLite database
@@ -837,11 +905,11 @@ def process_diseases(doc_list):
             disease_in_doc = [s["name"]
                               for s in doc["healthCondition"] if "isCurated" not in s]
             disease_names.update(disease_in_doc)
-            logger.debug(f"Found {len(disease_in_doc)} new diseases to process")
+            # logger.debug(f"Found {len(disease_in_doc)} new diseases to process")
 
     unique_disease_names = list(disease_names)
-    logger.info(
-        f"Total unique diseases to process: {len(unique_disease_names)}")
+    # logger.info(
+    #     f"Total unique diseases to process: {len(unique_disease_names)}")
 
     formatted_diseases = []
     for disease_name in unique_disease_names:
@@ -866,8 +934,8 @@ def process_diseases(doc_list):
                     disease_dict[disease_name.lower().strip()
                                  ] = disease_details
             except Exception as e:
-                logger.info(
-                    f"An error occurred while processing {disease_name}: {e}")
+                # logger.info(
+                #     f"An error occurred while processing {disease_name}: {e}")
                 continue
 
     disease_mapping = {
@@ -906,11 +974,11 @@ def cache_disease_in_db(disease_details):
 
 
 def process_descriptions(data):
-    logger.info("Standardizing data...")
+    # logger.info("Standardizing data...")
     # Check if data is a file path (str)
     if isinstance(data, str):
         # Read data from the file and process it
-        logger.info("Reading data from file...")
+        # logger.info("Reading data from file...")
         with open(os.path.join(data, "data.ndjson"), "rb") as f:
             doc_list = []
             count = 0
@@ -922,9 +990,9 @@ def process_descriptions(data):
                 doc_list.append(doc)
     else:
         # If data is a list, process it
-        logger.info("Reading data from list...")
+        # logger.info("Reading data from list...")
         doc_list = list(data)
-        logger.info(f"Total documents to process: {len(doc_list)}")
+        # logger.info(f"Total documents to process: {len(doc_list)}")
 
     updated_docs = extract(doc_list)
     updated_docs = process_species(updated_docs)
