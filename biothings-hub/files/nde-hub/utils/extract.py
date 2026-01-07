@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sqlite3
+import time
 
 import orjson
 import pandas as pd
@@ -12,6 +13,11 @@ from config import logger
 from .pubtator import DB_PATH as PUBTATOR_DB_PATH, query_condition
 
 DB_PATH = "/data/nde-hub/standardizers/extract_lookup/extract_lookup.db"
+
+_NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
+
+# Reuse HTTP connections for UniProt lookups.
+_UNIPROT_SESSION = requests.Session()
 
 # Advanced drop rules with NCBI Taxon IDs and filtering logic
 ADVANCED_DROP_RULES = {
@@ -556,7 +562,10 @@ def get_species_details(original_name, identifier):
     # logger.info(f"Getting details for {original_name}")
     identifier = str(identifier)
     identifier = identifier.split("*")[-1]
-    species_info = requests.get(f"https://rest.uniprot.org/taxonomy/{identifier}")
+    species_info = _UNIPROT_SESSION.get(
+        f"https://rest.uniprot.org/taxonomy/{identifier}",
+        timeout=30,
+    )
     species_info.raise_for_status()
     species_info = species_info.json()
     standard_dict = {
@@ -653,6 +662,12 @@ def process_species(doc_list):
         else:
             docs_to_standardize.append(doc)
 
+    logger.info(
+        "Species standardization: total_docs=%s docs_to_standardize=%s",
+        len(doc_list),
+        len(docs_to_standardize),
+    )
+
     term_names = set()
     for doc in docs_to_standardize:
         if "species" in doc:
@@ -665,12 +680,17 @@ def process_species(doc_list):
             # logger.debug(f"Document {doc['_id']} has {len(names)} infectiousAgent from EXTRACT.")
 
     unique_term_names = list(term_names)
-    # logger.info(f"Total unique species/infectiousAgent to process: {len(unique_term_names)}")
+    logger.info(
+        "Species standardization: unique_terms_from_extract=%s cached_species_details=%s",
+        len(unique_term_names),
+        len(species_dict),
+    )
 
     formatted_species = []
     if unique_term_names:
         try:
             # Fast path: if terms are already cached in sqlite, skip Text2Term entirely.
+            t0 = time.monotonic()
             missing_terms = []
             for original_name in unique_term_names:
                 standardized_species = lookup_species_in_db(original_name, species_dict)
@@ -681,18 +701,53 @@ def process_species(doc_list):
                 else:
                     missing_terms.append(original_name)
 
+            logger.info(
+                "Species standardization: terms_cached=%s terms_missing=%s",
+                len(unique_term_names) - len(missing_terms),
+                len(missing_terms),
+            )
+
             if not missing_terms:
                 # logger.info("All species/infectiousAgent terms found in sqlite cache; skipping Text2Term")
                 pass
             else:
-                # logger.info(f"Processing {len(missing_terms)} uncached species/infectiousAgent terms with Text2Term...")
+                logger.info(
+                    "Species standardization: running Text2Term for %s missing terms",
+                    len(missing_terms),
+                )
                 if not os.path.exists("cache/ncbitaxon"):
+                    logger.info("Species standardization: building Text2Term ncbitaxon cache (cache/ncbitaxon)")
                     text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
+
+                t_map0 = time.monotonic()
                 t2t_results = text2term.map_terms(missing_terms, "ncbitaxon", use_cache=True)
-                # logger.info(f"Found {len(t2t_results)} results from Text2Term")
+                logger.info(
+                    "Species standardization: Text2Term produced %s rows in %.1fs",
+                    len(t2t_results),
+                    time.monotonic() - t_map0,
+                )
                 t2t_results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
 
+                # Text2Term can return multiple mappings per Source Term; we only want the best one
+                # (highest Mapping Score) to avoid redundant UniProt lookups.
+                before = len(t2t_results)
+                t2t_results = t2t_results.drop_duplicates(subset=["Source Term"], keep="first")
+                after = len(t2t_results)
+                if after != before:
+                    logger.info(
+                        "Species standardization: reduced Text2Term rows from %s to %s by taking best mapping per Source Term",
+                        before,
+                        after,
+                    )
+
+                # UniProt taxonomy lookups can dominate runtime if many terms are missing.
+                uni0 = time.monotonic()
+                processed = 0
+                resolved = 0
+                failed = 0
+
                 for _, row in t2t_results.iterrows():
+                    processed += 1
                     identifier = row["Mapped Term CURIE"].split(":")[1]  # e.g., 'NCBITAXON:ID'
                     original_name = row["Source Term"]
                     # logger.debug(f"Processing uncached species/infectiousAgent: {original_name}")
@@ -706,9 +761,36 @@ def process_species(doc_list):
                             species_details.pop("fromEXTRACT")
                             cache_species_in_db(species_details)
                             species_dict[original_name.lower().strip()] = species_details
+                            resolved += 1
                     except Exception as e:
                         # logger.info(f"An error occurred while processing {original_name}: {e}")
+                        failed += 1
                         continue
+                    if processed % 500 == 0:
+                        elapsed = time.monotonic() - uni0
+                        rate = processed / elapsed if elapsed > 0 else 0.0
+                        logger.info(
+                            "Species standardization: UniProt lookups processed=%s resolved=%s failed=%s rate=%.2f/s elapsed=%.1fs",
+                            processed,
+                            resolved,
+                            failed,
+                            rate,
+                            elapsed,
+                        )
+
+                logger.info(
+                    "Species standardization: UniProt lookups done processed=%s resolved=%s failed=%s in %.1fs",
+                    processed,
+                    resolved,
+                    failed,
+                    time.monotonic() - uni0,
+                )
+
+            logger.info(
+                "Species standardization: completed in %.1fs (formatted_species=%s)",
+                time.monotonic() - t0,
+                len(formatted_species),
+            )
         except Exception as e:
             logger.error(f"Error during Text2Term processing: {e}")
             return doc_list
@@ -895,6 +977,7 @@ def process_diseases(doc_list):
 
     # Fetch diseases from the SQLite database
     disease_dict = fetch_diseases_from_db()
+    negative_disease_names = fetch_negative_diseases_from_db()
 
     doc_list = list(doc_list)
     for doc in doc_list:
@@ -913,6 +996,12 @@ def process_diseases(doc_list):
 
     formatted_diseases = []
     for disease_name in unique_disease_names:
+        disease_key = disease_name.lower().strip()
+
+        # Negative cache: if we previously confirmed this won't resolve, skip re-querying.
+        if disease_key in negative_disease_names:
+            continue
+
         # Check if the disease is in the SQLite database
         standardized_disease = lookup_disease_in_db(disease_name, disease_dict)
         if standardized_disease:
@@ -924,15 +1013,20 @@ def process_diseases(doc_list):
                 # If not in the database, query the external API
                 disease_details = query_condition(disease_name)
                 if disease_details:
+                    # Ensure originalName is present for caching
+                    disease_details.setdefault("originalName", disease_name)
                     disease_details["fromEXTRACT"] = True
-                    disease_details.pop("curatedBy")
+                    disease_details.pop("curatedBy", None)
                     formatted_diseases.append(disease_details)
                     disease_details.pop("fromEXTRACT")
                     # Cache the result in the SQLite database for future use
                     cache_disease_in_db(disease_details)
                     # Update the in-memory disease dictionary
-                    disease_dict[disease_name.lower().strip()
-                                 ] = disease_details
+                    disease_dict[disease_key] = disease_details
+                else:
+                    # Negative cache: remember that this name doesn't resolve.
+                    cache_negative_disease_in_db(disease_name)
+                    negative_disease_names.add(disease_key)
             except Exception as e:
                 # logger.info(
                 #     f"An error occurred while processing {disease_name}: {e}")
@@ -945,15 +1039,37 @@ def process_diseases(doc_list):
 
 
 def fetch_diseases_from_db():
-    conn = sqlite3.connect(PUBTATOR_DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT original_name, standard_dict FROM health_conditions")
-    disease_cursor = c.fetchall()
-    conn.close()
+    with sqlite3.connect(PUBTATOR_DB_PATH) as conn:
+        c = conn.cursor()
+        # Be defensive: allow running against fresh DBs.
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS health_conditions (original_name TEXT PRIMARY KEY, standard_dict TEXT)"
+        )
+        c.execute("SELECT original_name, standard_dict FROM health_conditions")
+        disease_cursor = c.fetchall()
 
-    disease_dict = {item[0].lower().strip(): json.loads(item[1])
-                    for item in disease_cursor if item[1]}
-    return disease_dict
+        disease_dict = {
+            item[0].lower().strip(): json.loads(item[1])
+            for item in disease_cursor
+            if item[1]
+        }
+        return disease_dict
+
+
+def fetch_negative_diseases_from_db():
+    """Return a set of lowercased disease names known to not resolve.
+
+    This is a negative cache: if `query_condition(name)` previously returned None,
+    we store `name` here and skip re-querying it on future runs.
+    """
+    with sqlite3.connect(PUBTATOR_DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute(
+            f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_DISEASE_TABLE} (original_name TEXT PRIMARY KEY)"
+        )
+        c.execute(f"SELECT original_name FROM {_NEGATIVE_DISEASE_TABLE}")
+        rows = c.fetchall()
+        return {row[0].lower().strip() for row in rows if row and row[0]}
 
 
 def lookup_disease_in_db(original_name, disease_dict):
@@ -962,15 +1078,36 @@ def lookup_disease_in_db(original_name, disease_dict):
 
 
 def cache_disease_in_db(disease_details):
-    conn = sqlite3.connect(PUBTATOR_DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "INSERT OR REPLACE INTO health_conditions VALUES (?, ?)",
-        (disease_details["originalName"].lower().strip(),
-         json.dumps(disease_details)),
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(PUBTATOR_DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS health_conditions (original_name TEXT PRIMARY KEY, standard_dict TEXT)"
+        )
+        c.execute(
+            "INSERT OR REPLACE INTO health_conditions VALUES (?, ?)",
+            (
+                disease_details["originalName"].lower().strip(),
+                json.dumps(disease_details),
+            ),
+        )
+        conn.commit()
+
+
+def cache_negative_disease_in_db(disease_name):
+    """Record that `disease_name` does not resolve via PubTator (`query_condition` == None)."""
+    disease_key = disease_name.lower().strip()
+    if not disease_key:
+        return
+    with sqlite3.connect(PUBTATOR_DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute(
+            f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_DISEASE_TABLE} (original_name TEXT PRIMARY KEY)"
+        )
+        c.execute(
+            f"INSERT OR IGNORE INTO {_NEGATIVE_DISEASE_TABLE} (original_name) VALUES (?)",
+            (disease_key,),
+        )
+        conn.commit()
 
 
 def process_descriptions(data):
