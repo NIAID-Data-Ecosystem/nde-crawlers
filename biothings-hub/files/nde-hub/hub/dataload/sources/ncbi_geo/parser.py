@@ -12,6 +12,16 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
+def insert_value(d, key, value):
+    if key in d:
+        if isinstance(d[key], list) and value not in d[key]:
+            d[key].append(value)
+        if not isinstance(d[key], list) and d[key] != value:
+            d[key] = [d[key], value]
+    else:
+        d[key] = value
+
+
 def get_full_name(name):
     parts = name.split(",")
     while len(parts) < 3:
@@ -77,7 +87,7 @@ def parse_sample_characteristics(output, value):
         "condition": ("healthCondition", "field_value"),
         "injury": ("healthCondition", "field_value"),
         "treatment": ("sampleProcess", "field_value"),
-        "Sex": ("sex", "field_value"),
+        "sex": ("sex", "field_value"),
         "cultivar": ("species", "field_value"),
         "strain": ("species", "field_value"),
         "time": ("temporalCoverage", "field_value"),
@@ -97,8 +107,8 @@ def parse_sample_characteristics(output, value):
 
         subproperty, field_value = parts[0], parts[1]
 
-        if subproperty in sample_mapping:
-            mapping = sample_mapping[subproperty]
+        if subproperty.lower() in sample_mapping:
+            mapping = sample_mapping[subproperty.lower()]
             if mapping[0] in [
                 "species",
                 "healthCondition",
@@ -296,13 +306,11 @@ def parse_gsm(data_folder):
                     output["sampleProcess"] = sample_process
 
             if key.startswith("!Sample_supplementary_file"):
-                if "distribution" not in output:
-                    output["distribution"] = []
                 if isinstance(value, list):
                     for v in value:
-                        output["distribution"].append({"@type": "dataDownload", "contentUrl": v})
+                        insert_value(output, "distribution", {"@type": "DataDownload", "contentUrl": v})
                 else:
-                    output["distribution"].append({"@type": "dataDownload", "contentUrl": value})
+                    insert_value(output, "distribution", {"@type": "DataDownload", "contentUrl": value})
 
         yield output
 
@@ -337,16 +345,6 @@ def find_gsm_file(data_folder, acc):
     else:
         logger.warning(f"GSM file not found: {file_path}")
         return None
-
-
-def insert_value(d, key, value):
-    if key in d:
-        if isinstance(d[key], list) and value not in d[key]:
-            d[key].append(value)
-        if not isinstance(d[key], list) and d[key] != value:
-            d[key] = [d[key], value]
-    else:
-        d[key] = value
 
 
 def parse_series_sample_characteristics(sample_elements, value):

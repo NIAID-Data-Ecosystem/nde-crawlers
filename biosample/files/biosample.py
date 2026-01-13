@@ -28,9 +28,9 @@ Entrez.api_key = GEO_API_KEY
 
 def insert_value(d, key, value):
     if key in d:
-        if isinstance(d[key], list):
+        if isinstance(d[key], list) and value not in d[key]:
             d[key].append(value)
-        else:
+        if not isinstance(d[key], list) and d[key] != value:
             d[key] = [d[key], value]
     else:
         d[key] = value
@@ -116,8 +116,7 @@ def parse_xml(sample_dict, output):
                         "unk",
                         "blank",
                         "null",
-                        "not appicable"
-                        "not recorded",
+                        "not appicable" "not recorded",
                         "?",
                     ]
                     if (
@@ -480,6 +479,9 @@ def parse_xml(sample_dict, output):
     if sex := attributes.get("host_sex"):
         output["sex"] = sex
 
+    if sex := attributes.get("sex"):
+        insert_value(output, "sex", sex)
+
     if species := attributes.get("host_taxid"):
         s = {"identifier": species}
         insert_value(output, "species", s)
@@ -497,6 +499,9 @@ def parse_xml(sample_dict, output):
             c = {"name": c}
             if aff:
                 c["affiliation"] = aff
+                c["@type"] = "Person"
+            else:
+                c["@type"] = "Orgnanization"
             insert_value(output, "contributor", c)
 
     if instrument := attributes.get("instrument"):
@@ -813,7 +818,7 @@ def parse():
                 "_id": _id.casefold(),
                 "identifier": _id,
                 "url": url,
-                "distribution": [{"@type": "dataDownload", "contentUrl": url}],
+                "distribution": [{"@type": "DataDownload", "contentUrl": url}],
                 "includedInDataCatalog": {
                     "@type": "DataCatalog",
                     "name": "BioSample",
