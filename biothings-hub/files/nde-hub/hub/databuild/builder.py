@@ -284,5 +284,5 @@ class NDEDataBuilder(builder.DataBuilder):
         self.deduplication(sources, duplicate)
 
         identifier_source_catalog = "Data Discovery Engine"
-        source_catalogs = ["NCBI GEO", "AccessClinicalData@NIAID"]
+        source_catalogs = ["NCBI GEO"]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
