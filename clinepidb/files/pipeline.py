@@ -7,6 +7,70 @@ import xmltodict
 logger = logging.getLogger("clinepidb-logger")
 
 
+def _split_csv(value):
+    if value in (None, ""):
+        return []
+    if isinstance(value, (list, tuple, set)):
+        parts = []
+        for entry in value:
+            parts.extend(_split_csv(entry))
+        return parts
+    if not isinstance(value, str):
+        value = str(value)
+    return [part.strip() for part in value.split(",") if part and part.strip()]
+
+
+def _coerce_int(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if not isinstance(value, str):
+        value = str(value)
+    text = value.strip()
+    if not text or text.upper() in {"N/A", "NA", "NONE", "NULL"}:
+        return None
+    text = text.replace(",", "")
+    try:
+        return int(float(text))
+    except Exception:
+        return None
+
+
+def _get_study_characteristic_value(record, key):
+    try:
+        table = record.get("tables", {}).get("StudyCharacteristicTable")
+        if isinstance(table, list) and table:
+            return table[0].get(key)
+    except Exception:
+        return None
+    return None
+
+
+def _add_sample_quantity(sample, raw_value, unit_text, unit_code=None):
+    value = _coerce_int(raw_value)
+    if value is None:
+        return
+
+    entry = {"@type": "QuantitativeValue", "value": value, "unitText": unit_text}
+    if unit_code:
+        entry["unitCode"] = unit_code
+
+    existing = sample.get("sampleQuantity")
+    if existing is None:
+        sample["sampleQuantity"] = [entry]
+        return
+    if isinstance(existing, dict):
+        sample["sampleQuantity"] = [existing]
+        existing = sample["sampleQuantity"]
+    if isinstance(existing, list) and entry not in existing:
+        existing.append(entry)
+
+
 def get_variableMeasured(entity):
     variableMeasured = []
     # Skip entities with displayName "Sample"
@@ -141,6 +205,105 @@ def record_generator():
             )
             if health_cond:
                 record["healthCondition"] = {"name": health_cond}
+
+            # # Sample metadata (minimal Sample object inside Dataset)
+            # base_sample_type = {
+            #     "@type": "DefinedTerm",
+            #     "name": "Study Subject",
+            #     "url": "http://purl.obolibrary.org/obo/NCIT_C41189",
+            #     "inDefinedTermSet": "NCIT",
+            #     "termCode": "NCIT_C41189",
+            # }
+            sample = {"@type": "Sample", "sampleType": []}
+
+            # Sample_Type is often a comma-separated list (e.g. "Blood sample, Urine sample")
+            sample_type_raw = _get_study_characteristic_value(record, "Sample_Type") or record.get("attributes", {}).get(
+                "Sample_Type"
+            )
+            sample_type_parts = _split_csv(sample_type_raw)
+            if sample_type_parts:
+                normalized = []
+                seen = set()
+                for part in sample_type_parts:
+                    key = part.casefold()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    normalized.append({"@type": "DefinedTerm", "name": part})
+                # Skip sentinel values like "No samples" while still keeping the base Study Subject term
+                normalized = [
+                    hit
+                    for hit in normalized
+                    if hit.get("name", "").casefold() not in {"no samples", "no sample"}
+                ]
+                if normalized:
+                    sample["sampleType"].extend(normalized)
+
+            sex_value = record.get("attributes", {}).get("sex") or _get_study_characteristic_value(record, "sex")
+            sex_parts = _split_csv(sex_value)
+            if sex_parts:
+                sample["sex"] = sex_parts[0] if len(sex_parts) == 1 else sorted(set(sex_parts))
+
+            participant_type = _get_study_characteristic_value(record, "Participant_Type")
+            participant_parts = _split_csv(participant_type)
+            if participant_parts:
+                sample["developmentalStage"] = [
+                    {"@type": "DefinedTerm", "name": part} for part in sorted(set(participant_parts))
+                ]
+
+            # If participant metadata exists, tag sampleType with Clinical Study Participants.
+            table_part_count = _get_study_characteristic_value(record, "Part_count")
+            if participant_parts or table_part_count not in (None, ""):
+                clinical_participants_term = {
+                    "@type": "DefinedTerm",
+                    "name": "Study Subject",
+                    "url": "http://purl.obolibrary.org/obo/NCIT_C41189",
+                    "inDefinedTermSet": "NCIT",
+                    "termCode": "NCIT_C41189",
+                }
+                existing_types = sample.get("sampleType")
+                if isinstance(existing_types, list):
+                    existing_keys = {
+                        (t.get("name", "").casefold(), t.get("termCode"), t.get("url"))
+                        for t in existing_types
+                        if isinstance(t, dict)
+                    }
+                    key = (
+                        clinical_participants_term.get("name", "").casefold(),
+                        clinical_participants_term.get("termCode"),
+                        clinical_participants_term.get("url"),
+                    )
+                    if key not in existing_keys:
+                        existing_types.append(clinical_participants_term)
+
+            hh_count = record.get("attributes", {}).get("HH_count") or _get_study_characteristic_value(record, "HH_count")
+            obser_count = record.get("attributes", {}).get("Obser_count") or _get_study_characteristic_value(record, "Obser_count")
+            samp_count = record.get("attributes", {}).get("Samp_count") or _get_study_characteristic_value(record, "Samp_count")
+            part_count = record.get("attributes", {}).get("Part_count") or table_part_count
+
+            _add_sample_quantity(
+                sample,
+                hh_count,
+                unit_text="Households",
+                unit_code="http://purl.obolibrary.org/obo/NCIT_C41194",
+            )
+            _add_sample_quantity(
+                sample,
+                obser_count,
+                unit_text="Observations",
+                unit_code="http://purl.obolibrary.org/obo/NCIT_C93430",
+            )
+            _add_sample_quantity(sample, samp_count, unit_text="Samples")
+            _add_sample_quantity(
+                sample,
+                part_count,
+                unit_text="Clinical Study Participants",
+                unit_code="http://purl.obolibrary.org/obo/NCIT_C70668",
+            )
+            # if sampleType is empty pop it
+            if not sample["sampleType"]:
+                sample.pop("sampleType")
+            record["sample"] = sample
 
             # tables.Publications -- helper function to create citations
             pmid_list = [hit.pop("pmid") for hit in record["tables"]["Publications"]]
