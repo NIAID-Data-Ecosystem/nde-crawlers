@@ -1,10 +1,59 @@
 import datetime
 import logging
+import re
 
 import requests
 import xmltodict
 
 logger = logging.getLogger("clinepidb-logger")
+
+
+_NCIT_LABEL_CACHE = {}
+
+
+def _looks_like_url(value):
+    return isinstance(value, str) and value.startswith(("http://", "https://"))
+
+
+def _ncit_code_from_obo_purl(url):
+    if not _looks_like_url(url):
+        return None
+    token = url.strip().rstrip("/").split("/")[-1]
+    match = re.search(r"NCIT_C(\d+)$", token, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return "C" + match.group(1)
+
+
+def _resolve_ncit_label_from_obo_purl(url):
+    if not _looks_like_url(url):
+        return None
+    if url in _NCIT_LABEL_CACHE:
+        return _NCIT_LABEL_CACHE[url]
+
+    code = _ncit_code_from_obo_purl(url)
+    if not code:
+        _NCIT_LABEL_CACHE[url] = None
+        return None
+
+    try:
+        resp = requests.get(
+            f"https://api-evsrest.nci.nih.gov/api/v1/concept/ncit/{code}",
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            _NCIT_LABEL_CACHE[url] = None
+            return None
+        payload = resp.json() if resp.content else {}
+        label = payload.get("name")
+        if isinstance(label, str) and label.strip():
+            _NCIT_LABEL_CACHE[url] = label.strip()
+            return _NCIT_LABEL_CACHE[url]
+    except Exception:
+        pass
+
+    _NCIT_LABEL_CACHE[url] = None
+    return None
 
 
 def _split_csv(value):
@@ -56,9 +105,26 @@ def _add_sample_quantity(sample, raw_value, unit_text, unit_code=None):
     if value is None:
         return
 
-    entry = {"@type": "QuantitativeValue", "value": value, "unitText": unit_text}
-    if unit_code:
-        entry["unitCode"] = unit_code
+    resolved_unit_text = unit_text
+    # If unitText is actually an NCIT URL, resolve it to the preferred label.
+    if _looks_like_url(unit_text):
+        resolved = _resolve_ncit_label_from_obo_purl(unit_text)
+        if resolved:
+            resolved_unit_text = resolved
+        if unit_code is None:
+            unit_code = unit_text
+    # Fallback: if unitCode is an NCIT URL and unitText is missing/URL-like, resolve from unitCode.
+    elif _looks_like_url(unit_code) and (unit_text in (None, "") or _looks_like_url(unit_text)):
+        resolved = _resolve_ncit_label_from_obo_purl(unit_code)
+        if resolved:
+            resolved_unit_text = resolved
+
+    if unit_text == "Clinical Study Participants":
+        entry = {"@type": "QuantitativeValue", "value": value, "unitText": "Study Subjects", "unitCode": "http://purl.obolibrary.org/obo/NCIT_C41189"}
+    else:
+        entry = {"@type": "QuantitativeValue", "value": value, "unitText": resolved_unit_text}
+        if unit_code:
+            entry["unitCode"] = unit_code
 
     existing = sample.get("sampleQuantity")
     if existing is None:
