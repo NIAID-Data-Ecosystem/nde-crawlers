@@ -85,9 +85,9 @@ body:
     validations:
       required: false
   - type: textarea
-    id: htmpScraping
+    id: htmlScraping
     attributes:
-      label: FTP Instructions
+      label: HTML Instructions
       description: If you selected HTML scraping, provide the URL structure (base and variable regions).
     validations:
       required: false
