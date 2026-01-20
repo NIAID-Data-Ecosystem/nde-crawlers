@@ -59,6 +59,38 @@ body:
       placeholder: The rationale for including this source is...
     validations:
       required: true
+  - type: dropdown
+    id: metadataAccess
+    attributes:
+      label: Metadata Access
+      description: How can we access the metadata? 
+      options:
+        - "API"
+        - "FTP dump"
+        - "HTML scraping"
+    validations:
+      required: true
+  - type: textarea
+    id: apiAccess
+    attributes:
+      label: API Access
+      description: If you selected API, provide API access instructions and sample query for single record and batch records.
+    validations:
+      required: false
+  - type: textarea
+    id: ftpAccess
+    attributes:
+      label: FTP Instructions
+      description: If you selected FTP dumps, provide available format of dump and instructions for getting dump.
+    validations:
+      required: false
+  - type: textarea
+    id: htmpScraping
+    attributes:
+      label: FTP Instructions
+      description: If you selected HTML scraping, provide the URL structure (base and variable regions).
+    validations:
+      required: false
   - type: checkboxes
     id: WBSlink
     attributes:
