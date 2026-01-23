@@ -45,6 +45,177 @@ class Dataverse(NDEDatabase):
         logger.warning(f"Rate limited (429). Sleeping {seconds}s before retrying...")
         time.sleep(seconds)
 
+    @staticmethod
+    def _first_str(value):
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, str):
+                    return item
+                if isinstance(item, dict):
+                    for key in ("@id", "identifier", "url", "value"):
+                        if isinstance(item.get(key), str):
+                            return item.get(key)
+        if isinstance(value, dict):
+            for key in ("@id", "identifier", "url", "value"):
+                if isinstance(value.get(key), str):
+                    return value.get(key)
+        return None
+
+    @staticmethod
+    def _select_dataset_from_jsonld(parsed):
+        """Pick the most likely Dataset object from parsed JSON-LD.
+
+        Dataverse landing pages may expose JSON-LD as:
+        - a single dict
+        - a list of dicts
+        - a dict with an '@graph' list
+        """
+
+        def iter_nodes(obj):
+            if isinstance(obj, dict):
+                yield obj
+                graph = obj.get("@graph")
+                if isinstance(graph, list):
+                    for node in graph:
+                        if isinstance(node, dict):
+                            yield node
+            elif isinstance(obj, list):
+                for item in obj:
+                    yield from iter_nodes(item)
+
+        def is_dataset(node: dict) -> bool:
+            t = node.get("@type")
+            if isinstance(t, str):
+                return t.lower() == "dataset"
+            if isinstance(t, list):
+                return any(isinstance(x, str) and x.lower() == "dataset" for x in t)
+            # Some pages only have schema context and an identifier/url; treat as a candidate.
+            return bool(node.get("identifier") or node.get("@id") or node.get("url"))
+
+        candidates = [node for node in iter_nodes(parsed) if isinstance(node, dict) and is_dataset(node)]
+        if not candidates:
+            return parsed if isinstance(parsed, dict) else None
+
+        # Prefer a true Dataset type if present.
+        for node in candidates:
+            t = node.get("@type")
+            if (isinstance(t, str) and t.lower() == "dataset") or (
+                isinstance(t, list) and any(isinstance(x, str) and x.lower() == "dataset" for x in t)
+            ):
+                return node
+        return candidates[0]
+
+    @staticmethod
+    def _funder_has_identifier(funder) -> bool:
+        if not isinstance(funder, dict):
+            return False
+        for key in ("identifier", "@id", "sameAs"):
+            value = funder.get(key)
+            if isinstance(value, str) and value.strip():
+                return True
+            if isinstance(value, list) and any(isinstance(v, str) and v.strip() for v in value):
+                return True
+            if isinstance(value, dict) and any(
+                isinstance(v, str) and v.strip() for v in value.values() if v is not None
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _has_funder_identifiers(cls, document: dict) -> bool:
+        if not isinstance(document, dict):
+            return False
+        funders = []
+        funding = document.get("funding")
+        if isinstance(funding, dict) and isinstance(funding.get("funder"), list):
+            funders.extend(funding.get("funder"))
+        if isinstance(document.get("funder"), list):
+            funders.extend(document.get("funder"))
+        if isinstance(document.get("funder"), dict):
+            funders.append(document.get("funder"))
+        return any(cls._funder_has_identifier(f) for f in funders)
+
+    @classmethod
+    def _extract_funders(cls, document: dict) -> list[dict]:
+        """Extract funder objects from a JSON-LD document.
+
+        Returns a list of dict funders (normalizing strings to {'name': str}).
+        """
+        if not isinstance(document, dict):
+            return []
+
+        funders = []
+        funding = document.get("funding")
+        if isinstance(funding, dict) and isinstance(funding.get("funder"), list):
+            funders.extend(funding.get("funder"))
+
+        direct = document.get("funder")
+        if isinstance(direct, list):
+            funders.extend(direct)
+        elif isinstance(direct, dict) or isinstance(direct, str):
+            funders.append(direct)
+
+        normalized: list[dict] = []
+        for funder in funders:
+            if isinstance(funder, dict):
+                normalized.append(funder)
+            elif isinstance(funder, str) and funder.strip():
+                normalized.append({"name": funder.strip()})
+        return normalized
+
+    @staticmethod
+    def _norm_name(value) -> str:
+        if not value:
+            return ""
+        if isinstance(value, str):
+            return " ".join(value.split()).casefold()
+        return ""
+
+    @classmethod
+    def _merge_funder_identifiers(cls, schema_doc: dict, jsonld_doc: dict) -> bool:
+        """Merge funder identifiers from landing-page JSON-LD into schema.org export.
+
+        Returns True if schema_doc was modified.
+        """
+        if not isinstance(schema_doc, dict) or not isinstance(jsonld_doc, dict):
+            return False
+
+        jsonld_funders = [f for f in cls._extract_funders(jsonld_doc) if cls._funder_has_identifier(f)]
+        if not jsonld_funders:
+            return False
+
+        schema_funders_raw = schema_doc.get("funder")
+        if not isinstance(schema_funders_raw, list):
+            schema_funders: list = []
+        else:
+            schema_funders = schema_funders_raw
+
+        changed = False
+        schema_by_name = {}
+        for funder in schema_funders:
+            if isinstance(funder, dict):
+                name = cls._norm_name(funder.get("name"))
+                if name:
+                    schema_by_name[name] = funder
+
+        for jsonld_funder in jsonld_funders:
+            jsonld_name = cls._norm_name(jsonld_funder.get("name"))
+            if jsonld_name and jsonld_name in schema_by_name:
+                target = schema_by_name[jsonld_name]
+                for key in ("identifier", "@id", "sameAs"):
+                    if key in jsonld_funder and not target.get(key):
+                        target[key] = jsonld_funder.get(key)
+                        changed = True
+            else:
+                schema_funders.append(jsonld_funder)
+                changed = True
+
+        if changed:
+            schema_doc["funder"] = schema_funders
+        return changed
+
     def extract_schema_json(self, url):
         """Fallback: scrape schema.org JSON-LD from a dataset landing page.
 
@@ -55,17 +226,26 @@ class Dataverse(NDEDatabase):
             def __init__(self):
                 super().__init__()
                 self._reading_schema = False
-                self.schema = None
+                self.schemas = []
+                self._buffer = []
 
             def handle_starttag(self, tag, attrs):
                 attrs = dict(attrs)
                 if tag == "script" and attrs.get("type") == "application/ld+json":
                     self._reading_schema = True
+                    self._buffer = []
 
             def handle_data(self, data):
                 if self._reading_schema:
-                    self.schema = data
+                    self._buffer.append(data)
+
+            def handle_endtag(self, tag):
+                if tag == "script" and self._reading_schema:
+                    raw = "".join(self._buffer).strip()
+                    if raw:
+                        self.schemas.append(raw)
                     self._reading_schema = False
+                    self._buffer = []
 
         retries = 0
         backoff_time = BASE_DELAY
@@ -83,14 +263,21 @@ class Dataverse(NDEDatabase):
                     return False
                 parser = SchemaScraper()
                 parser.feed(req.text)
-                if not parser.schema:
+                if not parser.schemas:
                     return False
-                raw = parser.schema.strip().replace("\n", "").replace("\r", "").replace("\t", "")
-                try:
-                    return json.loads(raw)
-                except json.decoder.JSONDecodeError:
-                    logger.info(f"scraped schema was not valid JSON for {url}")
-                    return False
+
+                for schema_text in parser.schemas:
+                    raw = schema_text.strip().replace("\r", "").replace("\t", "")
+                    try:
+                        parsed = json.loads(raw)
+                    except json.decoder.JSONDecodeError:
+                        # Some pages include multiple JSON objects or formatting quirks; skip invalid blocks.
+                        continue
+                    selected = self._select_dataset_from_jsonld(parsed)
+                    if isinstance(selected, dict):
+                        return selected
+                logger.info(f"scraped schema blocks were not valid JSON-LD for {url}")
+                return False
             except requests.RequestException as request_exception:
                 retries += 1
                 if retries > MAX_RETRIES:
@@ -176,6 +363,13 @@ class Dataverse(NDEDatabase):
                     return False
                 else:
                     if isinstance(res, dict):
+                        # Dataverse schema.org exporter may omit funder identifiers.
+                        # Always require/augment funder IDs by scraping landing-page JSON-LD and merging.
+                        if not self._has_funder_identifiers(res):
+                            document = self.extract_schema_json(url)
+                            if document and isinstance(document, dict):
+                                if self._merge_funder_identifiers(res, document):
+                                    logger.info(f"Augmented schema.org export with funder IDs from landing JSON-LD, {url}")
                         return res
                     return False
             except (requests.RequestException, json.decoder.JSONDecodeError) as e:
@@ -416,11 +610,33 @@ class Dataverse(NDEDatabase):
             try:
                 # parse the schema.org export document
                 if is_schema:
-                    dataset_url = dataset["identifier"]
+                    dataset_url = (
+                        self._first_str(dataset.get("identifier"))
+                        or self._first_str(dataset.get("@id"))
+                        or self._first_str(dataset.get("url"))
+                        or record[0]
+                    )
                     dataset["url"] = dataset_url
-                    dataset["doi"] = dataset.pop("identifier")
-                    dataset["identifier"] = dataset["doi"].replace("https://doi.org/", "")
-                    dataset["_id"] = dataset["doi"].replace("https://doi.org", "Dataverse").replace("/", "_")
+
+                    doi_url = self._first_str(dataset.get("identifier")) or self._first_str(dataset.get("@id"))
+                    if doi_url:
+                        dataset["doi"] = doi_url
+                        dataset.pop("identifier", None)
+                    else:
+                        dataset["doi"] = dataset_url
+                    dataset["identifier"] = (
+                        dataset.get("doi", "")
+                        .replace("https://doi.org/", "")
+                        .replace("http://doi.org/", "")
+                        .replace("doi:", "")
+                    )
+                    dataset["_id"] = (
+                        dataset.get("doi", "")
+                        .replace("https://doi.org", "Dataverse")
+                        .replace("http://doi.org", "Dataverse")
+                        .replace("doi:", "Dataverse_")
+                        .replace("/", "_")
+                    )
                     dataset["dateModified"] = (
                         datetime.datetime.strptime(dataset["dateModified"], "%Y-%m-%d").date().isoformat()
                     )
@@ -533,6 +749,7 @@ class Dataverse(NDEDatabase):
                         dataset["@type"] = dataset.pop("type")
                     else:
                         dataset["@type"] = "Dataset"
+                    dataset_url = dataset.get("url") or dataset.get("doi") or record[0]
                     if "global_id" in dataset:
                         dataset["doi"] = dataset.pop("global_id")
                     dataset["identifier"] = dataset.get("doi", "").replace("doi:", "")
