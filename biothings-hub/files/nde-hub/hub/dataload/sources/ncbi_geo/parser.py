@@ -112,13 +112,15 @@ def parse_sample_characteristics(output, value):
         sex = parse_sex(subproperty, field_value)
         if isinstance(sex, tuple):
             if sex[0] and isinstance(sex[0], list):
-                [insert_value(output, "sex", s) for s in sex[0]]
+                for s in sex[0]:
+                    insert_value(output, "sex", s)
             else:
                 insert_value(output, "sex", sex[0])
             if sex[1]:
                 insert_value(output, "developmentalStage", sex[1])
         if sex and isinstance(sex, list):
-            [insert_value(output, "sex", s) for s in sex]
+            for s in sex:
+                insert_value(output, "sex", s)
         elif sex:
             insert_value(output, "sex", sex)
         else:
@@ -134,26 +136,23 @@ def parse_sample_characteristics(output, value):
                 "anatomicalStructure",
                 "associatedPhenotype",
             ]:
-                if not mapping[0] in output:
-                    output[mapping[0]] = []
                 if isinstance(field_value, list):
                     for fv in field_value:
                         d = {"name": fv}
                         if "anatomicalStructure" == mapping[0]:
                             d["@type"] = "DefinedTerm"
-                        if not d in output[mapping[0]]:
-                            output[mapping[0]].append(d)
+                        insert_value(output, mapping[0], d)
                 else:
                     d = {"name": field_value}
                     if "anatomicalStructure" == mapping[0]:
                         d["@type"] = "DefinedTerm"
-                    if not d in output[mapping[0]]:
-                        output[mapping[0]].append(d)
+                    insert_value(output, mapping[0], d)
             elif mapping[0] == "temporalCoverage":
                 if isinstance(field_value, list):
-                    output[mapping[0]] = [{"duration": fv} for fv in field_value]
+                    for fv in field_value:
+                        insert_value(output, mapping[0], {"duration": fv})
                 else:
-                    output[mapping[0]] = [{"duration": field_value}]
+                    insert_value(output, mapping[0], {"duration": field_value})
             else:
                 if mapping[0] == "sampleProcess":
                     if "sampleProcess" in output and output["sampleProcess"]:
@@ -162,19 +161,13 @@ def parse_sample_characteristics(output, value):
                     else:
                         output["sampleProcess"] = field_value
                 else:
-                    if not mapping[0] in output:
-                        output[mapping[0]] = []
-
                     if mapping[1] == "subproperty":
-                        output[mapping[0]].append(subproperty)
+                        insert_value(output, mapping[0], subproperty)
                     else:
-                        output[mapping[0]].append(field_value)
+                        insert_value(output, mapping[0], field_value)
         else:
-            if not "variableMeasured" in output:
-                output["variableMeasured"] = []
             d = {"name": subproperty, "@type": "DefinedTerm"}
-            if not d in output["variableMeasured"]:
-                output["variableMeasured"].append(d)
+            insert_value(output, "variableMeasured", d)
 
 
 def parse_gsm(data_folder):
