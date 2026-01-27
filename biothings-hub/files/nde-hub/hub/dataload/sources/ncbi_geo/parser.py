@@ -4,6 +4,8 @@ import traceback
 
 import dateutil.parser
 
+from .sample_charateristics import parse_sex
+
 try:
     from config import logger
 except ImportError:
@@ -106,6 +108,21 @@ def parse_sample_characteristics(output, value):
             continue
 
         subproperty, field_value = parts[0], parts[1]
+
+        sex = parse_sex(subproperty, field_value)
+        if isinstance(sex, tuple):
+            if sex[0] and isinstance(sex[0], list):
+                [insert_value(output, "sex", s) for s in sex[0]]
+            else:
+                insert_value(output, "sex", sex[0])
+            if sex[1]:
+                insert_value(output, "developmentalStage", sex[1])
+        if sex and isinstance(sex, list):
+            [insert_value(output, "sex", s) for s in sex]
+        elif sex:
+            insert_value(output, "sex", sex)
+        else:
+            continue
 
         if subproperty.lower() in sample_mapping:
             mapping = sample_mapping[subproperty.lower()]
@@ -368,7 +385,6 @@ def parse_series_sample_characteristics(sample_elements, value):
         "gestational age": ("developmentalStage", "field_value"),
         "pistil development stage": ("developmentalStage", "field_value"),
         "developmental stage": ("developmentalStage", "field_value"),
-        "sex": ("sex", "field_value"),
     }
     values = value if isinstance(value, list) else [value]
     for v in values:
