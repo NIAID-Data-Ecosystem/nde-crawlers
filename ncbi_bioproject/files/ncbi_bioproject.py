@@ -245,7 +245,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
 
         if accession:
             output["identifier"] = accession
-            output["_id"] = f"ncbi_bioproject_{accession}"
+            output["_id"] = f"{accession}"
             output["url"] = f"https://www.ncbi.nlm.nih.gov/bioproject/{accession}"
             output["includedInDataCatalog"]["archivedAt"] = output["url"]
 
