@@ -247,8 +247,8 @@ class NDEDataBuilder(builder.DataBuilder):
         for result in results:
             records_to_delete.append(result.get("_id"))
 
-            donor_doc = result["original_doc"]
-            for recipient_doc in result["matching_catalogs"]:
+            recipient_doc = result["original_doc"]
+            for donor_doc in result["matching_catalogs"]:
                 merged_doc = merge_struct(
                     recipient_doc,
                     donor_doc,
@@ -284,5 +284,5 @@ class NDEDataBuilder(builder.DataBuilder):
         self.deduplication(sources, duplicate)
 
         identifier_source_catalog = "Data Discovery Engine"
-        source_catalogs = ["NCBI GEO"]
+        source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject"]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
