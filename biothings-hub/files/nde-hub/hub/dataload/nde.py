@@ -1172,7 +1172,13 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "@id": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer"},
             "@type": {"type": "keyword", "copy_to": ["all"]},
-            "additionalProperty": {"type": "text"},
+            "additionalProperty": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "propertyID": {"type": "keyword", "copy_to": ["all"]},
+                    "value": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "alternateIdentifier": {"type": "keyword", "copy_to": ["all"]},
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "anatomicalStructure": {
