@@ -292,7 +292,8 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                     if nde_mapping[k][1] == "variableMeasuered" or nde_mapping[k][1] == "anatomicalStructure":
                         d["@type"] = "DefinedTerm"
                     insert_value(output, k, d)
-                    logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {d}")
+                    if subproperty != "variableMeasured":
+                        logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {d}")
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     if k == "date":
                         try:
