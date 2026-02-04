@@ -312,5 +312,5 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
         else:
             logger.warning(f"Unmapped sample characteristic subproperty: {subproperty}")
 
-        if description := output.get("description") and isinstance(output["description"], list):
-            output["description"] = " ".join(description)
+        if (description := output.get("description")) and isinstance(description, list):
+            output["description"] = " ".join(map(str, description))
