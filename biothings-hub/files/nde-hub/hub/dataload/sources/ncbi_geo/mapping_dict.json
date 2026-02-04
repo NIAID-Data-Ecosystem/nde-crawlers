@@ -202957,7 +202957,7 @@
   ],
   "transfection": [
     "sampleProcess",
-    null
+    "value"
   ],
   "treated_with": [
     "sampleProcess",
@@ -203000,7 +203000,7 @@
     "value"
   ],
   "strain": [
-    "species/infectiousAgent",
+    "species",
     "value"
   ],
   "time": [
