@@ -200,7 +200,8 @@ def parse_gsm(data_folder):
                 else:
                     sample_process = value
                 if "sampleProcess" in output and output["sampleProcess"]:
-                    # If sampleProcess already exists, append new info
+                    if isinstance(output["sampleProcess"], list):
+                        output["sampleProcess"] = " ".join(output["sampleProcess"])
                     output["sampleProcess"] = output["sampleProcess"] + " " + sample_process
                 else:
                     output["sampleProcess"] = sample_process
