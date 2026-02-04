@@ -280,7 +280,7 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
         # with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
         #     mapping = json.load(f)
 
-        subproperty = subproperty.strip().lower().replace(" ", "_")
+        subproperty = re.sub(r"\s+", "_", subproperty.strip().lower())
         if subproperty in sample_mapping:
             k, v = sample_mapping[subproperty]
             if v:
@@ -289,11 +289,10 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                     d = {nde_mapping[k][1]: v}
                     if nde_mapping[k][1] == "sampleQuantity":
                         d["name"] = subproperty
-                    if nde_mapping[k][1] == "variableMeasuered" or nde_mapping[k][1] == "anatomicalStructure":
+                    if nde_mapping[k][1] == "variableMeasured" or nde_mapping[k][1] == "anatomicalStructure":
                         d["@type"] = "DefinedTerm"
                     insert_value(output, k, d)
-                    if subproperty != "variableMeasured":
-                        logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {d}")
+                    # logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {d}")
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     if k == "date":
                         try:
@@ -303,7 +302,7 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                             logger.warning(f"Error parsing date '{v}': {e}")
                     else:
                         insert_value(output, k, v)
-                    logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {v}")
+                    # logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {v}")
                 else:
                     logger.warning(f"Unmapped nde_mapping property: {k}")
             else:
