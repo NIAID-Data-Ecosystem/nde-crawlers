@@ -1288,6 +1288,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "conditionsOfAccess": {"type": "keyword"},
             "creditText": {"type": "text"},
+            "date": {"type": "date"},
             "dateCollected": {"type": "date"},
             "dateCreated": {"type": "date"},
             "dateModified": {"type": "date"},

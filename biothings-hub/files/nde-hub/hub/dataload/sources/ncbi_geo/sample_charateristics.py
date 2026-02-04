@@ -4,6 +4,23 @@ from pathlib import Path
 import regex as re
 from utils.sex import _parse_mf_list, extract_sex, find_sex_number_map
 
+try:
+    from config import logger
+except ImportError:
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+
+def insert_value(d, key, value):
+    if key in d:
+        if isinstance(d[key], list) and value not in d[key]:
+            d[key].append(value)
+        if not isinstance(d[key], list) and d[key] != value:
+            d[key] = [d[key], value]
+    else:
+        d[key] = value
+
 
 def find_age(text):
     """
@@ -229,3 +246,63 @@ def parse_sex(subproperty, value):
     with open(Path(__file__).resolve().parent / "sex_mappings.json", "r") as f:
         mapping = json.load(f)
     return extract_sex(value, mapping)
+
+
+def parse_sample_characteristics(output, value):
+    values = value if isinstance(value, list) else [value]
+    for v in values:
+        # Split by ":", strip whitespace, and only split on the first ":"
+        parts = [p.strip() for p in v.split(":", 1)]
+        if len(parts) != 2:
+            logger.warning(f"Invalid sample characteristic format: {v}")
+            continue
+
+        subproperty, field_value = parts[0], parts[1]
+
+        sex = parse_sex(subproperty, field_value)
+        if isinstance(sex, tuple):
+            if sex[0] and isinstance(sex[0], list):
+                for s in sex[0]:
+                    insert_value(output, "sex", s)
+            else:
+                insert_value(output, "sex", sex[0])
+            if sex[1]:
+                insert_value(output, "developmentalStage", sex[1])
+        elif sex and isinstance(sex, list):
+            for s in sex:
+                insert_value(output, "sex", s)
+        elif sex:
+            insert_value(output, "sex", sex)
+
+        if sex:
+            continue  # Skip further
+
+        with open(Path(__file__).resolve().parent / "nde_mapping.json", "r") as f:
+            nde_mapping = json.load(f)
+        with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
+            mapping = json.load(f)
+
+        subproperty = subproperty.strip().lower().replace(" ", "_")
+        if subproperty in mapping:
+            k, v = mapping[subproperty]
+            if v:
+                v = subproperty if v == "subproperty" else field_value
+                if k in nde_mapping and nde_mapping[k][0] == "object":
+                    d = {nde_mapping[k][1]: v}
+                    if nde_mapping[k][1] == "sampleQuantity":
+                        d["name"] = subproperty
+                    if nde_mapping[k][1] == "variableMeasuered" or nde_mapping[k][1] == "anatomicalStructure":
+                        d["@type"] = "DefinedTerm"
+                    insert_value(output, k, d)
+                    logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {d}")
+                elif k in nde_mapping and nde_mapping[k][0] == "value":
+                    insert_value(output, k, v)
+                    logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {v}")
+                else:
+                    logger.warning(f"Unmapped nde_mapping property: {k}")
+            else:
+                d = {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value}
+                insert_value(output, "additionalProperty", d)
+
+        else:
+            logger.warning(f"Unmapped sample characteristic subproperty: {subproperty}")

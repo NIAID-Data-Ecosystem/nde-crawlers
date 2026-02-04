@@ -4,7 +4,7 @@ import traceback
 
 import dateutil.parser
 
-from .sample_charateristics import parse_sex
+from .sample_charateristics import insert_value, parse_sample_characteristics
 
 try:
     from config import logger
@@ -12,16 +12,6 @@ except ImportError:
     import logging
 
     logger = logging.getLogger(__name__)
-
-
-def insert_value(d, key, value):
-    if key in d:
-        if isinstance(d[key], list) and value not in d[key]:
-            d[key].append(value)
-        if not isinstance(d[key], list) and d[key] != value:
-            d[key] = [d[key], value]
-    else:
-        d[key] = value
 
 
 def get_full_name(name):
@@ -59,115 +49,6 @@ def parse_soft_series(filepath):
                 else:
                     result[key] = value
     return result
-
-
-def parse_sample_characteristics(output, value):
-    sample_mapping = {
-        "tissue": ("anatomicalStructure", "field_value"),
-        "tissue id": ("anatomicalStructure", "field_value"),
-        "organ": ("anatomicalStructure", "field_value"),
-        "tissue type": ("anatomicalStructure", "field_value"),
-        "genotype": ("associatedGenotype", "field_value"),
-        "genotype/variation": ("associatedGenotype", "field_value"),
-        "ctnnb1 genotype": ("associatedGenotype", "field_value"),
-        "mouse line": ("associatedGenotype", "field_value"),
-        "phenotype": ("associatedPhenotype", "field_value"),
-        "cell type": ("cellType", "field_value"),
-        "cell line": ("cellType", "field_value"),
-        "cell subset": ("cellType", "field_value"),
-        "age": ("developmentalStage", "field_value"),
-        "time of_larval_development": ("developmentalStage", "field_value"),
-        "age group": ("developmentalStage", "field_value"),
-        "age (months)": ("developmentalStage", "field_value"),
-        "gestational age": ("developmentalStage", "field_value"),
-        "pistil development stage": ("developmentalStage", "field_value"),
-        "developmental stage": ("developmentalStage", "field_value"),
-        "sequencing run": ("experimentalPurpose", "subproperty"),
-        "disease": ("healthCondition", "field_value"),
-        "diagnosis": ("healthCondition", "field_value"),
-        "disease state": ("healthCondition", "field_value"),
-        "condition": ("healthCondition", "field_value"),
-        "injury": ("healthCondition", "field_value"),
-        "treatment": ("sampleProcess", "field_value"),
-        "sex": ("sex", "field_value"),
-        "cultivar": ("species", "field_value"),
-        "strain": ("species", "field_value"),
-        "time": ("temporalCoverage", "field_value"),
-        "timepoint": ("temporalCoverage", "field_value"),
-        "time of_treatment": ("temporalCoverage", "field_value"),
-        "time point": ("temporalCoverage", "field_value"),
-        "treatment/time point": ("temporalCoverage", "field_value"),
-        "time(days)": ("temporalCoverage", "field_value"),
-    }
-    values = value if isinstance(value, list) else [value]
-    for v in values:
-        # Split by ":", strip whitespace, and only split on the first ":"
-        parts = [p.strip() for p in v.split(":", 1)]
-        if len(parts) != 2:
-            logger.warning(f"Invalid sample characteristic format: {v}")
-            continue
-
-        subproperty, field_value = parts[0], parts[1]
-
-        sex = parse_sex(subproperty, field_value)
-        if isinstance(sex, tuple):
-            if sex[0] and isinstance(sex[0], list):
-                for s in sex[0]:
-                    insert_value(output, "sex", s)
-            else:
-                insert_value(output, "sex", sex[0])
-            if sex[1]:
-                insert_value(output, "developmentalStage", sex[1])
-        if sex and isinstance(sex, list):
-            for s in sex:
-                insert_value(output, "sex", s)
-        elif sex:
-            insert_value(output, "sex", sex)
-        else:
-            continue
-
-        if subproperty.lower() in sample_mapping:
-            mapping = sample_mapping[subproperty.lower()]
-            if mapping[0] in [
-                "species",
-                "healthCondition",
-                "developmentalStage",
-                "cellType",
-                "anatomicalStructure",
-                "associatedPhenotype",
-            ]:
-                if isinstance(field_value, list):
-                    for fv in field_value:
-                        d = {"name": fv}
-                        if "anatomicalStructure" == mapping[0]:
-                            d["@type"] = "DefinedTerm"
-                        insert_value(output, mapping[0], d)
-                else:
-                    d = {"name": field_value}
-                    if "anatomicalStructure" == mapping[0]:
-                        d["@type"] = "DefinedTerm"
-                    insert_value(output, mapping[0], d)
-            elif mapping[0] == "temporalCoverage":
-                if isinstance(field_value, list):
-                    for fv in field_value:
-                        insert_value(output, mapping[0], {"duration": fv})
-                else:
-                    insert_value(output, mapping[0], {"duration": field_value})
-            else:
-                if mapping[0] == "sampleProcess":
-                    if "sampleProcess" in output and output["sampleProcess"]:
-                        # If sampleProcess already exists, append new info
-                        output["sampleProcess"] = output["sampleProcess"] + " " + field_value
-                    else:
-                        output["sampleProcess"] = field_value
-                else:
-                    if mapping[1] == "subproperty":
-                        insert_value(output, mapping[0], subproperty)
-                    else:
-                        insert_value(output, mapping[0], field_value)
-        else:
-            d = {"name": subproperty, "@type": "DefinedTerm"}
-            insert_value(output, "variableMeasured", d)
 
 
 def parse_gsm(data_folder):
@@ -331,7 +212,7 @@ def get_records(data_folder):
             logger.info(dir)
             dirpath = os.path.join(root, dir)
             for file in os.listdir(dirpath):
-                logger.info(file)
+                # logger.info(file)
                 if file.endswith(".txt"):
                     fpath = os.path.join(dirpath, file)
                     try:
