@@ -1,6 +1,4 @@
-import json
-from pathlib import Path
-
+import dateutil.parser
 import regex as re
 from utils.sex import _parse_mf_list, extract_sex, find_sex_number_map
 
@@ -296,7 +294,14 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                     insert_value(output, k, d)
                     logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {d}")
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
-                    insert_value(output, k, v)
+                    if k == "date":
+                        try:
+                            v = dateutil.parser.parse(v, ignoretz=True).date().isoformat()
+                            insert_value(output, k, v)
+                        except Exception as e:
+                            logger.warning(f"Error parsing date '{v}': {e}")
+                    else:
+                        insert_value(output, k, v)
                     logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {v}")
                 else:
                     logger.warning(f"Unmapped nde_mapping property: {k}")
