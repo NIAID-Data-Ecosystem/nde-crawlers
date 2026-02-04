@@ -130,7 +130,7 @@ def apply_heuristics(subproperty, value):
     return None
 
 
-def parse_sex(subproperty, value):
+def parse_sex(subproperty, value, mapping):
     """Parses the sex from the given subproperty and value.
     Returns either:
       - Tuple of (sex, developmentalStage dict)
@@ -243,12 +243,12 @@ def parse_sex(subproperty, value):
         except (ValueError, TypeError):
             pass
 
-    with open(Path(__file__).resolve().parent / "sex_mappings.json", "r") as f:
-        mapping = json.load(f)
+    # with open(Path(__file__).resolve().parent / "sex_mappings.json", "r") as f:
+    #     mapping = json.load(f)
     return extract_sex(value, mapping)
 
 
-def parse_sample_characteristics(output, value):
+def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex_mapping):
     values = value if isinstance(value, list) else [value]
     for v in values:
         # Split by ":", strip whitespace, and only split on the first ":"
@@ -259,7 +259,7 @@ def parse_sample_characteristics(output, value):
 
         subproperty, field_value = parts[0], parts[1]
 
-        sex = parse_sex(subproperty, field_value)
+        sex = parse_sex(subproperty, field_value, sex_mapping)
         if isinstance(sex, tuple):
             if sex[0] and isinstance(sex[0], list):
                 for s in sex[0]:
@@ -277,14 +277,14 @@ def parse_sample_characteristics(output, value):
         if sex:
             continue  # Skip further
 
-        with open(Path(__file__).resolve().parent / "nde_mapping.json", "r") as f:
-            nde_mapping = json.load(f)
-        with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
-            mapping = json.load(f)
+        # with open(Path(__file__).resolve().parent / "nde_mapping.json", "r") as f:
+        #     nde_mapping = json.load(f)
+        # with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
+        #     mapping = json.load(f)
 
         subproperty = subproperty.strip().lower().replace(" ", "_")
-        if subproperty in mapping:
-            k, v = mapping[subproperty]
+        if subproperty in sample_mapping:
+            k, v = sample_mapping[subproperty]
             if v:
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":

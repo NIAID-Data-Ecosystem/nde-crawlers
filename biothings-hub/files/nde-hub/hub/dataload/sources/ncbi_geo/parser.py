@@ -1,6 +1,8 @@
 import datetime
+import json
 import os
 import traceback
+from pathlib import Path
 
 import dateutil.parser
 
@@ -59,6 +61,13 @@ def parse_gsm(data_folder):
 
     gse_dir = os.path.join(data_folder, "gsm")
     records = get_records(gse_dir)
+    with open(Path(__file__).resolve().parent / "sex_mappings.json", "r") as f:
+        sex_mapping = json.load(f)
+    with open(Path(__file__).resolve().parent / "nde_mapping.json", "r") as f:
+        nde_mapping = json.load(f)
+    with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
+        sample_mapping = json.load(f)
+
     for item in records:
         if not item.get("!Sample_geo_accession"):
             continue
@@ -70,7 +79,7 @@ def parse_gsm(data_folder):
             "_id": _id.casefold(),
             "identifier": _id,
             "url": url,
-            "distribution": [{"@type": "dataDownload", "contentUrl": url}],
+            "distribution": [{"@type": "DataDownload", "contentUrl": url}],
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "NCBI GEO",
@@ -183,7 +192,7 @@ def parse_gsm(data_folder):
 
         for key, value in item.items():
             if key.startswith("!Sample_characteristics"):
-                parse_sample_characteristics(output, value)
+                parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex_mapping)
 
             if "protocol" in key.lower() or key.startswith("!Sample_molecule"):
                 if isinstance(value, list):
