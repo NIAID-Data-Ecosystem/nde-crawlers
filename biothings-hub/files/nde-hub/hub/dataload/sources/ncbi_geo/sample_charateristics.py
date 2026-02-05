@@ -281,6 +281,8 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
         #     mapping = json.load(f)
 
         subproperty = re.sub(r"\s+", "_", subproperty.strip().lower())
+        if "sex" == subproperty:
+            logger.info(f"Didnt parse sex: {field_value} from subproperty: {subproperty}, checking sex: {sex}")
         if subproperty in sample_mapping:
             k, v = sample_mapping[subproperty]
             if v:
