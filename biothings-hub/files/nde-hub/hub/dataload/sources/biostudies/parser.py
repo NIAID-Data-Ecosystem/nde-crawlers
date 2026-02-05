@@ -3,7 +3,6 @@ import re
 
 import dateutil
 import requests
-from utils.utils import retry
 
 try:
     from config import logger
@@ -57,19 +56,25 @@ def parse_file(doc, accno):
     global known_section_attributes
     global known_subsection_types
 
-    if not doc.get("accno"):
+    if doc.get("accno"):
         accno = doc.get("accno")
+
+    accno = (accno or "").strip()
+    if accno.upper().startswith("E-"):
+        landing_url = f"https://www.ebi.ac.uk/biostudies/arrayexpress/studies/{accno}"
+    else:
+        landing_url = f"https://www.ebi.ac.uk/biostudies/studies/{accno}"
 
     try:
         output = {
             "_id": f"{accno.casefold()}",
-            "url": f"https://www.ebi.ac.uk/studies/{accno}",
+            "url": landing_url,
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "BioStudies",
                 "url": "https://www.ebi.ac.uk/biostudies/",
                 "versionDate": datetime.date.today().isoformat(),
-                "archivedAt": f"https://www.ebi.ac.uk/studies/{accno}",
+                "archivedAt": landing_url,
             },
             "@type": "Dataset",
         }
@@ -85,8 +90,14 @@ def parse_file(doc, accno):
                     continue
 
                 if key == "attachto":
-                    value = value.casefold().replace(" ", "")
-                    output["url"] = f"https://www.ebi.ac.uk/{value}/studies/{accno}"
+                    attachto_clean = value.casefold().replace(" ", "").strip().rstrip("/")
+                    if attachto_clean.startswith("http://") or attachto_clean.startswith("https://"):
+                        attachto_url = f"{attachto_clean}/studies/{accno}"
+                    else:
+                        attachto_url = f"https://www.ebi.ac.uk/{attachto_clean}/studies/{accno}"
+
+                    output["url"] = attachto_url
+                    output["includedInDataCatalog"]["archivedAt"] = attachto_url
                     output["includedInDataCatalog"]["dataset"] = output["url"]
                 elif key == "releasedate":
                     output["datePublished"] = dateutil.parser.parse(value, ignoretz=True).date().isoformat()
@@ -112,7 +123,7 @@ def parse_file(doc, accno):
                     key = attribute.pop("name").casefold()
                     try:
                         attribute.get("value")
-                    except Exception as e:
+                    except Exception:
                         logger.info(
                             f"This value is a list url: https://www.ebi.ac.uk/biostudies/api/v1/studies/{accno}"
                         )
