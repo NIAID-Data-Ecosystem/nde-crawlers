@@ -241,8 +241,6 @@ def parse_sex(subproperty, value, mapping):
         except (ValueError, TypeError):
             pass
 
-    # with open(Path(__file__).resolve().parent / "sex_mappings.json", "r") as f:
-    #     mapping = json.load(f)
     return extract_sex(value, mapping)
 
 
@@ -275,14 +273,7 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
         if sex:
             continue  # Skip further
 
-        # with open(Path(__file__).resolve().parent / "nde_mapping.json", "r") as f:
-        #     nde_mapping = json.load(f)
-        # with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
-        #     mapping = json.load(f)
-
         subproperty = re.sub(r"\s+", "_", subproperty.strip().lower())
-        if "sex" == subproperty:
-            logger.info(f"Didnt parse sex: {field_value} from subproperty: {subproperty}, checking sex: {sex}")
         if subproperty in sample_mapping:
             k, v = sample_mapping[subproperty]
             if v:
@@ -294,7 +285,6 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                     if nde_mapping[k][1] == "variableMeasured" or nde_mapping[k][1] == "anatomicalStructure":
                         d["@type"] = "DefinedTerm"
                     insert_value(output, k, d)
-                    # logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {d}")
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     if k == "date":
                         try:
@@ -305,7 +295,6 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                             logger.warning(f"Error parsing date '{v}': {e}")
                     else:
                         insert_value(output, k, v)
-                    # logger.info(f"Mapped sample characteristic subproperty: {subproperty} to {k} with value: {v}")
                 else:
                     logger.warning(f"Unmapped nde_mapping property: {k}")
             else:
