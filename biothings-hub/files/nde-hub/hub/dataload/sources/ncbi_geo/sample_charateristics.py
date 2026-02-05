@@ -298,8 +298,9 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     if k == "date":
                         try:
-                            v = dateutil.parser.parse(v, ignoretz=True).date().isoformat()
-                            insert_value(output, k, v)
+                            if not output.get("date"):
+                                v = dateutil.parser.parse(v, ignoretz=True).date().isoformat()
+                                insert_value(output, k, v)
                         except Exception as e:
                             logger.warning(f"Error parsing date '{v}': {e}")
                     else:
