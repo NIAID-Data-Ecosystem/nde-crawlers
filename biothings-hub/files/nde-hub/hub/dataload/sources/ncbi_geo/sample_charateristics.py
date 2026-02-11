@@ -306,3 +306,50 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
 
         if (description := output.get("description")) and isinstance(description, list):
             output["description"] = " ".join(map(str, description))
+
+
+def parse_series_sample_characteristics(output, value, sample_mapping, nde_mapping, sex_mapping):
+    values = value if isinstance(value, list) else [value]
+    for v in values:
+        # Split by ":", strip whitespace, and only split on the first ":"
+        parts = [p.strip() for p in v.split(":", 1)]
+        if len(parts) != 2:
+            logger.warning(f"Invalid sample characteristic format: {v}")
+            continue
+
+        subproperty, field_value = parts[0], parts[1]
+
+        sex = parse_sex(subproperty, field_value, sex_mapping)
+        if isinstance(sex, tuple):
+            if sex[0] and isinstance(sex[0], list):
+                for s in sex[0]:
+                    insert_value(output, "sex", s)
+            else:
+                insert_value(output, "sex", sex[0])
+            if sex[1]:
+                insert_value(output, "developmentalStage", sex[1])
+        elif sex and isinstance(sex, list):
+            for s in sex:
+                insert_value(output, "sex", s)
+        elif sex:
+            insert_value(output, "sex", sex)
+
+        if sex:
+            continue  # Skip further
+
+        subproperty = re.sub(r"\s+", "_", subproperty.strip().lower())
+        if subproperty in sample_mapping:
+            k, v = sample_mapping[subproperty]
+            if v:
+                v = subproperty if v == "subproperty" else field_value
+                if k in nde_mapping and nde_mapping[k][0] == "object":
+                    d = {nde_mapping[k][1]: v}
+                    if nde_mapping[k][1] == "sampleQuantity":
+                        d["name"] = subproperty
+                    if nde_mapping[k][1] == "anatomicalStructure":
+                        d["@type"] = "DefinedTerm"
+                    insert_value(output, k, d)
+                elif k in nde_mapping and nde_mapping[k][0] == "value":
+                    insert_value(output, k, v)
+        else:
+            logger.warning(f"Unmapped sample characteristic subproperty: {subproperty}")

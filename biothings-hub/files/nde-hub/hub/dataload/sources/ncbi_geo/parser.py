@@ -6,7 +6,7 @@ from pathlib import Path
 
 import dateutil.parser
 
-from .sample_charateristics import insert_value, parse_sample_characteristics
+from .sample_charateristics import insert_value, parse_sample_characteristics, parse_series_sample_characteristics
 
 try:
     from config import logger
@@ -63,7 +63,7 @@ def parse_gsm(data_folder):
     records = get_records(gse_dir)
     with open(Path(__file__).resolve().parent / "sex_mappings.json", "r") as f:
         sex_mapping = json.load(f)
-    with open(Path(__file__).resolve().parent / "nde_mapping.json", "r") as f:
+    with open(Path(__file__).resolve().parent / "gsm_nde_mapping.json", "r") as f:
         nde_mapping = json.load(f)
     with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
         sample_mapping = json.load(f)
@@ -248,76 +248,18 @@ def find_gsm_file(data_folder, acc):
         return None
 
 
-def parse_series_sample_characteristics(sample_elements, value):
-    sample_mapping = {
-        "tissue": ("anatomicalStructure", "field_value"),
-        "tissue id": ("anatomicalStructure", "field_value"),
-        "organ": ("anatomicalStructure", "field_value"),
-        "tissue type": ("anatomicalStructure", "field_value"),
-        "genotype": ("associatedGenotype", "field_value"),
-        "genotype/variation": ("associatedGenotype", "field_value"),
-        "ctnnb1 genotype": ("associatedGenotype", "field_value"),
-        "mouse line": ("associatedGenotype", "field_value"),
-        "phenotype": ("associatedPhenotype", "field_value"),
-        "cell type": ("cellType", "field_value"),
-        "cell line": ("cellType", "field_value"),
-        "cell subset": ("cellType", "field_value"),
-        "age": ("developmentalStage", "field_value"),
-        "time of_larval_development": ("developmentalStage", "field_value"),
-        "age group": ("developmentalStage", "field_value"),
-        "age (months)": ("developmentalStage", "field_value"),
-        "gestational age": ("developmentalStage", "field_value"),
-        "pistil development stage": ("developmentalStage", "field_value"),
-        "developmental stage": ("developmentalStage", "field_value"),
-    }
-    values = value if isinstance(value, list) else [value]
-    for v in values:
-        # Split by ":", strip whitespace, and only split on the first ":"
-        parts = [p.strip() for p in v.split(":", 1)]
-        if len(parts) != 2:
-            logger.warning(f"Invalid sample characteristic format: {v}")
-            continue
-
-        subproperty, field_value = parts[0].casefold(), parts[1].casefold()
-
-        if subproperty in sample_mapping:
-            mapping = sample_mapping[subproperty]
-            if mapping[0] in [
-                "developmentalStage",
-                "cellType",
-                "anatomicalStructure",
-                "associatedPhenotype",
-            ]:
-
-                if isinstance(field_value, list):
-                    for fv in field_value:
-                        d = {"name": fv}
-                        if "anatomicalStructure" == mapping[0]:
-                            d["@type"] = "DefinedTerm"
-                        insert_value(sample_elements, mapping[0], d)
-                else:
-                    d = {"name": field_value}
-                    if "anatomicalStructure" == mapping[0]:
-                        d["@type"] = "DefinedTerm"
-                    insert_value(sample_elements, mapping[0], d)
-            else:
-                if mapping[1] == "subproperty":
-                    insert_value(sample_elements, mapping[0], subproperty)
-                else:
-                    if isinstance(field_value, list):
-                        for fv in field_value:
-                            insert_value(sample_elements, mapping[0], fv)
-                    else:
-                        insert_value(sample_elements, mapping[0], field_value)
-
-
-def parse_series_sample(item, sample):
+def parse_series_sample(item, sample, sample_mapping, nde_mapping, sex_mapping):
     """
     Given a GEO Series item and an output dictionary, parse for the sample field in the dataset
     """
     if not item.get("!Sample_geo_accession"):
         return
     sample_elements = sample["aggregateElement"]
+    insert_value(
+        sample_elements,
+        "url",
+        "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + item.get("!Sample_geo_accession"),
+    )
     if sample_type := item.get("!Sample_type"):
         if isinstance(sample_type, list):
             for s in sample_type:
@@ -334,7 +276,7 @@ def parse_series_sample(item, sample):
 
     for key, value in item.items():
         if key.startswith("!Sample_characteristics"):
-            parse_series_sample_characteristics(sample_elements, value)
+            parse_series_sample_characteristics(sample_elements, value, sample_mapping, nde_mapping, sex_mapping)
 
 
 def parse_gse(data_folder):
@@ -342,6 +284,12 @@ def parse_gse(data_folder):
     Parse a GEO SOFT platform file into a dictionary.
     Each key is the SOFT field (e.g., '!Platform_title'), value is a list if repeated, or a string.
     """
+    with open(Path(__file__).resolve().parent / "sex_mappings.json", "r") as f:
+        sex_mapping = json.load(f)
+    with open(Path(__file__).resolve().parent / "gse_nde_mapping.json", "r") as f:
+        nde_mapping = json.load(f)
+    with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
+        sample_mapping = json.load(f)
 
     gse_dir = os.path.join(data_folder, "gse")
     records = get_records(gse_dir)
@@ -389,7 +337,7 @@ def parse_gse(data_folder):
                 gsm_file = find_gsm_file(gsm_dir, gsm_id)
                 try:
                     sample_item = parse_soft_series(gsm_file)
-                    parse_series_sample(sample_item, sample)
+                    parse_series_sample(sample_item, sample, sample_mapping, nde_mapping, sex_mapping)
                 except Exception as e:
                     logger.error(f"Error parsing GSM file {gsm_file}: {e}")
                     logger.error(traceback.format_exc())

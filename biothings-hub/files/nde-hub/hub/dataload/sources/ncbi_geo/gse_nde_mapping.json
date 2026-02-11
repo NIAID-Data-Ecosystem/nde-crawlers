@@ -1,0 +1,10 @@
+{
+    "anatomicalStructure": ["object", "name"],
+    "anatomicalSystem": ["object", "name"],
+    "associatedGenotype": ["value"],
+    "associatedPhenotype": ["object", "name"],
+    "cellType": ["object", "name"],
+    "developmentalStage": ["object", "name"],
+    "sampleQuantity": ["object", "value"],
+    "sampleType": ["object", "name"]
+}
