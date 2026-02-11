@@ -276,6 +276,8 @@ def parse_file(doc, accno):
                                     if attribute.get("name") and attribute.get("value"):
                                         key = attribute.pop("name").casefold()
                                         value = attribute.pop("value")
+                                    else:
+                                        continue
                                     if key == "organism":
                                         species = {"name": value}
                                         if output.get("species"):
@@ -294,6 +296,8 @@ def parse_file(doc, accno):
                                     if attribute.get("name") and attribute.get("value"):
                                         key = attribute.pop("name").casefold()
                                         value = attribute.pop("value")
+                                    else:
+                                        continue
                                     if key == "imaging method" or key == "technology" or key == "assay by molecule":
                                         mt = {"name": value}
                                         if output.get("measurementTechnique"):
@@ -304,8 +308,11 @@ def parse_file(doc, accno):
                             if attributes:
                                 citation = {}
                                 for attribute in attributes:
-                                    key = attribute.pop("name").casefold()
-                                    value = attribute.pop("value")
+                                    if attribute.get("name") and attribute.get("value"):
+                                        key = attribute.pop("name").casefold()
+                                        value = attribute.pop("value")
+                                    else:
+                                        continue
                                     if key == "doi":
                                         citation["doi"] = value
                                     elif key == "pubmed id":
