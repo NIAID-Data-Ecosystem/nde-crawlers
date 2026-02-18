@@ -1,5 +1,4 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.corrections import corrections
 from utils.extract import process_descriptions
 from utils.lineage import process_lineage
 from utils.measurement_technique_helper import process_measurement_technique
@@ -17,7 +16,6 @@ class NCBI_SRA_Uploader(NDESourceUploader):
         docs = process_descriptions(docs)
         docs = process_measurement_technique(docs, self.name)
         docs = process_lineage(docs)
-        docs = corrections(docs)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
             yield doc

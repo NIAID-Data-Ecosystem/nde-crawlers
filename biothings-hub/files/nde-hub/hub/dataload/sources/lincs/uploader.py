@@ -1,5 +1,4 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.corrections import corrections
 from utils.csv_helper import get_source_data
 from utils.extract import process_descriptions
 from utils.funding_helper import standardize_funding
@@ -29,7 +28,6 @@ class LINCSUploader(NDESourceUploader):
         docs = standardize_funding(data_folder)
         docs = process_descriptions(docs)
         docs = process_measurement_technique(docs, self.name)
-        docs = corrections(docs)
         docs = add_topic_category(docs, self.name)
         for doc in docs:
             yield doc
