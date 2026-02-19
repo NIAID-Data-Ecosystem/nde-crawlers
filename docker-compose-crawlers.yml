@@ -45,6 +45,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  clingen-crawler:
+    build:
+      context: clingen
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   covid_radx-crawler:
     build:
       context: covid_radx

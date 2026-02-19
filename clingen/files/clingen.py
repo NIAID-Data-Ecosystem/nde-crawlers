@@ -467,14 +467,12 @@ def _org(name: str) -> dict[str, str]:
     return {"@type": "Organization", "name": name}
 
 
-def _funding_object() -> dict[str, list[dict[str, str]]]:
-    return {
-        "identifier": [
-            {"@type": "PropertyValue", "value": "U24HG009649"},
-            {"@type": "PropertyValue", "value": "U24HG009650"},
-            {"@type": "PropertyValue", "value": "U24HG006834"},
-        ]
-    }
+def _funding_list() -> dict[str, list[dict[str, str]]]:
+    return [
+        {"identifier": "U24HG009649"},
+        {"identifier": "U24HG009650"},
+        {"identifier": "U24HG006834"},
+    ]
 
 
 def _open_text_stream(
@@ -652,9 +650,15 @@ def _build_gene_validity_record(
 
     record: dict[str, Any] = {
         "_id": _make_record_id("clingen_gene_validity", mondo),
-        "@type": "nde:DataCollection",
+        "@type": "DataCollection",
         "about": copy.deepcopy(settings["about"]),
-        "includedInDataCatalog": "Clinical Genomics Resource (ClinGen)",
+        "includedInDataCatalog": [{
+            "@type": "DataCatalog",
+            "name": "Clinical Genomics Resource (ClinGen)",
+            "url": "https://clinicalgenome.org/",
+            "versionDate": dt.datetime.now().date().isoformat(),
+            "archivedAt": url
+        }],
         "name": f"{disease_for_name} {settings['name_suffix']}".strip(),
         "url": url,
         "collectionSize": len(group["genes"]),
@@ -673,13 +677,13 @@ def _build_gene_validity_record(
             settings["description_template"],
             replacements,
         ),
-        "funding": _funding_object(),
+        "funding": _funding_list(),
         "conditionsOfAccess": "Open",
         "license": "https://creativecommons.org/publicdomain/zero/1.0/",
         "measurementTechnique": copy.deepcopy(
             MEASUREMENT_TECHNIQUE_DEFINED_TERMS
         ),
-        "species": "Homo Sapiens",
+        "species": {"name": "Homo Sapiens"},
         "topicCategory": copy.deepcopy(settings["topic_category"]),
         "usageInfo": (
             "https://www.clinicalgenome.org/docs/?doc-type="
@@ -737,9 +741,15 @@ def _build_variant_pathogenicity_record(
 
     record: dict[str, Any] = {
         "_id": _make_record_id("clingen_variant_pathogenicity", mondo),
-        "@type": "nde:DataCollection",
+        "@type": "DataCollection",
         "about": copy.deepcopy(settings["about"]),
-        "includedInDataCatalog": "Clinical Genomics Resource (ClinGen)",
+        "includedInDataCatalog": [{
+            "@type": "DataCatalog",
+            "name": "Clinical Genomics Resource (ClinGen)",
+            "url": "https://clinicalgenome.org/",
+            "versionDate": dt.datetime.now().date().isoformat(),
+            "archivedAt": url
+        }],
         "name": f"{disease_for_name} {settings['name_suffix']}".strip(),
         "url": url,
         "collectionSize": len(group["uuids"]),
@@ -758,13 +768,13 @@ def _build_variant_pathogenicity_record(
             settings["description_template"],
             replacements,
         ),
-        "funding": _funding_object(),
+        "funding": _funding_list(),
         "conditionsOfAccess": "Open",
         "license": "https://creativecommons.org/publicdomain/zero/1.0/",
         "measurementTechnique": copy.deepcopy(
             MEASUREMENT_TECHNIQUE_DEFINED_TERMS
         ),
-        "species": "Homo Sapiens",
+        "species": {"name": "Homo Sapiens"},
         "usageInfo": (
             "https://www.clinicalgenome.org/docs/?doc-type="
             "policies-position-statements"
