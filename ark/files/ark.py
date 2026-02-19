@@ -7,6 +7,7 @@ import re
 from typing import Any, Dict, Generator, List, Optional
 
 import pandas as pd
+import requests
 import synapseclient
 from api_secret import SYNAPSE_TOKEN
 from synapseclient import Synapse
@@ -162,6 +163,62 @@ IDENTIFIER_BASE_URLS = (
 )
 
 
+def ms_timestamp_to_date(value: Any) -> Optional[str]:
+    """Convert a millisecond Unix timestamp into YYYY-MM-DD."""
+    try:
+        if value is None or pd.isna(value):
+            return None
+        return datetime.datetime.fromtimestamp(int(value) / 1000).strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def build_distribution_entries(
+    syn: Synapse,
+    dataset_id: str,
+    fallback_date: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Collect DataDownload entries for each file in a Synapse Dataset."""
+    query = f"SELECT id, fileFormat, modifiedOn, createdOn FROM {dataset_id}"
+    try:
+        result = syn.tableQuery(query)
+        df = result.asDataFrame()
+    except Exception as error:
+        logger.warning("Failed to load distribution items for %s: %s", dataset_id, error)
+        return []
+
+    distribution: List[Dict[str, Any]] = []
+    for _, file_row in df.iterrows():
+        file_id = file_row.get("id")
+        if not file_id or pd.isna(file_id):
+            continue
+
+        content_url = SYNAPSE_OBJECT_URL.format(syn_id=str(file_id).strip())
+
+        file_format = file_row.get("fileFormat")
+        encoding_format = None
+        if file_format and not pd.isna(file_format):
+            encoding_format = str(file_format).strip()
+
+        date_modified = ms_timestamp_to_date(file_row.get("modifiedOn"))
+        if not date_modified:
+            date_modified = ms_timestamp_to_date(file_row.get("createdOn")) or fallback_date
+
+        if not date_modified:
+            continue
+
+        entry: Dict[str, Any] = {
+            "@type": "DataDownload",
+            "contentUrl": content_url,
+            "dateModified": date_modified,
+        }
+        if encoding_format:
+            entry["encodingFormat"] = encoding_format
+        distribution.append(entry)
+
+    return distribution
+
+
 def extract_grant_ids(credit_text: str) -> List[Dict[str, str]]:
     """
     Extract NIH grant IDs from acknowledgment/credit text.
@@ -208,6 +265,9 @@ def fetch_publication_details(syn: Synapse, pub_syn_id: str) -> Optional[Dict]:
         annotations = syn.get_annotations(pub_syn_id)
 
         pmid = annotations.get("PMID", [None])[0] if annotations.get("PMID") else None
+        # get rid of "pubmed:" prefix if present
+        if pmid and isinstance(pmid, str) and pmid.lower().startswith("pubmed:"):
+            pmid = pmid[7:].strip()
         if pmid and not pd.isna(pmid):
             # If PMID exists, return only the PMID (util handles the rest)
             return {"pmids": pmid}
@@ -246,6 +306,45 @@ def fetch_wiki_content(syn: Synapse, entity_id: str, wiki_id: Optional[str] = No
     except Exception as error:
         logger.warning("Failed to load wiki %s/%s: %s", entity_id, wiki_id, error)
         return None
+
+
+def fetch_formatted_citation(doi: str, style: str = "nature", language: str = "en-US") -> Optional[str]:
+    """Retrieve a formatted citation string for a given DOI."""
+    if not doi:
+        return None
+
+    params = {"doi": doi, "style": style, "lang": language}
+    try:
+        response = requests.get("https://citation.doi.org/format", params=params, timeout=10)
+    except requests.RequestException as error:
+        logger.warning("Failed to fetch formatted citation for %s: %s", doi, error)
+        return None
+
+    if not response.ok:
+        logger.warning(
+            "Failed to fetch formatted citation for %s: HTTP %s", doi, response.status_code
+        )
+        return None
+
+    citation = response.text.strip()
+    return citation or None
+
+
+def inject_citation_into_credit_text(credit_text: str, citation: str) -> str:
+    """Insert the citation after the standard acknowledgement statement."""
+    if not citation or citation in credit_text:
+        return credit_text
+
+    anchor = (
+        "**As a condition of use for this data, you MUST include this acknowledgement "
+        "statement in publications as an attribution to the AMP RA/SLE funders and data contributors**"
+    )
+
+    if anchor in credit_text:
+        return credit_text.replace(anchor, f"{anchor}\n{citation}", 1)
+
+    # Fallback: prepend citation if anchor statement unavailable
+    return f"{citation}\n\n{credit_text}" if credit_text else citation
 
 
 def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
@@ -290,13 +389,13 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         doc["description"] = str(description).strip()
 
     # Add dates if present (convert from Unix timestamp in milliseconds to YYYY-MM-DD)
-    date_created = row.get("createdOn")
-    if date_created and not pd.isna(date_created):
-        doc["dateCreated"] = datetime.datetime.fromtimestamp(int(date_created) / 1000).strftime("%Y-%m-%d")
+    date_created = ms_timestamp_to_date(row.get("createdOn"))
+    if date_created:
+        doc["dateCreated"] = date_created
 
-    date_modified = row.get("modifiedOn")
-    if date_modified and not pd.isna(date_modified):
-        doc["dateModified"] = datetime.datetime.fromtimestamp(int(date_modified) / 1000).strftime("%Y-%m-%d")
+    date_modified = ms_timestamp_to_date(row.get("modifiedOn"))
+    if date_modified:
+        doc["dateModified"] = date_modified
 
     # Add program as author (Organization type)
     program = row.get("program")
@@ -441,6 +540,10 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     if acknowledgment_ref and not pd.isna(acknowledgment_ref) and str(acknowledgment_ref).strip() and hasattr(entity, "parentId"):
         credit_text = fetch_wiki_content(syn, entity.parentId, str(acknowledgment_ref).split("/")[-1])
         if credit_text:
+            doi_value = doc.get("doi")
+            citation = fetch_formatted_citation(doi_value) if doi_value else None
+            if citation:
+                credit_text = inject_citation_into_credit_text(credit_text, citation)
             doc["creditText"] = credit_text
             # Extract grant IDs from credit text and add to funding
             funding_list = extract_grant_ids(credit_text)
@@ -475,8 +578,10 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
                 publications.append(pub_details)
 
     # Add PMIDs to document if any were found
-    if len(pmids) > 0:
-        doc["pmids"] = pmids
+    if len(pmids) == 1:
+        doc["pmids"] = pmids[0]
+    elif len(pmids) > 1:
+        doc["pmids"] = ", ".join(pmids)
 
     # Add citation for publications without PMIDs
     if len(publications) > 0:
@@ -513,6 +618,11 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     # Add keywords
     if len(keywords) > 0:
         doc["keywords"] = sorted(set(keywords))
+
+    fallback_date = doc.get("dateModified") or doc.get("dateCreated")
+    distribution_entries = build_distribution_entries(syn, syn_id, fallback_date)
+    if distribution_entries:
+        doc["distribution"] = distribution_entries
 
     return doc
 
@@ -564,7 +674,6 @@ def parse(
 if __name__ == "__main__":
     # Example usage
     for record in parse():
-        record_type = record.get("@type", "Unknown")
-        record_id = record.get("_id", "unknown")
-        record_name = record.get("name", "")
-        print(f"Processed {record_type}: {record_id} - {record_name}")
+        import json
+        with open("ark_datasets_output.jsonl", "a") as out_file:
+            out_file.write(f"{json.dumps(record)}\n")
