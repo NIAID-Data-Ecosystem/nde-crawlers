@@ -42,7 +42,7 @@ def _build_sample_record(
         "identifier": identifier,
         "name": display_name,
         "url": dataset_url,
-        "isPartOf": {
+        "isBasisFor": {
             "@type": "Dataset",
             "identifier": dataset_identifier,
             "url": dataset_url,
@@ -50,7 +50,7 @@ def _build_sample_record(
     }
 
     if dataset_name:
-        sample_record["isPartOf"]["name"] = dataset_name
+        sample_record["isBasisFor"]["name"] = dataset_name
 
     if dataset_record.get("includedInDataCatalog"):
         sample_record["includedInDataCatalog"] = copy.deepcopy(dataset_record["includedInDataCatalog"])

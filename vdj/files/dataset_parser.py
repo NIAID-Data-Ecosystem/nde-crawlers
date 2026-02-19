@@ -312,7 +312,7 @@ def build_dataset_sample_objects(sample_collections):
     excluded_keys = {
         "_id",
         "@type",
-        "isPartOf",
+        "isBasisFor",
         "sampleList",
         "itemListElement",
         "sample",
