@@ -70,11 +70,15 @@ def parse():
 
         # Biotools ID needs to be split into identifier and URL
         if biotools_id := tool.get("biotoolsID"):
-            output["identifier"] = biotools_id
-            url = f"https://bio.tools/{biotools_id}"
-            output["url"] = url
-            output["includedInDataCatalog"]["archivedAt"] = url
-            output["_id"] = f"biotools_{biotools_id}"
+            if biotools_id.strip():  # Check that biotoolsID is not empty or whitespace
+                output["identifier"] = biotools_id
+                url = f"https://bio.tools/{biotools_id}"
+                output["url"] = url
+                output["includedInDataCatalog"]["archivedAt"] = url
+                output["_id"] = f"biotools_{biotools_id}"
+            else:
+                logger.warning("Skipping tool with empty biotoolsID")
+                continue
         else:
             logger.warning("Skipping tool without biotoolsID")
             continue

@@ -9,6 +9,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
+def _coerce_int(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip()
+    if not text or text.upper() in {"N/A", "NA", "NONE", "NULL"}:
+        return None
+    try:
+        return int(float(text))
+    except Exception:
+        return None
+
+
 def convert_group_string_to_list(input_string):
     # Remove the curly braces
     stripped_string = input_string.strip("{}")
@@ -51,6 +69,31 @@ def parse(hit):
     }
     # Add the rest of the fields from _source
     hit = hit["_source"]
+
+    # Minimal Sample metadata so UI can treat RADx records like other datasets with sample info.
+    sample = None
+    if (estimated_participants := _coerce_int(hit.get("estimated_participants"))) is not None:
+        sample = {
+            "@type": "Sample",
+            "sampleType": [
+                {
+                    "@type": "DefinedTerm",
+                    "name": "Study Subject",
+                    "url": "http://purl.obolibrary.org/obo/NCIT_C41189",
+                    "inDefinedTermSet": "NCIT",
+                    "termCode": "NCIT_C41189",
+                }
+            ],
+            "sampleQuantity": [
+                {
+                    "@type": "QuantitativeValue",
+                    "value": estimated_participants,
+                    "unitText": "Study Subjects",
+                    "unitCode": "http://purl.obolibrary.org/obo/NCIT_C41189",
+                }
+            ],
+        }
+        output["sample"] = sample
     if doi := hit.get("study_doi"):
         output["doi"] = doi
 
