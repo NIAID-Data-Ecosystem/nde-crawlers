@@ -280,9 +280,9 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":
                     d = {nde_mapping[k][1]: v}
-                    if nde_mapping[k][1] == "sampleQuantity":
+                    if k == "sampleQuantity":
                         d["name"] = subproperty
-                    if nde_mapping[k][1] == "variableMeasured" or nde_mapping[k][1] == "anatomicalStructure":
+                    if k == "variableMeasured" or k == "anatomicalStructure":
                         d["@type"] = "DefinedTerm"
                     insert_value(output, k, d)
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
@@ -344,9 +344,9 @@ def parse_series_sample_characteristics(output, value, sample_mapping, nde_mappi
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":
                     d = {nde_mapping[k][1]: v}
-                    if nde_mapping[k][1] == "sampleQuantity":
+                    if k == "sampleQuantity":
                         d["name"] = subproperty
-                    if nde_mapping[k][1] == "anatomicalStructure":
+                    if k == "anatomicalStructure":
                         d["@type"] = "DefinedTerm"
                     insert_value(output, k, d)
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
