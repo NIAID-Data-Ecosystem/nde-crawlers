@@ -15,9 +15,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nde-logger")
 
-MAX_RETRIES = 1
+MAX_RETRIES = 5
 BASE_DELAY = 2  # 2 seconds
 MAX_DELAY = 60  # 1 minute
+REQUEST_DELAY = float(os.getenv("DATAVERSE_REQUEST_DELAY", "1.0"))  # seconds between API calls
+COOLDOWN_THRESHOLD = 10  # consecutive export failures before triggering cooldown
+COOLDOWN_SECONDS = float(os.getenv("DATAVERSE_COOLDOWN_SECONDS", "60"))  # cooldown sleep duration
 
 
 class Dataverse(NDEDatabase):
@@ -26,6 +29,7 @@ class Dataverse(NDEDatabase):
 
     DATAVERSE_SERVER = "https://dataverse.harvard.edu/api"
     EXPORT_URL = f"{DATAVERSE_SERVER}/datasets/export?exporter=schema.org"
+    DATAVERSE_JSON_EXPORT_URL = f"{DATAVERSE_SERVER}/datasets/export?exporter=dataverse_json"
 
     def __init__(self, sql_db=None):
         super().__init__(sql_db)
@@ -33,16 +37,18 @@ class Dataverse(NDEDatabase):
         self._headers = {"User-Agent": "nde-crawlers/dataverse"}
         self._headers["X-Dataverse-key"] = api_key
 
-    def _sleep_for_rate_limit(self, response):
-        if response is None or getattr(response, "status_code", None) != 429:
+    def _sleep_for_rate_limit(self, response, backoff_time=None):
+        """Sleep when rate-limited. Handles both 429 and 403 responses."""
+        status = getattr(response, "status_code", None) if response else None
+        if status not in (429, 403):
             return
-        retry_after = response.headers.get("Retry-After")
+        retry_after = response.headers.get("Retry-After") if response else None
         try:
-            seconds = int(retry_after) if retry_after else MAX_DELAY
+            seconds = int(retry_after) if retry_after else (backoff_time or MAX_DELAY)
         except ValueError:
-            seconds = MAX_DELAY
+            seconds = backoff_time or MAX_DELAY
         seconds = max(1, min(MAX_DELAY, seconds))
-        logger.warning(f"Rate limited (429). Sleeping {seconds}s before retrying...")
+        logger.warning(f"Rate limited ({status}). Sleeping {seconds}s before retrying...")
         time.sleep(seconds)
 
     @staticmethod
@@ -216,6 +222,98 @@ class Dataverse(NDEDatabase):
             schema_doc["funder"] = schema_funders
         return changed
 
+    @staticmethod
+    def _extract_dates_from_dataverse_json(dv_json):
+        """Extract dateCreated and dateModified from a dataverse_json export.
+
+        Returns a dict with 'dateCreated' and/or 'dateModified' in YYYY-MM-DD format.
+        """
+        dates = {}
+        version = dv_json.get("datasetVersion", {}) if isinstance(dv_json, dict) else {}
+        if not isinstance(version, dict):
+            return dates
+
+        create_time = version.get("createTime")
+        if isinstance(create_time, str) and create_time:
+            try:
+                dates["dateCreated"] = (
+                    datetime.datetime.fromisoformat(create_time.replace("Z", "+00:00")).strftime("%Y-%m-%d")
+                )
+            except (ValueError, TypeError):
+                pass
+
+        update_time = version.get("lastUpdateTime")
+        if isinstance(update_time, str) and update_time:
+            try:
+                dates["dateModified"] = (
+                    datetime.datetime.fromisoformat(update_time.replace("Z", "+00:00")).strftime("%Y-%m-%d")
+                )
+            except (ValueError, TypeError):
+                pass
+
+        return dates
+
+    @staticmethod
+    def _extract_funding_from_dataverse_json(dv_json):
+        """Extract funding info from the grantNumber fields of a dataverse_json export.
+
+        Returns a list of funding dicts (Schema.org Grant-style), or an empty list.
+        """
+        if not isinstance(dv_json, dict):
+            return []
+
+        version = dv_json.get("datasetVersion", {})
+        if not isinstance(version, dict):
+            return []
+
+        metadata_blocks = version.get("metadataBlocks", {})
+        citation = metadata_blocks.get("citation", {}) if isinstance(metadata_blocks, dict) else {}
+        fields = citation.get("fields", []) if isinstance(citation, dict) else []
+
+        grant_field = None
+        for field in fields:
+            if isinstance(field, dict) and field.get("typeName") == "grantNumber":
+                grant_field = field
+                break
+
+        if not grant_field or not isinstance(grant_field.get("value"), list):
+            return []
+
+        funding = []
+        for grant in grant_field["value"]:
+            if not isinstance(grant, dict):
+                continue
+
+            entry = {}
+            funder = {}
+
+            agency = grant.get("grantNumberAgency", {})
+            if isinstance(agency, dict):
+                # Use the expanded value for the human-readable funder name
+                expanded = agency.get("expandedvalue", {})
+                if isinstance(expanded, dict) and expanded.get("termName"):
+                    funder["name"] = expanded["termName"]
+                # The agency value field often contains a ROR URL
+                agency_value = agency.get("value", "")
+                if isinstance(agency_value, str) and agency_value.strip():
+                    if agency_value.startswith("http"):
+                        funder["@id"] = agency_value.strip()
+                    elif not funder.get("name"):
+                        # Fall back to raw value as funder name
+                        funder["name"] = agency_value.strip()
+
+            grant_number = grant.get("grantNumberValue", {})
+            if isinstance(grant_number, dict) and grant_number.get("value"):
+                entry["identifier"] = grant_number["value"]
+
+            if funder:
+                entry["funder"] = funder
+
+            if entry:
+                funding.append(entry)
+
+        return funding
+
     def extract_schema_json(self, url):
         """Fallback: scrape schema.org JSON-LD from a dataset landing page.
 
@@ -253,10 +351,13 @@ class Dataverse(NDEDatabase):
 
         while retries <= MAX_RETRIES:
             try:
+                if REQUEST_DELAY > 0:
+                    time.sleep(REQUEST_DELAY)
                 req = self._session.get(url, headers=self._headers, timeout=30)
                 if req.status_code == 429:
-                    self._sleep_for_rate_limit(req)
+                    self._sleep_for_rate_limit(req, backoff_time)
                     retries += 1
+                    backoff_time = min(MAX_DELAY, backoff_time * 2)
                     continue
                 if not req.ok:
                     logger.info(f"unable to retrieve {url}, status code: {req.status_code}")
@@ -302,10 +403,13 @@ class Dataverse(NDEDatabase):
 
         while retries <= MAX_RETRIES:
             try:
+                if REQUEST_DELAY > 0:
+                    time.sleep(REQUEST_DELAY)
                 req = self._session.get(dv_schema_export, headers=self._headers, timeout=30)
                 if req.status_code == 429:
-                    self._sleep_for_rate_limit(req)
+                    self._sleep_for_rate_limit(req, backoff_time)
                     retries += 1
+                    backoff_time = min(MAX_DELAY, backoff_time * 2)
                     continue
 
                 # Dataverse occasionally returns HTML/empty bodies (e.g., transient upstream errors)
@@ -382,6 +486,45 @@ class Dataverse(NDEDatabase):
                 # double the wait time, but cap at MAX_DELAY
                 backoff_time = min(MAX_DELAY, backoff_time * 2)
 
+    def fetch_dataverse_json(self, gid):
+        """Fetch the dataverse_json export for a dataset.
+
+        Returns the parsed JSON dict, or None if unavailable (e.g. harvested records).
+        """
+        dv_json_url = f"{self.DATAVERSE_JSON_EXPORT_URL}&persistentId={gid}"
+        logger.info(f"Fetching dataverse_json export - {dv_json_url}")
+
+        retries = 0
+        backoff_time = BASE_DELAY
+
+        while retries <= MAX_RETRIES:
+            try:
+                if REQUEST_DELAY > 0:
+                    time.sleep(REQUEST_DELAY)
+                req = self._session.get(dv_json_url, headers=self._headers, timeout=30)
+                if req.status_code == 429:
+                    self._sleep_for_rate_limit(req, backoff_time)
+                    retries += 1
+                    backoff_time = min(MAX_DELAY, backoff_time * 2)
+                    continue
+                if not req.ok:
+                    logger.info(f"dataverse_json export returned status={req.status_code} for {gid}")
+                    return None
+                res = req.json()
+                if isinstance(res, dict) and res.get("status") == "ERROR":
+                    logger.info(f"dataverse_json export returned ERROR for {gid}: {res.get('message')}")
+                    return None
+                return res
+            except (requests.RequestException, json.decoder.JSONDecodeError) as e:
+                retries += 1
+                if retries > MAX_RETRIES:
+                    logger.info(f"Failed to fetch dataverse_json for {gid} after {MAX_RETRIES} attempts: {e}")
+                    return None
+                logger.info(f"dataverse_json fetch failed: {e}, retrying in {backoff_time}s")
+                time.sleep(backoff_time)
+                backoff_time = min(MAX_DELAY, backoff_time * 2)
+        return None
+
     def compile_paginated_data(self, query_endpoint, per_page=400, start=0):
         logger.info(f"Compiling paginated data from {query_endpoint}")
         continue_paging = True
@@ -395,12 +538,15 @@ class Dataverse(NDEDatabase):
                 try:
                     url = f"{query_endpoint}&per_page={pager}&start={start}"
                     logger.info(f"Requesting {url}")
+                    if REQUEST_DELAY > 0:
+                        time.sleep(REQUEST_DELAY)
                     req = self._session.get(url, headers=self._headers, timeout=30)
                     if req.status_code == 429:
-                        self._sleep_for_rate_limit(req)
+                        self._sleep_for_rate_limit(req, backoff_time)
                         retries += 1
+                        backoff_time = min(MAX_DELAY, backoff_time * 2)
                         continue
-                    req.raise_for_status()  # Raise an exception for HTTP errors
+                    req.raise_for_status()  # Raise an exception for HTTP errors (including 403)
                     response = req.json()
                     retries = 0  # Reset the retry counter after a successful request
                 except (requests.RequestException, ValueError) as e:
@@ -431,9 +577,10 @@ class Dataverse(NDEDatabase):
                     # data_pages.extend(page_data)
                     continue_paging = total and start < total
                 except Exception as exception:
-                    logger.info("passing datapage because of exception: ", exception)
+                    logger.info(f"passing datapage because of exception: {exception}")
             else:
-                pass
+                logger.error(f"Failed to get response for start={start} after {MAX_RETRIES} retries. Stopping pagination.")
+                return
 
     def log_memory_usage(self):
         process = psutil.Process()
@@ -466,6 +613,7 @@ class Dataverse(NDEDatabase):
         schemas_gathered_ct = 0
         sleep_every = int(os.getenv("DATAVERSE_SLEEP_EVERY", "1000"))
         sleep_time = float(os.getenv("DATAVERSE_SLEEP_SECONDS", "5"))
+        consecutive_failures = 0
 
         counters = {
             "harvard_attempted_export": 0,
@@ -473,6 +621,9 @@ class Dataverse(NDEDatabase):
             "harvard_export_missing_at_id": 0,
             "harvard_export_failed": 0,
             "harvard_fallback_to_search": 0,
+            "harvard_dv_json_ok": 0,
+            "harvard_dv_json_failed": 0,
+            "harvard_dv_json_funding_replaced": 0,
             "handle_records": 0,
             "external_search_records": 0,
         }
@@ -504,8 +655,39 @@ class Dataverse(NDEDatabase):
                 # case: harvard data - doi:10.7910
                 # run the built-in dataverse schema export on harvard dataverse sources
                 counters["harvard_attempted_export"] += 1
+
+                # Cooldown: if many consecutive exports fail, the server may be
+                # throttling us.  Pause before making more requests.
+                if consecutive_failures >= COOLDOWN_THRESHOLD:
+                    logger.warning(
+                        f"{consecutive_failures} consecutive export failures — "
+                        f"cooling down for {COOLDOWN_SECONDS}s to avoid rate limiting"
+                    )
+                    time.sleep(COOLDOWN_SECONDS)
+                    consecutive_failures = 0
+
                 schema_record = self.run_dataverse_schema_export(global_id, data_url)
                 if schema_record and isinstance(schema_record, dict):
+                    consecutive_failures = 0  # reset on success
+                    # Enrich with dataverse_json export (dates + funding)
+                    dv_json = self.fetch_dataverse_json(global_id)
+                    if dv_json:
+                        counters["harvard_dv_json_ok"] += 1
+                        # Merge dateCreated and dateModified
+                        dates = self._extract_dates_from_dataverse_json(dv_json)
+                        if "dateCreated" in dates:
+                            schema_record["dateCreated"] = dates["dateCreated"]
+                        if "dateModified" in dates:
+                            schema_record["dateModified"] = dates["dateModified"]
+                        # Merge funding: overwrite if dataverse_json has it
+                        dv_funding = self._extract_funding_from_dataverse_json(dv_json)
+                        if dv_funding:
+                            schema_record.pop("funder", None)
+                            schema_record["funding"] = dv_funding
+                            counters["harvard_dv_json_funding_replaced"] += 1
+                            logger.info(f"Replaced funding with dataverse_json data for {global_id}")
+                    else:
+                        counters["harvard_dv_json_failed"] += 1
                     if schema_record.get("@id"):
                         counters["harvard_export_ok"] += 1
                         logger.info(f"schema export passed on {data_url}")
@@ -522,6 +704,7 @@ class Dataverse(NDEDatabase):
                             counters["harvard_export_failed"] += 1
                 else:
                     counters["harvard_export_failed"] += 1
+                    consecutive_failures += 1
                     # Critical fallback: do not drop Harvard records.
                     if data_page:
                         counters["harvard_fallback_to_search"] += 1
@@ -646,6 +829,11 @@ class Dataverse(NDEDatabase):
                             datetime.datetime.strptime(dataset["datePublished"], "%Y-%m-%d").date().isoformat()
                         )
 
+                    if "dateCreated" in dataset:
+                        dataset["dateCreated"] = (
+                            datetime.datetime.strptime(dataset["dateCreated"], "%Y-%m-%d").date().isoformat()
+                        )
+
                     if dataset.get("author") is None:
                         dataset.pop("author", None)
                         if dataset.get("creator"):
@@ -671,10 +859,13 @@ class Dataverse(NDEDatabase):
                         dataset["sdPublisher"] = [dataset.pop("publisher")]
                         dataset.pop("provider", None)
 
-                    if "funder" in dataset:
+                    if "funder" in dataset and "funding" not in dataset:
                         dataset["funding"] = {"funder": dataset.pop("funder")}
                         for data_dict in dataset["funding"]["funder"]:
                             data_dict.pop("@type", None)
+                    elif "funder" in dataset and "funding" in dataset:
+                        # funding already set (e.g. from dataverse_json); drop raw funder
+                        dataset.pop("funder", None)
 
                     if "description" in dataset:
                         description = dataset.pop("description")
