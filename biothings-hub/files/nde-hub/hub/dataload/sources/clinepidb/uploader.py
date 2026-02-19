@@ -1,5 +1,4 @@
 from hub.dataload.nde import NDESourceUploader
-from utils.corrections import corrections
 from utils.csv_helper import get_source_data
 from utils.disambiguating_description import add_disambiguating_description
 from utils.extract import process_descriptions
@@ -34,6 +33,5 @@ class ClinEpiDB_Uploader(NDESourceUploader):
         docs = process_measurement_technique(docs, self.name)
         docs = add_topic_category(docs, self.name)
         docs = add_disambiguating_description(docs, self.name)
-        docs = corrections(docs)
         for doc in docs:
             yield doc

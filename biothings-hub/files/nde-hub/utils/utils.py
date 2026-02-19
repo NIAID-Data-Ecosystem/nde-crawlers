@@ -22,7 +22,7 @@ from scores import (
     RESOURCE_CATALOG_REQUIRED,
     RESOURCE_CATALOG_REQUIRED_AUGMENTED,
 )
-from utils.corrections import corrections
+from utils.corrections import apply_corrections
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -300,9 +300,12 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         gen = func(*args, **kwargs)
-        # corrections util for sourceOrganization
-        # gen = corrections(gen)
         for doc in gen:
+            # Apply sourceOrganization corrections on the fly.
+            # Uses cached index (fetched once from GitHub per build).
+            # Matches by _id (records.txt) AND funding.identifier (real-time).
+            apply_corrections(doc)
+
             # dictionaries are mutable so we dont need to reassign
             add_date(doc)
             # TODO FOR TESTING

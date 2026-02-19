@@ -5,7 +5,6 @@ import re
 
 import orjson
 from hub.dataload.nde import NDESourceUploader
-from utils.corrections import corrections
 from utils.extract import process_descriptions
 from utils.utils import nde_upload_wrapper
 
@@ -132,7 +131,6 @@ class FigshareUploader(NDESourceUploader):
 
         filtered_documents = (doc for doc in processed_documents if _has_valid_topic_category(doc))
         enriched_documents = process_descriptions(filtered_documents)
-        corrected_documents = corrections(enriched_documents)
 
-        for i, doc in enumerate(corrected_documents, start=1):
+        for i, doc in enumerate(enriched_documents, start=1):
             yield doc
