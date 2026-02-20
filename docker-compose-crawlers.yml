@@ -63,6 +63,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  emdb-crawler:
+    build:
+      context: emdb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   dataverse-crawler:
     build:
       context: dataverse
