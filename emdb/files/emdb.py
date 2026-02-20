@@ -604,11 +604,7 @@ def _build_data_collection(
         "measurementTechnique": copy.deepcopy(MEASUREMENT_TECHNIQUE),
         "variableMeasured": copy.deepcopy(VARIABLE_MEASURED),
         "topicCategory": copy.deepcopy(TOPIC_CATEGORY),
-        "usageInfo": (
-            "https://www.ebi.ac.uk/emdb/faq#:~:text="
-            "Data%20files%20contained%20in%20the,"
-            "and%20the%20EMDB%20accession%20id."
-        ),
+        "usageInfo":{"url": "https://www.ebi.ac.uk/emdb/faq#:~:text=Data%20files%20contained%20in%20the,and%20the%20EMDB%20accession%20id."},
         "creditText": (
             "To cite a record from EMDB, please visit "
             "https://www.ebi.ac.uk/emdb/about."

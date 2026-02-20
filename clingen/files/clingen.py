@@ -706,10 +706,8 @@ def _build_gene_validity_record(
         ),
         "species": {"name": "Homo Sapiens"},
         "topicCategory": copy.deepcopy(settings["topic_category"]),
-        "usageInfo": (
-            "https://www.clinicalgenome.org/docs/?doc-type="
-            "policies-position-statements"
-        ),
+        "usageInfo": {"url": "https://www.clinicalgenome.org/docs/?doc-type=policies-position-statements"
+        },
         "variableMeasured": copy.deepcopy(settings["variable_measured"]),
         "isAccessibleForFree": True,
         "exampleOfWork": _build_example_of_work("gene-validity"),
@@ -799,10 +797,8 @@ def _build_variant_pathogenicity_record(
             MEASUREMENT_TECHNIQUE_DEFINED_TERMS
         ),
         "species": {"name": "Homo Sapiens"},
-        "usageInfo": (
-            "https://www.clinicalgenome.org/docs/?doc-type="
-            "policies-position-statements"
-        ),
+        "usageInfo": {"url": "https://www.clinicalgenome.org/docs/?doc-type=policies-position-statements"
+        },
         "variableMeasured": copy.deepcopy(settings["variable_measured"]),
         "isAccessibleForFree": True,
         "exampleOfWork": _build_example_of_work("variant-pathogenicity"),
