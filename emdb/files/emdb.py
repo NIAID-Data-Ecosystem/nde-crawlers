@@ -25,11 +25,8 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from typing import Any, Iterator, Optional
 
-# NOTE: species vs infectiousAgent classification is handled downstream
-# by the pubtator standardizer in the uploader. All organisms are emitted
-# under "species" here.
-
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("nde-logger")
 
 # ---------------------------------------------------------------------------
 # API endpoints
@@ -164,9 +161,27 @@ VARIABLE_MEASURED = [
 ]
 
 TOPIC_CATEGORY = [
-    "http://edamontology.org/topic_0611",  # Electron microscopy
-    "http://edamontology.org/topic_1317",  # Structural biology
-    "http://edamontology.org/topic_0781",  # Virology
+    {
+        "@type": "DefinedTerm",
+        "name": "Electron microscopy",
+        "identifier": "topic_0611",
+        "url": "http://edamontology.org/topic_0611",
+        "inDefinedTermSet": "EDAM",
+    },
+    {
+        "@type": "DefinedTerm",
+        "name": "Structural biology",
+        "identifier": "topic_1317",
+        "url": "http://edamontology.org/topic_1317",
+        "inDefinedTermSet": "EDAM",
+    },
+    {
+        "@type": "DefinedTerm",
+        "name": "Virology",
+        "identifier": "topic_0781",
+        "url": "http://edamontology.org/topic_0781",
+        "inDefinedTermSet": "EDAM",
+    },
 ]
 
 EXAMPLE_OF_WORK_ABOUT = [
@@ -571,12 +586,16 @@ def _build_data_collection(
                 "versionDate": dt.datetime.now(dt.timezone.utc)
                 .date()
                 .isoformat(),
+                "archivedAt": url
             }
         ],
         "name": name,
         "url": url,
         "description": description,
-        "collectionSize": facet_count,
+        "collectionSize": {
+            "minValue": facet_count,
+            "unitText": "Processed Electron Microscopy Images",
+        },
         "date": _iso_date(latest) or _iso_date(earliest),
         "dateModified": _iso_date(latest),
         "dateCreated": _iso_date(earliest),
@@ -594,7 +613,7 @@ def _build_data_collection(
             "To cite a record from EMDB, please visit "
             "https://www.ebi.ac.uk/emdb/about."
         ),
-        "version": "3.0.9.3",
+        # "version": "3.0.9.3",
         "exampleOfWork": _build_example_of_work(code),
         "isBasedOn": _build_is_based_on(ABOUT_DEFINED_TERM["name"]),
     }
@@ -657,10 +676,3 @@ def parse() -> Iterator[dict[str, Any]]:
         yield _build_data_collection(code, count, tax_info, group_data)
 
         time.sleep(REQUEST_DELAY)
-
-
-if __name__ == "__main__":
-    with open("emdb_sample_output.json", "w") as f:
-        for record in parse():
-            json.dump(record, f)
-            f.write("\n")

@@ -352,9 +352,27 @@ MODE_SETTINGS: dict[str, dict[str, Any]] = {
         "encoding_formats": ["CSV"],
         "example_additional_property": GENE_EXAMPLE_ADDITIONAL_PROPERTY,
         "topic_category": [
-            "http://edamontology.org/topic_0622",
-            "http://edamontology.org/topic_0199",
-            "http://edamontology.org/topic_0625",
+            {
+                "@type": "DefinedTerm",
+                "name": "Genomics",
+                "identifier": "topic_0622",
+                "url": "http://edamontology.org/topic_0622",
+                "inDefinedTermSet": "EDAM",
+            },
+            {
+                "@type": "DefinedTerm",
+                "name": "Genetic variation",
+                "identifier": "topic_0199",
+                "url": "http://edamontology.org/topic_0199",
+                "inDefinedTermSet": "EDAM",
+            },
+            {
+                "@type": "DefinedTerm",
+                "name": "Genotype and phenotype",
+                "identifier": "topic_0625",
+                "url": "http://edamontology.org/topic_0625",
+                "inDefinedTermSet": "EDAM",
+            },
         ],
     },
     "variant-pathogenicity": {
@@ -661,7 +679,10 @@ def _build_gene_validity_record(
         }],
         "name": f"{disease_for_name} {settings['name_suffix']}".strip(),
         "url": url,
-        "collectionSize": len(group["genes"]),
+        "collectionSize": {
+            "minValue": len(group["genes"]),
+            "unitText": "Gene-Disease Annotations",
+        },
         "author": _org(author_name),
         "creator": _org("ClinGen"),
         "healthCondition": {
@@ -752,7 +773,10 @@ def _build_variant_pathogenicity_record(
         }],
         "name": f"{disease_for_name} {settings['name_suffix']}".strip(),
         "url": url,
-        "collectionSize": len(group["uuids"]),
+        "collectionSize": {
+            "minValue": len(group["uuids"]),
+            "unitText": "Variant Pathogenicity Annotations",
+        },
         "author": _org(author_name),
         "creator": _org("ClinGen"),
         "healthCondition": {
