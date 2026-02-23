@@ -387,6 +387,66 @@ class NDESourceUploader(BaseSourceUploader):
                     "name": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "exampleOfWork": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "about": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                                "fields": {"raw": {"type": "keyword"}},
+                            },
+                            "url": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "encodingFormat": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                                "fields": {"raw": {"type": "keyword"}},
+                            },
+                            "url": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
+                    "potentialAction": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                            "description": {"type": "text"},
+                            "url": {"type": "text", "copy_to": ["all"]},
+                            "actionProcess": {
+                                "properties": {
+                                    "@type": {"type": "keyword"},
+                                    "name": {"type": "text", "copy_to": ["all"]},
+                                    "url": {"type": "text", "copy_to": ["all"]},
+                                    "description": {"type": "text"},
+                                    "step": {"type": "text"},
+                                }
+                            },
+                        }
+                    },
+                    "schemaVersion": {"type": "text"},
+                    "additionalProperty": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "name": {"type": "text", "copy_to": ["all"]},
+                            "value": {"type": "text", "copy_to": ["all"]},
+                            "unitText": {"type": "text"},
+                            "propertyID": {"type": "keyword", "copy_to": ["all"]},
+                        }
+                    },
+                }
+            },
             "featureList": {
                 "properties": {
                     "name": {
@@ -623,6 +683,12 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "keyword"},
                     "abstract": {"type": "text"},
+                    "actionProcess": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "step": {"type": "text"},
+                        }
+                    },
                     "additionalType": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -1515,6 +1581,12 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "keyword"},
                     "abstract": {"type": "text"},
+                    "actionProcess": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "step": {"type": "text"},
+                        }
+                    },
                     "additionalType": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
