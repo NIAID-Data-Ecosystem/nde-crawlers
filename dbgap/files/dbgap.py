@@ -3,11 +3,176 @@ import json
 import logging
 import os
 
+import regex as re
+import requests
 from download_files import download
 from lxml import html
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
+
+UNIT_MAP = {
+    "year": "year",
+    "years": "year",
+    "yr": "year",
+    "yrs": "year",
+    "y": "year",
+    "month": "month",
+    "months": "month",
+    "m": "month",
+    "d": "day",
+    "day": "day",
+    "days": "day",
+}
+
+UNIT_RE = r"(?:years?|yrs?|y|months?|m|days?|d)"
+
+RACE_MAP = {
+    "White": ["white", "caucasian"],
+    "Black or African American": ["black", "african american", "african-american"],
+    "Asian": ["asian", "chinese", "japanese", "korean", "filipino", "vietnamese", "indian"],
+    "Hispanic or Latino": ["hispanic", "latino", "latina"],
+    "Native American": ["native american", "american indian"],
+    "Pacific Islander": ["pacific islander"],
+    "Middle Eastern": ["middle eastern", "arab"],
+}
+
+_NEGATION_RE = re.compile(r"\b(?:not|no|non|without|excluding|except|never)\b", re.I)
+
+def parse_race_string(text: str) -> list:
+    """
+    Return a list of canonical race labels found in `text`.
+    - Matches synonyms with word boundaries (so 'asian' won't match 'vegasian').
+    - Skips matches if the immediately previous word is a negation word (uses _NEGATION_RE).
+    - Handles combined forms like "Black/African American" (both will be detected).
+    """
+    if not text:
+        return []
+
+    s = text.lower()
+    found = set()
+
+    for canon, terms in RACE_MAP.items():
+        candidates = list(terms) + [canon.lower()]
+        for term in candidates:
+            term = term.strip()
+            if not term:
+                continue
+
+            for m in re.finditer(rf"\b{re.escape(term)}\b", s):
+                # inspect only the single word immediately before the match
+                prev = re.search(r"([a-z]+)\W*$", s[:m.start()])
+                if prev and _NEGATION_RE.search(prev.group(1)):
+                    continue
+                found.add(canon)
+
+    return sorted(found)
+
+def _normalize_unit(unit_text: str | None) -> str | None:
+    if not unit_text:
+        return None
+    return UNIT_MAP.get(unit_text.lower())
+
+
+def _extract_unit(text: str) -> str | None:
+    m = re.search(rf"\b({UNIT_RE})\b", text.lower())
+    return _normalize_unit(m.group(1)) if m else None
+
+
+def parse_age_string(age_text: str) -> dict:
+    """
+    Parse age text into {"minVal": int?, "maxVal": int?, "unitText": "year|month|day"?}
+    """
+    s = age_text.strip().lower()
+    result: dict = {}
+
+    # 1) Range: "0-20 years", "2 - 36 months", "45 to 80 year"
+    m = re.search(
+        rf"\b(?:age(?:d|s)?(?:\s+of)?)?\s*(\d+)\s*(?:[-–—]|to)\s*(\d+)\s*({UNIT_RE})?\b",
+        s,
+    )
+    if m:
+        result["minVal"] = int(m.group(1))
+        result["maxVal"] = int(m.group(2))
+        unit = _normalize_unit(m.group(3)) or _extract_unit(s)
+        if unit:
+            result["unitText"] = unit
+        return result
+
+    # 2) Max only: "Less than 18 years of age", "under 18 years",
+    # "18 years of age and younger", "18 or younger", "at most 18 years"
+    m = re.search(
+        rf"\b(?:"
+        rf"(?:less than|under|below|younger than|at most|up to)\s*(\d+)\s*({UNIT_RE})?"
+        rf"|"
+        rf"(\d+)\s*({UNIT_RE})?(?:\s+of\s+age)?\s*(?:or|and)?\s*(?:younger|below|less)"
+        rf")\b",
+        s,
+    )
+    if m:
+        num = m.group(1) or m.group(3)
+        unit = m.group(2) or m.group(4)
+        result["maxVal"] = int(num)
+        unit = _normalize_unit(unit) or _extract_unit(s)
+        if unit:
+            result["unitText"] = unit
+        return result
+
+    # 3) Min only: "at least 18 years", "over 18", "18 years of age or older", "18+ years"
+    m = re.search(
+        rf"\b(?:"
+        rf"(?:at least|over|above|greater than|more than|older than)\s*(\d+)\s*({UNIT_RE})?"
+        rf"|"
+        rf"(\d+)\s*(?:\+\s*({UNIT_RE})?"
+        rf"|"
+        rf"({UNIT_RE})?(?:\s+of\s+age)?\s*(?:or|and)?\s*(?:older|above|more|greater|over))"
+        rf")\b",
+        s,
+    )
+    if m:
+        num = m.group(1) or m.group(3)
+        unit = m.group(2) or m.group(4) or m.group(5)
+        result["minVal"] = int(num)
+        unit = _normalize_unit(unit) or _extract_unit(s)
+        if unit:
+            result["unitText"] = unit
+        return result
+
+    return result
+
+
+def remove_html_tags(text):
+    # Parse the HTML string
+    parsed_html = html.fromstring(text)
+    # Extract the text content, effectively removing HTML tags
+    clean_text = parsed_html.text_content()
+    return clean_text
+
+
+def add_info(sample: dict, info_url: str):
+    data = requests.get(info_url).json()
+    html_string = data.get("data", {}).get("inclusion_criteria", "")
+    if html_string:
+        clean_text = remove_html_tags(html_string)
+        parsed_age = parse_age_string(clean_text)
+        if parsed_age:
+            parsed_age["@type"] = "QuantitativeValue"
+            sample["developmentalStage"] = parsed_age
+
+        parsed_race = list(parse_race_string(clean_text))
+        if parsed_race:
+            for race in parsed_race:
+                sample.setdefault("associatedPhenotype", []).append({"@type": "DefinedTerm", "name": race})
+
+def add_sample_quantity(sample: dict, subject_num_url: str):
+    data = requests.get(subject_num_url).json()
+    if count := data.get("data", {}).get("num_subjects"):
+        sample["sampleQuantity"] = {
+            "@type": "QuantitativeValue",
+            "value": count,
+            "unitText": "enrolled subjects",
+            "unitCode": "http://purl.obolibrary.org/obo/NCIT_C207572"
+        }
 
 
 def parse():
@@ -81,6 +246,13 @@ def parse():
                 output["url"] = url
                 output["includedInDataCatalog"]["archivedAt"] = url
                 output["_id"] = accession.split(".")[0]
+                subject_num_url = f"https://dbgap.ncbi.nlm.nih.gov/beta/api/study/{accession}/subject-count/?format=json"
+                info_url = f"https://dbgap.ncbi.nlm.nih.gov/beta/api/study/{accession}/info/?format=json"
+                sample = {}
+                add_sample_quantity(sample, subject_num_url)
+                add_info(sample, info_url)
+                if sample:
+                    output["sample"] = sample
 
             if identifier := data.get("@parentstudy"):
                 if identifier != accession:

@@ -2,3 +2,4 @@ requests
 orjson
 xmltodict
 lxml
+regex
