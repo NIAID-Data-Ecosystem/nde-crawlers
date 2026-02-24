@@ -276,10 +276,10 @@ def handle_response(data, condition, base_url, match_condition=True):
 
 def query_condition(health_condition, mesh_id=None):
     BASE_URLS = [
-        "https://biothings.ncats.io/mondo",
-        "https://biothings.ncats.io/hpo",
-        "https://biothings.ncats.io/doid",
-        "https://biothings.ncats.io/ncit",
+        "https://biothings.transltr.io/mondo",
+        "https://biothings.transltr.io/hpo",
+        "https://biothings.transltr.io/doid",
+        "https://biothings.transltr.io/ncit",
     ]
     logger.info(f'Querying for "{health_condition}"...')
     for base_url in BASE_URLS:
