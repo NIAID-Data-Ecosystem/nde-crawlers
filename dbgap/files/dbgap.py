@@ -260,6 +260,7 @@ def parse():
                 add_sample_quantity(sample, subject_num_url)
                 add_info(sample, info_url)
                 if sample:
+                    output["@type"] = "Sample"
                     output["sample"] = sample
 
             if identifier := data.get("@parentstudy"):
