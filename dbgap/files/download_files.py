@@ -6,6 +6,7 @@ import os
 import re
 import time
 import traceback
+from xml.parsers.expat import ExpatError
 
 import xmltodict
 from lxml import etree, html
@@ -99,6 +100,26 @@ def download_highest_version_xml(ftp, phs_dir, highest_version_dir, download_dir
     else:
         logger.info(f"No xml file found in {highest_version_dir}")
 
+@retry(retry_num=10, retry_sleep_sec=5)
+def write_json(ftp, download_dir, json_dir, phs, highest_version_dir):
+    download_highest_version_xml(ftp, phs, highest_version_dir)
+    local_filepath = os.path.join(download_dir, phs + ".xml")
+
+    if os.path.exists(local_filepath):
+        with open(local_filepath, "rb") as xml_file:
+            root = html.fromstring(xml_file.read())
+            try:
+                parsed_xml = xmltodict.parse(etree.tostring(root))
+            except ExpatError as e:
+                logger.error("XML parsing failed for %s: %s", local_filepath, e)
+                return
+
+            parsed_xml["gapexchange"]["studies"]["study"].pop("analyses", None)
+            parsed_xml["gapexchange"]["studies"]["study"].pop("annotations", None)
+        with open(f"{json_dir}/{phs}.json", "w", encoding="utf-8") as json_file:
+            json.dump(parsed_xml, json_file, indent=2)
+    else:
+        logger.info(f"File not found: {local_filepath}")
 
 def download():
     # Ensure the download directory exists
@@ -124,16 +145,4 @@ def download():
             highest_version_dir = f"{root_directory}/{phs}/{highest_version}"
             if highest_version_dir:
                 logger.info(f"Highest version directory in {phs}: {highest_version_dir}")
-                download_highest_version_xml(ftp, phs, highest_version_dir)
-                local_filepath = os.path.join(download_dir, phs + ".xml")
-
-                if os.path.exists(local_filepath):
-                    with open(local_filepath, "rb") as xml_file:
-                        root = html.fromstring(xml_file.read())
-                        parsed_xml = xmltodict.parse(etree.tostring(root))
-                        parsed_xml["gapexchange"]["studies"]["study"].pop("analyses", None)
-                        parsed_xml["gapexchange"]["studies"]["study"].pop("annotations", None)
-                    with open(f"{json_dir}/{phs}.json", "w", encoding="utf-8") as json_file:
-                        json.dump(parsed_xml, json_file, indent=2)
-                else:
-                    logger.info(f"File not found: {local_filepath}")
+                write_json(ftp, download_dir, json_dir, phs, highest_version_dir)

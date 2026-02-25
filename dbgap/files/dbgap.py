@@ -150,7 +150,11 @@ def remove_html_tags(text):
 
 
 def add_info(sample: dict, info_url: str):
-    data = requests.get(info_url).json()
+    data = requests.get(info_url)
+    if data:
+        data = data.json()
+    else:
+        return
     html_string = data.get("data", {}).get("inclusion_criteria", "")
     if html_string:
         clean_text = remove_html_tags(html_string)
@@ -165,7 +169,11 @@ def add_info(sample: dict, info_url: str):
                 sample.setdefault("associatedPhenotype", []).append({"@type": "DefinedTerm", "name": race})
 
 def add_sample_quantity(sample: dict, subject_num_url: str):
-    data = requests.get(subject_num_url).json()
+    data = requests.get(subject_num_url)
+    if data:
+        data = data.json()
+    else:
+        return
     if count := data.get("data", {}).get("num_subjects"):
         sample["sampleQuantity"] = {
             "@type": "QuantitativeValue",
