@@ -1296,6 +1296,13 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "@id": {"type": "keyword", "normalizer": "keyword_lowercase_normalizer"},
             "@type": {"type": "keyword", "copy_to": ["all"]},
+            "additionalPhenotype": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                }
+            },
             "additionalProperty": {
                 "properties": {
                     "@type": {"type": "keyword"},
@@ -1324,6 +1331,26 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
+                }
+            },
+            "author": {
+                "properties": {
+                    "@type": {"type": "text"},
+                    "affiliation": {
+                        "properties": {
+                            "@type": {"type": "keyword", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "sameAs": {"type": "keyword", "copy_to": ["all"]},
+                        }
+                    },
+                    "email": {"type": "text", "copy_to": ["all"]},
+                    "familyName": {"type": "text", "copy_to": ["all"]},
+                    "givenName": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                    "role": {"type": "keyword"},
+                    "title": {"type": "text"},
                     "url": {"type": "keyword"},
                 }
             },
@@ -1785,6 +1812,8 @@ class NDESourceSampleUploader(BaseSourceUploader):
                                 "type": "text",
                                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                             },
+                            "altitude": {"type": "text"},
+                            "depth": {"type": "text"},
                             "latitude": {"type": "float"},
                             "longitude": {"type": "float"},
                         }
@@ -1840,10 +1869,11 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 }
             },
             "sampleState": {"type": "text"},
-            "storageTemperature": {
+            "sampleStorageTemperature": {
                 "properties": {
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
+                    "name": {"type": "text"},
                     "unitText": {"type": "text"},
                     "value": {"type": "integer"},
                 }
@@ -1852,6 +1882,14 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "name": {"type": "text", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                }
+            },
+            "sdPublisher": {
+                "properties": {
+                    "@type": {"type": "keyword", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "url": {"type": "keyword"},
                 }
             },
             "sex": {"type": "keyword", "copy_to": ["all"]},
