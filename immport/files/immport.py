@@ -74,6 +74,19 @@ def map_schema_json(schema_json):
         if mt_list:
             schema_json["measurementTechnique"] = mt_list
 
+    # identifier: list of strings/dicts → list of strings (extract "value" if dict)
+    if identifiers := schema_json.pop("identifier", None):
+        id_list = []
+        for identifier in identifiers:
+            if isinstance(identifier, dict) and "value" in identifier:
+                id_list.append(identifier["value"])
+            elif isinstance(identifier, str):
+                id_list.append(identifier)
+        if id_list:
+            schema_json["identifier"] = id_list
+
+    schema_json["conditionsOfAccess"] = "Closed"
+
     return schema_json
 
 
