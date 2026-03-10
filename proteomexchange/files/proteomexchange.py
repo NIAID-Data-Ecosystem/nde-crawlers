@@ -309,8 +309,8 @@ def _parse_dataset(dataset):
         result["isBasedOn"] = is_based_on
     if is_related_to:
         result["isRelatedTo"] = is_related_to
-    if version:
-        result["version"] = str(version)
+    # if version:
+        # result["version"] = str(version)
     if date_published:
         result["datePublished"] = date_published
     if date_created:

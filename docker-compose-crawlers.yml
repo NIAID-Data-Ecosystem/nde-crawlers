@@ -210,6 +210,13 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  proteomexchange-crawler:
+    build:
+      context: proteomexchange
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
   qiita-crawler:
     build:
       context: qiita

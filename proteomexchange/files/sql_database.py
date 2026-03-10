@@ -91,7 +91,7 @@ class NDEDatabase:
     def is_cache_expired(self):
         """Uses the SQL_DB to connect to a sqlite db to check if the cache is expired in metadata table
         Returns:
-            True: if cache does not exist or is expired, False otherwise
+        True: if cache does not exist or is expired, False otherwise
         """
 
         # connect to database
