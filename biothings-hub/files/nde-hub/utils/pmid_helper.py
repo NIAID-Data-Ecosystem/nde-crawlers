@@ -25,11 +25,52 @@ import requests
 from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
-from .funding_helper import standardize_funder
+from .funding_helper import DB_PATH as FUNDING_DB_PATH, create_sqlite_db as create_funding_db, standardize_funder
 from .pubtator import DB_PATH, get_species_details, query_condition
 from .utils import retry
 
 PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
+
+# --- Module-level connection and cache management ---
+# Reuse SQLite connections instead of opening/closing per call
+_pmid_conn = None
+_pubtator_conn = None
+_funding_conn = None
+# In-memory cache to avoid repeated SQLite lookups for the same names
+_pubtator_cache = {}
+
+
+def _get_pmid_conn():
+    global _pmid_conn
+    if _pmid_conn is None:
+        _pmid_conn = sqlite3.connect(PMID_DB_PATH)
+        # Ensure cache tables exist (safe for existing DBs missing them)
+        cur = _pmid_conn.cursor()
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS eutils_cache
+                       (pmid TEXT PRIMARY KEY, data TEXT)"""
+        )
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS doi_cache
+                       (doi TEXT PRIMARY KEY, pmid TEXT)"""
+        )
+        _pmid_conn.commit()
+    return _pmid_conn
+
+
+def _get_pubtator_conn():
+    global _pubtator_conn
+    if _pubtator_conn is None:
+        _pubtator_conn = sqlite3.connect(DB_PATH)
+    return _pubtator_conn
+
+
+def _get_funding_conn():
+    global _funding_conn
+    if _funding_conn is None:
+        _funding_conn = sqlite3.connect(FUNDING_DB_PATH)
+        create_funding_db(_funding_conn)
+    return _funding_conn
 
 
 def remove_first_by_name(lst, target):
@@ -51,7 +92,7 @@ def update_species_and_disease(rec, pmids):
 
 
 def create_db():
-    os.makedirs(os.path.dirname(PMID_DB_PATH))
+    os.makedirs(os.path.dirname(PMID_DB_PATH), exist_ok=True)
     # Create or open a SQLite database
     conn = sqlite3.connect(PMID_DB_PATH)
     cur = conn.cursor()
@@ -66,6 +107,16 @@ def create_db():
         """CREATE TABLE IF NOT EXISTS disease_data
                    (pmid TEXT, entity_id TEXT, names TEXT,
                     PRIMARY KEY (pmid, entity_id))"""
+    )
+    # Cache for eutils citation+funding results (keyed by PMID)
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS eutils_cache
+                   (pmid TEXT PRIMARY KEY, data TEXT)"""
+    )
+    # Cache for DOI → PMID conversions
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS doi_cache
+                   (doi TEXT PRIMARY KEY, pmid TEXT)"""
     )
 
     conn.commit()
@@ -100,7 +151,7 @@ def stream_and_store(filename, entity_type):
 
 
 def get_data_for_pmids(pmids, entity_type):
-    conn = sqlite3.connect(PMID_DB_PATH)
+    conn = _get_pmid_conn()
     cur = conn.cursor()
     placeholder = "?"  # SQLite placeholder
     placeholders = ", ".join(placeholder for unused in pmids)
@@ -114,28 +165,33 @@ def get_data_for_pmids(pmids, entity_type):
             data[entity_id] = []
         data[entity_id].extend(names.split("|"))
 
-    conn.close()
     return data
 
 
 def pubtator_lookup(name, table):
-    conn = sqlite3.connect(DB_PATH)
+    cache_key = (name.lower().strip(), table)
+    if cache_key in _pubtator_cache:
+        logger.debug(f"Skipping {name}, found in memory cache")
+        return json.loads(json.dumps(_pubtator_cache[cache_key]))  # deep copy via JSON round-trip
+    conn = _get_pubtator_conn()
     c = conn.cursor()
-    c.execute(f"SELECT * FROM {table} WHERE original_name=?", (name.lower().strip(),))
+    c.execute(f"SELECT * FROM {table} WHERE original_name=?", (cache_key[0],))
     result = c.fetchone()
-    conn.close()
     if result:
-        logger.info(f"Skipping {name}, already in database")
-        return json.loads(result[1])
+        logger.debug(f"Skipping {name}, already in database")
+        parsed = json.loads(result[1])
+        _pubtator_cache[cache_key] = parsed
+        return json.loads(result[1])  # return a fresh copy
     return None
 
 
 def pubtator_add(name, table, standard_dict):
-    conn = sqlite3.connect(DB_PATH)
+    conn = _get_pubtator_conn()
     c = conn.cursor()
     c.execute(f"INSERT INTO {table} VALUES (?, ?)", (name.lower().strip(), standard_dict))
     conn.commit()
-    conn.close()
+    # Update in-memory cache
+    _pubtator_cache[(name.lower().strip(), table)] = json.loads(standard_dict)
 
 
 @retry(7, 5)
@@ -268,6 +324,11 @@ def update_record_disease(rec, disease_data):
     description = rec.get("description", "")
     title = rec.get("name", "")
 
+    # Pre-compute lowercased versions once per record instead of per-name
+    abstract_lower = abstract.lower()
+    description_lower = description.lower()
+    title_lower = title.lower()
+
     incorrect_terms = [
         "novel tumor",
         "hypervirulent covs",
@@ -300,7 +361,8 @@ def update_record_disease(rec, disease_data):
             if mesh_id == "MESH:C000657245":
                 mesh_id = "MESH:D000086382"
 
-            if name.lower() in abstract.lower() or name.lower() in description.lower() or name.lower() in title.lower():
+            name_lower = name.lower()
+            if name_lower in abstract_lower or name_lower in description_lower or name_lower in title_lower:
                 logger.info(f"Found {name} in abstract, description, or title")
                 if name.isupper():
                     logger.info(f"Possible Acronym: {name} in record: {rec['_id']}")
@@ -320,7 +382,7 @@ def update_record_disease(rec, disease_data):
                 update_made = True
                 break
             else:
-                logger.info(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
+                logger.debug(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
         if update_made:
             continue
 
@@ -341,6 +403,11 @@ def update_record_species(rec, species_data):
     description = rec.get("description", "")
     title = rec.get("name", "")
 
+    # Pre-compute lowercased versions once per record instead of per-name
+    abstract_lower = abstract.lower()
+    description_lower = description.lower()
+    title_lower = title.lower()
+
     blacklist = ["PERCH", "D-FISH"]
 
     for taxonomy_id, species_names in species_data.items():
@@ -353,7 +420,8 @@ def update_record_species(rec, species_data):
             if name.strip() == "":
                 logger.warning(f"Empty name found for {name}")
                 continue
-            if name.lower() in abstract.lower() or name.lower() in description.lower() or name.lower() in title.lower():
+            name_lower = name.lower()
+            if name_lower in abstract_lower or name_lower in description_lower or name_lower in title_lower:
                 logger.info(f"Found {name} in abstract, description, or title")
                 if name.isupper():
                     logger.info(f"Possible Acronym: {name} in record: {rec['_id']}")
@@ -399,7 +467,7 @@ def update_record_species(rec, species_data):
                 update_made = True
                 break
             else:
-                logger.info(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
+                logger.debug(f"{name} is not in abstract, description, or title. Not adding to record {rec['_id']}")
         if update_made:
             continue
 
@@ -431,12 +499,30 @@ def _convert_doi(doi, doi_dict):
         Entrez.api_key = api_key
 
     if doi not in doi_dict:
+        # Check persistent cache first
+        conn = _get_pmid_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT pmid FROM doi_cache WHERE doi = ?", (doi,))
+        row = cur.fetchone()
+        if row is not None:
+            doi_dict[doi] = row[0]  # may be None if previously resolved to nothing
+            return
+
         term = f"{doi}[DOI]"
         handle = Entrez.esearch(db="pubmed", term=term, retmode="json")
         data = json.loads(handle.read())
         handle.close()
         pmids = data.get("esearchresult", {}).get("idlist", [])
-        doi_dict[doi] = pmids[0] if pmids else None
+        result_pmid = pmids[0] if pmids else None
+        doi_dict[doi] = result_pmid
+
+        # Persist to cache
+        cur.execute(
+            "INSERT OR REPLACE INTO doi_cache (doi, pmid) VALUES (?, ?)",
+            (doi, result_pmid),
+        )
+        conn.commit()
+
         if api_key:
             time.sleep(0.05)
         else:
@@ -507,10 +593,6 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     :param api_key: API Key from NCBI to access E-utilities
     :return: A dictionary containing the pmids which hold citations and funding.
     """
-    # probably dont need this line. Using python package, should work both ways.
-    # if pmids is str:
-    #     warnings.warn(f"Got str:{pmids} as parameter, expecting an Iterable of str", RuntimeWarning)
-
     # set up Entrez variables. Email is required.
     Entrez.email = email
     if api_key:
@@ -573,6 +655,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     records = records["PubmedArticle"]
 
     funding = []
+    funder_conn = _get_funding_conn()  # reuse funding DB connection for all funder lookups
     for record in records:
         if grants := record["MedlineCitation"]["Article"].get("GrantList"):
             for grant in grants:
@@ -582,7 +665,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
                     fund["identifier"] = grant_id
                 if agency := grant.get("Agency"):
                     agency = str(agency)
-                    fund_dict = standardize_funder(agency)
+                    fund_dict = standardize_funder(agency, conn=funder_conn)
                     if fund_dict:
                         fund["funder"] = fund_dict
                     else:
@@ -596,6 +679,66 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
             funding = []
 
     return ct_fd
+
+
+def _ensure_cache_tables():
+    """Ensure the eutils_cache and doi_cache tables exist in the PMID DB."""
+    conn = _get_pmid_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS eutils_cache
+                   (pmid TEXT PRIMARY KEY, data TEXT)"""
+    )
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS doi_cache
+                   (doi TEXT PRIMARY KEY, pmid TEXT)"""
+    )
+    conn.commit()
+
+
+def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
+    """Wrapper around batch_get_pmid_eutils that caches results in SQLite.
+    On repeated runs, cached PMIDs are returned instantly without NCBI API calls.
+    """
+    _ensure_cache_tables()
+    conn = _get_pmid_conn()
+    cur = conn.cursor()
+
+    # Look up cached results
+    placeholders = ", ".join("?" for _ in pmid_list)
+    cur.execute(
+        f"SELECT pmid, data FROM eutils_cache WHERE pmid IN ({placeholders})",
+        pmid_list,
+    )
+    cached_rows = cur.fetchall()
+    cached_results = {row[0]: orjson.loads(row[1]) for row in cached_rows}
+    cached_pmids = set(cached_results.keys())
+    uncached_pmids = [p for p in pmid_list if p not in cached_pmids]
+
+    if cached_pmids:
+        logger.info(
+            "PMID eutils cache: %d cached, %d to fetch",
+            len(cached_pmids),
+            len(uncached_pmids),
+        )
+
+    # Fetch uncached PMIDs from NCBI
+    fresh_results = {}
+    if uncached_pmids:
+        fresh_results = batch_get_pmid_eutils(uncached_pmids, email, api_key)
+        # Store fresh results in cache
+        for pmid, data in fresh_results.items():
+            cur.execute(
+                "INSERT OR REPLACE INTO eutils_cache (pmid, data) VALUES (?, ?)",
+                (str(pmid), orjson.dumps(data).decode("utf-8")),
+            )
+        conn.commit()
+
+    # Merge cached + fresh
+    merged = {}
+    merged.update(cached_results)
+    merged.update(fresh_results)
+    return merged
 
 
 def load_pmid_ctfd(data):
@@ -709,13 +852,8 @@ def load_pmid_ctfd(data):
             if pmid_list:
                 # same thing as list(set(pmid_list))
                 pmid_list = [*set(pmid_list)]
-                # batch request retry up to 3 times
-                eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
-                # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
-                if api_key:
-                    time.sleep(0.1)
-                else:
-                    time.sleep(0.35)
+                # batch request with caching — skips NCBI API for already-seen PMIDs
+                eutils_info = cached_batch_get_pmid_eutils(pmid_list, email, api_key)
 
             # add in the citation and funding to each doc in doc_list and yield
             for rec in doc_list:
@@ -868,20 +1006,14 @@ def load_pmid_ctfd_wrapper(func):
             if pmid_list:
                 # same thing as list(set(pmid_list))
                 pmid_list = [*set(pmid_list)]
-                # batch request retry up to 3 times
-                eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
-                # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
-                if api_key:
-                    time.sleep(0.1)
-                else:
-                    time.sleep(0.35)
+                # batch request with caching — skips NCBI API for already-seen PMIDs
+                eutils_info = cached_batch_get_pmid_eutils(pmid_list, email, api_key)
 
             # add in the citation and funding to each doc in doc_list and yield
             for rec in doc_list:
                 if pmids := rec.pop("pmids", None):
-                    pmids = [pmid.strip() for pmid in pmids.split(",")]
+                    pmids = [pmid.strip().lstrip("0") for pmid in pmids.split(",")]
                     # fixes issue where pmid numbers under 10 is read as 04 instead of 4
-                    pmids = [pmid.lstrip("0") for pmid in pmids]
                     pmids = [*set(pmids)]
                     species = get_data_for_pmids(pmids, "species")
                     if species:
@@ -889,28 +1021,30 @@ def load_pmid_ctfd_wrapper(func):
                     diseases = get_data_for_pmids(pmids, "disease")
                     if diseases:
                         update_record_disease(rec, diseases)
-                    if not eutils_info.get(pmid):
-                        logger.info("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
-                    # this fixes the error where there is no pmid
-                    # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
-                    if eutils_info.get(pmid):
-                        if citation := eutils_info[pmid].get("citation"):
-                            if rec_citation := rec.get("citation"):
-                                # if the user originally had a citation field that is not a list change citation to list
-                                if not isinstance(rec_citation, list):
-                                    rec["citation"] = [rec_citation]
-                                rec["citation"].append(citation)
-                            else:
-                                rec["citation"] = [citation]
-                        if funding := eutils_info[pmid].get("funding"):
-                            if rec_funding := rec.get("funding"):
-                                # if the user originally had a funding field that is not a list change funding to list
-                                if not isinstance(rec_funding, list):
-                                    rec["funding"] = [rec_funding]
-                                rec["funding"] += funding
-                            else:
-                                rec["funding"] = copy(funding)
-            yield rec
+                    # Sequential processing for the rest (iterate all pmids, not just last one)
+                    for pmid in pmids:
+                        if not eutils_info.get(pmid):
+                            logger.info("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
+                        # this fixes the error where there is no pmid
+                        # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
+                        if eutils_info.get(pmid):
+                            if citation := eutils_info[pmid].get("citation"):
+                                if rec_citation := rec.get("citation"):
+                                    # if the user originally had a citation field that is not a list change citation to list
+                                    if not isinstance(rec_citation, list):
+                                        rec["citation"] = [rec_citation]
+                                    rec["citation"].append(citation)
+                                else:
+                                    rec["citation"] = [citation]
+                            if funding := eutils_info[pmid].get("funding"):
+                                if rec_funding := rec.get("funding"):
+                                    # if the user originally had a funding field that is not a list change funding to list
+                                    if not isinstance(rec_funding, list):
+                                        rec["funding"] = [rec_funding]
+                                    rec["funding"] += funding
+                                else:
+                                    rec["funding"] = copy(funding)
+                yield rec
 
     return wrapper
 
@@ -951,13 +1085,8 @@ def standardize_fields(docs):
         if pmid_list:
             # same thing as list(set(pmid_list))
             pmid_list = [*set(pmid_list)]
-            # batch request retry up to 3 times
-            eutils_info = batch_get_pmid_eutils(pmid_list, email, api_key)
-            # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
-            if api_key:
-                time.sleep(0.1)
-            else:
-                time.sleep(0.35)
+            # batch request with caching — skips NCBI API for already-seen PMIDs
+            eutils_info = cached_batch_get_pmid_eutils(pmid_list, email, api_key)
 
         for doc in doc_list:
             for field in fields:
