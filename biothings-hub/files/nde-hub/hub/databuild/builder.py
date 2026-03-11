@@ -157,7 +157,7 @@ class NDEDataBuilder(builder.DataBuilder):
         collection = db[collection_name]
 
         self.logger.info(
-            f"Agregating documents with duplicate {identifier_source_catalog} and sources {source_catalogs} in {collection_name}"
+            f"Aggregating documents with duplicate {identifier_source_catalog} and sources {source_catalogs} in {collection_name}"
         )
 
         # Aggregation pipeline to match DDE documents with NCBI GEO documents
@@ -255,6 +255,7 @@ class NDEDataBuilder(builder.DataBuilder):
                     aslistofdict="includedInDataCatalog",
                     include=["includedInDataCatalog"],
                 )
+                merged_doc["_id"] = donor_doc["_id"]  # keep the donor id
                 bulk_operations.append(
                     UpdateOne(
                         {"_id": merged_doc["_id"]},
@@ -284,5 +285,5 @@ class NDEDataBuilder(builder.DataBuilder):
         self.deduplication(sources, duplicate)
 
         identifier_source_catalog = "Data Discovery Engine"
-        source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject"]
+        source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject", "Protein Data Bank"]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)

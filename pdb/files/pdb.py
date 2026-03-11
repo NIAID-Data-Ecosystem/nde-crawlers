@@ -203,7 +203,7 @@ def getPDBmetadata(id, organisms):
 
         md["name"] = raw_data["struct"]["title"]
         md["description"] = raw_data["struct"]["title"]
-        md["_id"] = f"pdb_{raw_data['rcsb_id']}"
+        md["_id"] = f"{raw_data['rcsb_id']}"
         md["identifier"] = raw_data["rcsb_id"]
         md["doi"] = f"10.2210/{md['_id']}/pdb"
         md["author"] = [{"@type": "Person", "name": author["name"]} for author in raw_data["audit_author"]]
