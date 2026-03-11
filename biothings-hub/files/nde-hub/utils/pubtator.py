@@ -4,6 +4,7 @@ import logging
 import os
 import sqlite3
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Pool
 
 import orjson
@@ -14,6 +15,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 DB_PATH = "/data/nde-hub/standardizers/pubtator_lookup/pubtator_lookup.db"
+EXTRACT_DB_PATH = "/data/nde-hub/standardizers/extract_lookup/extract_lookup.db"
+_NEGATIVE_SPECIES_TABLE = "species_negative"
+
+# Reuse HTTP connections for UniProt lookups.
+_UNIPROT_SESSION = requests.Session()
 
 # Drop list for filtering out place names commonly confused with organisms
 DROP_LIST_TERMS = {
@@ -727,6 +733,347 @@ def update_table(conn, table_name, item_list, get_new_items_func):
             logger.info(f"No results for {no_matches}, skipping adding to lookup dictionary")
 
 
+def _extract_taxon_id(identifier):
+    """Extract a numeric taxon ID from identifier string (e.g., 'taxonomy:NEWT:9606')."""
+    if not identifier:
+        return None
+    parts = identifier.split(":")
+    last_part = parts[-1].strip()
+    if last_part.isdigit():
+        return last_part
+    return None
+
+
+def _load_species_cache():
+    """Load the species_details cache from the extract lookup DB."""
+    try:
+        with sqlite3.connect(EXTRACT_DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
+            c.execute("SELECT original_name, standard_dict FROM species_details")
+            return {row[0].lower().strip(): json.loads(row[1]) for row in c.fetchall() if row[1]}
+    except Exception as e:
+        logger.error(f"text2term: error loading species cache: {e}")
+        return {}
+
+
+def _cache_species_details(species_details):
+    """Cache a species_details entry in the extract lookup DB."""
+    try:
+        with sqlite3.connect(EXTRACT_DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
+            c.execute(
+                "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
+                (species_details["originalName"].lower().strip(), json.dumps(species_details)),
+            )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"text2term: error caching species details: {e}")
+
+
+def _fetch_negative_species_cache():
+    """Load the set of species names known to be unresolvable."""
+    try:
+        with sqlite3.connect(EXTRACT_DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute(f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_SPECIES_TABLE} (original_name TEXT PRIMARY KEY)")
+            c.execute(f"SELECT original_name FROM {_NEGATIVE_SPECIES_TABLE}")
+            return {row[0] for row in c.fetchall()}
+    except Exception as e:
+        logger.error(f"text2term: error loading negative species cache: {e}")
+        return set()
+
+
+def _cache_negative_species(original_name):
+    """Record a species name that could not be resolved, to avoid retrying."""
+    try:
+        with sqlite3.connect(EXTRACT_DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute(f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_SPECIES_TABLE} (original_name TEXT PRIMARY KEY)")
+            c.execute(
+                f"INSERT OR IGNORE INTO {_NEGATIVE_SPECIES_TABLE} (original_name) VALUES (?)",
+                (original_name.lower().strip(),),
+            )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"text2term: error caching negative species: {e}")
+
+
+def _get_uniprot_details(original_name, identifier, max_retries=3):
+    """Fetch species details from UniProt and classify as host or infectiousAgent."""
+    identifier = str(identifier).split("*")[-1]
+    for attempt in range(max_retries):
+        response = _UNIPROT_SESSION.get(f"https://rest.uniprot.org/taxonomy/{identifier}", timeout=30)
+        if response.status_code == 429:
+            retry_after = int(response.headers.get("Retry-After", 2 ** attempt))
+            logger.warning(f"text2term: UniProt 429 for {identifier}, retrying in {retry_after}s")
+            time.sleep(retry_after)
+            continue
+        response.raise_for_status()
+        break
+    else:
+        raise requests.exceptions.HTTPError(f"UniProt rate limit exceeded after {max_retries} retries for {identifier}")
+    species_info = response.json()
+
+    standard_dict = {
+        "@type": "DefinedTerm",
+        "identifier": identifier,
+        "inDefinedTermSet": "UniProt",
+        "url": f"https://www.uniprot.org/taxonomy/{identifier}",
+        "originalName": original_name,
+        "isCurated": False,
+    }
+
+    if scientific_name := species_info.get("scientificName"):
+        standard_dict["name"] = scientific_name
+    else:
+        standard_dict["name"] = original_name
+
+    alternative_names = []
+    if common_name := species_info.get("commonName"):
+        standard_dict["commonName"] = common_name
+        alternative_names.append(common_name)
+        standard_dict["displayName"] = f"{common_name} | {standard_dict['name']}"
+    else:
+        standard_dict["displayName"] = standard_dict["name"]
+
+    if other_names := species_info.get("otherNames"):
+        alternative_names.extend(other_names)
+    if alternative_names:
+        standard_dict["alternateName"] = list(set(alternative_names))
+
+    if lineage := species_info.get("lineage"):
+        standard_dict["classification"] = classify_as_host_or_agent(lineage)
+        standard_dict["lineage"] = lineage
+    else:
+        logger.warning(f"No lineage found for {identifier}")
+        standard_dict["classification"] = "infectiousAgent"
+
+    return standard_dict
+
+
+def _apply_resolved_species(doc, resolved):
+    """Replace unstandardized species/infectiousAgent entries with resolved ones."""
+    has_unstandardized = False
+    for field in ("species", "infectiousAgent"):
+        entries = doc.get(field, [])
+        if isinstance(entries, dict):
+            entries = [entries]
+        if isinstance(entries, list):
+            for entry in entries:
+                if isinstance(entry, dict) and "name" in entry and "inDefinedTermSet" not in entry and "curatedBy" not in entry:
+                    has_unstandardized = True
+                    break
+        if has_unstandardized:
+            break
+
+    if not has_unstandardized:
+        return
+
+    new_species = []
+    new_infectious_agents = []
+    seen_identifiers = set()
+
+    all_entries = []
+    for field in ("species", "infectiousAgent"):
+        entries = doc.get(field, [])
+        if isinstance(entries, dict):
+            entries = [entries]
+        if isinstance(entries, list):
+            for entry in entries:
+                if isinstance(entry, dict):
+                    all_entries.append((field, entry))
+
+    for original_field, entry in all_entries:
+        name = entry.get("name")
+        if not name:
+            continue
+
+        identifier = entry.get("identifier")
+
+        if "inDefinedTermSet" in entry or "curatedBy" in entry:
+            if identifier and identifier in seen_identifiers:
+                continue
+            if identifier:
+                seen_identifiers.add(identifier)
+            if original_field == "infectiousAgent" or entry.get("classification") == "infectiousAgent":
+                new_infectious_agents.append(entry)
+            else:
+                new_species.append(entry)
+            continue
+
+        key = name.lower().strip()
+        if key in resolved:
+            std = resolved[key].copy()
+            std.pop("lineage", None)
+            std["originalName"] = name
+            new_id = std.get("identifier")
+            if new_id and new_id in seen_identifiers:
+                continue
+            if new_id:
+                seen_identifiers.add(new_id)
+            if std.get("classification") == "infectiousAgent":
+                new_infectious_agents.append(std)
+            else:
+                new_species.append(std)
+        else:
+            if original_field == "infectiousAgent":
+                new_infectious_agents.append(entry)
+            else:
+                new_species.append(entry)
+
+    if new_species:
+        doc["species"] = new_species
+    else:
+        doc.pop("species", None)
+
+    if new_infectious_agents:
+        doc["infectiousAgent"] = new_infectious_agents
+
+
+def resolve_unstandardized_species(doc_list):
+    """Resolve species not standardized by PubTator DB lookup using text2term + UniProt."""
+    import text2term
+
+    doc_list = list(doc_list)
+
+    # Collect unique unstandardized species names (entries without inDefinedTermSet)
+    unstandardized = {}
+    for doc in doc_list:
+        for field in ("species", "infectiousAgent"):
+            entries = doc.get(field, [])
+            if isinstance(entries, dict):
+                entries = [entries]
+            if isinstance(entries, list):
+                for entry in entries:
+                    if isinstance(entry, dict) and "name" in entry and "inDefinedTermSet" not in entry and "curatedBy" not in entry:
+                        name = entry["name"]
+                        if name not in unstandardized:
+                            unstandardized[name] = entry.get("identifier")
+
+    if not unstandardized:
+        logger.info("text2term: all species already standardized")
+        for doc in doc_list:
+            yield doc
+        return
+
+    logger.info(f"text2term: {len(unstandardized)} unstandardized species to resolve")
+
+    species_cache = _load_species_cache()
+    negative_cache = _fetch_negative_species_cache()
+
+    resolved = {}
+    need_uniprot = []  # (name, taxon_id) tuples for direct UniProt lookup
+    need_text2term = []
+
+    for name, identifier in unstandardized.items():
+        key = name.lower().strip()
+
+        # Skip if previously confirmed unresolvable
+        if key in negative_cache:
+            continue
+
+        # Check positive cache first
+        if key in species_cache:
+            resolved[key] = species_cache[key]
+            continue
+
+        # Try to extract taxon ID from identifier for direct UniProt lookup
+        taxon_id = _extract_taxon_id(identifier)
+        if taxon_id:
+            need_uniprot.append((name, taxon_id))
+        else:
+            need_text2term.append(name)
+
+    logger.info(
+        "text2term: %s cached, %s negative-cached, %s need UniProt, %s need text2term",
+        len(resolved), len(unstandardized) - len(resolved) - len(need_uniprot) - len(need_text2term),
+        len(need_uniprot), len(need_text2term),
+    )
+
+    def _resolve_one(original_name, taxon_id):
+        """Resolve a single species via UniProt. Returns (key, details) or (key, None)."""
+        key = original_name.lower().strip()
+        try:
+            details = _get_uniprot_details(original_name, taxon_id)
+            return key, details
+        except Exception as e:
+            logger.warning(f"text2term: UniProt lookup failed for {original_name} (ID {taxon_id}): {e}")
+            return key, None
+
+    # Concurrent UniProt lookups for entries with known taxon IDs
+    if need_uniprot:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(_resolve_one, name, tid): name
+                for name, tid in need_uniprot
+            }
+            for future in as_completed(futures):
+                key, details = future.result()
+                if details:
+                    resolved[key] = details
+                    _cache_species_details(details)
+                    species_cache[key] = details
+                else:
+                    _cache_negative_species(key)
+                    negative_cache.add(key)
+                    # Fall back to text2term for this term
+                    need_text2term.append(futures[future])
+
+    logger.info(f"text2term: {len(resolved)} resolved from cache/ID, {len(need_text2term)} need text2term")
+
+    if need_text2term:
+        try:
+            if not os.path.exists("cache/ncbitaxon"):
+                logger.info("text2term: building ncbitaxon ontology cache...")
+                text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
+
+            t2t_results = text2term.map_terms(need_text2term, "ncbitaxon", use_cache=True)
+            t2t_results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
+            t2t_results = t2t_results.drop_duplicates(subset=["Source Term"], keep="first")
+
+            logger.info(f"text2term: mapped {len(t2t_results)} terms")
+
+            # Collect text2term results for concurrent UniProt lookups
+            t2t_lookups = []
+            mapped_source_terms = set()
+            for _, row in t2t_results.iterrows():
+                identifier = row["Mapped Term CURIE"].split(":")[1]
+                original_name = row["Source Term"]
+                mapped_source_terms.add(original_name.lower().strip())
+                t2t_lookups.append((original_name, identifier))
+
+            # Cache negatives for terms text2term couldn't map at all
+            for name in need_text2term:
+                key = name.lower().strip()
+                if key not in mapped_source_terms and key not in negative_cache:
+                    _cache_negative_species(key)
+                    negative_cache.add(key)
+
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {
+                    executor.submit(_resolve_one, name, tid): name
+                    for name, tid in t2t_lookups
+                }
+                for future in as_completed(futures):
+                    key, details = future.result()
+                    if details:
+                        resolved[key] = details
+                        _cache_species_details(details)
+                    else:
+                        _cache_negative_species(key)
+                        negative_cache.add(key)
+        except Exception as e:
+            logger.error(f"text2term: error during text2term resolution: {e}")
+
+    logger.info(f"text2term: total resolved={len(resolved)}")
+
+    for doc in doc_list:
+        _apply_resolved_species(doc, resolved)
+        yield doc
+
+
 def update_lookup_dict(health_conditions_list, species_list, infectious_agents_list, doc_list):
     # If the database file does not exist or is empty, create a new one
     if not os.path.exists(DB_PATH) or os.stat(DB_PATH).st_size == 0:
@@ -758,6 +1105,7 @@ def update_lookup_dict(health_conditions_list, species_list, infectious_agents_l
         logger.info("Finished updating lookup dictionary")
         logger.info("Standardizing document")
         transformed_docs = transform(doc_list)
+        transformed_docs = resolve_unstandardized_species(transformed_docs)
         return transformed_docs
     except Exception as e:
         # Log the error, close the connection, and raise the exception
