@@ -100,6 +100,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+      - cache:/cache
   figshare-crawler:
     build:
       context: figshare_oai-pmh

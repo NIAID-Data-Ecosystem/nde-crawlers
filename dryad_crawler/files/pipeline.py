@@ -32,7 +32,8 @@ class DryadItemProcessorPipeline:
             if "T" in date_string:
                 date = datetime.datetime.fromisoformat(date_string.split("T")[0]).date().isoformat()
             else:
-                date = datetime.datetime.fromisoformat(date_string).date().isoformat()
+                # Handle formats like "2022-05-23 15:04:04 U" by taking only "YYYY-MM-DD"
+                date = datetime.datetime.fromisoformat(date_string.split()[0]).date().isoformat()
             return date
         return None
 
