@@ -29,12 +29,10 @@ class DryadItemProcessorPipeline:
         Returns: An isoformatted date if there is a datetime if not then return None
         """
         if re.match(r"\d+-\d+-\d+", date_string):
-            if "T" in date_string:
-                date = datetime.datetime.fromisoformat(date_string.split("T")[0]).date().isoformat()
-            else:
-                # Handle formats like "2022-05-23 15:04:04 U" by taking only "YYYY-MM-DD"
-                date = datetime.datetime.fromisoformat(date_string.split()[0]).date().isoformat()
-            return date
+            # Extract just the YYYY-MM-DD portion, handling all variants:
+            # "2022-05-23", "2022-05-23T00:00:00Z", "2022-05-23 15:04:04 UTC"
+            date_only = date_string.split("T")[0].split()[0]
+            return datetime.datetime.fromisoformat(date_only).date().isoformat()
         return None
 
     def process_item(self, item: dict, spider):

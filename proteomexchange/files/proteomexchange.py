@@ -141,7 +141,7 @@ def _parse_dataset(dataset):
     if not pxd_id:
         return None
 
-    result["_id"] = f"proteomexchange_{pxd_id}"
+    result["_id"] = pxd_id
     result["identifier"] = pxd_id
 
     doi = _get_term(identifiers, "Digital Object Identifier (DOI)")
@@ -337,6 +337,33 @@ def _parse_dataset(dataset):
         "url": "https://www.proteomexchange.org/",
         "versionDate": datetime.date.today().isoformat(),
     }
+
+    # Static fields applied to every record
+    result["conditionsOfAccess"] = "Open"
+    result["license"] = "https://www.proteomexchange.org/pxcollaborativeagreement_2024.pdf"
+    result["usageInfo"] = {"url": "https://www.proteomexchange.org/docs/reprocessed_guidelines_px.pdf"}
+    result["topicCategory"] = [
+        {
+            "@type": "DefinedTerm",
+            "url": "http://edamontology.org/topic_0121",
+            "name": "Proteomics",
+            "inDefinedTermSet": "EDAM",
+        },
+        {
+            "@type": "DefinedTerm",
+            "url": "http://edamontology.org/topic_0123",
+            "name": "Protein properties",
+            "inDefinedTermSet": "EDAM",
+        },
+    ]
+    result["measurementTechnique"] = [
+        {
+            "@type": "DefinedTerm",
+            "url": "http://purl.obolibrary.org/obo/MMO_0000534",
+            "name": "Mass spectrometry",
+            "inDefinedTermSet": "MMO",
+        },
+    ]
 
     result["@type"] = "Dataset"
 
