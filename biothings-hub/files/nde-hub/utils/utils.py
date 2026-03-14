@@ -315,6 +315,8 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             # Remove HTML tags from description field
             if description := doc.get("description"):
                 try:
+                    if isinstance(description, list):
+                        description = " ".join(description)
                     # Check if the description contains an XML declaration
                     if isinstance(description, str) and description.strip().startswith("<?xml"):
                         # Convert to bytes if it's an XML string
