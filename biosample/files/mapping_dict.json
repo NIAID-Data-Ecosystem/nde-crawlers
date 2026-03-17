@@ -111391,7 +111391,7 @@
     "environmentalSystem": "value"
   },
   "env_local_scale": {
-    "environmentalSystem": null
+    "environmentalSystem": "value"
   },
   "metagenomic_source": {
     "environmentalSystem": "value"
@@ -111442,7 +111442,7 @@
     "healthCondition": "value"
   },
   "study_disease": {
-    "healthcondition": null
+    "healthCondition": "value"
   },
   "external_id": {
     "identifier": "value"
@@ -111529,7 +111529,7 @@
     "keywords": "value"
   },
   "note": {
-    "keywords": null
+    "keywords": "value"
   },
   "geo_loc_name": {
     "locationOfOrigin": "value"

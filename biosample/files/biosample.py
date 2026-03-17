@@ -108,9 +108,6 @@ def fetch_all_samples():
 
     retmax = 500  # max allowed by NCBI for json output
     for retstart in range(0, total, retmax):
-        if retstart > 1000:
-            break  # for testing, remove this in production
-
         accs = query_acc("all[filter]", retstart, retmax)
         yield accs
         if (retstart + retmax) % 10000 == 0:
@@ -180,7 +177,7 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                     if lat is not None and lon is not None:
                         geo["latitude"] = lat
                         geo["longitude"] = lon
-                        insert_value(output, {"locationOfOrigin": {"geo": geo}})
+                        insert_value(output, "locationOfOrigin", {"geo": geo})
                         geo = {}  # reset geo after inserting
                     continue
                 except Exception as e:
@@ -222,22 +219,28 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                             d["@type"] = "DefinedTerm"
                         insert_value(output, k, d)
                     elif k in nde_mapping and nde_mapping[k][0] == "value":
-                        if k == "date":
+                        if k in ["dateCollected", "dateModified", "datePublished"]:
                             try:
-                                if not output.get("date"):
+                                if k not in output.keys():
                                     value = dateutil.parser.parse(value, ignoretz=True).date().isoformat()
                                     insert_value(output, k, value)
                             except Exception as e:
                                 logger.warning(f"Error parsing date '{value}': {e}")
+                        elif k in ["description"]:
+                            if description := output.get("description"):
+                                description += " " + value
+                            else:
+                                description = value
+                            output["description"] = description.strip()
                         else:
                             insert_value(output, k, value)
                     else:
-                        logger.warning(f"Unmapped nde_mapping property: {k}")
+                        logger.warning(f"Unmapped nde_mapping property: {k}: {value}")
         else:
             insert_value(output, "additionalProperty", {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value})
 
     if geo:
-        insert_value(output, {"locationOfOrigin": {"geo": geo}})
+        insert_value(output, "locationOfOrigin", {"geo": geo})
 
 def parse():
 

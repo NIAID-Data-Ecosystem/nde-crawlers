@@ -62,7 +62,9 @@ def get_ids(session):
     response.raise_for_status()  # will raise an HTTPError if the HTTP request returned an unsuccessful status code
     response = response.json()
     pages = response["data"]["pageInfo"]["totalPages"]
+    logger.info(f"Total pages to crawl: {pages + 1}")
     for page in range(1, pages + 1):
+        logger.info(f"Crawling page {page} of {pages}")
         payload["pageNum"] = page
         response = session.post(url, json=payload)
         response.raise_for_status()
