@@ -4,17 +4,21 @@ import logging
 import os
 import re
 import time
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep
 from urllib.error import ContentTooShortError
 
 import pandas as pd
+import requests
 import wget
-from kingfisher import annotate
 from sql_database import NDEDatabase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
+
+ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
 
 class NCBI_SRA(NDEDatabase):
@@ -25,53 +29,216 @@ class NCBI_SRA(NDEDatabase):
     # Used for testing small chunks of data
     DATA_LIMIT = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ncbi_api_key = os.environ.get("NCBI_API_KEY")
+        if not self.ncbi_api_key:
+            try:
+                from config_local import GEO_API_KEY
+                self.ncbi_api_key = GEO_API_KEY
+            except ImportError:
+                pass
+
+    def _eutils_params(self, params):
+        """Add standard eutils parameters including API key if available."""
+        params["tool"] = "nde-crawlers"
+        params["email"] = "nde@scripps.edu"
+        if self.ncbi_api_key:
+            params["api_key"] = self.ncbi_api_key
+        return params
+
+    def _request_delay(self):
+        """Sleep to respect NCBI rate limits. 3 req/s without key, 10 req/s with key."""
+        if self.ncbi_api_key:
+            sleep(0.34)
+        else:
+            sleep(1.1)
+
+    @staticmethod
+    def _xml_text(element, path, attr=None):
+        """Safely extract text or attribute from an XML element."""
+        try:
+            el = element.find(path)
+            if el is None:
+                return ""
+            if attr:
+                return el.attrib.get(attr, "")
+            return el.text or ""
+        except (AttributeError, KeyError):
+            return ""
+
+    def _parse_efetch_xml(self, xml_text):
+        """Parse efetch XML into list of run-level metadata dicts."""
+        root = ET.fromstring(xml_text)
+        results = []
+
+        for pkg in root.findall("EXPERIMENT_PACKAGE"):
+            d = {}
+            d["experiment_accession"] = self._xml_text(pkg, "./EXPERIMENT", "accession")
+            d["experiment_title"] = self._xml_text(pkg, "./EXPERIMENT/TITLE")
+
+            lib = pkg.find("./EXPERIMENT/DESIGN/LIBRARY_DESCRIPTOR")
+            if lib is not None:
+                d["library_strategy"] = self._xml_text(lib, "LIBRARY_STRATEGY")
+
+            platform_el = pkg.find("./EXPERIMENT/PLATFORM")
+            if platform_el is not None and len(platform_el) > 0:
+                if len(platform_el[0]) > 0:
+                    model_text = platform_el[0][0].text
+                    if model_text:
+                        d["model"] = model_text.strip()
+
+            d["organisation"] = self._xml_text(pkg, "./Organization/Name")
+            d["organisation_contact_email"] = self._xml_text(
+                pkg, "./Organization/Contact", "email"
+            )
+
+            d["sample_accession"] = self._xml_text(pkg, "./SAMPLE", "accession")
+            d["sample_title"] = self._xml_text(pkg, "./SAMPLE/TITLE")
+            d["taxon_name"] = self._xml_text(
+                pkg, "./SAMPLE/SAMPLE_NAME/SCIENTIFIC_NAME"
+            )
+
+            # Sample attributes (captures cell line, strain, HapMap fields, etc.)
+            sample_attrs = pkg.find("./SAMPLE/SAMPLE_ATTRIBUTES")
+            if sample_attrs is not None:
+                for attr_el in sample_attrs:
+                    tag = attr_el.findtext("TAG")
+                    value = attr_el.findtext("VALUE")
+                    if tag and value:
+                        d[tag] = value
+
+            d["study_title"] = self._xml_text(pkg, "./STUDY/DESCRIPTOR/STUDY_TITLE")
+            d["experiment_desc"] = self._xml_text(
+                pkg, "./EXPERIMENT/DESIGN/DESIGN_DESCRIPTION"
+            )
+            d["study_abstract"] = self._xml_text(
+                pkg, "./STUDY/DESCRIPTOR/STUDY_ABSTRACT"
+            )
+
+            for run_el in pkg.findall("./RUN_SET/RUN"):
+                d2 = dict(d)
+                d2["run"] = run_el.attrib.get("accession", "")
+                d2["published"] = run_el.attrib.get("published", "")
+                results.append(d2)
+
+        return results
+
+    def _fetch_study_metadata(self, study_acc, bio_project=None):
+        """Fetch run-level metadata for a study from NCBI eutils.
+
+        Tries the study accession first, falls back to BioProject if available.
+        """
+        search_terms = [f"{study_acc}[Accession]"]
+        if bio_project and bio_project != "-":
+            search_terms.append(f"{bio_project}[BioProject]")
+
+        for term in search_terms:
+            try:
+                self._request_delay()
+                res = requests.get(
+                    ESEARCH_URL,
+                    params=self._eutils_params(
+                        {
+                            "db": "sra",
+                            "term": term,
+                            "retmax": 0,
+                            "usehistory": "y",
+                        }
+                    ),
+                    timeout=60,
+                )
+                res.raise_for_status()
+
+                search_root = ET.fromstring(res.text)
+                if search_root.find("ERROR") is not None:
+                    logger.warning(
+                        f"esearch error for {study_acc} ({term}): "
+                        f"{search_root.find('ERROR').text}"
+                    )
+                    continue
+
+                count_el = search_root.find("Count")
+                if count_el is None or int(count_el.text) == 0:
+                    logger.debug(f"No results for {study_acc} with term: {term}")
+                    continue
+
+                count = int(count_el.text)
+                webenv = search_root.find("WebEnv").text
+                query_key = search_root.find("QueryKey").text
+
+                all_data = []
+                retstart = 0
+                retmax = 500
+
+                while retstart < count:
+                    self._request_delay()
+                    res = requests.get(
+                        EFETCH_URL,
+                        params=self._eutils_params(
+                            {
+                                "db": "sra",
+                                "WebEnv": webenv,
+                                "query_key": query_key,
+                                "retstart": retstart,
+                                "retmax": retmax,
+                            }
+                        ),
+                        timeout=120,
+                    )
+                    res.raise_for_status()
+                    batch = self._parse_efetch_xml(res.text)
+                    all_data.extend(batch)
+                    retstart += retmax
+
+                if all_data:
+                    return all_data
+
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"Request error for {study_acc} ({term}): {e}")
+            except ET.ParseError as e:
+                logger.warning(f"XML parse error for {study_acc}: {e}")
+
+        return None
+
     # API
     def query_sra(self, study_info):
         study_acc = study_info[0]
         logger.info(f"Current Study: {study_acc}")
         if study_acc == "-":
             return (study_acc, json.dumps(None))
+
+        bio_project = study_info[7] if len(study_info) > 7 else None
+
         try:
-            annotate(
-                run_identifiers=None,
-                run_identifiers_file=None,
-                bioproject_accession=study_acc,
-                output_file=f"{study_acc}.json",
-                output_format="json",
-                all_columns=True,
-            )
-            with open(f"{study_acc}.json") as f:
-                data = json.load(f)
-                ftp_info = {}
-                if study_info[0] != "-":
-                    ftp_info["ftp_acc"] = study_info[0]
-                if study_info[1] != "-":
-                    ftp_info["ftp_type"] = study_info[1]
-                if study_info[3] != "-":
-                    ftp_info["ftp_updated"] = study_info[3]
-                if study_info[4] != "-":
-                    ftp_info["ftp_published"] = study_info[4]
-                if study_info[5] != "-":
-                    ftp_info["ftp_experiment"] = study_info[5]
-                if study_info[6] != "-":
-                    ftp_info["ftp_sample"] = study_info[6]
-                if study_info[7] != "-":
-                    ftp_info["ftp_bioProject"] = study_info[7]
-                if study_info[8] != "-":
-                    ftp_info["ftp_replacedBy"] = study_info[8]
-                data.append(ftp_info)
-                os.remove(f"{study_acc}.json")
-                return (study_acc, json.dumps(data))
-        except KeyError as e:
-            logger.error(f"KeyError for {study_acc}: {e}")
-            return (study_acc, json.dumps(None))
+            data = self._fetch_study_metadata(study_acc, bio_project)
+
+            if not data:
+                return (study_acc, json.dumps(None))
+
+            ftp_info = {}
+            if study_info[0] != "-":
+                ftp_info["ftp_acc"] = study_info[0]
+            if study_info[1] != "-":
+                ftp_info["ftp_type"] = study_info[1]
+            if study_info[3] != "-":
+                ftp_info["ftp_updated"] = study_info[3]
+            if study_info[4] != "-":
+                ftp_info["ftp_published"] = study_info[4]
+            if study_info[5] != "-":
+                ftp_info["ftp_experiment"] = study_info[5]
+            if study_info[6] != "-":
+                ftp_info["ftp_sample"] = study_info[6]
+            if study_info[7] != "-":
+                ftp_info["ftp_bioProject"] = study_info[7]
+            if study_info[8] != "-":
+                ftp_info["ftp_replacedBy"] = study_info[8]
+            data.append(ftp_info)
+
+            return (study_acc, json.dumps(data))
         except Exception as e:
-            if "HTTP Failure" in str(e):
-                logger.error(f"HTTP Failure for {study_acc}: {e}")
-                return (study_acc, json.dumps(None))
-            else:
-                logger.error(f"Unknown Error for {study_acc}: {e}")
-                return (study_acc, json.dumps(None))
+            logger.error(f"Error for {study_acc}: {e}")
+            return (study_acc, json.dumps(None))
 
     def load_cache(self):
         fileloc = "https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab"
@@ -265,9 +432,12 @@ class NCBI_SRA(NDEDatabase):
                     run_dict["additionalType"] = {"name": "Run", "url": "http://purl.obolibrary.org/obo/NCIT_C47911"}
                     run_dict["url"] = "https://www.ncbi.nlm.nih.gov/sra/" + run_accession
                 if published := run_metadata.get("published"):
-                    run_dict["datePublished"] = datetime.datetime.strptime(published, "%Y-%m-%d %H:%M:%S").strftime(
-                        "%Y-%m-%d"
-                    )
+                    try:
+                        run_dict["datePublished"] = datetime.datetime.strptime(
+                            published, "%Y-%m-%d %H:%M:%S"
+                        ).strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
                 if bool(run_dict) and run_dict not in is_based_on:
                     is_based_on.append(run_dict)
 
@@ -379,6 +549,8 @@ class NCBI_SRA(NDEDatabase):
                     logger.info(f"isBasedOn exceeds 100 for {study[0]}")
 
                 output["isBasedOn"] = is_based_on
+            if len(author_list):
+                output["author"] = author_list
             if len(species_list):
                 output["species"] = species_list
             if len(distribution_list):
