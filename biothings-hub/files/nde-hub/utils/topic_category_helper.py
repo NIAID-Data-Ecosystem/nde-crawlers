@@ -23,8 +23,9 @@ def add_topic_category(docs, source_name):
         docs = read_ndjson(file_path)
 
     # Cache the EDAM ontology if not already cached
-    if not os.path.exists("/data/nde-hub/topic_categories/cache/edam"):
-        text2term.cache_ontology("https://edamontology.org/EDAM_unstable.owl", "edam")
+    cache_dir = "/data/nde-hub/topic_categories/cache"
+    if not os.path.exists(os.path.join(cache_dir, "edam")):
+        text2term.cache_ontology("https://edamontology.org/EDAM_unstable.owl", "edam", cache_folder=cache_dir)
 
     file_path = f"/data/nde-hub/topic_categories/{source_name}.json"
     with open(file_path, "r") as file:
@@ -38,7 +39,7 @@ def add_topic_category(docs, source_name):
     all_topics = list(all_topics)
 
     # Batch query the topics
-    t2t_result = text2term.map_terms(all_topics, "edam", use_cache=True, base_iris=["http://edamontology.org/topic_"])
+    t2t_result = text2term.map_terms(all_topics, "edam", use_cache=True, base_iris=["http://edamontology.org/topic_"], cache_folder=cache_dir)
     t2t_result.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
 
     # Create a mapping for exact matches only
