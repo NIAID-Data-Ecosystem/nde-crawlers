@@ -17,12 +17,14 @@ Records for a given taxonomy code (paginated):
 """
 
 import copy
+import csv
 import datetime as dt
 import json
 import logging
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import Counter
 from typing import Any, Iterator, Optional
 
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +53,12 @@ NCBI_EFETCH_URL = (
 EMDB_SEARCH_URL_TEMPLATE = (
     "https://www.ebi.ac.uk/emdb/emsearch/"
     "?q=natural_source_ncbi_code:%22{code}%22"
+)
+
+# Paged search URL (retrieves all records, not just top facets)
+SEARCH_ALL_URL = (
+    "https://www.ebi.ac.uk/emdb/api/search/"
+    "natural_source_ncbi_code%3A%5B*%20TO%20*%5D"
 )
 
 # ---------------------------------------------------------------------------
@@ -326,6 +334,74 @@ def _fetch_facet_codes() -> dict[str, int]:
     logger.info("Fetching EMDB facet data...")
     data = _fetch_json(FACET_URL)
     return data.get("natural_source_ncbi_code", {})
+
+
+def _fetch_all_taxonomy_codes() -> dict[str, int]:
+    """Page through all EMDB records to discover every NCBI taxonomy code
+    and its frequency.  Unlike the facet API this returns ALL codes,
+    not just the top ~100.
+    """
+    code_counts: Counter[str] = Counter()
+    page = 1
+    page_size = 10_000
+    total_rows = 0
+
+    while True:
+        url = (
+            f"{SEARCH_ALL_URL}?rows={page_size}&page={page}"
+            "&fl=natural_source_ncbi_code"
+        )
+        logger.info(
+            "Fetching all taxonomy codes, page %d (%d rows so far)...",
+            page,
+            total_rows,
+        )
+
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Accept": "text/csv",
+                    "User-Agent": "nde-emdb-crawler/0.1",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                text = resp.read().decode("utf-8")
+        except Exception as exc:
+            logger.warning("Error fetching page %d: %s", page, exc)
+            break
+
+        rows = list(csv.DictReader(text.splitlines()))
+        if not rows:
+            break
+
+        total_rows += len(rows)
+        for row in rows:
+            raw = row.get("natural_source_ncbi_code", "")
+            for code in raw.split(","):
+                code = code.strip()
+                if code:
+                    code_counts[code] += 1
+
+        logger.info(
+            "Page %d: %d rows, %d unique codes so far",
+            page,
+            len(rows),
+            len(code_counts),
+        )
+
+        if len(rows) < page_size:
+            break
+
+        page += 1
+        time.sleep(REQUEST_DELAY)
+
+    logger.info(
+        "Completed: %d rows scanned, %d unique taxonomy codes",
+        total_rows,
+        len(code_counts),
+    )
+    return dict(code_counts)
 
 
 def _fetch_taxonomy_info(
@@ -641,10 +717,10 @@ def _build_data_collection(
 def parse() -> Iterator[dict[str, Any]]:
     """Yield DataCollection records, one per NCBI taxonomy code."""
 
-    # Step 1 – frequency table of taxonomy codes
-    facet = _fetch_facet_codes()
+    # Step 1 – frequency table of taxonomy codes (paged search finds all codes)
+    facet = _fetch_all_taxonomy_codes()
     if not facet:
-        logger.error("No taxonomy codes returned from EMDB facet API.")
+        logger.error("No taxonomy codes returned from EMDB search API.")
         return
 
     logger.info("Found %d taxonomy codes.", len(facet))
