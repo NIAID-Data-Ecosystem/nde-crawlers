@@ -201,6 +201,9 @@ def run_embeddings(es_hosts, index_name, log=None):
             index_options=model_info.get("index_options"),
         )
 
+        # Ensure all recently-indexed docs are visible before querying.
+        es.indices.refresh(index=index_name)
+
         query = {
             "query": {
                 "bool": {
