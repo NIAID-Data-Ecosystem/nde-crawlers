@@ -11,7 +11,6 @@ from urllib.error import ContentTooShortError
 
 import pandas as pd
 import requests
-import wget
 from sql_database import NDEDatabase
 
 logging.basicConfig(level=logging.INFO)
@@ -20,14 +19,50 @@ logger = logging.getLogger("nde-logger")
 ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
+INVALID_SAMPLE_VALUES = {
+    "-", "?", "blank", "ignore", "missing", "na", "n/a", "nan", "none",
+    "null", "not applicable", "not collected", "not determined",
+    "not provided", "not recorded", "restricted access",
+    "unspecified", "unk", "unknown",
+}
+
+# Maps SRA sample attribute tags to aggregateElement field names
+AGGREGATE_ATTR_MAP = {
+    "sex": "sex",
+    "Sex": "sex",
+    "cell_type": "cellType",
+    "cell type": "cellType",
+    "cell_line": "cellType",
+    "cell line": "cellType",
+    "cell line name": "cellType",
+    "dev_stage": "developmentalStage",
+    "development_stage": "developmentalStage",
+    "developmental_stage": "developmentalStage",
+    "genotype": "associatedGenotype",
+    "strain": "associatedGenotype",
+    "phenotype": "associatedPhenotype",
+    "tissue": "sampleType",
+    "tissue_type": "sampleType",
+    "source_name": "sampleType",
+    "sample_type": "sampleType",
+    "isolate": "sampleType",
+}
+
+# Maps SRA sample attribute tags to dataset-level field names
+DATASET_ATTR_MAP = {
+    "disease": "healthCondition",
+    "host_disease": "healthCondition",
+    "disease_state": "healthCondition",
+}
+
 
 class NCBI_SRA(NDEDatabase):
     # override variables
     SQL_DB = "ncbi_sra.db"
-    EXPIRE = datetime.timedelta(days=1000)
+    EXPIRE = datetime.timedelta(days=365)
 
     # Used for testing small chunks of data
-    DATA_LIMIT = None
+    DATA_LIMIT = 5
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -53,6 +88,51 @@ class NCBI_SRA(NDEDatabase):
             sleep(0.34)
         else:
             sleep(1.1)
+
+    def _download_file(self, url, dest, max_retries=10):
+        """Download a file with progress logging and retry logic."""
+        retry_count = 0
+        while True:
+            try:
+                logger.info(f"Starting download: {url}")
+                with requests.get(url, stream=True, timeout=300) as r:
+                    r.raise_for_status()
+                    total = int(r.headers.get("content-length", 0))
+                    if total:
+                        logger.info(f"File size: {total / (1024**3):.2f} GB")
+                    else:
+                        logger.info("File size: unknown")
+                    downloaded = 0
+                    last_log = 0
+                    log_interval = 500 * 1024 * 1024  # 500 MB
+                    dl_start = time.time()
+                    with open(dest, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if downloaded - last_log >= log_interval:
+                                elapsed = time.time() - dl_start
+                                speed = downloaded / elapsed / (1024**2) if elapsed > 0 else 0
+                                if total:
+                                    pct = downloaded / total * 100
+                                    logger.info(
+                                        f"Download progress: {downloaded / (1024**3):.2f} / "
+                                        f"{total / (1024**3):.2f} GB ({pct:.1f}%) - {speed:.1f} MB/s"
+                                    )
+                                else:
+                                    logger.info(
+                                        f"Download progress: {downloaded / (1024**3):.2f} GB - {speed:.1f} MB/s"
+                                    )
+                                last_log = downloaded
+                elapsed = time.time() - dl_start
+                logger.info(f"Download complete: {downloaded / (1024**3):.2f} GB in {elapsed:.0f}s")
+                return
+            except (ContentTooShortError, requests.exceptions.RequestException) as e:
+                retry_count += 1
+                if retry_count > max_retries:
+                    raise
+                logger.error(f"Download error: {e}. Retry {retry_count}/{max_retries}")
+                sleep(retry_count * 2)
 
     @staticmethod
     def _xml_text(element, path, attr=None):
@@ -98,6 +178,12 @@ class NCBI_SRA(NDEDatabase):
             d["taxon_name"] = self._xml_text(
                 pkg, "./SAMPLE/SAMPLE_NAME/SCIENTIFIC_NAME"
             )
+
+            # Extract BioSample accession (SAMN ID) - resolvable unlike SRS IDs
+            for ext_id in pkg.findall("./SAMPLE/IDENTIFIERS/EXTERNAL_ID"):
+                if ext_id.attrib.get("namespace") == "BioSample" and ext_id.text:
+                    d["biosample_accession"] = ext_id.text.strip()
+                    break
 
             # Sample attributes (captures cell line, strain, HapMap fields, etc.)
             sample_attrs = pkg.find("./SAMPLE/SAMPLE_ATTRIBUTES")
@@ -204,7 +290,7 @@ class NCBI_SRA(NDEDatabase):
     # API
     def query_sra(self, study_info):
         study_acc = study_info[0]
-        logger.info(f"Current Study: {study_acc}")
+        logger.debug(f"Current Study: {study_acc}")
         if study_acc == "-":
             return (study_acc, json.dumps(None))
 
@@ -242,22 +328,7 @@ class NCBI_SRA(NDEDatabase):
 
     def load_cache(self):
         fileloc = "https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab"
-        retry_count = 0
-        while True:
-            try:
-                logger.info("Starting FTP Download")
-                wget.download(fileloc, out="SRA_Accessions.tab")
-                break
-            except ContentTooShortError as e:
-                retry_count += 1
-                if retry_count > 10:
-                    raise e
-                else:
-                    logger.error("Error downloading file. %s. Retrying...", e)
-                    logger.info("Try count: %s of 10", retry_count)
-                    sleep(retry_count * 2)
-
-        logger.info("FTP Download Complete")
+        self._download_file(fileloc, "SRA_Accessions.tab")
 
         logger.info("Retrieving Studies from SRA_Accessions.tab")
 
@@ -296,7 +367,6 @@ class NCBI_SRA(NDEDatabase):
         with ThreadPoolExecutor(max_workers=3) as pool:
             data = pool.map(self.query_sra, accession_list)
             for item in data:
-                logger.info(f"Yielding {item[0]}")
                 yield item
                 count += 1
                 if count % 1000 == 0:
@@ -305,7 +375,7 @@ class NCBI_SRA(NDEDatabase):
                     start = time.time()
 
         logger.info("Removing SRA_Accessions.tab")
-        os.remove("SRA_Accessions.tab")
+        # os.remove("SRA_Accessions.tab")
         logger.info("Removed SRA_Accessions.tab")
 
     def parse(self, studies):
@@ -321,16 +391,12 @@ class NCBI_SRA(NDEDatabase):
 
             study_metadata = json.loads(study[1])
 
-            logger.info(f"Study: {study[0]}")
-
             if study_metadata is None:
-                logger.info(f"No Metadata for {study[0]}")
                 continue
             if len(study_metadata) == 0:
-                logger.info(f"No Metadata for {study[0]}")
                 continue
 
-            logger.info(f"Total runs: {len(study_metadata) - 1}")
+            logger.debug(f"Study: {study[0]} - {len(study_metadata) - 1} runs")
 
             if len(study_metadata) > 18000:
                 logger.info(f"{study[0]} has more than 18000 records: {len(study_metadata)}")
@@ -369,6 +435,17 @@ class NCBI_SRA(NDEDatabase):
             measurement_technique_list = []
             seen_measurements_techniques = set()
             author_list = []
+            sample_collection_items = []
+            seen_samples = set()
+            aggregate_data = {
+                "sex": set(),
+                "cellType": set(),
+                "developmentalStage": set(),
+                "associatedGenotype": set(),
+                "associatedPhenotype": set(),
+                "sampleType": set(),
+            }
+            health_condition_set = set()
 
             if bio_project := ftp_info.get("ftp_bioProject"):
                 bio_project_dict = {}
@@ -420,7 +497,6 @@ class NCBI_SRA(NDEDatabase):
                 # measurement techniques
                 if measurement_technique := run_metadata.get("library_strategy"):
                     if measurement_technique not in seen_measurements_techniques:
-                        logger.info(f"Adding measurement technique: {measurement_technique}")
                         measurement_technique_dict = {"name": measurement_technique}
                         seen_measurements_techniques.add(measurement_technique)
                         measurement_technique_list.append(measurement_technique_dict)
@@ -457,20 +533,31 @@ class NCBI_SRA(NDEDatabase):
                     }
                     is_based_on.append(experiment_dict)
 
-                sample_dict = {}
-                if sample_accession := run_metadata.get("sample_accession"):
-                    sample_dict["identifier"] = sample_accession
-                    sample_dict["url"] = "https://www.ncbi.nlm.nih.gov/sra/" + sample_accession
-                if sample_comment := run_metadata.get("sample comment"):
-                    sample_dict["description"] = sample_comment
-                if sample_title := run_metadata.get("sample_title"):
-                    sample_dict["name"] = sample_title
-                if bool(sample_dict) and sample_dict not in is_based_on:
-                    sample_dict["additionalType"] = {
-                        "name": "Sample",
-                        "url": "http://purl.obolibrary.org/obo/NCIT_C70699",
-                    }
-                    is_based_on.append(sample_dict)
+                # Collect sample info for SampleCollection
+                biosample_id = run_metadata.get("biosample_accession")
+                sample_acc = run_metadata.get("sample_accession")
+                sample_key = biosample_id or sample_acc
+                if sample_key and sample_key not in seen_samples:
+                    seen_samples.add(sample_key)
+                    if biosample_id:
+                        sample_item = {
+                            "@type": "Sample",
+                            "identifier": biosample_id,
+                            "url": f"https://www.ncbi.nlm.nih.gov/biosample/{biosample_id}",
+                            "_id": biosample_id.casefold(),
+                        }
+                        if sample_acc:
+                            sample_item["additionalIdentifier"] = sample_acc
+                    else:
+                        sample_item = {
+                            "@type": "Sample",
+                            "identifier": sample_acc,
+                            "url": f"https://www.ncbi.nlm.nih.gov/sra/{sample_acc}",
+                            "_id": sample_acc.casefold(),
+                        }
+                    if sample_title := run_metadata.get("sample_title"):
+                        sample_item["name"] = sample_title
+                    sample_collection_items.append(sample_item)
 
                 # instruments
                 instrument_dict = {}
@@ -509,6 +596,20 @@ class NCBI_SRA(NDEDatabase):
                     }
                     is_based_on.append(hapmap_dict)
 
+                # Collect aggregate values from sample attributes
+                for attr_tag, agg_field in AGGREGATE_ATTR_MAP.items():
+                    if val := run_metadata.get(attr_tag):
+                        val_clean = val.strip()
+                        if val_clean.casefold() not in INVALID_SAMPLE_VALUES and not val_clean.casefold().startswith("missing:"):
+                            aggregate_data[agg_field].add(val_clean)
+
+                # Collect dataset-level fields from sample attributes
+                for attr_tag, ds_field in DATASET_ATTR_MAP.items():
+                    if val := run_metadata.get(attr_tag):
+                        val_clean = val.strip()
+                        if val_clean.casefold() not in INVALID_SAMPLE_VALUES and not val_clean.casefold().startswith("missing:"):
+                            health_condition_set.add(val_clean)
+
             def sanitize_json_string(json_string):
                 # Replace single quotes with double quotes
                 json_string = json_string.replace("'", '"')
@@ -532,21 +633,14 @@ class NCBI_SRA(NDEDatabase):
                 return unique_items
 
             if len(is_based_on):
-                logger.info(f"Total isBasedOn: {len(is_based_on)}")
-
                 try:
-                    # Remove duplicates and limit to 100
                     is_based_on = remove_duplicates_and_limit(is_based_on, limit=100)
                 except Exception as e:
                     logger.error(f"Error while processing isBasedOn: {e}")
-                    # Handle error appropriately, possibly skipping the faulty item or re-logging
                     is_based_on = []
-
-                logger.info(f"Total unique isBasedOn: {len(is_based_on)}")
 
                 if len(is_based_on) > 100:
                     is_based_on = is_based_on[:100]
-                    logger.info(f"isBasedOn exceeds 100 for {study[0]}")
 
                 output["isBasedOn"] = is_based_on
             if len(author_list):
@@ -556,11 +650,49 @@ class NCBI_SRA(NDEDatabase):
             if len(distribution_list):
                 output["distribution"] = distribution_list
             if len(measurement_technique_list):
-                logger.info(f"Total measurement techniques: {len(measurement_technique_list)}")
                 output["measurementTechnique"] = measurement_technique_list
+            if health_condition_set:
+                output["healthCondition"] = [{"name": v} for v in sorted(health_condition_set)]
+
+            if sample_collection_items:
+                sample_collection = {
+                    "@type": "SampleCollection",
+                    "itemListElement": sample_collection_items,
+                    "numberOfItems": {
+                        "value": len(sample_collection_items),
+                        "unitText": "sample",
+                    },
+                }
+
+                # Build aggregateElement from collected sample attributes
+                aggregate_element = {}
+                if aggregate_data["sex"]:
+                    aggregate_element["sex"] = sorted(aggregate_data["sex"])
+                if aggregate_data["cellType"]:
+                    aggregate_element["cellType"] = [
+                        {"name": v} for v in sorted(aggregate_data["cellType"])
+                    ]
+                if aggregate_data["developmentalStage"]:
+                    aggregate_element["developmentalStage"] = [
+                        {"name": v} for v in sorted(aggregate_data["developmentalStage"])
+                    ]
+                if aggregate_data["associatedGenotype"]:
+                    aggregate_element["associatedGenotype"] = sorted(aggregate_data["associatedGenotype"])
+                if aggregate_data["associatedPhenotype"]:
+                    aggregate_element["associatedPhenotype"] = [
+                        {"name": v} for v in sorted(aggregate_data["associatedPhenotype"])
+                    ]
+                if aggregate_data["sampleType"]:
+                    aggregate_element["sampleType"] = [
+                        {"name": v} for v in sorted(aggregate_data["sampleType"])
+                    ]
+
+                if aggregate_element:
+                    sample_collection["aggregateElement"] = aggregate_element
+
+                output["sample"] = sample_collection
 
             yield output
-            logger.info(f"Yielded: {study[0]}")
 
         logger.info(f"Finished Parsing {count} Studies")
         logger.info(f"Total large documents: {too_big}")
@@ -572,22 +704,7 @@ class NCBI_SRA(NDEDatabase):
         last_updated = self.retreive_last_updated()
 
         fileloc = "https://ftp.ncbi.nlm.nih.gov/sra/reports/Metadata/SRA_Accessions.tab"
-        retry_count = 0
-        while True:
-            try:
-                logger.info("Starting FTP Download")
-                wget.download(fileloc, out="SRA_Accessions.tab")
-                break
-            except ContentTooShortError as e:
-                retry_count += 1
-                if retry_count > 10:
-                    raise e
-                else:
-                    logger.error("Error downloading file. %s. Retrying...", e)
-                    logger.info("Try count: %s of 10", retry_count)
-                    sleep(retry_count * 2)
-
-        logger.info("FTP Download Complete")
+        self._download_file(fileloc, "SRA_Accessions.tab")
 
         logger.info("Retrieving Studies from SRA_Accessions.tab")
 
@@ -648,6 +765,9 @@ class NCBI_SRA(NDEDatabase):
             ].values.tolist()
             logger.info("Total Studies Found: {}".format(len(accession_list)))
 
+        if self.DATA_LIMIT:
+            accession_list = accession_list[: self.DATA_LIMIT]
+
         count = 0
 
         logger.info("Retrieving Individual Study Metadata from API")
@@ -655,7 +775,6 @@ class NCBI_SRA(NDEDatabase):
         with ThreadPoolExecutor(max_workers=3) as pool:
             data = pool.map(self.query_sra, accession_list)
             for item in data:
-                logger.info(f"Yielding {item[0]}")
                 yield item
                 count += 1
                 if count % 1000 == 0:
@@ -664,6 +783,6 @@ class NCBI_SRA(NDEDatabase):
                     start = time.time()
 
         logger.info("Removing SRA_Accessions.tab")
-        os.remove("SRA_Accessions.tab")
+        # os.remove("SRA_Accessions.tab")
         logger.info("Removed SRA_Accessions.tab")
         self.insert_last_updated()

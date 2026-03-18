@@ -2,6 +2,6 @@ orjson
 datetime
 sickle
 pandas
-kingfisher
+requests
 wget
 python-dateutil

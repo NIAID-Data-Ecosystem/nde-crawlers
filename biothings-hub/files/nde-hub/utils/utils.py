@@ -23,6 +23,7 @@ from scores import (
     RESOURCE_CATALOG_REQUIRED_AUGMENTED,
 )
 from utils.corrections import apply_corrections
+from utils.lineage import process_lineage
 
 
 def retry(retry_num, retry_sleep_sec):
@@ -300,6 +301,7 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         gen = func(*args, **kwargs)
+        gen = process_lineage(gen)
         for doc in gen:
             # Apply sourceOrganization corrections on the fly.
             # Uses cached index (fetched once from GitHub per build).
