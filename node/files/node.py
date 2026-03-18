@@ -20,7 +20,7 @@ def insert_value(d, key, value):
         d[key] = value
 
 
-def make_session_with_retries(total=3, backoff_factor=1, status_forcelist=(429,500,502,503,504), allow_post=False, pool_maxsize=10):
+def make_session_with_retries(total=3, backoff_factor=1, status_forcelist=(429,500,502,503,504), allow_post=True, pool_maxsize=10):
     allowed = frozenset(["HEAD", "GET", "OPTIONS"])
     if allow_post:
         allowed = allowed.union(["POST"])
@@ -75,7 +75,10 @@ def get_ids(session):
 
 def parse():
     with make_session_with_retries() as session:
+        count = 0
         for project_id in get_ids(session):
+            logger.info(f"Processing project ID: {project_id}")
+            count += 1
             general_info = session.get(f"https://www.biosino.org/node/api/app/project/getGeneralInfo/{project_id}").json()
             general_info = general_info["data"]
             author_info = session.get(f"https://www.biosino.org/node/api/app/project/getAuthorInfo/{project_id}").json()
@@ -186,3 +189,4 @@ def parse():
                 output["dateModified"] = date_modified
 
             yield output
+        logger.info(f"Total documents processed: {count}")
