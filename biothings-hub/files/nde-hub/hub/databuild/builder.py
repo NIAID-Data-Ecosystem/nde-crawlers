@@ -45,11 +45,13 @@ class NDEDataBuilder(builder.DataBuilder):
                 "$match": {
                     "count": {"$gt": 1},
                     "documents": {
-                        "$elemMatch": {"_id": {"$regex": f"^{duplicate}"}},
-                        "$elemMatch": {"_id": {"$regex": f"^({'|'.join(sources)})"}},
+                        "$all": [
+                            {"$elemMatch": {"_id": {"$regex": f"^{duplicate}"}}},
+                            {"$elemMatch": {"_id": {"$regex": f"^({'|'.join(sources)})"}}},
+                        ]
                     },
                 }
-            },
+            }
         ]
 
         # Add allowDiskUse to handle large datasets
@@ -86,6 +88,7 @@ class NDEDataBuilder(builder.DataBuilder):
                             )
                         elif isinstance(sdPublisher, dict):
                             return any(source in sdPublisher.get("name", "").lower() for source in sources)
+                    self.logger.error(f"Unexpected document with _id {doc['_id']} in deduplication group {group}. Document: {doc}")
                     return False
 
                 result["documents"] = [doc for doc in result["documents"] if is_valid_document(doc)]
