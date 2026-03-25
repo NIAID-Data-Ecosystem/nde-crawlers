@@ -932,8 +932,19 @@ class NDESourceUploader(BaseSourceUploader):
                                     "value": {"type": "integer"},
                                 }
                             },
+                            "experimentalPurpose": {"type": "text"},
                             "sampleAvailability": {"type": "boolean"},
                             "sampleQuantity": {
+                                "properties": {
+                                    "maxValue": {"type": "double"},
+                                    "minValue": {"type": "double"},
+                                    "name": {"type": "text"},
+                                    "unitText": {"type": "text"},
+                                    "value": {"type": "integer"},
+                                }
+                            },
+                            "sampleState": {"type": "text"},
+                            "sampleStorageTemperature": {
                                 "properties": {
                                     "maxValue": {"type": "double"},
                                     "minValue": {"type": "double"},
@@ -1007,8 +1018,19 @@ class NDESourceUploader(BaseSourceUploader):
                             "value": {"type": "integer"},
                         }
                     },
+                    "experimentalPurpose": {"type": "text"},
                     "sampleAvailability": {"type": "boolean"},
                     "sampleQuantity": {
+                        "properties": {
+                            "maxValue": {"type": "double"},
+                            "minValue": {"type": "double"},
+                            "name": {"type": "text"},
+                            "unitText": {"type": "text"},
+                            "value": {"type": "integer"},
+                        }
+                    },
+                    "sampleState": {"type": "text"},
+                    "sampleStorageTemperature": {
                         "properties": {
                             "maxValue": {"type": "double"},
                             "minValue": {"type": "double"},
