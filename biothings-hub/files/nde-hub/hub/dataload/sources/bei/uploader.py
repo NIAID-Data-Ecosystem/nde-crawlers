@@ -4,7 +4,7 @@ from utils.pubtator import standardize_data
 from utils.utils import nde_upload_wrapper
 
 
-class Bei_Uploader(NDESourceUploader):
+class BeiUploader(NDESourceUploader):
     name = "bei"
 
     @nde_upload_wrapper
