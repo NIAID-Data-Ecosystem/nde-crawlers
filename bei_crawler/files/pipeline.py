@@ -43,7 +43,7 @@ class BeiItemProcessorPipeline:
         output = {
             "@context": "http://schema.org/",
             "@type": "Dataset",
-            "_id": _id.casefold(),
+            "_id": "bei_" + _id.casefold(),
             "identifier": _id,
             "url": url,
             "includedInDataCatalog": {

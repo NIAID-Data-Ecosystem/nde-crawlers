@@ -17,7 +17,7 @@ services:
       - data:/data
   bei-crawler:
     build:
-      context: bei
+      context: bei_crawler
       dockerfile: Dockerfile
     volumes:
       - data:/data
