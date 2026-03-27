@@ -53,6 +53,8 @@ class BeiItemProcessorPipeline:
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
             },
+            "conditionsOfAccess": "Restricted",
+            "isAccessibleForFree": True,
         }
 
         if name := item.get("Organism:"):
