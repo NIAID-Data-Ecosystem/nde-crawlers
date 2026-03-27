@@ -10,12 +10,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
-def insert_value(d, key, value):
-    if key in d:
+def insert_value(d, key, value, extend=False):
+    """ Insert a value into a dictionary, handling existing keys by converting to lists or extending strings as needed.
+    """
+
+    if key in d and not extend:
         if isinstance(d[key], list) and value not in d[key]:
             d[key].append(value)
         if not isinstance(d[key], list) and d[key] != value:
             d[key] = [d[key], value]
+    elif d.get(key) and extend:
+        d[key] = (d.get(key) + " " + value).strip()
     else:
         d[key] = value
 
@@ -72,6 +77,31 @@ def get_ids(session):
         for project in response["data"]["pageInfo"]["content"]:
             yield project["id"]
 
+def get_experiments(session, project_id):
+    url = "https://www.biosino.org/node/api/app/browseDetail/getDataList"
+    page_num = 1
+    payload = {
+        "type": "project",
+        "typeNo": project_id,
+        "sortKey": "",
+        "sortType": "",
+        "pageNum": page_num,
+        "pageSize": 100,
+    }
+
+    response = session.post(url, json=payload)
+    response.raise_for_status()  # will raise an HTTPError if the HTTP request returned an unsuccessful status code
+    response = response.json()
+
+    pages = response["data"]["total"] // 100 + (1 if response["data"]["total"] % 100 > 0 else 0)
+    for page in range(1, pages + 1):
+        payload["pageNum"] = page
+        logger.info(f"Crawling experiments for project {project_id}, page {page} of {pages}")
+        response = session.post(url, json=payload)
+        response.raise_for_status()
+        response = response.json()
+        for experiment in response["data"]["list"]:
+            yield experiment
 
 def parse():
     with make_session_with_retries() as session:
@@ -98,7 +128,32 @@ def parse():
                     "versionDate": datetime.date.today().isoformat(),
                     "archivedAt": url,
                 },
+                "conditionsOfAccess": "Open",
+                "creditText": (
+                    f"After successfully submitting your data to NODE, we recommend using the following wording to describe the data deposition in your manuscript: "
+                    f"All data are accessible in NODE (https://www.biosino.org/node) with the accession number {_id} or through the URL: https://www.biosino.org/node/project/detail/{_id}. "
+                    f"Please cite the following publication: Advances in multi-omics big data sharing platform research. Chinese Bulletin of Life Sciences. 2023, 35(12): 1553-1560. "
+                    f"DOI: [10.13376/j.cbls/2023169](https://lifescience.sinh.ac.cn/article.php?id=3716)"
+                )
             }
+
+            for experiment in get_experiments(session, project_id):
+                distribution = {"@type": "DataDownload"}
+                if name := experiment.get("name"):
+                    distribution["name"] = name
+                if _id := experiment.get("datNo"):
+                    distribution["identifier"] = _id
+                    if experiment.get("security").casefold() == "public":
+                        distribution["contentUrl"] = f"https://www.biosino.org/node/download/node/data/public/{_id}"
+                    else:
+                        output["conditionsOfAccess"] = "Restricted"
+                if content_size := experiment.get("fileSize"):
+                    distribution["contentSize"] = content_size
+                if encoding_format := experiment.get("dataType"):
+                    distribution["encodingFormat"] = encoding_format
+
+                insert_value(output, "distribution", distribution)
+
 
             if name := general_info.get("name"):
                 insert_value(output, "name", name)
@@ -115,13 +170,6 @@ def parse():
                             output["pmids"] = pmid
                         else:
                             output["pmids"] += f", {pmid}"
-                    # citation = {}
-                    # if doi := publish.get("doi"):
-                    #     insert_value(citation, "doi", doi)
-                    # if pmid := publish.get("pmid"):
-                    #     insert_value(citation, "pmid", pmid)
-                    # if citation:
-                    #     insert_value(output, "citation", citation)
 
             author = {}
             if given_name := author_info.get("firstName"):
