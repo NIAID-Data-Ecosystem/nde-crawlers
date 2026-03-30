@@ -77,7 +77,7 @@ def get_ids(session):
         for project in response["data"]["pageInfo"]["content"]:
             yield project["id"]
 
-def get_experiments(session, project_id):
+def get_data_list(session, project_id):
     url = "https://www.biosino.org/node/api/app/browseDetail/getDataList"
     page_num = 1
     payload = {
@@ -100,8 +100,8 @@ def get_experiments(session, project_id):
         response = session.post(url, json=payload)
         response.raise_for_status()
         response = response.json()
-        for experiment in response["data"]["list"]:
-            yield experiment
+        for data in response["data"]["list"]:
+            yield data
 
 def parse():
     with make_session_with_retries() as session:
@@ -137,19 +137,19 @@ def parse():
                 )
             }
 
-            for experiment in get_experiments(session, project_id):
+            for data in get_data_list(session, project_id):
                 distribution = {"@type": "DataDownload"}
-                if name := experiment.get("name"):
+                if name := data.get("name"):
                     distribution["name"] = name
-                if _id := experiment.get("datNo"):
+                if _id := data.get("datNo"):
                     distribution["identifier"] = _id
-                    if experiment.get("security").casefold() == "public":
+                    if data.get("security").casefold() == "public":
                         distribution["contentUrl"] = f"https://www.biosino.org/node/download/node/data/public/{_id}"
                     else:
                         output["conditionsOfAccess"] = "Restricted"
-                if content_size := experiment.get("fileSize"):
+                if content_size := data.get("fileSize"):
                     distribution["contentSize"] = content_size
-                if encoding_format := experiment.get("dataType"):
+                if encoding_format := data.get("dataType"):
                     distribution["encodingFormat"] = encoding_format
 
                 insert_value(output, "distribution", distribution)
@@ -182,45 +182,46 @@ def parse():
                 insert_value(output, "author", author)
 
             table_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleTable/{project_id}").json()
-            for exp_table in table_info["data"]["expTables"]:
-                data_type = exp_table["type"]
-                exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum=1&pageSize=100&sortKey=expNo&sortType=asc").json()
-                pages = exp_info["data"]["expTableData"]["totalPages"]
-                for page in range(1, pages + 1):
-                    exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum={page}&pageSize=100&sortKey=expNo&sortType=asc").json()
-                    for exp in exp_info["data"]["expTableData"]["content"]:
-                        if date_created := exp.get("createDate"):
-                            try:
-                                date_created = dateutil.parser.parse(date_created).date().isoformat()
-                                insert_value(output, "dateCreated", date_created)
-                            except (ValueError, TypeError):
-                                logger.info(f"Failed to parse date: {date_created} for project {project_id}")
+            if table_info.get("data") and table_info["data"].get("expTables"):
+                for exp_table in table_info["data"]["expTables"]:
+                    data_type = exp_table["type"]
+                    exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum=1&pageSize=100&sortKey=expNo&sortType=asc").json()
+                    pages = exp_info["data"]["expTableData"]["totalPages"]
+                    for page in range(1, pages + 1):
+                        exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum={page}&pageSize=100&sortKey=expNo&sortType=asc").json()
+                        for exp in exp_info["data"]["expTableData"]["content"]:
+                            if date_created := exp.get("createDate"):
+                                try:
+                                    date_created = dateutil.parser.parse(date_created).date().isoformat()
+                                    insert_value(output, "dateCreated", date_created)
+                                except (ValueError, TypeError):
+                                    logger.info(f"Failed to parse date: {date_created} for project {project_id}")
 
-                        if date_modified := exp.get("updateDate"):
-                            try:
-                                date_modified = dateutil.parser.parse(date_modified).date().isoformat()
-                                insert_value(output, "dateModified", date_modified)
-                            except (ValueError, TypeError):
-                                logger.info(f"Failed to parse date: {date_modified} for project {project_id}")
+                            if date_modified := exp.get("updateDate"):
+                                try:
+                                    date_modified = dateutil.parser.parse(date_modified).date().isoformat()
+                                    insert_value(output, "dateModified", date_modified)
+                                except (ValueError, TypeError):
+                                    logger.info(f"Failed to parse date: {date_modified} for project {project_id}")
 
-                        if submitter := exp.get("submitter"):
-                            author = {}
-                            if given_name := submitter.get("firstName"):
-                                insert_value(author, "givenName", given_name)
-                            if family_name := submitter.get("lastName"):
-                                insert_value(author, "familyName", family_name)
-                            if name := submitter.get("orgName"):
-                                insert_value(author, "affiliation", {"name": name})
-                            if author:
-                                insert_value(output, "author", author)
+                            if submitter := exp.get("submitter"):
+                                author = {}
+                                if given_name := submitter.get("firstName"):
+                                    insert_value(author, "givenName", given_name)
+                                if family_name := submitter.get("lastName"):
+                                    insert_value(author, "familyName", family_name)
+                                if name := submitter.get("orgName"):
+                                    insert_value(author, "affiliation", {"name": name})
+                                if author:
+                                    insert_value(output, "author", author)
 
-                        if attributes := exp.get("attributes"):
-                            if name := attributes.get("library_selection"):
-                                insert_value(output, "measurementTechnique", {"name": name})
-                            if name := attributes.get("library_strategy"):
-                                insert_value(output, "measurementTechnique", {"name": name})
-                            if name := attributes.get("platform"):
-                                insert_value(output, "measurementTechnique", {"name": name})
+                            if attributes := exp.get("attributes"):
+                                if name := attributes.get("library_selection"):
+                                    insert_value(output, "measurementTechnique", {"name": name})
+                                if name := attributes.get("library_strategy"):
+                                    insert_value(output, "measurementTechnique", {"name": name})
+                                if name := attributes.get("platform"):
+                                    insert_value(output, "measurementTechnique", {"name": name})
 
             if date_created := output.get("dateCreated"):
                 if not isinstance(date_created, list):
