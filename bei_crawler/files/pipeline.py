@@ -42,7 +42,7 @@ class BeiItemProcessorPipeline:
         url = item.get("url")
         output = {
             "@context": "http://schema.org/",
-            "@type": "Dataset",
+            "@type": "Sample",
             "_id": "bei_" + _id.casefold(),
             "identifier": _id,
             "url": url,
@@ -55,6 +55,7 @@ class BeiItemProcessorPipeline:
             },
             "conditionsOfAccess": "Restricted",
             "isAccessibleForFree": True,
+            "additionalType": "Biosample"
         }
 
         if name := item.get("Organism:"):
@@ -73,12 +74,12 @@ class BeiItemProcessorPipeline:
 
         if sample_availability := item.get("Availability Status:"):
             if sample_availability.strip().casefold() == "in stock" or sample_availability.strip().casefold() == "made to order":
-                insert_value(output, "sample", {"sampleAvailability": True})
+                insert_value(output, "sampleAvailability", True)
             else:
-                insert_value(output, "sample", {"sampleAvailability": False})
+                insert_value(output, "sampleAvailability", False)
 
         if name := item.get("Storage Temperature:"):
-            insert_value(output.setdefault("sample", {}), "sampleStorageTemperature", {"name": name})
+            insert_value(output, "sampleStorageTemperature", {"name": name})
 
         if name := item.get("Contributor:"):
             insert_value(output, "contributor", {"name": name})
@@ -108,7 +109,7 @@ class BeiItemProcessorPipeline:
             insert_value(output, "description", description, extend=True)
 
         if sample_state := item.get("Material Provided:"):
-            insert_value(output.setdefault("sample", {}), "sampleState", sample_state, extend=True)
+            insert_value(output, "sampleState", sample_state, extend=True)
 
         if name := item.get("Manufacturer:"):
             insert_value(output, "author", {"@type": "Organization", "name": name})
@@ -117,10 +118,10 @@ class BeiItemProcessorPipeline:
             insert_value(output, "description", description, extend=True)
 
         if sample_process := item.get("Packing/Storage:"):
-            insert_value(output.setdefault("sample", {}), "sampleProcess", sample_process)
+            insert_value(output, "sampleProcess", sample_process)
 
         if experimental_purpose := item.get("Functional Activity:"):
-            insert_value(output.setdefault("sample", {}), "experimentalPurpose", experimental_purpose)
+            insert_value(output, "experimentalPurpose", experimental_purpose)
 
         if citation := item.get("References:"):
             insert_value(output, "isBasedOn", {"citation": citation})
@@ -137,20 +138,20 @@ class BeiItemProcessorPipeline:
             insert_value(output.setdefault("usageInfo", {}), "description", description, extend=True)
 
         if additional_property := item.get("Insert Size:"):
-            insert_value(output.setdefault("sample", {}), "additionalProperty", {"@type": "PropertyValue", "name": "Insert Size", "value": additional_property})
+            insert_value(output, "additionalProperty", {"@type": "PropertyValue", "name": "Insert Size", "value": additional_property})
 
         if not "Organism:" in item and "Taxonomy:" in item:
             name = item.get("Taxonomy:")
             insert_value(output, "species", {"name": name})
 
         if additional_property := item.get("Growth Conditions:"):
-            insert_value(output.setdefault("sample", {}), "additionalProperty", {"@type": "PropertyValue", "name": "Growth Conditions", "value": additional_property})
+            insert_value(output, "additionalProperty", {"@type": "PropertyValue", "name": "Growth Conditions", "value": additional_property})
 
         if additional_property := item.get("Safety Precautions:"):
-            insert_value(output.setdefault("sample", {}), "additionalProperty", {"@type": "PropertyValue", "name": "Safety Precautions", "value": additional_property})
+            insert_value(output, "additionalProperty", {"@type": "PropertyValue", "name": "Safety Precautions", "value": additional_property})
 
         if additional_property := item.get("Thawing and Growth:"):
-            insert_value(output.setdefault("sample", {}), "additionalProperty", {"@type": "PropertyValue", "name": "Thawing and Growth", "value": additional_property})
+            insert_value(output, "additionalProperty", {"@type": "PropertyValue", "name": "Thawing and Growth", "value": additional_property})
 
         if description := item.get("Patents or other restrictions:"):
             insert_value(output.setdefault("usageInfo", {}), "description", description, extend=True)
@@ -162,16 +163,16 @@ class BeiItemProcessorPipeline:
             insert_value(output, "description", description, extend=True)
 
         if additional_property := item.get("Reconstitution:"):
-            insert_value(output.setdefault("sample", {}), "additionalProperty", {"@type": "PropertyValue", "name": "Reconstitution", "value": additional_property})
+            insert_value(output, "additionalProperty", {"@type": "PropertyValue", "name": "Reconstitution", "value": additional_property})
 
         if sample_state := item.get("Solubility:"):
-            insert_value(output.setdefault("sample", {}), "sampleState", sample_state, extend=True)
+            insert_value(output, "sampleState", sample_state, extend=True)
 
         if sample_state := item.get("Storage of Reconstituted Peptides:"):
-            insert_value(output.setdefault("sample", {}), "sampleState", sample_state, extend=True)
+            insert_value(output, "sampleState", sample_state, extend=True)
 
         if additional_property := item.get("Sequence:"):
-            insert_value(output.setdefault("sample", {}), "additionalProperty", {"@type": "PropertyValue", "name": "Sequence", "value": additional_property})
+            insert_value(output, "additionalProperty", {"@type": "PropertyValue", "name": "Sequence", "value": additional_property})
 
         return output
 

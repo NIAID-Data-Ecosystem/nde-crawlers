@@ -87,6 +87,7 @@ def parse_gsm(data_folder):
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
             },
+            "additionalType": "ExperimentalRunSample",
         }
 
         if name := item.get("!Sample_title"):

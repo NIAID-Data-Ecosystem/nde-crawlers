@@ -893,6 +893,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "aggregateElement": {
                         "properties": {
+                            "additionalType": {"type": "keyword", "copy_to": ["all"]},
                             "associatedGenotype": {"type": "text", "copy_to": ["all"]},
                             "associatedPhenotype": {
                                 "properties": {
@@ -979,6 +980,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "value": {"type": "integer"},
                         }
                     },
+                    "additionalType": {"type": "keyword", "copy_to": ["all"]},
                     "associatedGenotype": {"type": "text", "copy_to": ["all"]},
                     "associatedPhenotype": {
                         "properties": {
@@ -1332,6 +1334,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "value": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "additionalType": {"type": "keyword", "copy_to": ["all"]},
             "alternateIdentifier": {"type": "keyword", "copy_to": ["all"]},
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "anatomicalStructure": {

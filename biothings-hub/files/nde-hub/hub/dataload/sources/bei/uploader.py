@@ -1,10 +1,10 @@
-from hub.dataload.nde import NDESourceUploader
+from hub.dataload.nde import NDESourceSampleUploader
 from utils.extract import process_descriptions
 from utils.pubtator import standardize_data
 from utils.utils import nde_upload_wrapper
 
 
-class BeiUploader(NDESourceUploader):
+class BeiUploader(NDESourceSampleUploader):
     name = "bei"
 
     @nde_upload_wrapper
