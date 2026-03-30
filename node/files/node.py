@@ -181,9 +181,9 @@ def parse():
             if author:
                 insert_value(output, "author", author)
 
-            id_stat_info = session.get(f"https://www.biosino.org/node/api/app/project/getStatDetail/{project_id}").json()
-            for exp_stat in id_stat_info["data"]["expStats"]:
-                data_type = exp_stat["name"]
+            table_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleTable/{project_id}").json()
+            for exp_table in table_info["data"]["expTables"]:
+                data_type = exp_table["type"]
                 exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum=1&pageSize=100&sortKey=expNo&sortType=asc").json()
                 pages = exp_info["data"]["expTableData"]["totalPages"]
                 for page in range(1, pages + 1):
