@@ -55,7 +55,7 @@ class BeiItemProcessorPipeline:
             },
             "conditionsOfAccess": "Restricted",
             "isAccessibleForFree": True,
-            "additionalType": "Biosample"
+            "additionalType": "BioSample"
         }
 
         if name := item.get("Organism:"):
