@@ -376,6 +376,12 @@ def parse_samples():
         # - Pre-processed sample isBasisFor post-processed sample
         # - Post-processed sample isBasisFor Dataset
 
+        has_dataset_descendant = any(
+            isinstance(desc, dict) and desc.get("entity_type") == "Dataset"
+            for desc in _ensure_list(metadata.get("immediate_descendants"))
+        )
+        output["additionalType"] = "ExperimentalRunSample" if has_dataset_descendant else "BioSample"
+
         basis_for = []
         for desc in _ensure_list(metadata.get("immediate_descendants")):
             if not isinstance(desc, dict) or not desc.get("uuid"):
@@ -612,7 +618,7 @@ def parse_datasets():
         # Minimal Sample info on Dataset records (derived from donor + one related sample).
         # This supports UI layouts that conditionally render sample sections even when info is sparse.
         try:
-            sample_entry = {"@type": "Sample"}
+            sample_entry = {"@type": "Sample", "additionalType": "ExperimentalRunSample"}
 
             donor = metadata.get("donor") if isinstance(metadata, dict) else None
             donor_mapped = donor.get("mapped_metadata", {}) if isinstance(donor, dict) else {}
