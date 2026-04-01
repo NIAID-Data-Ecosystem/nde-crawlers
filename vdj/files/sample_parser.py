@@ -39,6 +39,7 @@ def _build_sample_record(
     sample_record = {
         "_id": record_id,
         "@type": "Sample",
+        "additionalType": "ExperimentalRunSample",
         "identifier": identifier,
         "name": display_name,
         "url": dataset_url,

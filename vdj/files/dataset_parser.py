@@ -723,7 +723,7 @@ def build_dataset_sample_objects(sample_collections):
             aggregate_data.pop("developmentalStage", None)
 
     if aggregate_data:
-        aggregate_element = {"@type": "Sample"}
+        aggregate_element = {"@type": "Sample", "additionalType": "ExperimentalRunSample"}
         aggregate_element.update(aggregate_data)
         sample_collection["aggregateElement"] = aggregate_element
 
