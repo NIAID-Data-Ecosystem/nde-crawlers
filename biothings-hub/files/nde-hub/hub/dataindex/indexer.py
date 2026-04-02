@@ -1,7 +1,5 @@
-import asyncio
-import functools
-
 from biothings.hub.dataindex.indexer import Indexer
+from elasticsearch import AsyncElasticsearch
 
 from .embed import run_embeddings
 
@@ -36,13 +34,25 @@ class NDEIndexer(Indexer):
             "filter": ["lowercase", "asciifolding", "shingle", "stemmer"],
         }
 
-    async def post_index(self, *args, **kwargs):
-        es_hosts = self.es_client_args.get("hosts")
-        index_name = self.es_index_name
-        self.logger.info("Starting post-index embedding for index '%s'", index_name)
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
-            functools.partial(run_embeddings, es_hosts, index_name, log=self.logger),
+    async def post_index(self, job_manager, *args, **kwargs):
+        self.logger.info("Starting post-index embedding for index '%s'", self.es_index_name)
+
+        pinfo = self.pinfo.get_pinfo(
+            step="post_index",
+            description=f"embedding {self.es_index_name}",
         )
-        self.logger.info("Post-index embedding complete for index '%s'", index_name)
+
+        job = await job_manager.defer_to_process(
+            pinfo,
+            run_embeddings,
+            self.es_client_args.get("hosts"),
+            self.es_index_name,
+        )
+        await job
+
+        self.logger.info("Post-index embedding complete for index '%s'", self.es_index_name)
+
+        self.logger.info("Force merging index '%s' to 1 segment", self.es_index_name)
+        async with AsyncElasticsearch(**self.es_client_args) as client:
+            await client.indices.forcemerge(index=self.es_index_name, max_num_segments=1, request_timeout=10800)
+        self.logger.info("Force merge complete for index '%s'", self.es_index_name)
