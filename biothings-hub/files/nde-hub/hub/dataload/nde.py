@@ -894,7 +894,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "aggregateElement": {
                         "properties": {
                             "additionalType": {"type": "keyword", "copy_to": ["all"]},
-                            "associatedGenotype": {"type": "text", "copy_to": ["all"]},
+                            "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
                             "associatedPhenotype": {
                                 "properties": {
                                     "identifier": {"type": "text", "copy_to": ["all"]},
@@ -956,7 +956,7 @@ class NDESourceUploader(BaseSourceUploader):
                             },
                             "sampleType": {
                                 "properties": {
-                                    "name": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "copy_to": ["all"]},
                                     "url": {"type": "text", "copy_to": ["all"]},
                                 }
                             },
@@ -981,7 +981,7 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "additionalType": {"type": "keyword", "copy_to": ["all"]},
-                    "associatedGenotype": {"type": "text", "copy_to": ["all"]},
+                    "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
                     "associatedPhenotype": {
                         "properties": {
                             "identifier": {"type": "text", "copy_to": ["all"]},
@@ -1043,7 +1043,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "sampleType": {
                         "properties": {
-                            "name": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
                     },
@@ -1351,7 +1351,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
-            "associatedGenotype": {"type": "text", "copy_to": ["all"]},
+            "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
             "associatedPhenotype": {
                 "properties": {
                     "identifier": {"type": "text", "copy_to": ["all"]},
@@ -1682,7 +1682,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "instrument": {
                 "properties": {
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
@@ -1905,7 +1905,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "sampleType": {
                 "properties": {
-                    "name": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
