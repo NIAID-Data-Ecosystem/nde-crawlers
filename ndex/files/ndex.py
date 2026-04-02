@@ -119,7 +119,7 @@ def convert_to_pmid(identifier: str) -> str:
                 pmid = record.get("pmid")
                 if pmid:
                     logger.info(f"Converted {identifier} to PMID: {pmid}")
-                    return pmid
+                    return str(pmid)
     except Exception as e:
         print(f"Error converting identifier {identifier}: {e}")
     return None
