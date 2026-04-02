@@ -210,12 +210,17 @@ def parse():
         citation_url = study.get("publications")
         if citation_url and validators.url(citation_url):
             if "pubmed" in citation_url:
-                result["pmids"] = citation_url.split("/")[-2]
+                pmid = citation_url.split("/")[-2]
+                # check if valid pmid with regex
+                if pmid.isdigit():
+                    result["pmids"] = citation_url.split("/")[-2]
             elif "doi" in citation_url:
                 doi_id = citation_url.split("/")[-1]
                 r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
                 if "pubmed" in r.url:
-                    result["pmids"] = r.url.split("/")[-2]
+                    pmid = r.url.split("/")[-2]
+                    if pmid.isdigit():
+                        result["pmids"] = r.url.split("/")[-2]
                 else:
                     result["citation"] = None
             else:
