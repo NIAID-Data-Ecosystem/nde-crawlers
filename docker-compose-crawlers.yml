@@ -51,6 +51,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+      - cache:/cache
   clinepidb-crawler:
     build:
       context: clinepidb

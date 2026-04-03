@@ -31,7 +31,16 @@ import urllib.parse
 import urllib.request
 from typing import Any, Iterator, Optional
 
-logging.basicConfig(level=logging.INFO)
+import requests
+from requests.adapters import HTTPAdapter
+from sql_database import NDEDatabase
+from urllib3.util.retry import Retry
+
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger("nde-logger")
 
 # ---------------------------------------------------------------------------
@@ -43,14 +52,14 @@ API_BASE = "https://www.bv-brc.org/api"
 TAXONOMY_URL = (
     f"{API_BASE}/taxonomy/"
     "?gt(genomes,0)&eq(taxon_rank,species)"
-    "&select(taxon_id,taxon_name,genomes,lineage_names)"
+    "&select(taxon_id,taxon_name,genomes)"
     "&sort(+taxon_id)"
     "&http_accept=application/json"
 )
 
 GENOME_URL_TEMPLATE = (
     f"{API_BASE}/genome/"
-    "?in(taxon_lineage_ids,({code}))"
+    "?eq(taxon_id,{code})"
     "&select(genome_id,genome_name,taxon_id,"
     "isolation_country,host_common_name,host_name,"
     "host_scientific_name,host_taxon_id,"
@@ -63,7 +72,7 @@ GENOME_URL_TEMPLATE = (
 # Count query (solr format) — returns numFound without fetching all docs
 GENOME_COUNT_URL_TEMPLATE = (
     f"{API_BASE}/genome/"
-    "?in(taxon_lineage_ids,({code}))"
+    "?eq(taxon_id,{code})"
     "&select(genome_id)"
     "&limit(1,0)"
     "&http_accept=application/solr+json"
@@ -189,7 +198,7 @@ HOWTO_STEPS = [
         "Genome records associated with that NCBI Taxonomy code "
         "(paginating as needed): "
         "https://www.bv-brc.org/api/genome/"
-        "?in(taxon_lineage_ids,({NCBI_TAXONOMY_ID}))"
+        "?eq(taxon_id,{NCBI_TAXONOMY_ID})"
         "&select(genome_id,genome_name,taxon_id,isolation_country,"
         "host_common_name,host_name,host_scientific_name,host_taxon_id)"
         "&sort(+genome_id)&http_accept=application/json&limit(1000,0)"
@@ -215,6 +224,8 @@ HOWTO_STEPS = [
 
 ROWS_PER_PAGE = 1000
 REQUEST_DELAY = 0.5  # seconds between API calls
+MAX_RETRIES = 3
+RETRY_BACKOFF = 10  # seconds, doubled each retry
 
 
 # ---------------------------------------------------------------------------
@@ -222,14 +233,27 @@ REQUEST_DELAY = 0.5  # seconds between API calls
 # ---------------------------------------------------------------------------
 
 
-def _fetch_json(url: str, timeout: int = 120) -> Any:
-    """Fetch a URL and return parsed JSON."""
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "nde-bvbrc-crawler/0.1"},
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read())
+def _fetch_json(url: str, timeout: int = 120, retries: int = MAX_RETRIES) -> Any:
+    """Fetch a URL and return parsed JSON, with retry on timeout."""
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, retries + 1):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "nde-bvbrc-crawler/0.1"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read())
+        except Exception as exc:
+            last_exc = exc
+            if attempt < retries:
+                wait = RETRY_BACKOFF * (2 ** (attempt - 1))
+                logger.warning(
+                    "Attempt %d/%d failed for %s: %s — retrying in %ds",
+                    attempt, retries, url[:120], exc, wait,
+                )
+                time.sleep(wait)
+    raise last_exc  # type: ignore[misc]
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[dt.datetime]:
@@ -302,7 +326,7 @@ def _fetch_taxonomy_species() -> list[dict[str, Any]]:
         try:
             data = _fetch_json(url)
         except Exception as exc:
-            logger.warning("Error fetching taxonomy page at offset %d: %s", offset, exc)
+            logger.warning("Error fetching taxonomy page at offset %d: %s (after retries)", offset, exc)
             break
 
         if not data:
@@ -324,7 +348,7 @@ def _fetch_genome_count(code: str) -> int:
     """Fetch the total genome count for a taxon using solr response format."""
     url = GENOME_COUNT_URL_TEMPLATE.format(code=code)
     try:
-        data = _fetch_json(url, timeout=30)
+        data = _fetch_json(url, timeout=120)
         return data.get("response", {}).get("numFound", 0)
     except Exception as exc:
         logger.warning("Error fetching genome count for %s: %s", code, exc)
@@ -374,7 +398,7 @@ def _fetch_genomes_for_taxon(
             records = _fetch_json(url)
         except Exception as exc:
             logger.warning(
-                "Error fetching genomes at offset %d for taxon %s: %s",
+                "Error fetching genomes at offset %d for taxon %s: %s (after retries)",
                 offset,
                 code,
                 exc,
@@ -514,7 +538,7 @@ def _build_example_of_work(code: str) -> dict[str, Any]:
             "name": "Use API call for an example record",
             "target": (
                 f"{API_BASE}/genome/"
-                f"?in(taxon_lineage_ids,({code}))"
+                f"?eq(taxon_id,{code})"
                 "&select(genome_id,genome_name,taxon_id,isolation_country,"
                 "host_common_name,host_name,host_scientific_name,"
                 "host_taxon_id)"
@@ -697,59 +721,145 @@ def _build_data_collection(
 
 
 # ---------------------------------------------------------------------------
-# Main entry point
+# Main class
 # ---------------------------------------------------------------------------
 
 
-def parse() -> Iterator[dict[str, Any]]:
-    """Yield DataCollection records, one per species-level taxonomy code."""
+class BvBrc(NDEDatabase):
+    SQL_DB = "bv_brc.db"
+    EXPIRE = dt.timedelta(days=30)
 
-    # Fetch the API version
-    version = _fetch_api_version()
-    if version:
-        logger.info("BV-BRC API version: %s", version)
+    def __init__(self):
+        super().__init__()
+        self._version = ""
 
-    # Step 1 – Get all species-level taxa with genomes from taxonomy API
-    taxa = _fetch_taxonomy_species()
-    if not taxa:
-        logger.error("No taxonomy entries returned from BV-BRC taxonomy API.")
-        return
+    def _get_session(self):
+        """Create a requests session with retry logic and connection pooling."""
+        session = requests.Session()
+        retries = Retry(total=5, backoff_factor=2, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retries, pool_connections=10, pool_maxsize=10)
+        session.mount("https://", adapter)
+        return session
 
-    logger.info("Processing %d species-level taxa...", len(taxa))
+    def load_cache(self):
+        """Download all BV-BRC taxonomy + genome data and yield (_id, json_str) tuples for the cache."""
+        session = self._get_session()
 
-    # Step 2 – For each taxon, fetch genome metadata and build DataCollection
-    for taxon in taxa:
-        code = str(taxon.get("taxon_id", "")).strip()
-        taxon_name = (taxon.get("taxon_name") or f"Organism {code}").strip()
-        genome_count_from_taxonomy = taxon.get("genomes", 0)
+        # Fetch the API version
+        self._version = _fetch_api_version()
+        if self._version:
+            logger.info("BV-BRC API version: %s", self._version)
 
-        if not code:
-            continue
+        # Step 1 — Get all species-level taxa with genomes from taxonomy API
+        taxa = _fetch_taxonomy_species()
+        if not taxa:
+            logger.error("No taxonomy entries returned from BV-BRC taxonomy API.")
+            return
 
-        logger.info(
-            "Processing taxon %s (%s, ~%d genomes)...",
-            code,
-            taxon_name,
-            genome_count_from_taxonomy,
-        )
+        logger.info("Starting processing of %d species-level taxa", len(taxa))
 
-        # Get the actual count via solr query
-        genome_count = _fetch_genome_count(code)
-        if genome_count == 0:
-            genome_count = genome_count_from_taxonomy
-        time.sleep(REQUEST_DELAY)
+        count = 0
+        errors = 0
+        for taxon in taxa:
+            code = str(taxon.get("taxon_id", "")).strip()
+            taxon_name = (taxon.get("taxon_name") or f"Organism {code}").strip()
+            genome_count_from_taxonomy = taxon.get("genomes", 0)
 
-        # Fetch detailed genome metadata
-        group_data = _fetch_genomes_for_taxon(code, genome_count)
+            if not code:
+                continue
 
-        # Use the higher of the two counts (taxonomy table vs actual query)
-        final_count = max(genome_count, group_data["record_count"])
-        if final_count == 0:
-            logger.warning("No genomes found for taxon %s, skipping.", code)
-            continue
+            try:
+                logger.info(
+                    "Processing taxon %s (%s, ~%d genomes)...",
+                    code, taxon_name, genome_count_from_taxonomy,
+                )
 
-        yield _build_data_collection(
-            code, taxon_name, final_count, group_data, version,
-        )
+                # Get the actual count via solr query
+                genome_count = _fetch_genome_count(code)
+                if genome_count == 0:
+                    genome_count = genome_count_from_taxonomy
+                time.sleep(REQUEST_DELAY)
 
-        time.sleep(REQUEST_DELAY)
+                # Fetch detailed genome metadata
+                group_data = _fetch_genomes_for_taxon(code, genome_count)
+
+                # Use the higher of the two counts
+                final_count = max(genome_count, group_data["record_count"])
+                if final_count == 0:
+                    logger.warning("No genomes found for taxon %s, skipping.", code)
+                    continue
+
+                # Serialize aggregated data for the cache
+                # Convert sets and datetimes to JSON-serializable types
+                cache_entry = {
+                    "code": code,
+                    "taxon_name": taxon_name,
+                    "genome_count": final_count,
+                    "version": self._version,
+                    "earliest_inserted": _iso_date(group_data["earliest_inserted"]),
+                    "latest_modified": _iso_date(group_data["latest_modified"]),
+                    "countries": sorted(group_data["countries"]),
+                    "hosts": sorted([list(h) for h in group_data["hosts"]]),
+                    "collection_years": sorted(group_data["collection_years"]),
+                    "diseases": sorted(group_data["diseases"]),
+                    "record_count": group_data["record_count"],
+                }
+
+                cache_id = _make_record_id(code)
+                yield (cache_id, json.dumps(cache_entry))
+                count += 1
+                if count % 500 == 0:
+                    logger.info("Cached %s / %s taxa (errors: %s)", count, len(taxa), errors)
+            except Exception as e:
+                errors += 1
+                logger.error("Error processing taxon %s: %s", code, e)
+                continue
+
+            time.sleep(REQUEST_DELAY)
+
+        logger.info("Finished loading cache. Total cached: %s, Errors: %s", count, errors)
+
+    def parse(self, records):
+        """Parse cached records into NDE-schema DataCollection documents."""
+        count = 0
+        errors = 0
+        for record in records:
+            cache_id = record[0]
+            try:
+                data = json.loads(record[1])
+
+                # Reconstruct the group_data dict from cached JSON
+                group_data = {
+                    "earliest_inserted": (
+                        dt.datetime.fromisoformat(data["earliest_inserted"])
+                        if data.get("earliest_inserted") else None
+                    ),
+                    "latest_modified": (
+                        dt.datetime.fromisoformat(data["latest_modified"])
+                        if data.get("latest_modified") else None
+                    ),
+                    "countries": set(data.get("countries", [])),
+                    "hosts": set(tuple(h) for h in data.get("hosts", [])),
+                    "collection_years": data.get("collection_years", []),
+                    "diseases": set(data.get("diseases", [])),
+                    "record_count": data.get("record_count", 0),
+                }
+
+                result = _build_data_collection(
+                    data["code"],
+                    data["taxon_name"],
+                    data["genome_count"],
+                    group_data,
+                    data.get("version", ""),
+                )
+                if result:
+                    yield result
+                    count += 1
+                    if count % 500 == 0:
+                        logger.info("Parsed %s records (errors: %s)", count, errors)
+            except Exception as e:
+                errors += 1
+                logger.error("Error parsing %s: %s", cache_id, e)
+                continue
+
+        logger.info("Finished parsing. Total records: %s, Errors: %s", count, errors)
