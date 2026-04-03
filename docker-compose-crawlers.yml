@@ -45,6 +45,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  bv_brc-crawler:
+    build:
+      context: bv_brc
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   clinepidb-crawler:
     build:
       context: clinepidb
