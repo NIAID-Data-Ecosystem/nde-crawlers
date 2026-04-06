@@ -5,20 +5,14 @@ BV-BRC Genomes DataCollection crawler for the NIAID Data Ecosystem.
 Groups Bacterial and Viral Bioinformatics Resource Center genome records
 by NCBI Taxonomy ID and generates one DataCollection record per organism.
 
-API reference
--------------
-Taxonomy table (species with genomes):
-    https://www.bv-brc.org/api/taxonomy/
-    ?gt(genomes,0)&eq(taxon_rank,species)
-    &select(taxon_id,taxon_name,genomes)&limit(1000)
+Data source
+-----------
+Bulk genome metadata is downloaded from the BV-BRC FTPS server:
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/genome_metadata
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/genome_summary
 
-Genomes for a given taxonomy code (paginated):
-    https://www.bv-brc.org/api/genome/
-    ?in(taxon_lineage_ids,({CODE}))
-    &select(genome_id,genome_name,taxon_id,isolation_country,
-            host_common_name,host_name,host_scientific_name,
-            host_taxon_id,date_inserted,date_modified,collection_year)
-    &sort(+genome_id)&http_accept=application/json&limit(1000,0)
+Taxon names are batch-resolved from the BV-BRC REST API:
+    https://www.bv-brc.org/api/taxonomy/?in(taxon_id,(...))
 """
 
 import copy
@@ -26,15 +20,14 @@ import datetime as dt
 import json
 import logging
 import re
+import ssl
 import time
-import urllib.parse
 import urllib.request
-from typing import Any, Iterator, Optional
+from collections import defaultdict
+from ftplib import FTP, FTP_TLS
+from typing import Any, Optional
 
-import requests
-from requests.adapters import HTTPAdapter
 from sql_database import NDEDatabase
-from urllib3.util.retry import Retry
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
@@ -49,35 +42,6 @@ logger = logging.getLogger("nde-logger")
 
 API_BASE = "https://www.bv-brc.org/api"
 
-TAXONOMY_URL = (
-    f"{API_BASE}/taxonomy/"
-    "?gt(genomes,0)&eq(taxon_rank,species)"
-    "&select(taxon_id,taxon_name,genomes)"
-    "&sort(+taxon_id)"
-    "&http_accept=application/json"
-)
-
-GENOME_URL_TEMPLATE = (
-    f"{API_BASE}/genome/"
-    "?eq(taxon_id,{code})"
-    "&select(genome_id,genome_name,taxon_id,"
-    "isolation_country,host_common_name,host_name,"
-    "host_scientific_name,host_taxon_id,"
-    "date_inserted,date_modified,collection_year,disease)"
-    "&sort(+genome_id)"
-    "&http_accept=application/json"
-    "&limit({limit},{offset})"
-)
-
-# Count query (solr format) — returns numFound without fetching all docs
-GENOME_COUNT_URL_TEMPLATE = (
-    f"{API_BASE}/genome/"
-    "?eq(taxon_id,{code})"
-    "&select(genome_id)"
-    "&limit(1,0)"
-    "&http_accept=application/solr+json"
-)
-
 # End-user URL (used as the DataCollection url)
 BVBRC_VIEW_URL_TEMPLATE = (
     "https://www.bv-brc.org/view/Taxonomy/{code}#view_tab=genomes"
@@ -85,6 +49,36 @@ BVBRC_VIEW_URL_TEMPLATE = (
 
 # API version URL
 API_VERSION_URL = f"{API_BASE}/"
+
+# ---------------------------------------------------------------------------
+# FTP configuration
+# ---------------------------------------------------------------------------
+
+FTP_HOST = "ftp.bv-brc.org"
+FTP_USER = "anonymous"
+FTP_PASS = "guest"
+GENOME_METADATA_PATH = "RELEASE_NOTES/genome_metadata"
+GENOME_SUMMARY_PATH = "RELEASE_NOTES/genome_summary"
+GENOME_LINEAGE_PATH = "RELEASE_NOTES/genome_lineage"
+
+# genome_metadata column indices (0-based)
+META_TAXON_ID = 3
+META_COMPLETION_DATE = 13
+META_COLLECTION_DATE = 37
+META_ISOLATION_COUNTRY = 38
+META_HOST_NAME = 45
+META_DISEASE = 63
+META_MIN_COLS = 64
+
+# genome_summary column indices (0-based)
+SUMMARY_TAXON_ID = 2
+SUMMARY_DATE_MODIFIED = 19
+SUMMARY_MIN_COLS = 20
+
+# genome_lineage column indices (0-based)
+LINEAGE_TAXON_ID = 2
+LINEAGE_SPECIES = 9
+LINEAGE_MIN_COLS = 10
 
 # ---------------------------------------------------------------------------
 # Curated / static metadata
@@ -194,23 +188,23 @@ ENCODING_FORMAT = [
 
 HOWTO_STEPS = [
     (
-        "Step 1: For each NCBI Taxonomy code, pull all the BV-BRC "
-        "Genome records associated with that NCBI Taxonomy code "
-        "(paginating as needed): "
-        "https://www.bv-brc.org/api/genome/"
-        "?eq(taxon_id,{NCBI_TAXONOMY_ID})"
-        "&select(genome_id,genome_name,taxon_id,isolation_country,"
-        "host_common_name,host_name,host_scientific_name,host_taxon_id)"
-        "&sort(+genome_id)&http_accept=application/json&limit(1000,0)"
+        "Step 1: Download bulk genome data from the BV-BRC FTPS server "
+        "(ftps://ftp.bv-brc.org/RELEASE_NOTES/). Stream and aggregate "
+        "three tab-separated files: 'genome_metadata' for per-taxon "
+        "genome counts, isolation countries, host organisms, diseases, "
+        "collection dates, and earliest completion dates; "
+        "'genome_summary' for the latest date_modified per taxon; and "
+        "'genome_lineage' for species names per taxon_id."
     ),
     (
-        "Step 2: Parse the records to generate an organism-specific "
-        "DataCollection. Use the latest 'date_modified' value for "
-        "'dateModified' and the earliest 'date_inserted' value for "
-        "'dateCreated'. Generate the 'temporalCoverage' from the "
-        "date_inserted info across all records for that organism. Use "
-        "the count of the records for 'collectionSize'. Generate the "
-        "values for the 'species', 'infectiousAgent', 'url', 'name', "
+        "Step 2: Parse the aggregated records to generate an organism-"
+        "specific DataCollection per NCBI Taxonomy ID. Use the latest "
+        "'date_modified' from genome_summary for 'dateModified' and "
+        "the earliest 'completion_date' from genome_metadata for "
+        "'dateCreated'. Generate 'temporalCoverage' from the "
+        "'collection_date' values across all records for that organism. "
+        "Use the count of genome records for 'collectionSize'. Generate "
+        "the values for 'species', 'infectiousAgent', 'url', 'name', "
         "and 'description' properties based on the information "
         "retrieved for the NCBI taxonomy code and any templated text."
     ),
@@ -222,8 +216,6 @@ HOWTO_STEPS = [
     ),
 ]
 
-ROWS_PER_PAGE = 1000
-REQUEST_DELAY = 0.5  # seconds between API calls
 MAX_RETRIES = 3
 RETRY_BACKOFF = 10  # seconds, doubled each retry
 
@@ -301,170 +293,243 @@ def _fetch_api_version() -> str:
 
 
 # ---------------------------------------------------------------------------
-# API fetching
+# FTP bulk download and local aggregation
 # ---------------------------------------------------------------------------
 
 
-def _fetch_taxonomy_species() -> list[dict[str, Any]]:
+def _connect_ftp() -> FTP_TLS:
+    """Open an encrypted FTPS connection to BV-BRC.
+
+    Uses a custom FTP_TLS subclass that reuses the control channel's TLS
+    session on data connections — required by BV-BRC's FTPS server.
     """
-    Page through the BV-BRC taxonomy API to get all species-level taxa
-    that have at least one genome.
-    Returns list of {taxon_id, taxon_name, genomes, lineage_names}.
-    """
-    all_taxa: list[dict[str, Any]] = []
-    offset = 0
-    page_size = 1000
 
-    while True:
-        url = f"{TAXONOMY_URL}&limit({page_size},{offset})"
-        logger.info(
-            "Fetching taxonomy species, offset %d (%d so far)...",
-            offset,
-            len(all_taxa),
-        )
+    class _SessionReuseFTP(FTP_TLS):
+        """FTP_TLS that reuses the control TLS session on data channels."""
 
-        try:
-            data = _fetch_json(url)
-        except Exception as exc:
-            logger.warning("Error fetching taxonomy page at offset %d: %s (after retries)", offset, exc)
-            break
+        def ntransfercmd(self, cmd, rest=None):
+            conn, size = FTP.ntransfercmd(self, cmd, rest)
+            if self._prot_p:
+                conn = self.context.wrap_socket(
+                    conn, server_hostname=self.host,
+                    session=self.sock.session,
+                )
+            return conn, size
 
-        if not data:
-            break
-
-        all_taxa.extend(data)
-
-        if len(data) < page_size:
-            break
-
-        offset += len(data)
-        time.sleep(REQUEST_DELAY)
-
-    logger.info("Found %d species-level taxa with genomes.", len(all_taxa))
-    return all_taxa
+    ftp = _SessionReuseFTP()
+    ftp.connect(FTP_HOST, 21, timeout=300)
+    ftp.login(FTP_USER, FTP_PASS)
+    ftp.prot_p()  # secure data channel
+    return ftp
 
 
-def _fetch_genome_count(code: str) -> int:
-    """Fetch the total genome count for a taxon using solr response format."""
-    url = GENOME_COUNT_URL_TEMPLATE.format(code=code)
+def _stream_ftp_lines(ftp: FTP_TLS, path: str):
+    """Yield decoded text lines from an FTPS file (streaming, not buffered)."""
+    sock = ftp.transfercmd(f"RETR {path}")
+    fp = sock.makefile("rb")
     try:
-        data = _fetch_json(url, timeout=120)
-        return data.get("response", {}).get("numFound", 0)
-    except Exception as exc:
-        logger.warning("Error fetching genome count for %s: %s", code, exc)
-        return 0
-
-
-def _fetch_genomes_for_taxon(
-    code: str,
-    expected_count: int,
-) -> dict[str, Any]:
-    """
-    Paginate through all genome records for a given NCBI taxonomy code.
-
-    Returns aggregated data:
-      earliest_inserted   – Optional[datetime]
-      latest_modified     – Optional[datetime]
-      countries           – set of country names
-      hosts               – set of (host_name, host_scientific_name) tuples
-      collection_years    – list of collection years
-      diseases            – set of disease names
-      record_count        – int (actual records fetched)
-    """
-    insertions: list[dt.datetime] = []
-    modifications: list[dt.datetime] = []
-    countries: set[str] = set()
-    hosts: set[tuple[str, str]] = set()
-    collection_years: list[int] = []
-    diseases: set[str] = set()
-    record_count = 0
-    offset = 0
-
-    while True:
-        url = GENOME_URL_TEMPLATE.format(
-            code=code,
-            limit=ROWS_PER_PAGE,
-            offset=offset,
-        )
-        logger.info(
-            "Fetching genomes for taxon %s, offset %d (%d/%d)...",
-            code,
-            offset,
-            record_count,
-            expected_count,
-        )
-
+        for raw_line in fp:
+            yield raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+    finally:
+        fp.close()
+        sock.close()
         try:
-            records = _fetch_json(url)
-        except Exception as exc:
-            logger.warning(
-                "Error fetching genomes at offset %d for taxon %s: %s (after retries)",
-                offset,
-                code,
-                exc,
-            )
-            break
+            ftp.voidresp()
+        except Exception:
+            pass
 
-        if not records:
-            break
 
-        for rec in records:
-            record_count += 1
+def _aggregate_genome_metadata() -> dict[str, dict[str, Any]]:
+    """
+    Stream genome_metadata from FTP and aggregate per taxon_id.
 
-            # Dates
-            ins = _parse_datetime(rec.get("date_inserted"))
-            mod = _parse_datetime(rec.get("date_modified"))
-            if ins:
-                insertions.append(ins)
-            if mod:
-                modifications.append(mod)
+    Returns dict of taxon_id -> {
+        genome_count, countries, hosts, diseases,
+        collection_years, earliest_completion
+    }
+    """
+    taxa: dict[str, dict[str, Any]] = defaultdict(lambda: {
+        "genome_count": 0,
+        "countries": set(),
+        "hosts": set(),
+        "diseases": set(),
+        "collection_years": set(),
+        "earliest_completion": None,
+    })
 
-            # Country
-            country = (rec.get("isolation_country") or "").strip()
+    ftp = _connect_ftp()
+    line_count = 0
+    start_time = time.time()
+
+    try:
+        for line in _stream_ftp_lines(ftp, GENOME_METADATA_PATH):
+            if line_count == 0:
+                line_count += 1
+                continue  # skip header
+
+            fields = line.split("\t")
+            if len(fields) <= META_DISEASE:
+                line_count += 1
+                continue
+
+            taxon_id = fields[META_TAXON_ID].strip()
+            if not taxon_id:
+                line_count += 1
+                continue
+
+            entry = taxa[taxon_id]
+            entry["genome_count"] += 1
+
+            country = fields[META_ISOLATION_COUNTRY].strip()
             if country:
-                countries.add(country)
+                entry["countries"].add(country)
 
-            # Host
-            host_name = (rec.get("host_name") or "").strip()
-            host_sci = (rec.get("host_scientific_name") or "").strip()
-            if host_name or host_sci:
-                hosts.add((host_name or host_sci, host_sci or host_name))
+            host = fields[META_HOST_NAME].strip()
+            if host:
+                entry["hosts"].add(host)
 
-            # Collection year
-            year = rec.get("collection_year")
-            if year is not None:
+            disease_raw = fields[META_DISEASE].strip()
+            if disease_raw:
+                for d in disease_raw.split(";"):
+                    d = d.strip()
+                    if d:
+                        entry["diseases"].add(d)
+
+            coll_date = fields[META_COLLECTION_DATE].strip()
+            if coll_date:
                 try:
-                    collection_years.append(int(year))
-                except (ValueError, TypeError):
+                    year = int(coll_date[:4])
+                    if 1000 <= year <= 2100:
+                        entry["collection_years"].add(year)
+                except (ValueError, IndexError):
                     pass
 
-            # Disease
-            raw_disease = rec.get("disease")
-            if isinstance(raw_disease, list):
-                for d in raw_disease:
-                    d = (d or "").strip()
-                    if d:
-                        diseases.add(d)
-            elif isinstance(raw_disease, str):
-                d = raw_disease.strip()
-                if d:
-                    diseases.add(d)
+            comp_date = fields[META_COMPLETION_DATE].strip()
+            if comp_date and not comp_date.startswith("1900"):
+                cur = entry["earliest_completion"]
+                if cur is None or comp_date < cur:
+                    entry["earliest_completion"] = comp_date
 
-        if len(records) < ROWS_PER_PAGE:
-            break
+            line_count += 1
+            if line_count % 2_000_000 == 0:
+                elapsed = time.time() - start_time
+                logger.info(
+                    "genome_metadata: %dM lines, %d taxa (%.0fs)",
+                    line_count // 1_000_000, len(taxa), elapsed,
+                )
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass
 
-        offset += len(records)
-        time.sleep(REQUEST_DELAY)
+    elapsed = time.time() - start_time
+    logger.info(
+        "genome_metadata complete: %d lines, %d unique taxa in %.0fs",
+        line_count, len(taxa), elapsed,
+    )
+    return dict(taxa)
 
-    return {
-        "earliest_inserted": min(insertions) if insertions else None,
-        "latest_modified": max(modifications) if modifications else None,
-        "countries": countries,
-        "hosts": hosts,
-        "collection_years": collection_years,
-        "diseases": diseases,
-        "record_count": record_count,
-    }
+
+def _aggregate_genome_summary() -> dict[str, str]:
+    """
+    Stream genome_summary from FTP and return the latest date_modified
+    per taxon_id.
+    """
+    latest_modified: dict[str, str] = {}
+
+    ftp = _connect_ftp()
+    line_count = 0
+    start_time = time.time()
+
+    try:
+        for line in _stream_ftp_lines(ftp, GENOME_SUMMARY_PATH):
+            if line_count == 0:
+                line_count += 1
+                continue  # skip header
+
+            fields = line.split("\t")
+            if len(fields) <= SUMMARY_DATE_MODIFIED:
+                line_count += 1
+                continue
+
+            taxon_id = fields[SUMMARY_TAXON_ID].strip()
+            date_mod = fields[SUMMARY_DATE_MODIFIED].strip()
+
+            if taxon_id and date_mod:
+                cur = latest_modified.get(taxon_id)
+                if cur is None or date_mod > cur:
+                    latest_modified[taxon_id] = date_mod
+
+            line_count += 1
+            if line_count % 2_000_000 == 0:
+                elapsed = time.time() - start_time
+                logger.info(
+                    "genome_summary: %dM lines (%.0fs)",
+                    line_count // 1_000_000, elapsed,
+                )
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass
+
+    elapsed = time.time() - start_time
+    logger.info(
+        "genome_summary complete: %d lines, %d taxa with dates in %.0fs",
+        line_count, len(latest_modified), elapsed,
+    )
+    return latest_modified
+
+
+def _extract_taxon_names_ftp() -> dict[str, str]:
+    """
+    Stream genome_lineage from FTP and extract the 'species' name for each
+    taxon_id. Returns {taxon_id: species_name}. Keeps the first (and
+    typically only) species name seen per taxon.
+    """
+    names: dict[str, str] = {}
+
+    ftp = _connect_ftp()
+    line_count = 0
+    start_time = time.time()
+
+    try:
+        for line in _stream_ftp_lines(ftp, GENOME_LINEAGE_PATH):
+            if line_count == 0:
+                line_count += 1
+                continue  # skip header
+
+            fields = line.split("\t")
+            if len(fields) <= LINEAGE_SPECIES:
+                line_count += 1
+                continue
+
+            taxon_id = fields[LINEAGE_TAXON_ID].strip()
+            species = fields[LINEAGE_SPECIES].strip()
+
+            if taxon_id and species and taxon_id not in names:
+                names[taxon_id] = species
+
+            line_count += 1
+            if line_count % 2_000_000 == 0:
+                elapsed = time.time() - start_time
+                logger.info(
+                    "genome_lineage: %dM lines, %d names (%.0fs)",
+                    line_count // 1_000_000, len(names), elapsed,
+                )
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass
+
+    elapsed = time.time() - start_time
+    logger.info(
+        "genome_lineage complete: %d lines, %d taxon names in %.0fs",
+        line_count, len(names), elapsed,
+    )
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -699,8 +764,8 @@ def _build_data_collection(
         ]
 
     # Version
-    if version:
-        record["version"] = version
+    # if version:
+        # record["version"] = version
 
     # Funding
     record["funding"] = [
@@ -726,98 +791,81 @@ def _build_data_collection(
 
 
 class BvBrc(NDEDatabase):
-    SQL_DB = "bv_brc.db"
+    SQL_DB = "bv_brc_solar.db"
     EXPIRE = dt.timedelta(days=30)
 
     def __init__(self):
         super().__init__()
         self._version = ""
 
-    def _get_session(self):
-        """Create a requests session with retry logic and connection pooling."""
-        session = requests.Session()
-        retries = Retry(total=5, backoff_factor=2, status_forcelist=[500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retries, pool_connections=10, pool_maxsize=10)
-        session.mount("https://", adapter)
-        return session
-
     def load_cache(self):
-        """Download all BV-BRC taxonomy + genome data and yield (_id, json_str) tuples for the cache."""
-        session = self._get_session()
+        """Download BV-BRC genome data via FTP bulk files and yield (_id, json_str) tuples."""
+        overall_start = time.time()
 
         # Fetch the API version
         self._version = _fetch_api_version()
         if self._version:
             logger.info("BV-BRC API version: %s", self._version)
 
-        # Step 1 — Get all species-level taxa with genomes from taxonomy API
-        taxa = _fetch_taxonomy_species()
-        if not taxa:
-            logger.error("No taxonomy entries returned from BV-BRC taxonomy API.")
+        # Step 1 — Download and aggregate genome_metadata from FTP
+        logger.info("Step 1/3: Downloading genome_metadata from FTP (%s)...", FTP_HOST)
+        meta_agg = _aggregate_genome_metadata()
+        if not meta_agg:
+            logger.error("No genome records found in FTP genome_metadata file.")
             return
 
-        logger.info("Starting processing of %d species-level taxa", len(taxa))
+        # Step 2 — Download and aggregate genome_summary for date_modified
+        logger.info("Step 2/3: Downloading genome_summary from FTP...")
+        date_mods = _aggregate_genome_summary()
 
+        # Step 3 — Download genome_lineage for taxon names (no API needed)
+        logger.info("Step 3/3: Downloading genome_lineage from FTP for taxon names...")
+        taxon_names = _extract_taxon_names_ftp()
+
+        # Build and yield cache entries
+        taxon_ids = sorted(meta_agg.keys())
+        total_taxa = len(taxon_ids)
         count = 0
-        errors = 0
-        for taxon in taxa:
-            code = str(taxon.get("taxon_id", "")).strip()
-            taxon_name = (taxon.get("taxon_name") or f"Organism {code}").strip()
-            genome_count_from_taxonomy = taxon.get("genomes", 0)
+        for taxon_id in taxon_ids:
+            agg = meta_agg[taxon_id]
+            taxon_name = taxon_names.get(taxon_id, f"Organism {taxon_id}")
 
-            if not code:
-                continue
+            earliest = agg["earliest_completion"]
+            if earliest:
+                parsed = _parse_datetime(earliest)
+                earliest = _iso_date(parsed)
 
-            try:
-                logger.info(
-                    "Processing taxon %s (%s, ~%d genomes)...",
-                    code, taxon_name, genome_count_from_taxonomy,
-                )
+            latest = date_mods.get(taxon_id)
+            if latest:
+                parsed = _parse_datetime(latest)
+                latest = _iso_date(parsed)
 
-                # Get the actual count via solr query
-                genome_count = _fetch_genome_count(code)
-                if genome_count == 0:
-                    genome_count = genome_count_from_taxonomy
-                time.sleep(REQUEST_DELAY)
+            cache_entry = {
+                "code": taxon_id,
+                "taxon_name": taxon_name,
+                "genome_count": agg["genome_count"],
+                "version": self._version,
+                "earliest_inserted": earliest,
+                "latest_modified": latest,
+                "countries": sorted(agg["countries"]),
+                "hosts": sorted([[h, h] for h in agg["hosts"]]),
+                "collection_years": sorted(agg["collection_years"]),
+                "diseases": sorted(agg["diseases"]),
+                "record_count": agg["genome_count"],
+            }
 
-                # Fetch detailed genome metadata
-                group_data = _fetch_genomes_for_taxon(code, genome_count)
+            cache_id = _make_record_id(taxon_id)
+            yield (cache_id, json.dumps(cache_entry))
+            count += 1
 
-                # Use the higher of the two counts
-                final_count = max(genome_count, group_data["record_count"])
-                if final_count == 0:
-                    logger.warning("No genomes found for taxon %s, skipping.", code)
-                    continue
+            if count % 5000 == 0:
+                logger.info("Built %d / %d cache entries", count, total_taxa)
 
-                # Serialize aggregated data for the cache
-                # Convert sets and datetimes to JSON-serializable types
-                cache_entry = {
-                    "code": code,
-                    "taxon_name": taxon_name,
-                    "genome_count": final_count,
-                    "version": self._version,
-                    "earliest_inserted": _iso_date(group_data["earliest_inserted"]),
-                    "latest_modified": _iso_date(group_data["latest_modified"]),
-                    "countries": sorted(group_data["countries"]),
-                    "hosts": sorted([list(h) for h in group_data["hosts"]]),
-                    "collection_years": sorted(group_data["collection_years"]),
-                    "diseases": sorted(group_data["diseases"]),
-                    "record_count": group_data["record_count"],
-                }
-
-                cache_id = _make_record_id(code)
-                yield (cache_id, json.dumps(cache_entry))
-                count += 1
-                if count % 500 == 0:
-                    logger.info("Cached %s / %s taxa (errors: %s)", count, len(taxa), errors)
-            except Exception as e:
-                errors += 1
-                logger.error("Error processing taxon %s: %s", code, e)
-                continue
-
-            time.sleep(REQUEST_DELAY)
-
-        logger.info("Finished loading cache. Total cached: %s, Errors: %s", count, errors)
+        elapsed = time.time() - overall_start
+        logger.info(
+            "Finished loading cache. Total: %d taxa, Time: %.0f min",
+            count, elapsed / 60,
+        )
 
     def parse(self, records):
         """Parse cached records into NDE-schema DataCollection documents."""
