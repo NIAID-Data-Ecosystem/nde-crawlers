@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from datetime import datetime
 
 import requests
@@ -161,7 +162,11 @@ def parse():
                 measurement_techniques = [{"name": name} for name in split_names if name]
                 output["measurementTechnique"] = measurement_techniques
             if bibliography := metadata.get("bibliography"):
-                output["pmids"] = str(bibliography).split(".")[0]
+                pmid_candidate = str(bibliography).split(".")[0]
+                if re.match(r"^\d+$", pmid_candidate):
+                    output["pmids"] = pmid_candidate
+                else:
+                    logger.warning("Skipping invalid pmid from bibliography for %s: %r", id, bibliography)
 
             # set conditionsOfAccess and isAccessibleForFree
             output["conditionsOfAccess"] = "Restricted"
