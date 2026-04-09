@@ -4,33 +4,57 @@ import re
 
 import requests
 
+from api_secret import QIITA_EMAIL, QIITA_PASSWORD
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
+BASE_URL = "https://qiita.ucsd.edu"
 
-COOKIE = 'user="2|1:0|10:1771526259|4:user|32:ImR5bGFud2VsemVsQGdtYWlsLmNvbSI=|16a46fcd1be0e8a236e119777fd75b683b320fd839035cfca0bc1f8a9a7ee62f"'
+
+def get_authenticated_session():
+    """Login to Qiita and return an authenticated requests session."""
+    session = requests.Session()
+
+    response = session.post(
+        f"{BASE_URL}/auth/login/",
+        data={
+            "username": QIITA_EMAIL,
+            "password": QIITA_PASSWORD,
+        },
+        headers={
+            "Referer": f"{BASE_URL}/auth/login/",
+            "Origin": BASE_URL,
+        },
+    )
+
+    if "user" not in session.cookies:
+        raise RuntimeError("Failed to authenticate with Qiita — check credentials in api_secret.py")
+
+    logger.info("Successfully authenticated with Qiita")
+    return session
+
+
+session = get_authenticated_session()
 
 
 def retrieve_study_metadata():
     logger.info("Retrieving study metadata from Qiita")
 
-    url = "https://qiita.ucsd.edu/study/list_studies/?&user=dylanwelzel@gmail.com&visibility=public&sEcho=344&query=&_=1665437236850"
-    headers = {"Cookie": COOKIE}
-    r = requests.get(url, headers=headers)
+    url = f"{BASE_URL}/study/list_studies/?&user={QIITA_EMAIL}&visibility=public&sEcho=344&query=&_=1665437236850"
+    r = session.get(url)
     return r.json()["aaData"]
 
 
 def retrieve_study_samples(study_id):
-    url = f"https://qiita.ucsd.edu/study/description/sample_template/columns/?study_id={study_id}"
-    headers = {"Cookie": COOKIE}
-    r = requests.get(url, headers=headers)
+    url = f"{BASE_URL}/study/description/sample_template/columns/?study_id={study_id}"
+    r = session.get(url)
 
     result = []
 
     for column_name in r.json()["values"]:
-        url = f"https://qiita.ucsd.edu/study/description/sample_template/columns/?study_id={study_id}&column={column_name}"
-        headers = {"Cookie": COOKIE}
-        r = requests.get(url, headers=headers)
+        url = f"{BASE_URL}/study/description/sample_template/columns/?study_id={study_id}&column={column_name}"
+        r = session.get(url)
 
         sample_dict = {"name": column_name, "values": []}
 
@@ -59,7 +83,7 @@ def parse():
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "Qiita",
-                "url": "https://qiita.ucsd.edu/",
+                "url": f"{BASE_URL}/",
                 "versionDate": datetime.date.today().isoformat(),
             },
             "@type": "Dataset",
@@ -69,8 +93,8 @@ def parse():
             output["description"] = study_abstract
 
         if study_id := study.get("study_id"):
-            output["url"] = f"https://qiita.ucsd.edu/study/description/{study_id}"
-            output["includedInDataCatalog"]["archivedAt"] = f"https://qiita.ucsd.edu/study/description/{study_id}"
+            output["url"] = f"{BASE_URL}/study/description/{study_id}"
+            output["includedInDataCatalog"]["archivedAt"] = f"{BASE_URL}/study/description/{study_id}"
             output["_id"] = f"qiita_{study_id}"
 
             # TODO use helper to import sample metadata to proper mapping
