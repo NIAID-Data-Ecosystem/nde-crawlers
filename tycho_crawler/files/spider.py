@@ -47,28 +47,34 @@ class TychoSpider(scrapy.Spider):
                     )
 
     def parse_dataset(self, response):
-        # return reponse.url
         logger.info(f"Processing dataset: {response.url}")
         country = response.meta.get("country")
-        metadata_download = response.xpath(
-            '//div[@class="service"]//a[contains(text(), "Download metadata in DATS JSON format")]/@onclick'
-        ).get()
         zenodo_link = response.xpath('//a[contains(text(), "Download data and metadata from Zenodo")]/@href').get()
-        if not metadata_download:
-            logger.warning(f"No metadata download link found for {response.url}, skipping.")
-            return
-        match = re.search(r"\{.*\}", metadata_download)
-        if match:
+
+        # Try new format: metadata embedded in <script id="download-dats-json">
+        metadata_script = response.xpath('//script[@id="download-dats-json"]/text()').get()
+        if metadata_script:
+            metadata = json.loads(metadata_script.strip())
+        else:
+            # Fall back to old format: metadata in onclick attribute
+            metadata_download = response.xpath(
+                '//div[@class="service"]//a[contains(text(), "Download metadata in DATS JSON format")]/@onclick'
+            ).get()
+            if not metadata_download:
+                logger.warning(f"No metadata download link found for {response.url}, skipping.")
+                return
+            match = re.search(r"\{.*\}", metadata_download)
+            if not match:
+                logger.warning(f"Could not parse metadata from onclick for {response.url}, skipping.")
+                return
             metadata = match.group(0)
-            # fixes double backslash escape. Example: '{\\"identifier\\": \\"10.25337/T7/ptycho.v2.0/BE.840539006\\"}'
             metadata = metadata.encode("utf-8").decode("unicode_escape")
             metadata = json.loads(metadata)
-            logger.info(f"Identifier: {metadata.get('identifier')}")
-            logger.info(f"Zenodo link: {zenodo_link}")
-            item = {
-                "country": country,
-                "zenodo_url": zenodo_link,
-                "metadata": metadata,
-            }
 
-            yield item
+        logger.info(f"Identifier: {metadata.get('identifier')}")
+        logger.info(f"Zenodo link: {zenodo_link}")
+        yield {
+            "country": country,
+            "zenodo_url": zenodo_link,
+            "metadata": metadata,
+        }
