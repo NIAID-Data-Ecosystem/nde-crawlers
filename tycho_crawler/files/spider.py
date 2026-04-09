@@ -54,6 +54,9 @@ class TychoSpider(scrapy.Spider):
             '//div[@class="service"]//a[contains(text(), "Download metadata in DATS JSON format")]/@onclick'
         ).get()
         zenodo_link = response.xpath('//a[contains(text(), "Download data and metadata from Zenodo")]/@href').get()
+        if not metadata_download:
+            logger.warning(f"No metadata download link found for {response.url}, skipping.")
+            return
         match = re.search(r"\{.*\}", metadata_download)
         if match:
             metadata = match.group(0)

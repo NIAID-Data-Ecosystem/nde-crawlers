@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 
 import requests
 
@@ -29,6 +30,13 @@ def get_ids():
 def get_metadata(workflow_id):
     """Get the metadata of a workflow."""
     url = f"https://workflowhub.eu/workflows/{workflow_id}.json"
+    response = requests.get(url)
+    return response.json()["data"]
+
+
+def get_publication(pub_id):
+    """Get the metadata of a publication."""
+    url = f"https://workflowhub.eu/publications/{pub_id}.json"
     response = requests.get(url)
     return response.json()["data"]
 
@@ -216,5 +224,22 @@ def parse():
         count += 1
         if count % 50 == 0:
             logger.info("Parsed %s workflows.", count)
-        yield parse_metadata(metadata)
+        parsed = parse_metadata(metadata)
+
+        pub_ids = [p["id"] for p in metadata.get("relationships", {}).get("publications", {}).get("data", [])]
+        pmid_list = []
+        for pub_id in pub_ids:
+            try:
+                pub_data = get_publication(pub_id)
+                pubmed_id = pub_data.get("attributes", {}).get("pubmed_id")
+                if pubmed_id is not None and re.match(r"^\d+$", str(pubmed_id)):
+                    pmid_list.append(str(pubmed_id))
+                elif pubmed_id is not None:
+                    logger.warning("Skipping invalid pubmed_id for publication %s: %r", pub_id, pubmed_id)
+            except Exception as e:
+                logger.error("Could not fetch publication %s: %s", pub_id, e)
+        if pmid_list:
+            parsed["pmids"] = ",".join(pmid_list)
+
+        yield parsed
     logger.info("Finished parsing metadata. Total: %s workflows.", count)
