@@ -630,7 +630,7 @@ def _build_is_based_on(about_name: str) -> list[dict[str, Any]]:
     }
 
     source_obj = {
-        "@type": "nde:ResourceCatalog",
+        "@type": "ResourceCatalog",
         "name": "Bacterial and Viral Bioinformatics Resource Center",
         "url": "https://data.niaid.nih.gov/resources?id=dde_42e839db86d4166d",
     }
@@ -647,16 +647,21 @@ def _build_description(
 ) -> str:
     parts = []
     parts.append(
-        f"{taxon_name} genomes publicly available from BV-BRC"
+        f"{taxon_name} genomes publicly available from the BV-BRC"
     )
     if version:
         parts[-1] += f" API version {version}"
-    parts[-1] += "."
+    parts[-1] += " and/or FTP."
 
     if countries:
         country_list = ", ".join(sorted(countries))
         parts.append(
             f"These genomes were collected from {country_list}"
+            " and undisclosed locations."
+        )
+    else:
+        parts.append(
+            "These genomes were collected from undisclosed locations."
         )
 
     if hosts:
@@ -771,6 +776,7 @@ def _build_data_collection(
     record["funding"] = [
         {
             "@type": "MonetaryGrant",
+            "identifier": "U24AI183849",
             "funder": {
                 "@type": "Organization",
                 "name": (
