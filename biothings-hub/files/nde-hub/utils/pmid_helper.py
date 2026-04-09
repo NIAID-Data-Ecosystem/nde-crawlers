@@ -484,7 +484,8 @@ def _convert_pmc(pmc_list, pmc_dict):
     request = requests.get(request_url).json()
     # key pmcid value pmid
     for record in request.get("records"):
-        pmc_dict[record.get("pmcid")] = record.get("pmid")
+        if pmid := record.get("pmid"):
+            pmc_dict[record.get("pmcid")] = str(pmid)
     # reset the list
     pmc_list.clear()
     time.sleep(0.5)
