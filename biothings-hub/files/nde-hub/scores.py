@@ -114,3 +114,46 @@ DATASET_RECOMMENDED_FIELDS = [
 DATASET_REQUIRED_AUGMENTED_FIELDS = ["funding", "measurementTechnique"]
 DATASET_RECOMMENDED_AUGMENTED_FIELDS = [
     "species", "infectiousAgent", "healthCondition", "citation", "topicCategory"]
+DATA_COLLECTION_REQUIRED = [
+    "about",
+    "collectionSize",
+    "date",
+    "dateModified",
+    "description",
+    "includedInDataCatalog",
+    "name",
+    "url",
+]
+
+DATA_COLLECTION_RECOMMENDED = [
+    "author",
+    "citation",
+    "conditionsOfAccess",
+    "creator",
+    "dateCreated",
+    "datePublished",
+    "exampleOfWork",
+    "funding",
+    "healthCondition",
+    "infectiousAgent",
+    "interactionStatistic",
+    "isBasedOn",
+    "license",
+    "measurementTechnique",
+    "sameAs",
+    "spatialCoverage",
+    "species",
+    "temporalCoverage",
+    "topicCategory",
+    "usageInfo",
+    "variableMeasured",
+]
+
+DATA_COLLECTION_REQUIRED_AUGMENTED = ["funding", "measurementTechnique"]
+DATA_COLLECTION_RECOMMENDED_AUGMENTED = [
+    "species",
+    "infectiousAgent",
+    "healthCondition",
+    "citation",
+    "topicCategory"
+]
