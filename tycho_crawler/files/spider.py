@@ -55,6 +55,8 @@ class TychoSpider(scrapy.Spider):
         metadata_script = response.xpath('//script[@id="download-dats-json"]/text()').get()
         if metadata_script:
             metadata = json.loads(metadata_script.strip())
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
         else:
             # Fall back to old format: metadata in onclick attribute
             metadata_download = response.xpath(
