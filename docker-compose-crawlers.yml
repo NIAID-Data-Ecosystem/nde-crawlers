@@ -182,6 +182,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  mwccs-crawler:
+    build:
+      context: mwccs
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   ncbi_bioproject-crawler:
     build:
       context: ncbi_bioproject
