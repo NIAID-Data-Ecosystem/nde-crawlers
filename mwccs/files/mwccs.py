@@ -147,7 +147,7 @@ IS_BASED_ON = [
         },
     },
     {
-        "@type": "nde:ResourceCatalog",
+        "@type": "ResourceCatalog",
         "name": (
             "The Multicenter AIDS Cohort Study (MACS) / Women's Interagency "
             "HIV Study (WIHS) Combined Cohort Study"
@@ -673,6 +673,10 @@ def _build_data_collection(data: dict[str, Any]) -> dict[str, Any]:
         "species": copy.deepcopy(SPECIES),
         "infectiousAgent": copy.deepcopy(FALLBACK_INFECTIOUS_AGENT),
     }
+
+    included_catalog = record["includedInDataCatalog"][0]
+    included_catalog["archivedAt"] = data.get("url", "")
+
 
     # Date fields
     date_created = data.get("date_created")
