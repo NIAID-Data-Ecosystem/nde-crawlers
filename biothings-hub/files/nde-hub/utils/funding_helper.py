@@ -183,12 +183,48 @@ def standardize_funding(data):
         conn.close()
 
 
+def is_valid_nih_funding_id(funding_id):
+    """
+    Quick plausibility check for NIH funding identifiers.
+    Filters obviously non-NIH IDs (European grants, full-text descriptions,
+    markdown junk) while staying permissive for fuzzy matches.
+    """
+    stripped = funding_id.strip()
+
+    # Too short or too long to be a real project number
+    if len(stripped) < 5 or len(stripped) > 50:
+        return False
+
+    # Non-ASCII means European/foreign grant IDs
+    if not stripped.isascii():
+        return False
+
+    # Must contain at least one digit
+    if not re.search(r"\d", stripped):
+        return False
+
+    # Starts with junk characters
+    if stripped[0] in "\"'#_":
+        return False
+
+    # Too many words — it's a description, not an ID
+    if len(stripped.split()) > 4:
+        return False
+
+    # After the same cleanup update_funding does, should be alphanumeric
+    cleaned = stripped.replace("NIH", "").replace("-", "").replace(" ", "")
+    if not cleaned.isalnum():
+        return False
+
+    return True
+
+
 def update_funding(funding_id):
     """
     Update funding information for a given funding id.
     """
     count = 0
-    if len(funding_id) < 5:
+    if not is_valid_nih_funding_id(funding_id):
         logger.info(f"INVALID FUNDING ID FOR {funding_id}")
         return None
     if "NIH" in funding_id:
