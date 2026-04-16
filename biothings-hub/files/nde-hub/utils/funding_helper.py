@@ -117,15 +117,8 @@ def standardize_funding(data):
                         if funding_cache:
                             doc["funding"][i] = funding_cache
                         else:
-                            logger.info(f"Not in cache: {funding_id}, looking up via API...")
-                            new_funding = update_funding(funding_dict["identifier"])
-                            if new_funding:
-                                update_sqlite_db(conn, funding_id, new_funding)
-                                funding_cache_dict[funding_id] = new_funding
-                                doc["funding"][i] = new_funding
-                            else:
-                                logger.info(f"No results from API for {funding_id}")
-                                continue
+                            logger.info(f"Not in cache: {funding_id}, skipping API lookup")
+                            continue
                     elif isinstance(funding_dict.get("funder", {}), dict):
                         if (funder_name := funding_dict.get("funder", {}).get("name")):
                             try:
@@ -151,15 +144,8 @@ def standardize_funding(data):
                 if funding_cache:
                     doc["funding"] = funding_cache
                 else:
-                    logger.info(f"Not in cache: {funding_id}, looking up via API...")
-                    new_funding = update_funding(doc["funding"]["identifier"])
-                    if new_funding:
-                        update_sqlite_db(conn, funding_id, new_funding)
-                        funding_cache_dict[funding_id] = new_funding
-                        doc["funding"] = new_funding
-                    else:
-                        logger.info(f"No results from API for {funding_id}")
-                        continue
+                    logger.info(f"Not in cache: {funding_id}, skipping API lookup")
+                    continue
             elif isinstance(doc.get("funding", {}).get("funder", {}), dict):
                 if (funder_name := doc.get("funding", {}).get("funder", {}).get("name")):
                     try:
@@ -229,7 +215,9 @@ def update_funding(funding_id):
         return None
     if "NIH" in funding_id:
         funding_id = funding_id.replace("NIH", "")
-    funding_id = funding_id.replace("-", "")
+    # Remove dashes between alphanumeric segments (e.g. U01-HL → U01HL)
+    # but keep the suffix dash before digits (e.g. -01, -01A1)
+    funding_id = re.sub(r"-(?=[A-Za-z])", "", funding_id)
 
     data = []
     offset = 0

@@ -666,7 +666,7 @@ def _build_data_collection(data: dict[str, Any]) -> dict[str, Any]:
         "includedInDataCatalog": [copy.deepcopy(INCLUDED_IN_DATA_CATALOG)],
         "isBasedOn": copy.deepcopy(IS_BASED_ON),
         "conditionsOfAccess": "Restricted",
-        "isAccessibleForFree": False,
+        "isAccessibleForFree": True,
         "usageInfo": copy.deepcopy(USAGE_INFO),
         "funding": copy.deepcopy(FUNDING),
         "topicCategory": copy.deepcopy(TOPIC_CATEGORY),

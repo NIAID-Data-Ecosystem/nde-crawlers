@@ -19,6 +19,7 @@ class NCBI_Geo_Dumper(dumper.BaseDumper):
     Entrez.api_key = GEO_API_KEY
     SRC_NAME = "ncbi_geo"
     SRC_ROOT_FOLDER = os.path.join(config.DATA_ARCHIVE_ROOT, SRC_NAME)
+    SCHEDULE = "0 17 1 1,4,7,10 *"  # 1st day of Jan, Apr, Jul, Oct at 17:00 UTC
     MAX_PARALLEL_DUMP = 5
 
     def prepare_client(self):
