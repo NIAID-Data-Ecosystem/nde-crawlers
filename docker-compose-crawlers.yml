@@ -89,6 +89,12 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  dbaasp-crawler:
+    build:
+      context: dbaasp
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   dbgap-crawler:
     build:
       context: dbgap
