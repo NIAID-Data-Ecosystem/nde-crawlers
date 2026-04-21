@@ -456,7 +456,10 @@ def parse():
 
             # fix topicCategory
             if topicCategory := hit.pop("topicCategory", None):
-                hit["topicCategory"] = {"url": topicCategory}
+                if isinstance(topicCategory, str):
+                    hit["topicCategory"] = {"url": topicCategory}
+                elif isinstance(topicCategory, dict):
+                    hit["topicCategory"] = topicCategory
 
             # remove unnecessary values
             hit.pop("_meta", None)

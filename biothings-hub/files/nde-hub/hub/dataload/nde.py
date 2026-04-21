@@ -16,6 +16,7 @@ __all__ = [
     "NDEFileSystemDumper",
     "NDESourceUploader",
     "NDESourceSampleUploader",
+    "NDECombinedUploader",
 ]
 
 
@@ -344,6 +345,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
+            "creditText": {"type": "text"},
             "curatedBy": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -368,6 +370,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@id": {"type": "keyword"},
                     "@type": {"type": "keyword"},
+                    "contentSize": {"type": "text"},
                     "contentUrl": {"type": "text"},
                     "dateCreated": {"type": "date"},
                     "dateModified": {"type": "date"},
@@ -377,7 +380,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
-                    "contentSize": {"type": "text"},
+                    "identifier": {"type": "keyword"},
                     "name": {"type": "keyword"},
                 }
             },
@@ -899,7 +902,9 @@ class NDESourceUploader(BaseSourceUploader):
                                 "properties": {
                                     "identifier": {"type": "text", "copy_to": ["all"]},
                                     "name": {"type": "keyword", "copy_to": ["all"]},
+                                    "unitText": {"type": "text"},
                                     "url": {"type": "keyword"},
+                                    "value": {"type": "double"},
                                 }
                             },
                             "anatomicalStructure": {
@@ -941,7 +946,7 @@ class NDESourceUploader(BaseSourceUploader):
                                     "minValue": {"type": "double"},
                                     "name": {"type": "text"},
                                     "unitText": {"type": "text"},
-                                    "value": {"type": "integer"},
+                                    "value": {"type": "double"},
                                 }
                             },
                             "sampleState": {"type": "text"},
@@ -986,7 +991,9 @@ class NDESourceUploader(BaseSourceUploader):
                         "properties": {
                             "identifier": {"type": "text", "copy_to": ["all"]},
                             "name": {"type": "keyword", "copy_to": ["all"]},
+                            "unitText": {"type": "text"},
                             "url": {"type": "keyword"},
+                            "value": {"type": "double"},
                         }
                     },
                     "anatomicalStructure": {
@@ -1028,7 +1035,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "minValue": {"type": "double"},
                             "name": {"type": "text"},
                             "unitText": {"type": "text"},
-                            "value": {"type": "integer"},
+                            "value": {"type": "double"},
                         }
                     },
                     "sampleState": {"type": "text"},
@@ -1335,6 +1342,11 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 }
             },
             "additionalType": {"type": "keyword", "copy_to": ["all"]},
+            "all": {
+                "type": "text",
+                "analyzer": "nde_analyzer",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+            },
             "alternateIdentifier": {"type": "keyword", "copy_to": ["all"]},
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "anatomicalStructure": {
@@ -1356,7 +1368,9 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
+                    "unitText": {"type": "text"},
                     "url": {"type": "keyword"},
+                    "value": {"type": "double"},
                 }
             },
             "author": {
@@ -1496,20 +1510,26 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "@id": {"type": "keyword"},
                     "@type": {"type": "keyword"},
+                    "contentSize": {"type": "text"},
                     "contentUrl": {"type": "text"},
                     "dateCreated": {"type": "date"},
                     "dateModified": {"type": "date"},
                     "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
+                    "identifier": {"type": "keyword"},
                     "encodingFormat": {
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
-                    "contentSize": {"type": "text"},
                     "name": {"type": "keyword"},
                 }
             },
-            "environmentalSystem": {"type": "text"},
+            "environmentalSystem": {
+                "properties": {
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "name": {"type": "text", "copy_to": ["all"]},
+                }
+            },
             "experimentalPurpose": {"type": "text"},
             "funding": {
                 "properties": {
@@ -1839,6 +1859,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                             },
                             "altitude": {"type": "text"},
                             "depth": {"type": "text"},
+                            "elevation": {"type": "text"},
                             "latitude": {"type": "float"},
                             "longitude": {"type": "float"},
                         }
@@ -1890,7 +1911,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "minValue": {"type": "double"},
                     "name": {"type": "text"},
                     "unitText": {"type": "text"},
-                    "value": {"type": "integer"},
+                    "value": {"type": "double"},
                 }
             },
             "sampleState": {"type": "text"},
@@ -2064,22 +2085,14 @@ class NDESourceSampleUploader(BaseSourceUploader):
         return mapping
 
 
-class NDECombinedUploader(NDESourceUploader, NDESourceSampleUploader):
+class NDECombinedUploader(NDESourceUploader):
     """
-    Combines both NDESourceUploader and NDESourceSampleUploader
+    Combines mappings from both NDESourceUploader and NDESourceSampleUploader
     """
-
-    storage_class = IgnoreDuplicatedStorage
-
-    def load_data(self, data_folder):
-        return super().load_data(data_folder)
 
     @classmethod
     def get_mapping(cls):
-        # Merge mappings from both parents
         mapping1 = NDESourceUploader.get_mapping()
         mapping2 = NDESourceSampleUploader.get_mapping()
-
-        # Use merge_struct to combine them
         combined_mapping = merge_struct(mapping1, mapping2)
         return combined_mapping

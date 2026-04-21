@@ -12,7 +12,7 @@
     "datePublished": ["value"],
     "description": ["value"],
     "developmentalStage": ["object", "name"],
-    "environmentalSystem": ["value"],
+    "environmentalSystem": ["object", "name"],
     "experimentalPurpose": ["value"],
     "healthCondition": ["object", "name"],
     "identifier": ["value"],

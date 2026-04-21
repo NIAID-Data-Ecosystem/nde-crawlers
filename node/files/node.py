@@ -6,6 +6,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
+from .sample import add_aggregate_element, get_samples, parse_sample
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
@@ -15,10 +17,18 @@ def insert_value(d, key, value, extend=False):
     """
 
     if key in d and not extend:
-        if isinstance(d[key], list) and value not in d[key]:
-            d[key].append(value)
-        if not isinstance(d[key], list) and d[key] != value:
-            d[key] = [d[key], value]
+        if isinstance(d[key], list):
+            if isinstance(value, list):
+                for item in value:
+                    if item not in d[key]:
+                        d[key].append(item)
+            elif value not in d[key]:
+                d[key].append(value)
+        else:
+            if isinstance(value, list):
+                d[key] = [d[key]] + [v for v in value if v != d[key]]
+            elif d[key] != value:
+                d[key] = [d[key], value]
     elif d.get(key) and extend:
         d[key] = (d.get(key) + " " + value).strip()
     else:
@@ -182,6 +192,31 @@ def parse():
                 insert_value(output, "author", author)
 
             table_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleTable/{project_id}").json()
+            s = {
+                "@type": "SampleCollection",
+                "itemListElement": [],
+                "aggregateElement": {},
+                "numberOfItems": {"value": 0, "unitText": "sample"},
+            }
+            for sample in get_samples(session, table_info, project_id):
+                parsed_sample = parse_sample(sample)
+                if parsed_sample:
+                    yield parsed_sample
+
+                    s["itemListElement"].append(
+                        {
+                            "@type": "Sample",
+                            "identifier": parsed_sample.get("identifier"),
+                            "url": parsed_sample.get("url"),
+                            "_id": parsed_sample.get("_id"),
+                        }
+                    )
+                    s["numberOfItems"]["value"] += 1
+                    add_aggregate_element(s["aggregateElement"], parsed_sample)
+
+            if s.get("itemListElement"):
+                output["sample"] = s
+
             if table_info.get("data") and table_info["data"].get("expTables"):
                 for exp_table in table_info["data"]["expTables"]:
                     data_type = exp_table["type"]
