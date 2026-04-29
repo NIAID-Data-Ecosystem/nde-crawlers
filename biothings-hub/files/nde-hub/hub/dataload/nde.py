@@ -325,6 +325,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                 }
             },
+            "creativeWorkStatus": {"type": "keyword"},
             "creator": {
                 "properties": {
                     "@type": {"type": "text"},

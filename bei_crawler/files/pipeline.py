@@ -73,10 +73,19 @@ class BeiItemProcessorPipeline:
                 pass
 
         if sample_availability := item.get("Availability Status:"):
-            if sample_availability.strip().casefold() == "in stock" or sample_availability.strip().casefold() == "made to order":
+            if "in stock" in sample_availability.strip().casefold():
+                insert_value(output, "creativeWorkStatus", "Available")
                 insert_value(output, "sampleAvailability", True)
-            else:
+            elif "made to order" in sample_availability.strip().casefold():
+                insert_value(output, "creativeWorkStatus", "Bespoke")
+                insert_value(output, "sampleAvailability", True)
+            elif "out of stock" in sample_availability.strip().casefold():
+                insert_value(output, "creativeWorkStatus", "Backordered")
                 insert_value(output, "sampleAvailability", False)
+            elif "discontinued" in sample_availability.strip().casefold():
+                insert_value(output, "creativeWorkStatus", "Retired")
+                insert_value(output, "sampleAvailability", False)
+
 
         if name := item.get("Storage Temperature:"):
             insert_value(output, "sampleStorageTemperature", {"name": name})

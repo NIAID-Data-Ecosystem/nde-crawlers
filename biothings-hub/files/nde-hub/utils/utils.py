@@ -82,6 +82,9 @@ def check_schema(doc: Dict) -> Dict:
     if coa := doc.get("conditionsOfAccess"):
         enum = ["Open", "Restricted", "Closed", "Embargoed"]
         assert coa in enum, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, enum)
+    if cws := doc.get("creativeWorkStatus"):
+        enum = ["Bespoke", "Available", "Backordered", "Retired"]
+        assert cws in enum, "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, enum)
     return doc
 
 
