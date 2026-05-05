@@ -1,5 +1,7 @@
+import ast
 import datetime
 import logging
+import re
 
 from dateutil.parser import parse as date_parse
 
@@ -9,6 +11,60 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("nde-logger")
+
+
+# Strip trailing "(ncbitaxon:NNNN)" so we can use NNNN as the identifier and
+# look up the canonical name. The match is case-insensitive — OmicsDI emits
+# both "ncbitaxon" and "NCBItaxon" depending on the source.
+_NCBITAXON_SUFFIX = re.compile(r"\s*\(\s*ncbitaxon\s*:\s*(\d+)\s*\)\s*$", re.IGNORECASE)
+
+
+def _clean_species_name(value):
+    """Return (clean_name, identifier_or_None).
+
+    Handles two OmicsDI quirks:
+    - "Homo Sapiens (ncbitaxon:9606)" -> ("Homo Sapiens", "9606")
+    - "Homo sapiens" -> ("Homo sapiens", None)
+    """
+    if not isinstance(value, str):
+        return value, None
+    name = value.strip()
+    m = _NCBITAXON_SUFFIX.search(name)
+    if m:
+        return name[: m.start()].strip(), m.group(1)
+    return name, None
+
+
+def _coerce_species_names(value):
+    """Yield species name strings from OmicsDI's mixed shapes.
+
+    The field arrives as a list, a string, or a string-ified list like
+    "['Homo sapiens']" depending on the upstream serializer. Normalize them
+    all to a plain iterable of stripped strings.
+    """
+    if value is None:
+        return
+    if isinstance(value, list):
+        for v in value:
+            if v:
+                yield str(v).strip()
+        return
+    if isinstance(value, str):
+        v = value.strip()
+        if v.startswith("[") and v.endswith("]"):
+            try:
+                parsed = ast.literal_eval(v)
+            except (ValueError, SyntaxError):
+                parsed = None
+            if isinstance(parsed, list):
+                for p in parsed:
+                    if p:
+                        yield str(p).strip()
+                return
+        if v:
+            yield v
+        return
+    yield str(value).strip()
 
 
 def parse(record, dataset_name, _id, url):
@@ -249,27 +305,56 @@ def parse(record, dataset_name, _id, url):
 
         for key in ["species", "Organism", "taxonomy"]:
             if species_names := additional.get(key):
-                for species_name in species_names:
-                    species.append({"name": species_name})
+                for species_name in _coerce_species_names(species_names):
+                    name, identifier = _clean_species_name(species_name)
+                    if not name:
+                        continue
+                    entry = {"name": name}
+                    if identifier:
+                        entry["identifier"] = identifier
+                    species.append(entry)
 
         if additional.get("GenotypeID") and not additional.get("Organism"):
-            for infectious_agent in additional.get("GenotypeID"):
-                ia.append({"name": infectious_agent})
+            for infectious_agent in _coerce_species_names(additional.get("GenotypeID")):
+                name, identifier = _clean_species_name(infectious_agent)
+                if not name:
+                    continue
+                entry = {"name": name}
+                if identifier:
+                    entry["identifier"] = identifier
+                ia.append(entry)
         elif species_names := additional.get("GenotypeID"):
-            for species_name in species_names:
-                species.append({"name": species_name})
+            for species_name in _coerce_species_names(species_names):
+                name, identifier = _clean_species_name(species_name)
+                if not name:
+                    continue
+                entry = {"name": name}
+                if identifier:
+                    entry["identifier"] = identifier
+                species.append(entry)
 
         if (
             additional.get("GenotypeID_Systematic")
             and not additional.get("Organism")
             and not additional.get("GenotypeID")
         ):
-            for infectious_agent in additional.get("GenotypeID_Systematic"):
-                ia.append({"name": infectious_agent})
+            for infectious_agent in _coerce_species_names(additional.get("GenotypeID_Systematic")):
+                name, identifier = _clean_species_name(infectious_agent)
+                if not name:
+                    continue
+                entry = {"name": name}
+                if identifier:
+                    entry["identifier"] = identifier
+                ia.append(entry)
         elif species_names := additional.get("GenotypeID_Systematic"):
-            for species_name in species_names:
-                if species_name:
-                    species.append({"name": species_name})
+            for species_name in _coerce_species_names(species_names):
+                name, identifier = _clean_species_name(species_name)
+                if not name:
+                    continue
+                entry = {"name": name}
+                if identifier:
+                    entry["identifier"] = identifier
+                species.append(entry)
 
         for key in ["condition", "disease"]:
             if hc_names := additional.get(key):

@@ -23,6 +23,20 @@ def parse_ontology_term(text):
         return {"name": m.group(1).strip(), "identifier": m.group(2).strip()}
     return {"name": text.strip()}
 
+
+# Source occasionally emits "Homo sapiens [Taxonomy ID: 9606]" as the organism
+# name; pull the digits out so they can populate `identifier` directly.
+_TAXID_BRACKET = re.compile(r"\s*\[\s*Taxonomy\s+ID\s*:\s*(\d+)\s*\]\s*$", re.IGNORECASE)
+
+
+def _split_taxonomy_id_bracket(value):
+    if not isinstance(value, str):
+        return value, None
+    m = _TAXID_BRACKET.search(value)
+    if m:
+        return value[: m.start()].strip(), m.group(1)
+    return value.strip(), None
+
 def parse_lat_lon(s):
     """Assumes format '54 N 20 W' -> (54.0, -20.0)."""
     parts = s.strip().split()
@@ -213,8 +227,12 @@ def parse_sample(sample):
         insert_value(output.setdefault("infectiousAgent", {}), "identifier", identifier)
 
     if name := sample.get("organism"):
-        insert_value(output.setdefault("species", {}), "name", name)
-        insert_value(output.setdefault("infectiousAgent", {}), "name", name)
+        clean_name, bracket_taxid = _split_taxonomy_id_bracket(name)
+        insert_value(output.setdefault("species", {}), "name", clean_name)
+        insert_value(output.setdefault("infectiousAgent", {}), "name", clean_name)
+        if bracket_taxid and not sample.get("taxId"):
+            insert_value(output.setdefault("species", {}), "identifier", bracket_taxid)
+            insert_value(output.setdefault("infectiousAgent", {}), "identifier", bracket_taxid)
 
     if date_created := sample.get("createDate"):
         try:
@@ -272,7 +290,11 @@ def parse_sample(sample):
             if key == "biomaterial_provider":
                 insert_value(output.setdefault("author", {}), "name", value)
             elif key == "host":
-                insert_value(output, "species", {"name": value})
+                clean_value, host_taxid = _split_taxonomy_id_bracket(value)
+                host_entry = {"name": clean_value}
+                if host_taxid:
+                    host_entry["identifier"] = host_taxid
+                insert_value(output, "species", host_entry)
             elif key == "environmental_package":
                 insert_value(output, "environmentalSystem", {"name": value})
             elif key == "host_sex":

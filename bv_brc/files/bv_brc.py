@@ -563,9 +563,23 @@ def _build_species_list(hosts: set[tuple[str, str]]) -> list[dict[str, str]]:
     result = []
     seen = set()
     for host_name, host_sci in sorted(hosts):
-        if host_name not in seen:
-            result.append({"name": host_name})
-            seen.add(host_name)
+        # BV-BRC's host field often arrives as "Common, Scientific" (e.g.
+        # "Human, Homo sapiens"). Prefer the scientific binomial so the
+        # standardizer's lookup keys on a known canonical name.
+        candidates = []
+        if host_sci and host_sci != host_name:
+            candidates.append(host_sci)
+        if host_name and "," in host_name:
+            parts = [p.strip() for p in host_name.split(",") if p.strip()]
+            if len(parts) >= 2:
+                candidates.append(parts[-1])
+        candidates.append(host_name)
+
+        for name in candidates:
+            if name and name not in seen:
+                result.append({"name": name})
+                seen.add(name)
+                break
     return result
 
 

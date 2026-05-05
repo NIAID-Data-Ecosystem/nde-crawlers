@@ -3,6 +3,11 @@ import datetime
 import json
 import logging
 import re
+
+# Drop serology results like "Cytomegalovirus +" / "Cytomegalovirus -" — these
+# come from VDJServer as healthCondition values but represent seropositivity,
+# not a disease, so the standardizer can't resolve them.
+_SEROLOGY_SUFFIX = re.compile(r"\s+[+\-]\s*$")
 from decimal import Decimal, InvalidOperation
 
 from parser_utils import _add_unique_dict, _add_unique_value, _ensure_list, _iter_string_values, _sanitize_identifier
@@ -357,6 +362,8 @@ def _build_sample_record(
         _add_unique_dict(temporal_coverages, temporal_seen, {"name": name, "duration": duration})
 
     def add_health_condition(name, identifier=None):
+        if isinstance(name, str) and _SEROLOGY_SUFFIX.search(name):
+            return
         entry = {"name": name, "identifier": identifier}
         _add_unique_dict(health_conditions, health_conditions_seen, entry)
 

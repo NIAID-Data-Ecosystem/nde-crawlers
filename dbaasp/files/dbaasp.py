@@ -422,6 +422,39 @@ _SUBSPECIES_MARKERS = {
 }
 _LOWER_EPITHET = re.compile(r"^[a-z]+$")
 
+# DBAASP's targetSpecies field sometimes carries cell lines or anatomy values
+# that aren't real organisms (e.g. "Human colon", "Human Melanoma SBcl-2").
+# We can't enumerate them all, but a few patterns catch the common cases.
+_HUMAN_NOT_SPECIES = {
+    "colon", "melanoma", "liver", "lung", "kidney", "brain", "skin", "gut",
+    "breast", "blood", "intestine", "stomach", "cells", "cell", "tissue",
+    "macrophage", "macrophages", "neutrophil", "neutrophils",
+    "fibroblast", "fibroblasts", "carcinoma", "leukemia", "lymphoma",
+    "lymphocyte", "lymphocytes", "monocyte", "monocytes", "embryonic",
+    "primary", "adenocarcinoma", "epithelial", "erythrocyte", "erythrocytes",
+    "platelet", "platelets", "serum", "plasma", "saliva",
+}
+# Cell-line-style tokens: letters with embedded digits or hyphen-digits like
+# "SBcl-2", "HEK293", "MCF-7", "HepG2".
+_CELL_LINE_TOKEN = re.compile(r"^[A-Za-z]+\d+[A-Za-z\d]*$|^[A-Za-z]+[-]\d+[A-Za-z\d]*$")
+
+
+def _looks_like_anatomy_or_cell_line(cleaned: str) -> bool:
+    if not cleaned:
+        return False
+    tokens = cleaned.split()
+    if not tokens:
+        return False
+    # "Human <anatomy or cell-type word>"
+    if tokens[0].lower() == "human" and len(tokens) >= 2:
+        if tokens[1].lower() in _HUMAN_NOT_SPECIES:
+            return True
+    # Any token shaped like a cell line designator
+    for t in tokens:
+        if _CELL_LINE_TOKEN.match(t):
+            return True
+    return False
+
 
 def _http_get_json(url: str, params: Optional[dict] = None) -> Any:
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
@@ -457,11 +490,14 @@ def normalize_species(name: str) -> str:
     - Preserve "subsp./var./serovar <epithet>" annotations after the species
     - Virus-like first tokens (contain hyphen/digit) -> just the first token
     - Anything else is kept as-is
+    - Cell lines and anatomy-style names are dropped entirely.
     """
     if not name:
         return ""
     cleaned = re.sub(r"\s+", " ", name.strip(" ,;"))
     if not cleaned:
+        return ""
+    if _looks_like_anatomy_or_cell_line(cleaned):
         return ""
     tokens = cleaned.split()
     if len(tokens) < 2:

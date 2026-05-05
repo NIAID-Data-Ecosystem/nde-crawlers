@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 
 import requests
@@ -6,6 +7,21 @@ import validators
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
+
+
+# Strip a trailing all-uppercase abbreviation in parens (e.g. "Tuberculosis (TB)"
+# -> "Tuberculosis"). Limited to 2-7 char uppercase tokens so we don't accidentally
+# strip mixed-case parentheticals like "(SARS-CoV-2)" or full alt-name annotations.
+_TRAILING_UPPER_ABBR = re.compile(r"\s*\(([A-Z][A-Z0-9]{1,6})\)\s*$")
+
+
+def _clean_health_condition_name(value):
+    if not isinstance(value, str):
+        return value
+    m = _TRAILING_UPPER_ABBR.search(value)
+    if m:
+        return value[: m.start()].strip()
+    return value
 
 
 def parse():
@@ -204,7 +220,8 @@ def parse():
         result["funding"] = [{"funder": {"name": study.get("creator")}}]
         if nct_number and nct_number != "N/A":
             result["nctid"] = nct_number
-        result["healthCondition"] = {"name": study.get("condition")}
+        if condition := study.get("condition"):
+            result["healthCondition"] = {"name": _clean_health_condition_name(condition)}
         result["mainEntityOfPage"] = study.get("clinical_trial_website")
 
         citation_url = study.get("publications")

@@ -11,6 +11,22 @@ except ImportError:
 
     logger = logging.getLogger(__name__)
 
+
+# Strip trailing "(common name)" annotations like "Homo sapiens (human)" so the
+# downstream lookup keys on the canonical scientific name. Only matches when the
+# parens contain lowercase words/spaces/hyphens — preserves abbreviations like
+# "(SARS-CoV-2)" that are case-mixed.
+_ORGANISM_COMMON_NAME_SUFFIX = re.compile(r"\s*\(([a-z][a-z \-/]*)\)\s*$")
+
+
+def _clean_organism_name(value):
+    if not isinstance(value, str):
+        return value
+    m = _ORGANISM_COMMON_NAME_SUFFIX.search(value)
+    if m:
+        return value[: m.start()].strip()
+    return value
+
 known_attributes = [
     "reviewtype",
     "template",
@@ -157,7 +173,7 @@ def parse_file(doc, accno):
                                     )
                         attribute.pop("valqual", None)
                     elif key == "organism":
-                        species = {"name": value}
+                        species = {"name": _clean_organism_name(value)}
                         if output.get("species"):
                             output["species"].append(species)
                         else:
@@ -279,7 +295,7 @@ def parse_file(doc, accno):
                                     else:
                                         continue
                                     if key == "organism":
-                                        species = {"name": value}
+                                        species = {"name": _clean_organism_name(value)}
                                         if output.get("species"):
                                             output["species"].append(species)
                                         else:
