@@ -26,6 +26,46 @@ from utils.corrections import apply_corrections
 from utils.lineage import process_lineage
 
 
+# Source data sometimes emits literal placeholders ("Not provided", "Unknown",
+# "Disease", "Normal", "N/A", etc.) as species / infectiousAgent / healthCondition
+# values. These aren't real terms and would otherwise reach the index unchanged
+# because the standardizer's lookup misses them and they have no curatedBy flag
+# to mark them as already-processed.
+PLACEHOLDER_TERMS = frozenset({
+    "", "-", "--", "n/a", "n.a.", "na",
+    "none", "null", "nan",
+    "not available", "not provided", "not known", "not specified",
+    "not applicable", "no data", "missing", "unknown",
+    "normal", "disease",
+})
+
+
+def _is_placeholder_term(name):
+    if not isinstance(name, str):
+        return False
+    return name.lower().strip() in PLACEHOLDER_TERMS
+
+
+def drop_placeholder_terms(doc):
+    """Strip placeholder entries from species / infectiousAgent / healthCondition."""
+    for field in ("species", "infectiousAgent", "healthCondition"):
+        if field not in doc:
+            continue
+        value = doc[field]
+        if isinstance(value, dict):
+            if _is_placeholder_term(value.get("name")):
+                doc.pop(field, None)
+        elif isinstance(value, list):
+            kept = [
+                entry for entry in value
+                if not (isinstance(entry, dict) and _is_placeholder_term(entry.get("name")))
+            ]
+            if kept:
+                doc[field] = kept
+            else:
+                doc.pop(field, None)
+
+
 def retry(retry_num, retry_sleep_sec):
     """
     retry help decorator.
@@ -333,6 +373,8 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
                 except etree.ParserError as e:
                     # At minimum, prevent the lxml error object from escaping
                     logger.warning("ParserError while processing doc %s: %s", doc.get("_id"), str(e))
+
+            drop_placeholder_terms(doc)
 
             # Everything past this point should always be last in order
             check_schema(doc)
