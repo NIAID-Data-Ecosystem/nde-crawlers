@@ -59,7 +59,6 @@ INCLUDED_IN_DATA_CATALOG = {
     "name": "Database of Antimicrobial Activity and Structure of Peptides",
     "alternateName": "DBAASP",
     "url": "https://dbaasp.org/",
-    "archivedAt": "https://data.niaid.nih.gov/resources?id=dde_cc13744ba5c15cca",
 }
 
 SPECIES = {"@type": "DefinedTerm", "name": "Homo sapiens"}
@@ -642,6 +641,7 @@ def _build_record(
             {
                 **copy.deepcopy(INCLUDED_IN_DATA_CATALOG),
                 "versionDate": today,
+                "archivedAt": url,
             }
         ],
         "name": name,
@@ -657,7 +657,6 @@ def _build_record(
         "creditText": CREDIT_TEXT,
         "conditionsOfAccess": "Open",
         "funding": copy.deepcopy(FUNDING),
-        "healthCondition": [],
         "infectiousAgent": [infectious_agent],
         "license": "https://creativecommons.org/licenses/by-nc/4.0/",
         "measurementTechnique": copy.deepcopy(MEASUREMENT_TECHNIQUE),
@@ -671,8 +670,8 @@ def _build_record(
         "exampleOfWork": _build_example_of_work(species),
         "isBasedOn": _build_is_based_on(species),
     }
-    if version:
-        record["version"] = version
+    # if version:
+    #     record["version"] = version
     return record
 
 

@@ -4,6 +4,7 @@ import biothings
 import biothings.hub.dataload.uploader as uploader
 import timeout_decorator
 from hub.dataload.nde import NDESourceUploader
+from utils.measurement_technique_helper import process_measurement_technique
 from utils.pubtator import standardize_data
 from utils.topic_category_helper import add_topic_category
 from utils.utils import nde_upload_wrapper
@@ -33,6 +34,7 @@ class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
         try:
             docs = self.parse_files_with_timeout(input_file)
             docs = standardize_data(docs)
+            docs = process_measurement_technique(docs, self.name)
             docs = add_topic_category(docs, self.name)
             for doc in docs:
                 yield doc

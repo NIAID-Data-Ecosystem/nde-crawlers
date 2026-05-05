@@ -17,7 +17,7 @@ class NODE_Uploader(NDECombinedUploader):
         docs = standardize_funding(docs)
         docs = standardize_data(docs)
         docs = process_descriptions(docs)
+        docs = process_measurement_technique(docs, self.name)
         docs = add_topic_category(docs, self.name)
-        # docs = process_measurement_technique(docs, self.name)
         for doc in docs:
             yield doc
