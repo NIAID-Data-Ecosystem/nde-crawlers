@@ -14,6 +14,14 @@ from parser_utils import _add_unique_dict, _add_unique_value, _ensure_list, _ite
 
 logger = logging.getLogger("nde-logger")
 
+GENERIC_VERSION_RE = re.compile(
+    r"^(?:v(?:ersion)?\s*)?\d+(?:[._-]\d+)*$",
+    re.IGNORECASE,
+)
+
+def is_generic_version_string(value: str) -> bool:
+    value = value.strip()
+    return bool(GENERIC_VERSION_RE.fullmatch(value))
 
 def _build_sample_record(
     samples,
@@ -835,7 +843,10 @@ def _build_sample_record(
 
         for kit in _ensure_list(sample.get("library_generation_kit_version")):
             if isinstance(kit, str):
-                add_measurement(name=kit.strip())
+                kit = kit.strip()
+
+                if kit and not is_generic_version_string(kit):
+                    add_measurement(name=kit)
 
         for method in _ensure_list(sample.get("library_generation_method")):
             if isinstance(method, str):
