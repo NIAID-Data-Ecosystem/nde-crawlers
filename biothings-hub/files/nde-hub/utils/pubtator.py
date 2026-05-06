@@ -72,31 +72,69 @@ def should_filter_term(term_name, identifier=None):
     return False
 
 
+_IDENTIFIER_RESOLUTION_CACHE = {}
+
+
+def _resolve_name_via_identifier(item, key):
+    """For species/infectiousAgent items lacking a name, look up the taxon via UniProt.
+
+    Mutates the item in place with the resolved fields when successful.
+    Returns the resolved name, or None when the item should be skipped.
+    Resolutions are cached per-run by normalized identifier.
+    """
+    if key not in ("species", "infectiousAgent"):
+        return None
+    identifier = item.get("identifier")
+    if not identifier:
+        return None
+
+    cache_key = str(identifier).split("*")[-1].strip()
+    if cache_key in _IDENTIFIER_RESOLUTION_CACHE:
+        details = _IDENTIFIER_RESOLUTION_CACHE[cache_key]
+    else:
+        try:
+            details = _get_uniprot_details(item.get("originalName") or str(identifier), identifier)
+        except Exception as e:
+            logger.warning(f"Could not resolve {key} entry via identifier {identifier}: {e}")
+            _IDENTIFIER_RESOLUTION_CACHE[cache_key] = None
+            return None
+        _IDENTIFIER_RESOLUTION_CACHE[cache_key] = details
+
+    name = details.get("name") if details else None
+    if not name:
+        return None
+    for field, value in details.items():
+        if field not in item or not item[field]:
+            item[field] = value
+    return name
+
+
 def extract_values(doc_list, key):
-    # Initialize an empty list to store the extracted values
     values_list = []
 
-    # Iterate through each document in the doc_list
     for doc in doc_list:
-        # If the value for the given key is a list, iterate through the items in the list
-        if isinstance(doc.get(key, {}), list):
-            for item in doc[key]:
-                # Check if the item has already been curated
-                if "curatedBy" in item:
-                    logger.info(f'{item["name"]} has already been curated, skipping...')
-                    continue
-                # Append the "name" field of the item to the values_list
-                values_list.append(item["name"])
+        value = doc.get(key)
+        if isinstance(value, list):
+            items = value
+        elif isinstance(value, dict) and value:
+            items = [value]
+        else:
+            continue
 
-        # If the value for the given key is a dictionary, extract the "name" field and append it to the values_list
-        elif item_name := doc.get(key, {}).get("name"):
-            # Check if the item has already been curated
-            if "curatedBy" in doc[key]:
-                logger.info(f"{item_name} has already been curated, skipping...")
+        for item in items:
+            if not isinstance(item, dict):
                 continue
-            values_list.append(item_name)
+            if "curatedBy" in item:
+                logger.info(f"{item.get('name', '(unnamed)')} has already been curated, skipping...")
+                continue
+            name = item.get("name")
+            if not name:
+                name = _resolve_name_via_identifier(item, key)
+                if not name:
+                    logger.info(f"Skipping {key} entry without resolvable name: {item}")
+                    continue
+            values_list.append(name)
 
-    # Remove duplicates and return a list of unique values with whitespace stripped
     return list(dict.fromkeys([x.lower().strip() for x in values_list]))
 
 
