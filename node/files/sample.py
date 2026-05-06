@@ -4,10 +4,30 @@ import re
 
 import dateutil.parser
 
-from .node import insert_value
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
+
+def insert_value(d, key, value, extend=False):
+    """ Insert a value into a dictionary, handling existing keys by converting to lists or extending strings as needed.
+    """
+
+    if key in d and not extend:
+        if isinstance(d[key], list):
+            if isinstance(value, list):
+                for item in value:
+                    if item not in d[key]:
+                        d[key].append(item)
+            elif value not in d[key]:
+                d[key].append(value)
+        else:
+            if isinstance(value, list):
+                d[key] = [d[key]] + [v for v in value if v != d[key]]
+            elif d[key] != value:
+                d[key] = [d[key], value]
+    elif d.get(key) and extend:
+        d[key] = (d.get(key) + " " + value).strip()
+    else:
+        d[key] = value
 
 def parse_ontology_term(text):
     """
@@ -191,7 +211,7 @@ def get_samples(session, table_info, project_id):
             sap_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=sample&dataType={data_type}&total=0&pageNum=1&pageSize=100&sortKey=sapNo&sortType=asc").json()
             pages = sap_info["data"]["sapTableData"]["totalPages"]
             for page in range(1, pages + 1):
-                print(f"Crawling sample info page {page} of {pages} for project {project_id}")
+                logger.info(f"Crawling sample info page {page} of {pages} for project {project_id}")
                 sap_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=sample&dataType={data_type}&total=0&pageNum={page}&pageSize=100&sortKey=sapNo&sortType=asc").json()
                 for sap in sap_info["data"]["sapTableData"]["content"]:
                     yield sap
@@ -206,17 +226,18 @@ def parse_sample(sample):
     output = {
         "@context": "http://schema.org/",
         "@type": "Sample",
-        "_id": _id.casefold(),
+        "_id": "node_" + _id.casefold(),
         "identifier": _id,
         "url": url,
         "distribution": [{"@type": "DataDownload", "contentUrl": url}],
         "includedInDataCatalog": {
             "@type": "DataCatalog",
-            "name": "BioSample",
-            "url": "https://www.ncbi.nlm.nih.gov/biosample/",
+            "name": "National Omics Data Encyclopedia",
+            "url": "https://www.biosino.org/node/home",
             "versionDate": datetime.date.today().isoformat(),
             "archivedAt": url,
         },
+        "additionalType": "ExperimentalRunSample",
     }
 
     if name := sample.get("name"):
@@ -281,7 +302,7 @@ def parse_sample(sample):
     if sample_process := sample.get("protocol"):
         insert_value(output, "sampleProcess", sample_process)
 
-
+    geo = {}
     if attributes := sample.get("attributes"):
         for key, value in attributes.items():
             if not value:
@@ -311,13 +332,16 @@ def parse_sample(sample):
             elif key == "env_material":
                 insert_value(output, "environmentalSystem", parse_ontology_term(value))
             elif key == "geographic_location":
-                insert_value(output.setdefault("locationOfOrigin", {}), "name", value)
+                geo["name"] = value
+                # insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "name", value)
             elif key == "latitude":
                 if latitude := parse_latitude(value):
-                    insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "latitude", latitude)
+                    geo["latitude"] = latitude
+                    # insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "latitude", latitude)
             elif key == "longitude":
                 if longitude := parse_longitude(value):
-                    insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "longitude", longitude)
+                    geo["longitude"] = longitude
+                    # insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "longitude", longitude)
             elif key == "sample_collection_date":
                 try:
                     value = dateutil.parser.parse(value).date().isoformat()
@@ -353,7 +377,8 @@ def parse_sample(sample):
                 else:
                     insert_value(output, "sampleStorageTemperature", {"name": value})
             elif key == "elevation":
-                insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "elevation", value)
+                geo["elevation"] = value
+                # insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "elevation", value)
             elif key == "weight":
                 insert_value(output, "associatedPhenotype", parse_weight(value))
             elif key == "host_weight":
@@ -413,7 +438,8 @@ def parse_sample(sample):
                         logger.warning(f"Failed to parse latitude_end or longitude_end from value '{value}': {e}")
                         continue
             elif key == "altitude":
-                insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "altitude", value)
+                geo["altitude"] = value
+                # insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "altitude", value)
             elif key == "sample_storage_location":
                 insert_value(output, "itemLocation", {"name": value})
             elif key == "sample_volume_or_weight_for_dna_extraction":
@@ -438,6 +464,8 @@ def parse_sample(sample):
             else:
                 insert_value(output, "additionalProperty", {"@type": "PropertyValue", "propertyID": key, "value": value})
 
+    if geo:
+        insert_value(output, "locationOfOrigin", {"geo": geo})
 
     if cinf := sample.get("calc_info"):
         for key, value in cinf.items():

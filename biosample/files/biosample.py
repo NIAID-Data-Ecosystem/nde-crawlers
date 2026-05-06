@@ -8,7 +8,7 @@ from pathlib import Path
 import dateutil.parser
 import xmltodict
 from Bio import Entrez
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 DEFAULT_TIMEOUT = 30  # seconds
 socket.setdefaulttimeout(DEFAULT_TIMEOUT)
@@ -71,7 +71,21 @@ def insert_value(d, key, value):
     else:
         d[key] = value
 
-@retry(stop=stop_after_attempt(5), wait=wait_fixed(5), reraise=True)
+class EsummaryTooLargeError(Exception):
+    """esummary returned the 10MB JSON-size error; retrying won't help — split the range."""
+
+
+def _is_size_error(records):
+    err = records.get("eutilsresult", {}).get("ERROR", "") if isinstance(records, dict) else ""
+    return "max size is 10MB" in err or "cannot be transformaed to json" in err
+
+
+@retry(
+    stop=stop_after_attempt(10),
+    wait=wait_exponential(multiplier=5, max=60),
+    retry=retry_if_not_exception_type(EsummaryTooLargeError),
+    reraise=True,
+)
 def query_acc(term, retstart, retmax):
     handle = Entrez.esearch(db="biosample", term=term, usehistory="y", timeout=DEFAULT_TIMEOUT)
     record = Entrez.read(handle)
@@ -90,7 +104,28 @@ def query_acc(term, retstart, retmax):
 
     records = json.load(handle)
     handle.close()
+    if "result" not in records:
+        if _is_size_error(records):
+            raise EsummaryTooLargeError(
+                f"esummary response over 10MB at retstart={retstart}, retmax={retmax}"
+            )
+        logger.warning(f"Unexpected esummary response (retstart={retstart}): {records}")
+        raise RuntimeError(f"esummary missing 'result' key: {records}")
     return records["result"]
+
+
+def fetch_range(term, retstart, retmax):
+    """Yield record batches for [retstart, retstart+retmax). Recursively splits on 10MB errors."""
+    try:
+        yield query_acc(term, retstart, retmax)
+    except EsummaryTooLargeError as e:
+        if retmax <= 1:
+            logger.error(f"{e}; single record exceeds 10MB esummary cap, skipping retstart={retstart}")
+            return
+        half = retmax // 2
+        logger.warning(f"{e}; splitting into chunks of {half} and {retmax - half}")
+        yield from fetch_range(term, retstart, half)
+        yield from fetch_range(term, retstart + half, retmax - half)
 
 
 def fetch_all_samples():
@@ -108,10 +143,43 @@ def fetch_all_samples():
 
     retmax = 500  # max allowed by NCBI for json output
     for retstart in range(0, total, retmax):
-        accs = query_acc("all[filter]", retstart, retmax)
-        yield accs
+        for accs in fetch_range("all[filter]", retstart, retmax):
+            yield accs
         if (retstart + retmax) % 10000 == 0:
             logger.info(f"Fetched {retstart + retmax} of {total} records")
+
+
+def get_all_addtype_records():
+    """
+    Fetch all Accession IDs from NCBI Biosample filtered by 'human str profile' using Biopython Entrez ESearch with pagination.
+
+    """
+
+    term = "human str profile[Filter]"
+
+    # First, get total count
+    handle = Entrez.esearch(db="biosample", term=term, timeout=DEFAULT_TIMEOUT)
+    record = Entrez.read(handle)
+    total = int(record["Count"])
+    logger.info(f"Total records to add biosample type: {total}")
+    handle.close()
+
+    retmax = 10000
+    idlist = []
+    for retstart in range(0, total, retmax):
+        handle = Entrez.esearch(
+            db="biosample",
+            term=term,
+            retmode="json",
+            retstart=retstart,
+            retmax=retmax,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        record = json.load(handle)
+        handle.close()
+        idlist.extend(record["esearchresult"]["idlist"])
+        logger.info(f"Fetched {min(retstart + retmax, total)} of {total} records")
+    return idlist
 
 
 def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
@@ -249,6 +317,8 @@ def parse():
     with open(Path(__file__).resolve().parent / "mapping_dict.json", "r") as f:
         sample_mapping = json.load(f)
 
+    id_list = get_all_addtype_records()
+
     for sample_list in fetch_all_samples():
         for key, sample in sample_list.items():
             if key == "uids":
@@ -276,7 +346,10 @@ def parse():
                     "versionDate": datetime.date.today().isoformat(),
                     "archivedAt": url,
                 },
+                "additionalType": "ExperimentalRunSample"
             }
+            if key in id_list:
+                output["additionalType"] = ["ExperimentalRunSample", "BioSample"]
 
             if name := sample.get("title"):
                 output["name"] = name

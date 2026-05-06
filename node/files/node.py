@@ -6,33 +6,10 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from .sample import add_aggregate_element, get_samples, parse_sample
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
-
-def insert_value(d, key, value, extend=False):
-    """ Insert a value into a dictionary, handling existing keys by converting to lists or extending strings as needed.
-    """
-
-    if key in d and not extend:
-        if isinstance(d[key], list):
-            if isinstance(value, list):
-                for item in value:
-                    if item not in d[key]:
-                        d[key].append(item)
-            elif value not in d[key]:
-                d[key].append(value)
-        else:
-            if isinstance(value, list):
-                d[key] = [d[key]] + [v for v in value if v != d[key]]
-            elif d[key] != value:
-                d[key] = [d[key], value]
-    elif d.get(key) and extend:
-        d[key] = (d.get(key) + " " + value).strip()
-    else:
-        d[key] = value
+from sample import add_aggregate_element, get_samples, insert_value, parse_sample
 
 
 def make_session_with_retries(total=3, backoff_factor=1, status_forcelist=(429,500,502,503,504), allow_post=True, pool_maxsize=10):
@@ -106,7 +83,7 @@ def get_data_list(session, project_id):
     pages = response["data"]["total"] // 100 + (1 if response["data"]["total"] % 100 > 0 else 0)
     for page in range(1, pages + 1):
         payload["pageNum"] = page
-        logger.info(f"Crawling experiments for project {project_id}, page {page} of {pages}")
+        logger.info(f"Crawling data ids for project {project_id}, page {page} of {pages}")
         response = session.post(url, json=payload)
         response.raise_for_status()
         response = response.json()
@@ -128,7 +105,7 @@ def parse():
             output = {
                 "@context": "http://schema.org/",
                 "@type": "Dataset",
-                "_id": "NODE_" + _id.casefold(),
+                "_id": "node_" + _id.casefold(),
                 "identifier": _id,
                 "url": url,
                 "includedInDataCatalog": {
@@ -223,6 +200,7 @@ def parse():
                     exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum=1&pageSize=100&sortKey=expNo&sortType=asc").json()
                     pages = exp_info["data"]["expTableData"]["totalPages"]
                     for page in range(1, pages + 1):
+                        logger.info(f"Crawling experiment info page {page} of {pages} for project {project_id}")
                         exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum={page}&pageSize=100&sortKey=expNo&sortType=asc").json()
                         for exp in exp_info["data"]["expTableData"]["content"]:
                             if date_created := exp.get("createDate"):
