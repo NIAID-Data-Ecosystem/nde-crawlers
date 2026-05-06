@@ -12,6 +12,7 @@ import gzip
 import json
 import os
 import os.path
+import re
 import sqlite3
 import time
 import urllib.error
@@ -697,6 +698,32 @@ def _ensure_cache_tables():
     conn.commit()
 
 
+_VALID_PMID_RE = re.compile(r"^[1-9]\d{0,8}$")
+
+
+def _filter_valid_pmids(pmid_list):
+    """Strip and validate PMIDs. NCBI returns HTTP 400 if any id in the
+    request is malformed (non-digit, empty, leading zero, too long), which
+    aborts the entire batch. Filter out anything that isn't a positive
+    integer of <=9 digits and log what was dropped.
+    """
+    valid = []
+    invalid = []
+    for raw in pmid_list:
+        pmid = str(raw).strip().lstrip("0")
+        if _VALID_PMID_RE.match(pmid):
+            valid.append(pmid)
+        else:
+            invalid.append(raw)
+    if invalid:
+        logger.warning(
+            "Dropping %d malformed PMID(s) before NCBI request: %s",
+            len(invalid),
+            invalid[:20],
+        )
+    return valid
+
+
 def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
     """Wrapper around batch_get_pmid_eutils that caches results in SQLite.
     On repeated runs, cached PMIDs are returned instantly without NCBI API calls.
@@ -704,6 +731,10 @@ def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
     _ensure_cache_tables()
     conn = _get_pmid_conn()
     cur = conn.cursor()
+
+    pmid_list = _filter_valid_pmids(pmid_list)
+    if not pmid_list:
+        return {}
 
     # Look up cached results
     placeholders = ", ".join("?" for _ in pmid_list)
