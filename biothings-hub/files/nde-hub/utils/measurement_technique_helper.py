@@ -144,56 +144,50 @@ def append_to_field(doc, field, new_entry):
         doc[field] = [new_entry]
 
 
+def _apply_measurement_mapping(doc, mapping):
+    new_mt = []
+    if "measurementTechnique" in doc:
+        mt = doc["measurementTechnique"]
+        if isinstance(mt, dict):
+            mt = [mt]
+        elif not isinstance(mt, list):
+            mt = []
+
+        for item in mt:
+            original_name = item.get("name")
+            if original_name in mapping:
+                for map_record in mapping[original_name]:
+                    target_field = map_record.get("field", "measurementTechnique")
+                    new_entry = dict(map_record)
+                    new_entry["originalName"] = original_name
+                    if target_field == "keywords":
+                        append_to_field(doc, target_field, new_entry["name"])
+                    elif target_field == "measurementTechnique":
+                        new_mt.append(new_entry)
+                    else:
+                        append_to_field(doc, target_field, new_entry)
+            else:
+                new_mt.append(item)
+
+    if new_mt:
+        doc["measurementTechnique"] = new_mt
+    else:
+        doc.pop("measurementTechnique", None)
+    return doc
+
+
 def process_measurement_technique(data, name):
     """
-    Updates the measurementTechnique field in each document based on the provided mapping.
-    Each document's measurementTechnique property is standardized as a list.
-    If a repository technique maps to more than one target field, each mapping entry is
-    added to the appropriate field.
-    If measurementTechnique ends up as an empty list, it is removed from the document.
-    For the 'keywords' field, only the mapping name string is appended.
+    Yields each doc with its measurementTechnique field standardized.
+    Streams instead of materializing so large sources (e.g. biosample at 54M records)
+    don't exhaust memory. Per-doc semantics are unchanged.
     """
     mapping = load_mapping(name)
 
-    # Load documents from file or list.
     if isinstance(data, str):
         with open(os.path.join(data, "data.ndjson"), "rb") as f:
-            doc_list = [orjson.loads(line) for line in f]
+            for line in f:
+                yield _apply_measurement_mapping(orjson.loads(line), mapping)
     else:
-        doc_list = list(data)
-
-    for doc in doc_list:
-        new_mt = []  # This will store standardized measurementTechnique entries
-        if "measurementTechnique" in doc:
-            mt = doc["measurementTechnique"]
-            # Normalize mt to a list for easier processing.
-            if isinstance(mt, dict):
-                mt = [mt]
-            elif not isinstance(mt, list):
-                mt = []
-
-            for item in mt:
-                original_name = item.get("name")
-                if original_name in mapping:
-                    # Process all mapping entries for this repository technique.
-                    for map_record in mapping[original_name]:
-                        target_field = map_record.get("field", "measurementTechnique")
-                        new_entry = dict(map_record)
-                        new_entry["originalName"] = original_name
-                        if target_field == "keywords":
-                            # Append only the name string for keywords.
-                            append_to_field(doc, target_field, new_entry["name"])
-                        elif target_field == "measurementTechnique":
-                            new_mt.append(new_entry)
-                        else:
-                            append_to_field(doc, target_field, new_entry)
-                else:
-                    new_mt.append(item)
-
-        # Overwrite or remove measurementTechnique based on whether new_mt is empty.
-        if new_mt:
-            doc["measurementTechnique"] = new_mt
-        else:
-            doc.pop("measurementTechnique", None)
-
-    return doc_list
+        for doc in data:
+            yield _apply_measurement_mapping(doc, mapping)
