@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sqlite3
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Pool
@@ -73,6 +74,12 @@ def should_filter_term(term_name, identifier=None):
 
 
 _IDENTIFIER_RESOLUTION_CACHE = {}
+_TRANSFORM_HC_DICT = None
+_TRANSFORM_SPECIES_DICT = None
+
+
+class AliasLookupDict(dict):
+    aliases_indexed = True
 
 
 def _resolve_name_via_identifier(item, key):
@@ -109,80 +116,173 @@ def _resolve_name_via_identifier(item, key):
     return name
 
 
-def extract_values(doc_list, key):
-    values_list = []
+def _iter_data_file(data_folder):
+    with open(os.path.join(os.fspath(data_folder), "data.ndjson"), "rb") as f:
+        for line in f:
+            yield orjson.loads(line)
 
-    for doc in doc_list:
-        value = doc.get(key)
-        if isinstance(value, list):
-            items = value
-        elif isinstance(value, dict) and value:
-            items = [value]
-        else:
+
+def _iter_ndjson_file(file_path):
+    with open(file_path, "rb") as f:
+        for line in f:
+            yield orjson.loads(line)
+
+
+def _is_reiterable(data):
+    try:
+        return iter(data) is not data
+    except TypeError:
+        return False
+
+
+def _add_unique_value(values, name):
+    if not name:
+        return
+    normalized_name = name.lower().strip()
+    if normalized_name:
+        values.setdefault(normalized_name, None)
+
+
+def _iter_section_items(doc, key):
+    value = doc.get(key)
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict) and value:
+        return [value]
+    return []
+
+
+def _collect_values_from_doc(doc, key, values):
+    for item in _iter_section_items(doc, key):
+        if not isinstance(item, dict):
             continue
-
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            if "curatedBy" in item:
-                logger.info(f"{item.get('name', '(unnamed)')} has already been curated, skipping...")
-                continue
-            name = item.get("name")
+        if "curatedBy" in item:
+            logger.info(f"{item.get('name', '(unnamed)')} has already been curated, skipping...")
+            continue
+        name = item.get("name")
+        if not name:
+            name = _resolve_name_via_identifier(item, key)
             if not name:
-                name = _resolve_name_via_identifier(item, key)
-                if not name:
-                    logger.info(f"Skipping {key} entry without resolvable name: {item}")
-                    continue
-            values_list.append(name)
+                logger.info(f"Skipping {key} entry without resolvable name: {item}")
+                continue
+        _add_unique_value(values, name)
 
-    return list(dict.fromkeys([x.lower().strip() for x in values_list]))
+
+def extract_values(doc_list, key):
+    values = {}
+    for doc in doc_list:
+        _collect_values_from_doc(doc, key, values)
+    return list(values.keys())
+
+
+def _collect_unstandardized_species_from_doc(doc, species_dict, unstandardized_species):
+    for field in ("species", "infectiousAgent"):
+        for entry in _iter_section_items(doc, field):
+            if not isinstance(entry, dict):
+                continue
+            if "inDefinedTermSet" in entry or "curatedBy" in entry:
+                continue
+
+            name = entry.get("name")
+            if not name:
+                name = _resolve_name_via_identifier(entry, field)
+                if not name:
+                    continue
+                if "inDefinedTermSet" in entry or "curatedBy" in entry:
+                    continue
+
+            if should_filter_term(name, entry.get("identifier")):
+                continue
+            if species_dict and lookup_item(name, species_dict):
+                continue
+
+            key = name.lower().strip()
+            if key:
+                unstandardized_species.setdefault(key, (name, entry.get("identifier")))
+
+
+def _scan_documents(docs, species_dict=None, spool_file=None):
+    health_conditions = {}
+    species = {}
+    infectious_agents = {}
+    unstandardized_species = {}
+    count = 0
+
+    for doc in docs:
+        count += 1
+        if count % 1000 == 0:
+            logger.info(f"Processed {count} lines")
+
+        _collect_values_from_doc(doc, "healthCondition", health_conditions)
+        _collect_values_from_doc(doc, "species", species)
+        _collect_values_from_doc(doc, "infectiousAgent", infectious_agents)
+
+        if species_dict is not None:
+            _collect_unstandardized_species_from_doc(doc, species_dict, unstandardized_species)
+
+        if spool_file is not None:
+            spool_file.write(orjson.dumps(doc))
+            spool_file.write(b"\n")
+
+    return (
+        list(health_conditions.keys()),
+        list(species.keys()),
+        list(infectious_agents.keys()),
+        unstandardized_species,
+        count,
+    )
 
 
 def standardize_data(data):
+    return _standardize_data(data)
+
+
+def _standardize_data(data):
     logger.info("Standardizing data...")
-    # Check if data is a file path (str)
-    if isinstance(data, str):
-        # Read data from the file and process it
-        logger.info("Reading data from file...")
-        with open(os.path.join(data, "data.ndjson"), "rb") as f:
-            health_conditions_list = []
-            species_list = []
-            infectious_agents_list = []
-            doc_list = []
-            count = 0
-            for line in f:
-                count += 1
-                if count % 1000 == 0:
-                    logger.info(f"Processed {count} lines")
-                doc = orjson.loads(line)
-                doc_list.append(doc)
+    temp_path = None
 
-            health_conditions_list = extract_values(doc_list, "healthCondition")
-            species_list = extract_values(doc_list, "species")
-            infectious_agents_list = extract_values(doc_list, "infectiousAgent")
+    try:
+        _ensure_lookup_db()
+        hc_dict, species_dict = fetch_data_from_db()
 
-            logger.info(
-                f"Found {len(health_conditions_list)} health conditions, {len(species_list)} species, {len(infectious_agents_list)} infectious agents"
-            )
-            return update_lookup_dict(health_conditions_list, species_list, infectious_agents_list, doc_list)
+        if isinstance(data, (str, os.PathLike)):
+            logger.info("Reading data from file...")
+            source_factory = lambda: _iter_data_file(data)
+            scan_result = _scan_documents(source_factory(), species_dict=species_dict)
+        elif _is_reiterable(data):
+            logger.info("Reading data from reusable iterable...")
+            source_factory = lambda: iter(data)
+            scan_result = _scan_documents(source_factory(), species_dict=species_dict)
+        else:
+            logger.info("Reading data from one-pass iterable; spooling documents to disk for a streaming second pass...")
+            with tempfile.NamedTemporaryFile(prefix="pubtator-standardize-", suffix=".ndjson", delete=False) as f:
+                temp_path = f.name
+                scan_result = _scan_documents(data, species_dict=species_dict, spool_file=f)
+            source_factory = lambda: _iter_ndjson_file(temp_path)
 
-    else:
-        # If data is a list, process it
-        logger.info("Reading data from list...")
-        health_conditions_list = []
-        species_list = []
-        infectious_agents_list = []
-        doc_list = list(data)
-
-        health_conditions_list = extract_values(doc_list, "healthCondition")
-        species_list = extract_values(doc_list, "species")
-        infectious_agents_list = extract_values(doc_list, "infectiousAgent")
-
+        health_conditions_list, species_list, infectious_agents_list, unstandardized_species, count = scan_result
+        logger.info(f"Scanned {count} documents")
         logger.info(
             f"Found {len(health_conditions_list)} health conditions, {len(species_list)} species, {len(infectious_agents_list)} infectious agents"
         )
-        # Call the update_lookup_dict function with the extracted data
-        return update_lookup_dict(health_conditions_list, species_list, infectious_agents_list, doc_list)
+
+        docs = update_lookup_dict(
+            health_conditions_list,
+            species_list,
+            infectious_agents_list,
+            source_factory,
+            unstandardized_species=unstandardized_species,
+            hc_dict=hc_dict,
+            species_dict=species_dict,
+        )
+        for doc in docs:
+            yield doc
+    finally:
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except FileNotFoundError:
+                pass
 
 
 def classify_as_host_or_agent(lineage):
@@ -579,9 +679,15 @@ def get_new_species(species):
 
 
 def lookup_item(original_name, data_dict):
+    if not original_name or not data_dict:
+        return None
+
     original_name_lower = original_name.lower().strip()
     if original_name_lower in data_dict:
         return data_dict[original_name_lower]
+
+    if getattr(data_dict, "aliases_indexed", False) or not hasattr(data_dict, "values"):
+        return None
 
     for item_data in data_dict.values():
         if "name" in item_data and original_name_lower == item_data["name"].lower().strip():
@@ -593,6 +699,37 @@ def lookup_item(original_name, data_dict):
     return None
 
 
+def _add_lookup_alias(lookup_dict, alias, item_data):
+    if not alias:
+        return
+    normalized_alias = str(alias).lower().strip()
+    if normalized_alias:
+        lookup_dict.setdefault(normalized_alias, item_data)
+
+
+def _build_lookup_dict(rows):
+    lookup_dict = AliasLookupDict()
+    loaded_items = []
+
+    for original_name, standard_dict in rows:
+        if not standard_dict:
+            continue
+        item_data = json.loads(standard_dict)
+        _add_lookup_alias(lookup_dict, original_name, item_data)
+        loaded_items.append(item_data)
+
+    for item_data in loaded_items:
+        _add_lookup_alias(lookup_dict, item_data.get("name"), item_data)
+        _add_lookup_alias(lookup_dict, item_data.get("originalName"), item_data)
+        alternate_names = item_data.get("alternateName", [])
+        if isinstance(alternate_names, str):
+            alternate_names = [alternate_names]
+        for alternate_name in alternate_names:
+            _add_lookup_alias(lookup_dict, alternate_name, item_data)
+
+    return lookup_dict
+
+
 def fetch_data_from_db():
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
@@ -601,8 +738,8 @@ def fetch_data_from_db():
         c.execute("SELECT original_name, standard_dict FROM species")
         species_cursor = c.fetchall()
 
-    hc_dict = {item[0].lower().strip(): json.loads(item[1]) for item in hc_cursor if item[1]}
-    species_dict = {item[0].lower().strip(): json.loads(item[1]) for item in species_cursor if item[1]}
+    hc_dict = _build_lookup_dict(hc_cursor)
+    species_dict = _build_lookup_dict(species_cursor)
 
     return hc_dict, species_dict
 
@@ -620,8 +757,11 @@ def process_section(section, cursor_dict, is_species_section=False):
             continue
         original_name = original_obj.get("name")
         if not original_name:
-            new_section_list.append(original_obj)
-            continue
+            if is_species_section:
+                original_name = _resolve_name_via_identifier(original_obj, "species")
+            if not original_name:
+                new_section_list.append(original_obj)
+                continue
 
         # Apply drop list filtering for species-related sections
         if is_species_section:
@@ -646,8 +786,20 @@ def process_section(section, cursor_dict, is_species_section=False):
     return new_section_list
 
 
+def _init_transform_worker(hc_dict, species_dict, identifier_resolution_cache):
+    global _TRANSFORM_HC_DICT, _TRANSFORM_SPECIES_DICT
+    _TRANSFORM_HC_DICT = hc_dict
+    _TRANSFORM_SPECIES_DICT = species_dict
+    _IDENTIFIER_RESOLUTION_CACHE.update(identifier_resolution_cache or {})
+
+
 def process_document(args):
-    doc, hc_dict, species_dict, doc_index = args
+    if len(args) == 4:
+        doc, hc_dict, species_dict, doc_index = args
+    else:
+        doc, doc_index = args
+        hc_dict = _TRANSFORM_HC_DICT or {}
+        species_dict = _TRANSFORM_SPECIES_DICT or {}
 
     # Get sections from the document
     health_conditions_list = doc.get("healthCondition", {})
@@ -734,14 +886,22 @@ def process_document(args):
 
 def transform(doc_list):
     hc_dict, species_dict = fetch_data_from_db()
+    return transform_with_lookup(doc_list, hc_dict, species_dict)
 
-    with Pool(15) as pool:
-        # Generate arguments for starmap
-        args = [(doc, hc_dict, species_dict, index) for index, doc in enumerate(doc_list)]
-        processed_docs = pool.map(process_document, args)
 
-    for doc in processed_docs:
-        yield doc
+def transform_with_lookup(doc_list, hc_dict, species_dict):
+    processes = int(os.environ.get("PUBTATOR_TRANSFORM_PROCESSES", "15"))
+    chunksize = int(os.environ.get("PUBTATOR_TRANSFORM_CHUNKSIZE", "500"))
+    identifier_resolution_cache = dict(_IDENTIFIER_RESOLUTION_CACHE)
+
+    with Pool(
+        processes,
+        initializer=_init_transform_worker,
+        initargs=(hc_dict, species_dict, identifier_resolution_cache),
+    ) as pool:
+        args = ((doc, index) for index, doc in enumerate(doc_list, start=1))
+        for doc in pool.imap(process_document, args, chunksize=chunksize):
+            yield doc
 
 
 def update_table(conn, table_name, item_list, get_new_items_func):
@@ -970,31 +1130,26 @@ def _apply_resolved_species(doc, resolved):
         doc["infectiousAgent"] = new_infectious_agents
 
 
-def resolve_unstandardized_species(doc_list):
-    """Resolve species not standardized by PubTator DB lookup using text2term + UniProt."""
-    import text2term
+def _normalize_unstandardized_species(unstandardized):
+    normalized = {}
+    for key, value in unstandardized.items():
+        if isinstance(value, tuple):
+            name, identifier = value
+        else:
+            name, identifier = key, value
+        normalized_key = str(name).lower().strip()
+        if normalized_key:
+            normalized.setdefault(normalized_key, (name, identifier))
+    return normalized
 
-    doc_list = list(doc_list)
 
-    # Collect unique unstandardized species names (entries without inDefinedTermSet)
-    unstandardized = {}
-    for doc in doc_list:
-        for field in ("species", "infectiousAgent"):
-            entries = doc.get(field, [])
-            if isinstance(entries, dict):
-                entries = [entries]
-            if isinstance(entries, list):
-                for entry in entries:
-                    if isinstance(entry, dict) and "name" in entry and "inDefinedTermSet" not in entry and "curatedBy" not in entry:
-                        name = entry["name"]
-                        if name not in unstandardized:
-                            unstandardized[name] = entry.get("identifier")
+def resolve_species_terms(unstandardized):
+    """Resolve unique species names using the local cache, UniProt IDs, then text2term."""
+    unstandardized = _normalize_unstandardized_species(unstandardized)
 
     if not unstandardized:
         logger.info("text2term: all species already standardized")
-        for doc in doc_list:
-            yield doc
-        return
+        return {}
 
     logger.info(f"text2term: {len(unstandardized)} unstandardized species to resolve")
 
@@ -1004,12 +1159,12 @@ def resolve_unstandardized_species(doc_list):
     resolved = {}
     need_uniprot = []  # (name, taxon_id) tuples for direct UniProt lookup
     need_text2term = []
+    negative_count = 0
 
-    for name, identifier in unstandardized.items():
-        key = name.lower().strip()
-
+    for key, (name, identifier) in unstandardized.items():
         # Skip if previously confirmed unresolvable
         if key in negative_cache:
+            negative_count += 1
             continue
 
         # Check positive cache first
@@ -1026,7 +1181,7 @@ def resolve_unstandardized_species(doc_list):
 
     logger.info(
         "text2term: %s cached, %s negative-cached, %s need UniProt, %s need text2term",
-        len(resolved), len(unstandardized) - len(resolved) - len(need_uniprot) - len(need_text2term),
+        len(resolved), negative_count,
         len(need_uniprot), len(need_text2term),
     )
 
@@ -1063,6 +1218,8 @@ def resolve_unstandardized_species(doc_list):
 
     if need_text2term:
         try:
+            import text2term
+
             if not os.path.exists("cache/ncbitaxon"):
                 logger.info("text2term: building ncbitaxon ontology cache...")
                 text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
@@ -1106,49 +1263,97 @@ def resolve_unstandardized_species(doc_list):
             logger.error(f"text2term: error during text2term resolution: {e}")
 
     logger.info(f"text2term: total resolved={len(resolved)}")
+    return resolved
 
-    for doc in doc_list:
-        _apply_resolved_species(doc, resolved)
+
+def _collect_unstandardized_species(docs, spool_file=None):
+    unstandardized_species = {}
+    for doc in docs:
+        _collect_unstandardized_species_from_doc(doc, None, unstandardized_species)
+        if spool_file is not None:
+            spool_file.write(orjson.dumps(doc))
+            spool_file.write(b"\n")
+    return unstandardized_species
+
+
+def _apply_resolved_species_to_stream(docs, resolved):
+    for doc in docs:
+        if resolved:
+            _apply_resolved_species(doc, resolved)
         yield doc
 
 
-def update_lookup_dict(health_conditions_list, species_list, infectious_agents_list, doc_list):
-    # If the database file does not exist or is empty, create a new one
+def resolve_unstandardized_species(doc_list):
+    """Resolve species not standardized by PubTator DB lookup using text2term + UniProt."""
+    temp_path = None
+    try:
+        if _is_reiterable(doc_list):
+            source_factory = lambda: iter(doc_list)
+            unstandardized = _collect_unstandardized_species(source_factory())
+        else:
+            with tempfile.NamedTemporaryFile(prefix="pubtator-resolve-species-", suffix=".ndjson", delete=False) as f:
+                temp_path = f.name
+                unstandardized = _collect_unstandardized_species(doc_list, spool_file=f)
+            source_factory = lambda: _iter_ndjson_file(temp_path)
+
+        resolved = resolve_species_terms(unstandardized)
+        yield from _apply_resolved_species_to_stream(source_factory(), resolved)
+    finally:
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except FileNotFoundError:
+                pass
+
+
+def _ensure_lookup_db():
     if not os.path.exists(DB_PATH) or os.stat(DB_PATH).st_size == 0:
         logger.info("No lookup dictionary found, creating new one")
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
-        # Create the health_conditions table and insert manually provided health conditions
         c.execute(
-            """CREATE TABLE health_conditions
+            """CREATE TABLE IF NOT EXISTS health_conditions
                         (original_name text, standard_dict text)"""
         )
-        # Create the species table
         c.execute(
-            """CREATE TABLE species
+            """CREATE TABLE IF NOT EXISTS species
                         (original_name text, standard_dict text)"""
         )
-    else:
-        # If the database file exists, connect to it
-        conn = sqlite3.connect(DB_PATH)
+
+
+def update_lookup_dict(
+    health_conditions_list,
+    species_list,
+    infectious_agents_list,
+    doc_list,
+    unstandardized_species=None,
+    hc_dict=None,
+    species_dict=None,
+):
+    _ensure_lookup_db()
+    if hc_dict is None or species_dict is None:
+        hc_dict, species_dict = fetch_data_from_db()
+
+    source_factory = doc_list if callable(doc_list) else lambda: iter(doc_list)
 
     try:
         # Update the health_conditions and species tables with new data
         # update_table(conn, "health_conditions", health_conditions_list, get_new_health_conditions)
         # update_table(conn, "species", species_list + infectious_agents_list, get_new_species)
-        conn.close()
+        if unstandardized_species is None:
+            unstandardized_species = _collect_unstandardized_species(source_factory())
 
         # Log the completion of updating the lookup dictionary and standardize the documents
         logger.info("Finished updating lookup dictionary")
+        resolved_species = resolve_species_terms(unstandardized_species)
         logger.info("Standardizing document")
-        transformed_docs = transform(doc_list)
-        transformed_docs = resolve_unstandardized_species(transformed_docs)
-        return transformed_docs
+        transformed_docs = transform_with_lookup(source_factory(), hc_dict, species_dict)
+        return _apply_resolved_species_to_stream(transformed_docs, resolved_species)
     except Exception as e:
-        # Log the error, close the connection, and raise the exception
         logger.error(f"An error occurred while updating lookup dictionary: {e}")
-        conn.close()
         raise
 
 
