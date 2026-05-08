@@ -170,7 +170,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "text"},
                     "description": {"type": "text"},
                     "displayName": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
@@ -290,7 +290,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
-                    "unitText": {"type": "text"},
+                    "unitText": {"type": "keyword"},
                     "value": {"type": "integer"},
                 }
             },
@@ -1463,7 +1463,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
-                    "unitText": {"type": "text"},
+                    "unitText": {"type": "keyword"},
                     "value": {"type": "integer"},
                 }
             },
