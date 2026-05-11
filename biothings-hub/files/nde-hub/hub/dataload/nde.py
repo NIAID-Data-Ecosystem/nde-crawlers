@@ -170,7 +170,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "text"},
                     "description": {"type": "text"},
                     "displayName": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
-                    "name": {"type": "keyword", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
