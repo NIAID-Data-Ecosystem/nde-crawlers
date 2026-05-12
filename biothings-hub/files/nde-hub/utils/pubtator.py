@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import sqlite3
 import tempfile
 import time
@@ -21,6 +22,9 @@ _NEGATIVE_SPECIES_TABLE = "species_negative"
 
 # Reuse HTTP connections for UniProt lookups.
 _UNIPROT_SESSION = requests.Session()
+
+# Regular expression for matching taxon IDs
+_TAXID_RE = re.compile(r"^\d+$")
 
 # Drop list for filtering out place names commonly confused with organisms
 DROP_LIST_TERMS = {
@@ -96,6 +100,14 @@ def _resolve_name_via_identifier(item, key):
         return None
 
     cache_key = str(identifier).split("*")[-1].strip()
+
+    # UniProt taxonomy only accepts numeric NCBI tax IDs; skip anything else
+    # (e.g. IPC###, internal codes) to avoid guaranteed 400s.
+    if not _TAXID_RE.match(cache_key):
+        logger.debug(f"Skipping non-numeric {key} identifier: {identifier}")
+        _IDENTIFIER_RESOLUTION_CACHE[cache_key] = None
+        return None
+
     if cache_key in _IDENTIFIER_RESOLUTION_CACHE:
         details = _IDENTIFIER_RESOLUTION_CACHE[cache_key]
     else:
