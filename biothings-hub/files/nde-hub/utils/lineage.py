@@ -18,7 +18,6 @@ _taxon_lineage_cache: dict = {}   # taxid -> list of ancestor taxids
 _taxon_parent_cache: dict = {}    # taxid -> parent taxid (or None)
 _fetched_taxon_ids: set = set()   # taxids already in memory
 _mt = None
-_db_loaded = False
 
 
 def _get_client():
@@ -42,20 +41,33 @@ def _ensure_db():
         )
 
 
-def _load_db_into_memory():
-    """Bulk-load the entire SQLite cache into the in-memory dicts (once)."""
-    global _db_loaded
-    if _db_loaded:
+def _load_cached_taxa(taxon_ids: Set[int]):
+    """Load cached lineage data for only the requested taxon IDs."""
+    missing_ids = set(taxon_ids) - _fetched_taxon_ids
+    if not missing_ids:
         return
+
     _ensure_db()
     with sqlite3.connect(DB_PATH) as conn:
-        for taxid, lineage_json in conn.execute("SELECT taxid, lineage FROM taxon_lineage"):
-            _taxon_lineage_cache[taxid] = json.loads(lineage_json)
-            _fetched_taxon_ids.add(taxid)
-        for taxid, parent in conn.execute("SELECT taxid, parent_taxid FROM taxon_parent"):
-            _taxon_parent_cache[taxid] = parent
-            _fetched_taxon_ids.add(taxid)
-    _db_loaded = True
+        for chunk in _chunked(sorted(missing_ids), _TAXA_CHUNK_SIZE):
+            placeholders = ",".join("?" for _ in chunk)
+            cached_ids = set()
+
+            for taxid, lineage_json in conn.execute(
+                f"SELECT taxid, lineage FROM taxon_lineage WHERE taxid IN ({placeholders})",
+                chunk,
+            ):
+                _taxon_lineage_cache[taxid] = json.loads(lineage_json)
+                cached_ids.add(taxid)
+
+            for taxid, parent in conn.execute(
+                f"SELECT taxid, parent_taxid FROM taxon_parent WHERE taxid IN ({placeholders})",
+                chunk,
+            ):
+                _taxon_parent_cache[taxid] = parent
+                cached_ids.add(taxid)
+
+            _fetched_taxon_ids.update(cached_ids)
 
 
 def _save_to_db(lineage_rows: list, parent_rows: list):
@@ -107,9 +119,9 @@ def _extract_taxids(record: dict) -> Set[int]:
 
 def _fetch_taxon_info(taxon_ids: Set[int]):
     """Fetch and cache taxon lineage/parent info for any IDs not yet cached."""
-    _load_db_into_memory()
+    _load_cached_taxa(taxon_ids)
     mt = _get_client()
-    new_ids = taxon_ids - _fetched_taxon_ids
+    new_ids = {taxid for taxid in taxon_ids if taxid not in _taxon_lineage_cache}
     if not new_ids:
         return
 
@@ -137,7 +149,8 @@ def _fetch_taxon_info(taxon_ids: Set[int]):
     _fetched_taxon_ids.update(new_ids)
 
     # Fetch parent info for lineage ancestors not yet in cache
-    missing = lineage_taxon_ids - _fetched_taxon_ids
+    _load_cached_taxa(lineage_taxon_ids)
+    missing = {taxid for taxid in lineage_taxon_ids if taxid not in _taxon_parent_cache}
     if missing:
         for chunk in _chunked(sorted(missing), _TAXA_CHUNK_SIZE):
             try:
