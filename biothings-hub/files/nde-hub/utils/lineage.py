@@ -11,12 +11,6 @@ DB_PATH = "/data/nde-hub/standardizers/lineage_lookup/lineage_lookup.db"
 _TAXA_CHUNK_SIZE = 1000
 _BATCH_SIZE = 1000
 
-# ---------------------------------------------------------------------------
-# In-memory hot caches (populated from SQLite on first miss, then kept warm).
-# ---------------------------------------------------------------------------
-_taxon_lineage_cache: dict = {}   # taxid -> list of ancestor taxids
-_taxon_parent_cache: dict = {}    # taxid -> parent taxid (or None)
-_fetched_taxon_ids: set = set()   # taxids already in memory
 _mt = None
 
 
@@ -41,9 +35,9 @@ def _ensure_db():
         )
 
 
-def _load_cached_taxa(taxon_ids: Set[int]):
-    """Load cached lineage data for only the requested taxon IDs."""
-    missing_ids = set(taxon_ids) - _fetched_taxon_ids
+def _load_cached_lineages(taxon_ids: Set[int], lineage_cache: dict):
+    """Load SQLite-cached lineage rows into a batch-local cache."""
+    missing_ids = set(taxon_ids) - set(lineage_cache)
     if not missing_ids:
         return
 
@@ -51,23 +45,28 @@ def _load_cached_taxa(taxon_ids: Set[int]):
     with sqlite3.connect(DB_PATH) as conn:
         for chunk in _chunked(sorted(missing_ids), _TAXA_CHUNK_SIZE):
             placeholders = ",".join("?" for _ in chunk)
-            cached_ids = set()
-
             for taxid, lineage_json in conn.execute(
                 f"SELECT taxid, lineage FROM taxon_lineage WHERE taxid IN ({placeholders})",
                 chunk,
             ):
-                _taxon_lineage_cache[taxid] = json.loads(lineage_json)
-                cached_ids.add(taxid)
+                lineage_cache[taxid] = json.loads(lineage_json)
 
+
+def _load_cached_parents(taxon_ids: Set[int], parent_cache: dict):
+    """Load SQLite-cached parent rows into a batch-local cache."""
+    missing_ids = set(taxon_ids) - set(parent_cache)
+    if not missing_ids:
+        return
+
+    _ensure_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        for chunk in _chunked(sorted(missing_ids), _TAXA_CHUNK_SIZE):
+            placeholders = ",".join("?" for _ in chunk)
             for taxid, parent in conn.execute(
                 f"SELECT taxid, parent_taxid FROM taxon_parent WHERE taxid IN ({placeholders})",
                 chunk,
             ):
-                _taxon_parent_cache[taxid] = parent
-                cached_ids.add(taxid)
-
-            _fetched_taxon_ids.update(cached_ids)
+                parent_cache[taxid] = parent
 
 
 def _save_to_db(lineage_rows: list, parent_rows: list):
@@ -117,41 +116,45 @@ def _extract_taxids(record: dict) -> Set[int]:
     return taxids
 
 
-def _fetch_taxon_info(taxon_ids: Set[int]):
-    """Fetch and cache taxon lineage/parent info for any IDs not yet cached."""
-    _load_cached_taxa(taxon_ids)
-    mt = _get_client()
-    new_ids = {taxid for taxid in taxon_ids if taxid not in _taxon_lineage_cache}
-    if not new_ids:
-        return
+def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: dict):
+    """Fetch and persist lineage/parent info not present in the batch cache."""
+    _load_cached_lineages(taxon_ids, lineage_cache)
+    _load_cached_parents(taxon_ids, parent_cache)
 
+    new_ids = set(taxon_ids) - set(lineage_cache)
+
+    mt = None
     lineage_rows: list = []
     parent_rows: list = []
-    lineage_taxon_ids: Set[int] = set()
 
-    for chunk in _chunked(sorted(new_ids), _TAXA_CHUNK_SIZE):
-        taxon_info_list = mt.gettaxa(chunk)
-        for taxon_info in taxon_info_list:
-            taxid = taxon_info.get("taxid")
-            lineage = taxon_info.get("lineage", [])
-            parent_taxid = taxon_info.get("parent_taxid")
-            if taxid is not None:
-                _taxon_lineage_cache[taxid] = lineage
-                parent = parent_taxid if parent_taxid else None
-                _taxon_parent_cache[taxid] = parent
-                lineage_rows.append((taxid, json.dumps(lineage)))
-                parent_rows.append((taxid, parent))
-                try:
-                    lineage_taxon_ids.update(lineage)
-                except TypeError:
-                    pass
+    if new_ids:
+        mt = _get_client()
+        for chunk in _chunked(sorted(new_ids), _TAXA_CHUNK_SIZE):
+            taxon_info_list = mt.gettaxa(chunk)
+            for taxon_info in taxon_info_list:
+                taxid = taxon_info.get("taxid")
+                lineage = taxon_info.get("lineage", [])
+                parent_taxid = taxon_info.get("parent_taxid")
+                if taxid is not None:
+                    lineage_cache[taxid] = lineage
+                    parent = parent_taxid if parent_taxid else None
+                    parent_cache[taxid] = parent
+                    lineage_rows.append((taxid, json.dumps(lineage)))
+                    parent_rows.append((taxid, parent))
 
-    _fetched_taxon_ids.update(new_ids)
+    lineage_taxon_ids: Set[int] = set(taxon_ids)
+    for lineage in lineage_cache.values():
+        try:
+            lineage_taxon_ids.update(lineage)
+        except TypeError:
+            pass
 
-    # Fetch parent info for lineage ancestors not yet in cache
-    _load_cached_taxa(lineage_taxon_ids)
-    missing = {taxid for taxid in lineage_taxon_ids if taxid not in _taxon_parent_cache}
+    # Fetch parent info for lineage ancestors not yet in the batch cache.
+    _load_cached_parents(lineage_taxon_ids, parent_cache)
+    missing = lineage_taxon_ids - set(parent_cache)
     if missing:
+        if mt is None:
+            mt = _get_client()
         for chunk in _chunked(sorted(missing), _TAXA_CHUNK_SIZE):
             try:
                 info_list = mt.gettaxa(chunk)
@@ -160,32 +163,31 @@ def _fetch_taxon_info(taxon_ids: Set[int]):
                     parent_taxid = taxon_info.get("parent_taxid")
                     if taxid is not None:
                         parent = parent_taxid if parent_taxid else None
-                        _taxon_parent_cache[taxid] = parent
+                        parent_cache[taxid] = parent
                         parent_rows.append((taxid, parent))
             except Exception as e:
                 print(f"Error fetching lineage taxon info chunk: {e}")
-        _fetched_taxon_ids.update(missing)
 
     _save_to_db(lineage_rows, parent_rows)
 
 
-def _get_lineage_entries(taxid: int):
-    lineage_ids = list(_taxon_lineage_cache.get(taxid, [])) + [taxid]
+def _get_lineage_entries(taxid: int, lineage_cache: dict, parent_cache: dict):
+    lineage_ids = list(lineage_cache.get(taxid, [])) + [taxid]
     entries = []
     for taxon in lineage_ids:
         entry = {"taxon": taxon}
-        parent_taxon = _taxon_parent_cache.get(taxon)
+        parent_taxon = parent_cache.get(taxon)
         if taxon != 1 and parent_taxon is not None:
             entry["parent_taxon"] = parent_taxon
         entries.append(entry)
     return entries
 
 
-def _annotate_record(record: dict):
+def _annotate_record(record: dict, lineage_cache: dict, parent_cache: dict):
     """Add _meta.lineage to a single record based on its taxon IDs."""
     lineage_entries_set: set = set()
     for taxid in _extract_taxids(record):
-        for entry in _get_lineage_entries(taxid):
+        for entry in _get_lineage_entries(taxid, lineage_cache, parent_cache):
             lineage_entries_set.add((entry["taxon"], entry.get("parent_taxon")))
 
     lineage_entries = []
@@ -208,13 +210,29 @@ def _iter_docs(docs):
         yield from docs
 
 
+def _process_batch(batch: list):
+    all_ids: Set[int] = set()
+    for rec in batch:
+        all_ids.update(_extract_taxids(rec))
+
+    lineage_cache: dict = {}
+    parent_cache: dict = {}
+    if all_ids:
+        _fetch_taxon_info(all_ids, lineage_cache, parent_cache)
+
+    for rec in batch:
+        _annotate_record(rec, lineage_cache, parent_cache)
+        yield rec
+
+
 def process_lineage(docs):
     """Add taxonomy lineage to documents using a persistent SQLite-backed cache.
 
     Accepts an iterable of dicts (or a path to an ndjson directory) and yields
     each document with ``_meta.lineage`` populated.  Taxon lookups are cached in
-    SQLite at ``DB_PATH`` so data persists across process restarts, and in
-    in-memory dicts for fast per-record access within a run.
+    SQLite at ``DB_PATH`` so data persists across process restarts. In-memory
+    lineage and parent dictionaries are scoped to one internal batch and are
+    discarded before the next batch is processed.
 
     Documents are collected into small internal batches so that API calls are
     amortised without ever materialising the full dataset in memory.
@@ -223,22 +241,8 @@ def process_lineage(docs):
     for doc in _iter_docs(docs):
         batch.append(doc)
         if len(batch) >= _BATCH_SIZE:
-            all_ids: Set[int] = set()
-            for rec in batch:
-                all_ids.update(_extract_taxids(rec))
-            if all_ids:
-                _fetch_taxon_info(all_ids)
-            for rec in batch:
-                _annotate_record(rec)
-                yield rec
+            yield from _process_batch(batch)
             batch = []
 
     if batch:
-        all_ids = set()
-        for rec in batch:
-            all_ids.update(_extract_taxids(rec))
-        if all_ids:
-            _fetch_taxon_info(all_ids)
-        for rec in batch:
-            _annotate_record(rec)
-            yield rec
+        yield from _process_batch(batch)
