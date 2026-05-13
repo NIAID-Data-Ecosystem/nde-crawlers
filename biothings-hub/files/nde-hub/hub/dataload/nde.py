@@ -346,6 +346,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
+            "creativeWorkStatus": {"type": "keyword"},
             "creditText": {"type": "text"},
             "curatedBy": {
                 "properties": {
@@ -1484,6 +1485,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 }
             },
             "conditionsOfAccess": {"type": "keyword"},
+            "creativeWorkStatus": {"type": "keyword"},
             "creditText": {"type": "text"},
             "date": {"type": "date"},
             "dateCollected": {"type": "date"},
