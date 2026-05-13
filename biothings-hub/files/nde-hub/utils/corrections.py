@@ -11,7 +11,8 @@ Strategy 2 ensures that NEW records are corrected immediately at upload time
 without waiting for the records list to be regenerated externally.
 
 Corrections data is cached at the module level so it is fetched from GitHub
-once per build (or per CACHE_TTL window) and reused across all sources.
+once per uploader process and reused across all documents handled by that
+process.
 """
 
 import json
@@ -19,7 +20,6 @@ import logging
 import math
 import os
 import threading
-import time
 
 import orjson
 import requests
@@ -35,14 +35,12 @@ OWNER = "NIAID-Data-Ecosystem"
 REPO = "nde-metadata-corrections"
 PROD_DIR = "collections_corrections_production"
 STAGING_DIR = "collections_corrections_staging"
-CACHE_TTL = 3600  # seconds
 
 # ---------------------------------------------------------------------------
 # Module-level cache (thread-safe)
 # ---------------------------------------------------------------------------
 _cache_lock = threading.Lock()
 _corrections_cache = None
-_corrections_cache_time = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +190,7 @@ def fetch_correction_files(correction_name):
 
 
 # ---------------------------------------------------------------------------
-# Corrections index — built once, cached for CACHE_TTL
+# Corrections index — built once per uploader process
 # ---------------------------------------------------------------------------
 def _build_corrections_index():
     """
@@ -300,31 +298,29 @@ def _build_corrections_index():
 
 def get_corrections_index():
     """
-    Return the cached corrections index, rebuilding it if stale or missing.
-    Thread-safe; falls back to a stale cache on network errors.
+    Return the cached corrections index, building it once per process.
+    Thread-safe; returns an empty index if the initial GitHub load fails.
     """
-    global _corrections_cache, _corrections_cache_time
+    global _corrections_cache
 
     with _cache_lock:
-        now = time.time()
-        if _corrections_cache is not None and (now - _corrections_cache_time) < CACHE_TTL:
+        if _corrections_cache is not None:
             return _corrections_cache
-        stale_cache = _corrections_cache
 
     # Build outside the lock (network I/O can be slow).
     try:
         index = _build_corrections_index()
     except Exception as e:
         logger.error(f"Failed to build corrections index: {e}")
-        if stale_cache is not None:
-            logger.warning("Falling back to stale corrections cache")
-            return stale_cache
+        with _cache_lock:
+            if _corrections_cache is not None:
+                logger.warning("Falling back to existing corrections cache")
+                return _corrections_cache
         # Return empty index so documents can still flow through.
         return {"by_id": {}, "by_funding": []}
 
     with _cache_lock:
         _corrections_cache = index
-        _corrections_cache_time = time.time()
 
     return index
 

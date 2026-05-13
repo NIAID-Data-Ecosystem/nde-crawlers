@@ -943,15 +943,25 @@ def update_table(conn, table_name, item_list, get_new_items_func):
             logger.info(f"No results for {no_matches}, skipping adding to lookup dictionary")
 
 
-def _extract_taxon_id(identifier):
-    """Extract a numeric taxon ID from identifier string (e.g., 'taxonomy:NEWT:9606')."""
+def _normalize_taxon_id(identifier):
+    """Return a numeric NCBI Taxonomy ID, or None for non-taxon placeholders."""
     if not identifier:
         return None
-    parts = identifier.split(":")
-    last_part = parts[-1].strip()
+
+    candidate = str(identifier).split("*")[-1].strip()
+    if candidate.isdigit():
+        return candidate
+
+    last_part = candidate.split(":")[-1].strip()
     if last_part.isdigit():
         return last_part
+
     return None
+
+
+def _extract_taxon_id(identifier):
+    """Extract a numeric taxon ID from identifier string (e.g., 'taxonomy:NEWT:9606')."""
+    return _normalize_taxon_id(identifier)
 
 
 def _load_species_cache():
@@ -1012,7 +1022,11 @@ def _cache_negative_species(original_name):
 
 def _get_uniprot_details(original_name, identifier, max_retries=3):
     """Fetch species details from UniProt and classify as host or infectiousAgent."""
-    identifier = str(identifier).split("*")[-1]
+    original_identifier = identifier
+    identifier = _normalize_taxon_id(identifier)
+    if not identifier:
+        raise ValueError(f"Invalid NCBI Taxonomy ID: {original_identifier}")
+
     for attempt in range(max_retries):
         response = _UNIPROT_SESSION.get(f"https://rest.uniprot.org/taxonomy/{identifier}", timeout=30)
         if response.status_code == 429:
@@ -1203,6 +1217,9 @@ def resolve_species_terms(unstandardized):
         try:
             details = _get_uniprot_details(original_name, taxon_id)
             return key, details
+        except ValueError as e:
+            logger.info(f"text2term: skipping UniProt lookup for {original_name} (ID {taxon_id}): {e}")
+            return key, None
         except Exception as e:
             logger.warning(f"text2term: UniProt lookup failed for {original_name} (ID {taxon_id}): {e}")
             return key, None
@@ -1245,11 +1262,25 @@ def resolve_species_terms(unstandardized):
             # Collect text2term results for concurrent UniProt lookups
             t2t_lookups = []
             mapped_source_terms = set()
+            invalid_t2t_identifiers = 0
             for _, row in t2t_results.iterrows():
-                identifier = row["Mapped Term CURIE"].split(":")[1]
                 original_name = row["Source Term"]
-                mapped_source_terms.add(original_name.lower().strip())
+                key = original_name.lower().strip()
+                mapped_source_terms.add(key)
+                identifier = _extract_taxon_id(row["Mapped Term CURIE"])
+                if not identifier:
+                    invalid_t2t_identifiers += 1
+                    if key not in negative_cache:
+                        _cache_negative_species(key)
+                        negative_cache.add(key)
+                    continue
                 t2t_lookups.append((original_name, identifier))
+
+            if invalid_t2t_identifiers:
+                logger.info(
+                    "text2term: skipped %s mappings with non-numeric taxonomy identifiers",
+                    invalid_t2t_identifiers,
+                )
 
             # Cache negatives for terms text2term couldn't map at all
             for name in need_text2term:
