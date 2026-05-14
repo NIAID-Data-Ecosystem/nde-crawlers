@@ -86,6 +86,30 @@ class AliasLookupDict(dict):
     aliases_indexed = True
 
 
+class SQLiteSpeciesResolver:
+    """Batch-load resolved species details from SQLite instead of RAM."""
+
+    def __init__(self, total_resolved=0):
+        self.total_resolved = total_resolved
+
+    def __bool__(self):
+        return self.total_resolved > 0
+
+    def load(self, keys):
+        return _load_species_cache_for_keys(keys)
+
+
+def _chunked(iterable, chunk_size):
+    chunk = []
+    for item in iterable:
+        chunk.append(item)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
 def _resolve_name_via_identifier(item, key):
     """For species/infectiousAgent items lacking a name, look up the taxon via UniProt.
 
@@ -904,16 +928,37 @@ def transform(doc_list):
 def transform_with_lookup(doc_list, hc_dict, species_dict):
     processes = int(os.environ.get("PUBTATOR_TRANSFORM_PROCESSES", "15"))
     chunksize = int(os.environ.get("PUBTATOR_TRANSFORM_CHUNKSIZE", "500"))
-    identifier_resolution_cache = dict(_IDENTIFIER_RESOLUTION_CACHE)
+    max_buffered_docs = int(
+        os.environ.get(
+            "PUBTATOR_TRANSFORM_MAX_BUFFERED_DOCS",
+            str(max(processes * chunksize, chunksize)),
+        )
+    )
+    max_buffered_docs = max(max_buffered_docs, chunksize)
+    identifier_resolution_cache = dict(_IDENTIFIER_RESOLUTION_CACHE) if _IDENTIFIER_RESOLUTION_CACHE else None
 
     with Pool(
         processes,
         initializer=_init_transform_worker,
         initargs=(hc_dict, species_dict, identifier_resolution_cache),
     ) as pool:
-        args = ((doc, index) for index, doc in enumerate(doc_list, start=1))
-        for doc in pool.imap(process_document, args, chunksize=chunksize):
-            yield doc
+        logger.info(
+            "PubTator transform: processes=%s chunksize=%s max_buffered_docs=%s",
+            processes,
+            chunksize,
+            max_buffered_docs,
+        )
+        batch = []
+        for index, doc in enumerate(doc_list, start=1):
+            batch.append((doc, index))
+            if len(batch) >= max_buffered_docs:
+                for transformed_doc in pool.imap(process_document, batch, chunksize=chunksize):
+                    yield transformed_doc
+                batch = []
+
+        if batch:
+            for transformed_doc in pool.imap(process_document, batch, chunksize=chunksize):
+                yield transformed_doc
 
 
 def update_table(conn, table_name, item_list, get_new_items_func):
@@ -964,8 +1009,72 @@ def _extract_taxon_id(identifier):
     return _normalize_taxon_id(identifier)
 
 
-def _load_species_cache():
+def _normalize_species_cache_keys(keys):
+    normalized = []
+    seen = set()
+    for key in keys or []:
+        normalized_key = str(key).lower().strip()
+        if normalized_key and normalized_key not in seen:
+            seen.add(normalized_key)
+            normalized.append(normalized_key)
+    return normalized
+
+
+def _load_species_cache_for_keys(keys):
+    """Load species_details rows for only the requested normalized names."""
+    normalized_keys = _normalize_species_cache_keys(keys)
+    if not normalized_keys:
+        return {}
+
+    try:
+        species_cache = {}
+        with sqlite3.connect(EXTRACT_DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
+            for chunk in _chunked(normalized_keys, 1000):
+                placeholders = ",".join("?" for _ in chunk)
+                c.execute(
+                    f"SELECT original_name, standard_dict FROM species_details WHERE original_name IN ({placeholders})",
+                    chunk,
+                )
+                for original_name, standard_dict in c.fetchall():
+                    if standard_dict:
+                        species_cache[original_name.lower().strip()] = json.loads(standard_dict)
+        return species_cache
+    except Exception as e:
+        logger.error(f"text2term: error loading species cache for batch: {e}")
+        return {}
+
+
+def _fetch_species_cache_keys(keys):
+    """Return the subset of requested normalized names present in species_details."""
+    normalized_keys = _normalize_species_cache_keys(keys)
+    if not normalized_keys:
+        return set()
+
+    try:
+        cached_keys = set()
+        with sqlite3.connect(EXTRACT_DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
+            for chunk in _chunked(normalized_keys, 1000):
+                placeholders = ",".join("?" for _ in chunk)
+                c.execute(
+                    f"SELECT original_name FROM species_details WHERE original_name IN ({placeholders})",
+                    chunk,
+                )
+                cached_keys.update(row[0].lower().strip() for row in c.fetchall())
+        return cached_keys
+    except Exception as e:
+        logger.error(f"text2term: error loading species cache keys: {e}")
+        return set()
+
+
+def _load_species_cache(keys=None):
     """Load the species_details cache from the extract lookup DB."""
+    if keys is not None:
+        return _load_species_cache_for_keys(keys)
+
     try:
         with sqlite3.connect(EXTRACT_DB_PATH) as conn:
             c = conn.cursor()
@@ -992,14 +1101,25 @@ def _cache_species_details(species_details):
         logger.error(f"text2term: error caching species details: {e}")
 
 
-def _fetch_negative_species_cache():
+def _fetch_negative_species_cache(keys=None):
     """Load the set of species names known to be unresolvable."""
     try:
         with sqlite3.connect(EXTRACT_DB_PATH) as conn:
             c = conn.cursor()
             c.execute(f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_SPECIES_TABLE} (original_name TEXT PRIMARY KEY)")
-            c.execute(f"SELECT original_name FROM {_NEGATIVE_SPECIES_TABLE}")
-            return {row[0] for row in c.fetchall()}
+            if keys is None:
+                c.execute(f"SELECT original_name FROM {_NEGATIVE_SPECIES_TABLE}")
+                return {row[0] for row in c.fetchall()}
+
+            negative_cache = set()
+            for chunk in _chunked(_normalize_species_cache_keys(keys), 1000):
+                placeholders = ",".join("?" for _ in chunk)
+                c.execute(
+                    f"SELECT original_name FROM {_NEGATIVE_SPECIES_TABLE} WHERE original_name IN ({placeholders})",
+                    chunk,
+                )
+                negative_cache.update(row[0] for row in c.fetchall())
+            return negative_cache
     except Exception as e:
         logger.error(f"text2term: error loading negative species cache: {e}")
         return set()
@@ -1169,8 +1289,158 @@ def _normalize_unstandardized_species(unstandardized):
     return normalized
 
 
-def resolve_species_terms(unstandardized):
+def _iter_normalized_unstandardized_species(unstandardized):
+    for key, value in (unstandardized or {}).items():
+        if isinstance(value, tuple):
+            name, identifier = value
+        else:
+            name, identifier = key, value
+        normalized_key = str(name).lower().strip()
+        if normalized_key:
+            yield normalized_key, name, identifier
+
+
+def _resolve_species_terms_lazy(unstandardized):
+    """Resolve species, but leave positive cache records on disk for batch reads."""
+    if not unstandardized:
+        logger.info("text2term: all species already standardized")
+        return SQLiteSpeciesResolver(0)
+
+    try:
+        total_unstandardized = len(unstandardized)
+    except TypeError:
+        total_unstandardized = "unknown"
+    logger.info(f"text2term: {total_unstandardized} unstandardized species to resolve")
+
+    resolved_count = 0
+    negative_count = 0
+    need_uniprot = []
+    need_text2term = []
+
+    for chunk in _chunked(_iter_normalized_unstandardized_species(unstandardized), 5000):
+        keys = [key for key, _, _ in chunk]
+        cached_species_keys = _fetch_species_cache_keys(keys)
+        negative_cache = _fetch_negative_species_cache(keys)
+
+        for key, name, identifier in chunk:
+            if key in negative_cache:
+                negative_count += 1
+                continue
+
+            if key in cached_species_keys:
+                resolved_count += 1
+                continue
+
+            taxon_id = _extract_taxon_id(identifier)
+            if taxon_id:
+                need_uniprot.append((name, taxon_id))
+            else:
+                need_text2term.append(name)
+
+    logger.info(
+        "text2term: %s cached, %s negative-cached, %s need UniProt, %s need text2term",
+        resolved_count, negative_count,
+        len(need_uniprot), len(need_text2term),
+    )
+
+    def _resolve_one(original_name, taxon_id):
+        """Resolve a single species via UniProt. Returns (key, details) or (key, None)."""
+        key = original_name.lower().strip()
+        try:
+            details = _get_uniprot_details(original_name, taxon_id)
+            return key, details
+        except ValueError as e:
+            logger.info(f"text2term: skipping UniProt lookup for {original_name} (ID {taxon_id}): {e}")
+            return key, None
+        except Exception as e:
+            logger.warning(f"text2term: UniProt lookup failed for {original_name} (ID {taxon_id}): {e}")
+            return key, None
+
+    if need_uniprot:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(_resolve_one, name, tid): name
+                for name, tid in need_uniprot
+            }
+            for future in as_completed(futures):
+                key, details = future.result()
+                if details:
+                    resolved_count += 1
+                    _cache_species_details(details)
+                else:
+                    _cache_negative_species(key)
+                    need_text2term.append(futures[future])
+
+    logger.info(f"text2term: {resolved_count} resolved from cache/ID, {len(need_text2term)} need text2term")
+
+    if need_text2term:
+        try:
+            import text2term
+
+            if not os.path.exists("cache/ncbitaxon"):
+                logger.info("text2term: building ncbitaxon ontology cache...")
+                text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
+
+            t2t_results = text2term.map_terms(need_text2term, "ncbitaxon", use_cache=True)
+            t2t_results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
+            t2t_results = t2t_results.drop_duplicates(subset=["Source Term"], keep="first")
+
+            logger.info(f"text2term: mapped {len(t2t_results)} terms")
+
+            t2t_lookups = []
+            mapped_source_terms = set()
+            invalid_t2t_identifiers = 0
+            negative_cache = set()
+            for _, row in t2t_results.iterrows():
+                original_name = row["Source Term"]
+                key = original_name.lower().strip()
+                mapped_source_terms.add(key)
+                identifier = _extract_taxon_id(row["Mapped Term CURIE"])
+                if not identifier:
+                    invalid_t2t_identifiers += 1
+                    if key not in negative_cache:
+                        _cache_negative_species(key)
+                        negative_cache.add(key)
+                    continue
+                t2t_lookups.append((original_name, identifier))
+
+            if invalid_t2t_identifiers:
+                logger.info(
+                    "text2term: skipped %s mappings with non-numeric taxonomy identifiers",
+                    invalid_t2t_identifiers,
+                )
+
+            for name in need_text2term:
+                key = name.lower().strip()
+                if key not in mapped_source_terms and key not in negative_cache:
+                    _cache_negative_species(key)
+                    negative_cache.add(key)
+
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {
+                    executor.submit(_resolve_one, name, tid): name
+                    for name, tid in t2t_lookups
+                }
+                for future in as_completed(futures):
+                    key, details = future.result()
+                    if details:
+                        resolved_count += 1
+                        _cache_species_details(details)
+                    else:
+                        _cache_negative_species(key)
+                        negative_cache.add(key)
+        except Exception as e:
+            logger.error(f"text2term: error during text2term resolution: {e}")
+
+    logger.info(f"text2term: total resolved={resolved_count}")
+    return SQLiteSpeciesResolver(resolved_count)
+
+
+def resolve_species_terms(unstandardized, lazy=False):
     """Resolve unique species names using the local cache, UniProt IDs, then text2term."""
+    if lazy:
+        return _resolve_species_terms_lazy(unstandardized)
+
     unstandardized = _normalize_unstandardized_species(unstandardized)
 
     if not unstandardized:
@@ -1180,9 +1450,11 @@ def resolve_species_terms(unstandardized):
     logger.info(f"text2term: {len(unstandardized)} unstandardized species to resolve")
 
     species_cache = _load_species_cache()
+    cached_species_keys = set(species_cache)
     negative_cache = _fetch_negative_species_cache()
 
     resolved = {}
+    resolved_count = 0
     need_uniprot = []  # (name, taxon_id) tuples for direct UniProt lookup
     need_text2term = []
     negative_count = 0
@@ -1194,7 +1466,8 @@ def resolve_species_terms(unstandardized):
             continue
 
         # Check positive cache first
-        if key in species_cache:
+        if key in cached_species_keys:
+            resolved_count += 1
             resolved[key] = species_cache[key]
             continue
 
@@ -1207,7 +1480,7 @@ def resolve_species_terms(unstandardized):
 
     logger.info(
         "text2term: %s cached, %s negative-cached, %s need UniProt, %s need text2term",
-        len(resolved), negative_count,
+        resolved_count, negative_count,
         len(need_uniprot), len(need_text2term),
     )
 
@@ -1234,6 +1507,7 @@ def resolve_species_terms(unstandardized):
             for future in as_completed(futures):
                 key, details = future.result()
                 if details:
+                    resolved_count += 1
                     resolved[key] = details
                     _cache_species_details(details)
                     species_cache[key] = details
@@ -1243,7 +1517,7 @@ def resolve_species_terms(unstandardized):
                     # Fall back to text2term for this term
                     need_text2term.append(futures[future])
 
-    logger.info(f"text2term: {len(resolved)} resolved from cache/ID, {len(need_text2term)} need text2term")
+    logger.info(f"text2term: {resolved_count} resolved from cache/ID, {len(need_text2term)} need text2term")
 
     if need_text2term:
         try:
@@ -1297,6 +1571,7 @@ def resolve_species_terms(unstandardized):
                 for future in as_completed(futures):
                     key, details = future.result()
                     if details:
+                        resolved_count += 1
                         resolved[key] = details
                         _cache_species_details(details)
                     else:
@@ -1305,7 +1580,7 @@ def resolve_species_terms(unstandardized):
         except Exception as e:
             logger.error(f"text2term: error during text2term resolution: {e}")
 
-    logger.info(f"text2term: total resolved={len(resolved)}")
+    logger.info(f"text2term: total resolved={resolved_count}")
     return resolved
 
 
@@ -1319,7 +1594,57 @@ def _collect_unstandardized_species(docs, spool_file=None):
     return unstandardized_species
 
 
+def _collect_unstandardized_species_keys_from_doc(doc):
+    keys = set()
+    for field in ("species", "infectiousAgent"):
+        entries = doc.get(field, [])
+        if isinstance(entries, dict):
+            entries = [entries]
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if (
+                isinstance(entry, dict)
+                and "name" in entry
+                and "inDefinedTermSet" not in entry
+                and "curatedBy" not in entry
+            ):
+                key = entry["name"].lower().strip()
+                if key:
+                    keys.add(key)
+    return keys
+
+
+def _apply_resolved_species_from_sqlite(docs, resolver):
+    batch_size = int(os.environ.get("PUBTATOR_RESOLVED_SPECIES_BATCH_SIZE", "5000"))
+    batch_size = max(batch_size, 1)
+    batch = []
+
+    def flush_batch():
+        keys = set()
+        for doc in batch:
+            keys.update(_collect_unstandardized_species_keys_from_doc(doc))
+        resolved = resolver.load(keys)
+        for doc in batch:
+            if resolved:
+                _apply_resolved_species(doc, resolved)
+            yield doc
+
+    for doc in docs:
+        batch.append(doc)
+        if len(batch) >= batch_size:
+            yield from flush_batch()
+            batch = []
+
+    if batch:
+        yield from flush_batch()
+
+
 def _apply_resolved_species_to_stream(docs, resolved):
+    if isinstance(resolved, SQLiteSpeciesResolver):
+        yield from _apply_resolved_species_from_sqlite(docs, resolved)
+        return
+
     for doc in docs:
         if resolved:
             _apply_resolved_species(doc, resolved)
@@ -1391,7 +1716,12 @@ def update_lookup_dict(
 
         # Log the completion of updating the lookup dictionary and standardize the documents
         logger.info("Finished updating lookup dictionary")
-        resolved_species = resolve_species_terms(unstandardized_species)
+        resolved_species = resolve_species_terms(unstandardized_species, lazy=True)
+        if hasattr(unstandardized_species, "clear"):
+            unstandardized_species.clear()
+        for item_list in (health_conditions_list, species_list, infectious_agents_list):
+            if hasattr(item_list, "clear"):
+                item_list.clear()
         logger.info("Standardizing document")
         transformed_docs = transform_with_lookup(source_factory(), hc_dict, species_dict)
         return _apply_resolved_species_to_stream(transformed_docs, resolved_species)
