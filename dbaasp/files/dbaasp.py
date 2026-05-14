@@ -61,8 +61,6 @@ INCLUDED_IN_DATA_CATALOG = {
     "url": "https://dbaasp.org/",
 }
 
-SPECIES = {"@type": "DefinedTerm", "name": "Homo sapiens"}
-
 # Curated from DDE record dde_cc13744ba5c15cca.
 DDE_CURATED_BY = {
     "name": "Data Discovery Engine",
@@ -395,10 +393,9 @@ HOWTO_STEPS = [
     (
         "Step 3. Use each organism to generate a DataCollection url to search "
         "DBAASP by organism and get the count of the records for "
-        "'collectionSize'. Generate the values for the 'species', "
-        "'infectiousAgent', 'url', 'name', and 'description' properties based "
-        "on the information retrieved for the organism and any templated "
-        "text."
+        "'collectionSize'. Generate the values for the 'infectiousAgent', "
+        "'url', 'name', and 'description' properties based on the information "
+        "retrieved for the organism and any templated text."
     ),
     (
         "Step 4. Fill in manually curated fields from the DBAASP resource "
@@ -416,12 +413,6 @@ DESCRIPTION_TEMPLATE = (
 
 NAME_TEMPLATE = "Antimicrobial peptide records targeting {infectiousAgent.name} at DBAASP"
 
-_SUBSPECIES_MARKERS = {
-    "subsp", "subsp.", "subspecies", "var", "var.", "serovar",
-    "pathovar", "pv", "pv.", "biovar", "bv", "bv.", "sv", "sv.",
-}
-_LOWER_EPITHET = re.compile(r"^[a-z]+$")
-
 # DBAASP's targetSpecies field sometimes carries cell lines or anatomy values
 # that aren't real organisms (e.g. "Human colon", "Human Melanoma SBcl-2").
 # We can't enumerate them all, but a few patterns catch the common cases.
@@ -437,6 +428,14 @@ _HUMAN_NOT_SPECIES = {
 # Cell-line-style tokens: letters with embedded digits or hyphen-digits like
 # "SBcl-2", "HEK293", "MCF-7", "HepG2".
 _CELL_LINE_TOKEN = re.compile(r"^[A-Za-z]+\d+[A-Za-z\d]*$|^[A-Za-z]+[-]\d+[A-Za-z\d]*$")
+# Virus tokens that share the cell-line shape (e.g. "HIV-1", "HSV-1", "RSV")
+# but should be kept. Influenza H#N# names are handled separately.
+_VIRUS_TOKEN = re.compile(
+    r"^(?:HIV|HSV|HBV|HCV|HAV|HEV|HPV|EBV|CMV|HTLV|RSV|VZV|HHV|HCoV|MERS|SARS|HRV|HFV)"
+    r"(?:[-\d].*)?$",
+    re.IGNORECASE,
+)
+_INFLUENZA_TOKEN = re.compile(r"^H\d+N\d+$", re.IGNORECASE)
 
 
 def _looks_like_anatomy_or_cell_line(cleaned: str) -> bool:
@@ -449,9 +448,11 @@ def _looks_like_anatomy_or_cell_line(cleaned: str) -> bool:
     if tokens[0].lower() == "human" and len(tokens) >= 2:
         if tokens[1].lower() in _HUMAN_NOT_SPECIES:
             return True
-    # Any token shaped like a cell line designator
+    # Any token shaped like a cell line designator (excluding known viruses)
     for t in tokens:
         if _CELL_LINE_TOKEN.match(t):
+            if _VIRUS_TOKEN.match(t) or _INFLUENZA_TOKEN.match(t):
+                continue
             return True
     return False
 
@@ -482,15 +483,12 @@ def _http_get_json(url: str, params: Optional[dict] = None) -> Any:
     raise RuntimeError(f"GET {url} failed after {MAX_RETRIES} attempts: {last_exc}")
 
 
-def normalize_species(name: str) -> str:
-    """Collapse strain/ATCC-style suffixes so entries group by genus+species.
+def _clean_target_species(name: str) -> str:
+    """Trim/collapse whitespace and drop cell-line / anatomy values.
 
-    Rules:
-    - "Genus species [strain/ATCC ...]" -> "Genus species"
-    - Preserve "subsp./var./serovar <epithet>" annotations after the species
-    - Virus-like first tokens (contain hyphen/digit) -> just the first token
-    - Anything else is kept as-is
-    - Cell lines and anatomy-style names are dropped entirely.
+    Per the DBAASP DataCollection mapping, the raw `targetSpecies.value` is
+    used as-is — DBAASP's search filter only matches names it has registered,
+    so any normalization risks producing URLs that yield zero results.
     """
     if not name:
         return ""
@@ -499,27 +497,6 @@ def normalize_species(name: str) -> str:
         return ""
     if _looks_like_anatomy_or_cell_line(cleaned):
         return ""
-    tokens = cleaned.split()
-    if len(tokens) < 2:
-        return cleaned
-
-    first, second = tokens[0], tokens[1]
-    if first[:1].isupper() and _LOWER_EPITHET.fullmatch(second):
-        base = f"{first} {second}"
-        i = 2
-        while i + 1 < len(tokens):
-            marker = tokens[i].lower().rstrip(".")
-            if marker in {m.rstrip(".") for m in _SUBSPECIES_MARKERS}:
-                if _LOWER_EPITHET.fullmatch(tokens[i + 1]):
-                    base += f" {tokens[i]} {tokens[i + 1]}"
-                    i += 2
-                    continue
-            break
-        return base
-
-    if re.search(r"[-\d]", first):
-        return first
-
     return cleaned
 
 
@@ -699,7 +676,6 @@ def _build_record(
         "variableMeasured": copy.deepcopy(VARIABLE_MEASURED),
         "topicCategory": copy.deepcopy(TOPIC_CATEGORY),
         "usageInfo": copy.deepcopy(USAGE_INFO),
-        "species": copy.deepcopy(SPECIES),
         "date": today,
         "dateModified": today,
         "isAccessibleForFree": True,
@@ -728,10 +704,10 @@ def _collect_species_groups(
         if detail is None:
             continue
         for raw in _extract_target_species_names(detail):
-            normalized = normalize_species(raw)
-            if not normalized:
+            cleaned = _clean_target_species(raw)
+            if not cleaned:
                 continue
-            groups.setdefault(normalized, set()).add(pid)
+            groups.setdefault(cleaned, set()).add(pid)
     logger.info(
         "Processed %d peptides, found %d unique target species groups",
         count, len(groups),
