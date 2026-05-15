@@ -902,11 +902,14 @@ class NDESourceUploader(BaseSourceUploader):
                             "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
                             "associatedPhenotype": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "identifier": {"type": "text", "copy_to": ["all"]},
                                     "name": {"type": "keyword", "copy_to": ["all"]},
                                     "unitText": {"type": "text"},
                                     "url": {"type": "keyword"},
                                     "value": {"type": "double"},
+                                    "minValue": {"type": "double"},
+                                    "maxValue": {"type": "double"},
                                 }
                             },
                             "anatomicalStructure": {
@@ -991,11 +994,14 @@ class NDESourceUploader(BaseSourceUploader):
                     "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
                     "associatedPhenotype": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "identifier": {"type": "text", "copy_to": ["all"]},
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "unitText": {"type": "text"},
                             "url": {"type": "keyword"},
                             "value": {"type": "double"},
+                            "minValue": {"type": "double"},
+                            "maxValue": {"type": "double"},
                         }
                     },
                     "anatomicalStructure": {
@@ -1368,11 +1374,14 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
             "associatedPhenotype": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "unitText": {"type": "text"},
                     "url": {"type": "keyword"},
                     "value": {"type": "double"},
+                    "minValue": {"type": "double"},
+                    "maxValue": {"type": "double"},
                 }
             },
             "author": {
@@ -1527,6 +1536,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "name": {"type": "keyword"},
                 }
             },
+            "doi": {"type": "text", "copy_to": ["all"], "fields": {"keyword": {"type": "keyword"}}},
             "environmentalSystem": {
                 "properties": {
                     "identifier": {"type": "text", "copy_to": ["all"]},
