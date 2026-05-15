@@ -6,7 +6,7 @@ import traceback
 
 import orjson
 
-import bacdive
+import bacdive_crawler
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -16,7 +16,7 @@ logger = logging.getLogger("nde-logger")
 # set the release string to be ISO date format
 # minute precision is good enough but feel free to change
 release_string = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-dirname = os.path.join("/data", "node_crawled")
+dirname = os.path.join("/data", "bacdive_crawled")
 os.makedirs(dirname, exist_ok=True)
 release_filename = os.path.join(dirname, "release.txt")
 # so that updates are as atomic as possible, using rename
@@ -31,7 +31,7 @@ fd = open(tmp_filename, "wb")
 is_parsed = False
 # run parser
 try:
-    docs = bacdive.parse()
+    docs = bacdive_crawler.parse()
     for doc in docs:
         line = orjson.dumps(doc) + b"\n"
         fd.write(line)

@@ -41,6 +41,7 @@ def insert_value(d, key, value, extend=False):
 
 def get_all_bacdive_ids():
     """Return a sorted list of every BacDive strain ID via SPARQL."""
+    logger.info("Fetching all BacDive IDs via SPARQL...")
     resp = requests.get(
         SPARQL_URL,
         params={"query": STRAIN_QUERY},
@@ -61,9 +62,10 @@ def iter_bacdive_records(ids=None, sleep=SLEEP):
     """Yield (bacdive_id, record_dict) for every ID (all of BacDive by default)."""
     if ids is None:
         ids = get_all_bacdive_ids()
+    logger.info(f"Fetching BacDive records for {len(ids)} IDs...")
     client = bacdive.BacdiveClient()  # public=True -> no auth
     for i in range(0, len(ids), BATCH_SIZE):
-        print(f"Fetching IDs {min(i + BATCH_SIZE, len(ids))} out of {len(ids)}...")
+        logger.info(f"Fetching IDs {min(i + BATCH_SIZE, len(ids))} out of {len(ids)}...")
         chunk = ids[i:i + BATCH_SIZE]
         if client.search(id=chunk) == 0:
             continue
