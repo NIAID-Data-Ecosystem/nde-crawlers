@@ -21,6 +21,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  ceirr-crawler:
+    build:
+      context: ceirr_crawler
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   bioconductor-crawler:
     build:
       context: bioconductor

@@ -290,3 +290,12 @@ class NDEDataBuilder(builder.DataBuilder):
         identifier_source_catalog = "Data Discovery Engine"
         source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject", "Protein Data Bank"]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
+
+        # CEIRR reagents can also be cataloged in BEI Resources. The CEIRR
+        # crawler emits BEI identifiers in the matching BEI _id form so this
+        # can merge CEIRR catalog provenance into the BEI record and remove
+        # the duplicate CEIRR document.
+        self.identifier_deduplication(
+            "Centers of Excellence for Influenza Research and Response (CEIRR) Resources",
+            ["BEI Resources"],
+        )
