@@ -404,7 +404,7 @@ class CeirrItemProcessorPipeline:
             if contact_email:
                 contributor["email"] = contact_email
             if institution:
-                contributor["affiliation"] = {"@type": "Organization", "identifier": institution}
+                contributor["affiliation"] = institution
             insert_value(output, "contributor", contributor)
 
         if institution:
@@ -491,8 +491,13 @@ class CeirrItemProcessorPipeline:
         if concentration := clean_value(item.get("concentration")):
             add_concentration_quantity(output, concentration)
 
-        if quantity_available := maybe_number(item.get("quantity_available")):
+        quantity_available = maybe_number(item.get("quantity_available"))
+        if quantity_available is not None:
             add_sample_quantity(output, "# Aliquots Available", value=quantity_available, unit_text="Aliquots")
+            if quantity_available >= 1:
+                output["creativeWorkStatus"] = "Available"
+            elif quantity_available == 0:
+                output["creativeWorkStatus"] = "Backordered"
 
         if quantity_minimum := maybe_number(item.get("quantity_minimum")):
             add_sample_quantity(output, "minimum order", value=quantity_minimum, unit_text="minimum order")
