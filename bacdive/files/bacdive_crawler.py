@@ -113,6 +113,8 @@ def _to_iso_date(val):
     if val is None:
         return None
     try:
+        if isinstance(val, int):
+            val = str(val)
         dt = dateutil.parser.parse(val, ignoretz=True).date().isoformat()
     except (dateutil.parser.ParserError, TypeError):
         logger.warning(f"Could not parse date: {val}")
