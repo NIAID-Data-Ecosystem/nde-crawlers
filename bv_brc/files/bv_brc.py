@@ -3,16 +3,20 @@
 BV-BRC Genomes DataCollection crawler for the NIAID Data Ecosystem.
 
 Groups Bacterial and Viral Bioinformatics Resource Center genome records
-by NCBI Taxonomy ID and generates one DataCollection record per organism.
+by species-level NCBI Taxonomy ID and generates one DataCollection record
+per organism.
 
 Data source
 -----------
 Bulk genome metadata is downloaded from the BV-BRC FTPS server:
-    ftps://ftp.bv-brc.org/RELEASE_NOTES/genome_metadata
-    ftps://ftp.bv-brc.org/RELEASE_NOTES/genome_summary
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/bacteria/genome_metadata
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/bacteria/genome_summary
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/bacteria/genome_lineage
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/viruses/genome_metadata
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/viruses/genome_summary
+    ftps://ftp.bv-brc.org/RELEASE_NOTES/viruses/genome_lineage
 
-Taxon names are batch-resolved from the BV-BRC REST API:
-    https://www.bv-brc.org/api/taxonomy/?in(taxon_id,(...))
+Taxon names and species-level roll-ups are resolved from genome_lineage.
 """
 
 import copy
@@ -57,9 +61,16 @@ API_VERSION_URL = f"{API_BASE}/"
 FTP_HOST = "ftp.bv-brc.org"
 FTP_USER = "anonymous"
 FTP_PASS = "guest"
-GENOME_METADATA_PATH = "RELEASE_NOTES/genome_metadata"
-GENOME_SUMMARY_PATH = "RELEASE_NOTES/genome_summary"
-GENOME_LINEAGE_PATH = "RELEASE_NOTES/genome_lineage"
+BULK_RELEASE_DIRS = ("RELEASE_NOTES/bacteria", "RELEASE_NOTES/viruses")
+GENOME_METADATA_PATHS = tuple(
+    f"{release_dir}/genome_metadata" for release_dir in BULK_RELEASE_DIRS
+)
+GENOME_SUMMARY_PATHS = tuple(
+    f"{release_dir}/genome_summary" for release_dir in BULK_RELEASE_DIRS
+)
+GENOME_LINEAGE_PATHS = tuple(
+    f"{release_dir}/genome_lineage" for release_dir in BULK_RELEASE_DIRS
+)
 
 # genome_metadata column indices (0-based)
 META_TAXON_ID = 3
@@ -78,7 +89,9 @@ SUMMARY_MIN_COLS = 20
 # genome_lineage column indices (0-based)
 LINEAGE_TAXON_ID = 2
 LINEAGE_SPECIES = 9
-LINEAGE_MIN_COLS = 10
+LINEAGE_LINEAGE_IDS = 10
+LINEAGE_LINEAGE_NAMES = 11
+LINEAGE_MIN_COLS = 12
 
 # ---------------------------------------------------------------------------
 # Curated / static metadata
@@ -189,16 +202,18 @@ ENCODING_FORMAT = [
 HOWTO_STEPS = [
     (
         "Step 1: Download bulk genome data from the BV-BRC FTPS server "
-        "(ftps://ftp.bv-brc.org/RELEASE_NOTES/). Stream and aggregate "
-        "three tab-separated files: 'genome_metadata' for per-taxon "
+        "(ftps://ftp.bv-brc.org/RELEASE_NOTES/bacteria/ and "
+        "ftps://ftp.bv-brc.org/RELEASE_NOTES/viruses/). Stream and "
+        "aggregate three tab-separated files: 'genome_metadata' for per-taxon "
         "genome counts, isolation countries, host organisms, diseases, "
         "collection dates, and earliest completion dates; "
         "'genome_summary' for the latest date_modified per taxon; and "
-        "'genome_lineage' for species names per taxon_id."
+        "'genome_lineage' for species names and species-level taxon grouping."
     ),
     (
         "Step 2: Parse the aggregated records to generate an organism-"
-        "specific DataCollection per NCBI Taxonomy ID. Use the latest "
+        "specific DataCollection per species-level NCBI Taxonomy ID. Use "
+        "the latest "
         "'date_modified' from genome_summary for 'dateModified' and "
         "the earliest 'completion_date' from genome_metadata for "
         "'dateCreated'. Generate 'temporalCoverage' from the "
@@ -339,9 +354,136 @@ def _stream_ftp_lines(ftp: FTP_TLS, path: str):
             pass
 
 
-def _aggregate_genome_metadata() -> dict[str, dict[str, Any]]:
+def _split_lineage_field(value: str) -> list[str]:
+    return [part.strip() for part in value.split(";") if part.strip()]
+
+
+def _species_group_from_lineage(
+    taxon_id: str,
+    species_name: str,
+    lineage_ids_raw: str,
+    lineage_names_raw: str,
+) -> tuple[str, str]:
     """
-    Stream genome_metadata from FTP and aggregate per taxon_id.
+    Return the species-level taxon_id and display name for a lineage row.
+
+    BV-BRC virus genomes often use strain/subtype taxon IDs in genome_metadata,
+    while the genome_lineage file carries the species name and aligned lineage
+    ID/name lists. Grouping by the species entry keeps viral collections from
+    being split into many strain-level records.
+    """
+    species_name = species_name.strip()
+    lineage_ids = _split_lineage_field(lineage_ids_raw)
+    lineage_names = _split_lineage_field(lineage_names_raw)
+
+    if species_name and len(lineage_ids) == len(lineage_names):
+        for idx in range(len(lineage_names) - 1, -1, -1):
+            if lineage_names[idx] == species_name:
+                return lineage_ids[idx], species_name
+
+    if species_name:
+        return taxon_id, species_name
+
+    if lineage_ids and lineage_names and len(lineage_ids) == len(lineage_names):
+        return lineage_ids[-1], lineage_names[-1]
+
+    return taxon_id, f"Organism {taxon_id}"
+
+
+def _extract_taxon_groups_ftp() -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Stream genome_lineage files and infer species-level grouping.
+
+    Returns:
+        taxon_groups: source taxon_id -> species-level taxon_id for source
+            taxon IDs that should be rolled up.
+        group_names: species-level taxon_id -> species/display name.
+    """
+    taxon_groups: dict[str, str] = {}
+    group_names: dict[str, str] = {}
+    line_count = 0
+    group_count = 0
+    start_time = time.time()
+
+    for path in GENOME_LINEAGE_PATHS:
+        ftp = _connect_ftp()
+        file_line_count = 0
+        logger.info("Streaming genome_lineage from %s", path)
+
+        try:
+            for line in _stream_ftp_lines(ftp, path):
+                if file_line_count == 0:
+                    file_line_count += 1
+                    line_count += 1
+                    continue  # skip header
+
+                fields = line.split("\t")
+                if len(fields) < LINEAGE_MIN_COLS:
+                    file_line_count += 1
+                    line_count += 1
+                    continue
+
+                taxon_id = fields[LINEAGE_TAXON_ID].strip()
+                if not taxon_id:
+                    file_line_count += 1
+                    line_count += 1
+                    continue
+
+                group_id, group_name = _species_group_from_lineage(
+                    taxon_id,
+                    fields[LINEAGE_SPECIES],
+                    fields[LINEAGE_LINEAGE_IDS],
+                    fields[LINEAGE_LINEAGE_NAMES],
+                )
+
+                if group_id != taxon_id:
+                    taxon_groups.setdefault(taxon_id, group_id)
+
+                if group_name:
+                    group_names.setdefault(group_id, group_name)
+
+                group_count += 1
+                file_line_count += 1
+                line_count += 1
+                if line_count % 2_000_000 == 0:
+                    elapsed = time.time() - start_time
+                    logger.info(
+                        "genome_lineage: %dM lines, %d roll-up taxa, "
+                        "%d group names (%.0fs)",
+                        line_count // 1_000_000,
+                        len(taxon_groups),
+                        len(group_names),
+                        elapsed,
+                    )
+        finally:
+            try:
+                ftp.quit()
+            except Exception:
+                pass
+
+        logger.info(
+            "genome_lineage file complete: %s, %d lines",
+            path, file_line_count,
+        )
+
+    elapsed = time.time() - start_time
+    logger.info(
+        "genome_lineage complete: %d lines, %d lineage rows, "
+        "%d roll-up taxa, %d group names in %.0fs",
+        line_count, group_count, len(taxon_groups), len(group_names), elapsed,
+    )
+    return taxon_groups, group_names
+
+
+def _group_taxon_id(taxon_id: str, taxon_groups: dict[str, str]) -> str:
+    return taxon_groups.get(taxon_id, taxon_id)
+
+
+def _aggregate_genome_metadata(
+    taxon_groups: dict[str, str],
+) -> dict[str, dict[str, Any]]:
+    """
+    Stream genome_metadata from FTP and aggregate per species-level taxon_id.
 
     Returns dict of taxon_id -> {
         genome_count, countries, hosts, diseases,
@@ -357,71 +499,85 @@ def _aggregate_genome_metadata() -> dict[str, dict[str, Any]]:
         "earliest_completion": None,
     })
 
-    ftp = _connect_ftp()
     line_count = 0
     start_time = time.time()
 
-    try:
-        for line in _stream_ftp_lines(ftp, GENOME_METADATA_PATH):
-            if line_count == 0:
-                line_count += 1
-                continue  # skip header
+    for path in GENOME_METADATA_PATHS:
+        ftp = _connect_ftp()
+        file_line_count = 0
+        logger.info("Streaming genome_metadata from %s", path)
 
-            fields = line.split("\t")
-            if len(fields) <= META_DISEASE:
-                line_count += 1
-                continue
-
-            taxon_id = fields[META_TAXON_ID].strip()
-            if not taxon_id:
-                line_count += 1
-                continue
-
-            entry = taxa[taxon_id]
-            entry["genome_count"] += 1
-
-            country = fields[META_ISOLATION_COUNTRY].strip()
-            if country:
-                entry["countries"].add(country)
-
-            host = fields[META_HOST_NAME].strip()
-            if host:
-                entry["hosts"].add(host)
-
-            disease_raw = fields[META_DISEASE].strip()
-            if disease_raw:
-                for d in disease_raw.split(";"):
-                    d = d.strip()
-                    if d:
-                        entry["diseases"].add(d)
-
-            coll_date = fields[META_COLLECTION_DATE].strip()
-            if coll_date:
-                try:
-                    year = int(coll_date[:4])
-                    if 1000 <= year <= 2100:
-                        entry["collection_years"].add(year)
-                except (ValueError, IndexError):
-                    pass
-
-            comp_date = fields[META_COMPLETION_DATE].strip()
-            if comp_date and not comp_date.startswith("1900"):
-                cur = entry["earliest_completion"]
-                if cur is None or comp_date < cur:
-                    entry["earliest_completion"] = comp_date
-
-            line_count += 1
-            if line_count % 2_000_000 == 0:
-                elapsed = time.time() - start_time
-                logger.info(
-                    "genome_metadata: %dM lines, %d taxa (%.0fs)",
-                    line_count // 1_000_000, len(taxa), elapsed,
-                )
-    finally:
         try:
-            ftp.quit()
-        except Exception:
-            pass
+            for line in _stream_ftp_lines(ftp, path):
+                if file_line_count == 0:
+                    file_line_count += 1
+                    line_count += 1
+                    continue  # skip header
+
+                fields = line.split("\t")
+                if len(fields) <= META_DISEASE:
+                    file_line_count += 1
+                    line_count += 1
+                    continue
+
+                source_taxon_id = fields[META_TAXON_ID].strip()
+                if not source_taxon_id:
+                    file_line_count += 1
+                    line_count += 1
+                    continue
+
+                taxon_id = _group_taxon_id(source_taxon_id, taxon_groups)
+                entry = taxa[taxon_id]
+                entry["genome_count"] += 1
+
+                country = fields[META_ISOLATION_COUNTRY].strip()
+                if country:
+                    entry["countries"].add(country)
+
+                host = fields[META_HOST_NAME].strip()
+                if host:
+                    entry["hosts"].add(host)
+
+                disease_raw = fields[META_DISEASE].strip()
+                if disease_raw:
+                    for d in disease_raw.split(";"):
+                        d = d.strip()
+                        if d:
+                            entry["diseases"].add(d)
+
+                coll_date = fields[META_COLLECTION_DATE].strip()
+                if coll_date:
+                    try:
+                        year = int(coll_date[:4])
+                        if 1000 <= year <= 2100:
+                            entry["collection_years"].add(year)
+                    except (ValueError, IndexError):
+                        pass
+
+                comp_date = fields[META_COMPLETION_DATE].strip()
+                if comp_date and not comp_date.startswith("1900"):
+                    cur = entry["earliest_completion"]
+                    if cur is None or comp_date < cur:
+                        entry["earliest_completion"] = comp_date
+
+                file_line_count += 1
+                line_count += 1
+                if line_count % 2_000_000 == 0:
+                    elapsed = time.time() - start_time
+                    logger.info(
+                        "genome_metadata: %dM lines, %d taxa (%.0fs)",
+                        line_count // 1_000_000, len(taxa), elapsed,
+                    )
+        finally:
+            try:
+                ftp.quit()
+            except Exception:
+                pass
+
+        logger.info(
+            "genome_metadata file complete: %s, %d lines",
+            path, file_line_count,
+        )
 
     elapsed = time.time() - start_time
     logger.info(
@@ -431,48 +587,61 @@ def _aggregate_genome_metadata() -> dict[str, dict[str, Any]]:
     return dict(taxa)
 
 
-def _aggregate_genome_summary() -> dict[str, str]:
+def _aggregate_genome_summary(taxon_groups: dict[str, str]) -> dict[str, str]:
     """
     Stream genome_summary from FTP and return the latest date_modified
-    per taxon_id.
+    per species-level taxon_id.
     """
     latest_modified: dict[str, str] = {}
 
-    ftp = _connect_ftp()
     line_count = 0
     start_time = time.time()
 
-    try:
-        for line in _stream_ftp_lines(ftp, GENOME_SUMMARY_PATH):
-            if line_count == 0:
-                line_count += 1
-                continue  # skip header
+    for path in GENOME_SUMMARY_PATHS:
+        ftp = _connect_ftp()
+        file_line_count = 0
+        logger.info("Streaming genome_summary from %s", path)
 
-            fields = line.split("\t")
-            if len(fields) <= SUMMARY_DATE_MODIFIED:
-                line_count += 1
-                continue
-
-            taxon_id = fields[SUMMARY_TAXON_ID].strip()
-            date_mod = fields[SUMMARY_DATE_MODIFIED].strip()
-
-            if taxon_id and date_mod:
-                cur = latest_modified.get(taxon_id)
-                if cur is None or date_mod > cur:
-                    latest_modified[taxon_id] = date_mod
-
-            line_count += 1
-            if line_count % 2_000_000 == 0:
-                elapsed = time.time() - start_time
-                logger.info(
-                    "genome_summary: %dM lines (%.0fs)",
-                    line_count // 1_000_000, elapsed,
-                )
-    finally:
         try:
-            ftp.quit()
-        except Exception:
-            pass
+            for line in _stream_ftp_lines(ftp, path):
+                if file_line_count == 0:
+                    file_line_count += 1
+                    line_count += 1
+                    continue  # skip header
+
+                fields = line.split("\t")
+                if len(fields) <= SUMMARY_DATE_MODIFIED:
+                    file_line_count += 1
+                    line_count += 1
+                    continue
+
+                source_taxon_id = fields[SUMMARY_TAXON_ID].strip()
+                taxon_id = _group_taxon_id(source_taxon_id, taxon_groups)
+                date_mod = fields[SUMMARY_DATE_MODIFIED].strip()
+
+                if taxon_id and date_mod:
+                    cur = latest_modified.get(taxon_id)
+                    if cur is None or date_mod > cur:
+                        latest_modified[taxon_id] = date_mod
+
+                file_line_count += 1
+                line_count += 1
+                if line_count % 2_000_000 == 0:
+                    elapsed = time.time() - start_time
+                    logger.info(
+                        "genome_summary: %dM lines (%.0fs)",
+                        line_count // 1_000_000, elapsed,
+                    )
+        finally:
+            try:
+                ftp.quit()
+            except Exception:
+                pass
+
+        logger.info(
+            "genome_summary file complete: %s, %d lines",
+            path, file_line_count,
+        )
 
     elapsed = time.time() - start_time
     logger.info(
@@ -480,56 +649,6 @@ def _aggregate_genome_summary() -> dict[str, str]:
         line_count, len(latest_modified), elapsed,
     )
     return latest_modified
-
-
-def _extract_taxon_names_ftp() -> dict[str, str]:
-    """
-    Stream genome_lineage from FTP and extract the 'species' name for each
-    taxon_id. Returns {taxon_id: species_name}. Keeps the first (and
-    typically only) species name seen per taxon.
-    """
-    names: dict[str, str] = {}
-
-    ftp = _connect_ftp()
-    line_count = 0
-    start_time = time.time()
-
-    try:
-        for line in _stream_ftp_lines(ftp, GENOME_LINEAGE_PATH):
-            if line_count == 0:
-                line_count += 1
-                continue  # skip header
-
-            fields = line.split("\t")
-            if len(fields) <= LINEAGE_SPECIES:
-                line_count += 1
-                continue
-
-            taxon_id = fields[LINEAGE_TAXON_ID].strip()
-            species = fields[LINEAGE_SPECIES].strip()
-
-            if taxon_id and species and taxon_id not in names:
-                names[taxon_id] = species
-
-            line_count += 1
-            if line_count % 2_000_000 == 0:
-                elapsed = time.time() - start_time
-                logger.info(
-                    "genome_lineage: %dM lines, %d names (%.0fs)",
-                    line_count // 1_000_000, len(names), elapsed,
-                )
-    finally:
-        try:
-            ftp.quit()
-        except Exception:
-            pass
-
-    elapsed = time.time() - start_time
-    logger.info(
-        "genome_lineage complete: %d lines, %d taxon names in %.0fs",
-        line_count, len(names), elapsed,
-    )
-    return names
 
 
 # ---------------------------------------------------------------------------
@@ -617,8 +736,9 @@ def _build_example_of_work(code: str) -> dict[str, Any]:
             "name": "Use API call for an example record",
             "target": (
                 f"{API_BASE}/genome/"
-                f"?eq(taxon_id,{code})"
-                "&select(genome_id,genome_name,taxon_id,isolation_country,"
+                f"?eq(taxon_lineage_ids,{code})"
+                "&select(genome_id,genome_name,taxon_id,taxon_lineage_ids,"
+                "isolation_country,"
                 "host_common_name,host_name,host_scientific_name,"
                 "host_taxon_id)"
                 "&sort(+genome_id)&http_accept=application/json&limit(1,0)"
@@ -827,20 +947,24 @@ class BvBrc(NDEDatabase):
         if self._version:
             logger.info("BV-BRC API version: %s", self._version)
 
-        # Step 1 — Download and aggregate genome_metadata from FTP
-        logger.info("Step 1/3: Downloading genome_metadata from FTP (%s)...", FTP_HOST)
-        meta_agg = _aggregate_genome_metadata()
+        # Step 1 — Download genome_lineage for species-level grouping
+        logger.info(
+            "Step 1/3: Downloading genome_lineage from FTP for taxon grouping..."
+        )
+        taxon_groups, taxon_names = _extract_taxon_groups_ftp()
+
+        # Step 2 — Download and aggregate genome_metadata from FTP
+        logger.info(
+            "Step 2/3: Downloading genome_metadata from FTP (%s)...", FTP_HOST
+        )
+        meta_agg = _aggregate_genome_metadata(taxon_groups)
         if not meta_agg:
             logger.error("No genome records found in FTP genome_metadata file.")
             return
 
-        # Step 2 — Download and aggregate genome_summary for date_modified
-        logger.info("Step 2/3: Downloading genome_summary from FTP...")
-        date_mods = _aggregate_genome_summary()
-
-        # Step 3 — Download genome_lineage for taxon names (no API needed)
-        logger.info("Step 3/3: Downloading genome_lineage from FTP for taxon names...")
-        taxon_names = _extract_taxon_names_ftp()
+        # Step 3 — Download and aggregate genome_summary for date_modified
+        logger.info("Step 3/3: Downloading genome_summary from FTP...")
+        date_mods = _aggregate_genome_summary(taxon_groups)
 
         # Build and yield cache entries
         taxon_ids = sorted(meta_agg.keys())
