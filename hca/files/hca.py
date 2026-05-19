@@ -1,10 +1,32 @@
 import datetime
 import logging
+import re
 
 import requests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
+
+PROJECT_UUID_RE = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])")
+
+
+def format_uuid(value):
+    return f"{value[:8]}-{value[8:12]}-{value[12:16]}-{value[16:20]}-{value[20:]}"
+
+
+def get_project_uuid(source):
+    """Extract a project UUID from an Azul catalog source."""
+    if isinstance(source, dict):
+        source = source.get("sourceSpec")
+
+    if not isinstance(source, str):
+        raise ValueError(f"Unexpected HCA source format: {source}")
+
+    match = PROJECT_UUID_RE.search(source)
+    if not match:
+        raise ValueError(f"No project UUID found in HCA source: {source}")
+
+    return format_uuid(match.group(1).lower())
 
 
 def retrieve_ids():
@@ -20,9 +42,7 @@ def retrieve_ids():
 
     uuids = []
     for source in sources:
-        id = source.split("_")[2]
-        uuid = id[:8] + "-" + id[8:12] + "-" + id[12:16] + "-" + id[16:20] + "-" + id[20:]
-        uuids.append(uuid)
+        uuids.append(get_project_uuid(source))
     return uuids
 
 
