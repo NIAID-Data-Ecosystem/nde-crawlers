@@ -3,6 +3,7 @@
 # https://biopython.org/DIST/docs/tutorial/Tutorial.html#sec162
 # https://biopython.org/docs/1.76/api/Bio.Entrez.html
 # https://www.nlm.nih.gov/bsd/mms/medlineelements.html
+# https://biopython.org/docs/1.76/api/Bio.Medline.html?highlight=medline
 # https://dataguide.nlm.nih.gov/eutilities/utilities.html#efetch
 # https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
 
@@ -621,6 +622,11 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
             citation["pmid"] = pmid
             citation["identifier"] = "PMID:" + pmid
             citation["url"] = "https://pubmed.ncbi.nlm.nih.gov/" + pmid + "/"
+        if aids := record.get("AID"):
+            for aid in aids:
+                if aid.endswith(" [doi]"):
+                    citation["doi"] = aid[: -len(" [doi]")].strip()
+                    break
         if journal_name := record.get("JT"):
             citation["journalName"] = journal_name
         if date_published := record.get("DP"):
@@ -910,6 +916,17 @@ def load_pmid_ctfd(data):
                                     # if the user originally had a citation field that is not a list change citation to list
                                     if not isinstance(rec_citation, list):
                                         rec["citation"] = [rec_citation]
+                                    # drop the original DOI stub now that the enriched citation carries the DOI
+                                    if enriched_doi := citation.get("doi"):
+                                        rec["citation"] = [
+                                            c
+                                            for c in rec["citation"]
+                                            if not (
+                                                isinstance(c, dict)
+                                                and isinstance(c.get("doi"), str)
+                                                and c["doi"].lower() == enriched_doi.lower()
+                                            )
+                                        ]
                                     rec["citation"].append(citation)
                                 else:
                                     rec["citation"] = [citation]
@@ -1065,6 +1082,17 @@ def load_pmid_ctfd_wrapper(func):
                                     # if the user originally had a citation field that is not a list change citation to list
                                     if not isinstance(rec_citation, list):
                                         rec["citation"] = [rec_citation]
+                                    # drop the original DOI stub now that the enriched citation carries the DOI
+                                    if enriched_doi := citation.get("doi"):
+                                        rec["citation"] = [
+                                            c
+                                            for c in rec["citation"]
+                                            if not (
+                                                isinstance(c, dict)
+                                                and isinstance(c.get("doi"), str)
+                                                and c["doi"].lower() == enriched_doi.lower()
+                                            )
+                                        ]
                                     rec["citation"].append(citation)
                                 else:
                                     rec["citation"] = [citation]

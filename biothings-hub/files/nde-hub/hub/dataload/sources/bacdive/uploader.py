@@ -2,13 +2,16 @@ from hub.dataload.nde import NDESourceSampleUploader
 from utils.extract import process_descriptions
 from utils.pubtator import standardize_data
 from utils.utils import nde_upload_wrapper
-
+from utils.pmid_helper import load_pmid_ctfd
+from utils.funding_helper import standardize_funding
 
 class BacdiveUploader(NDESourceSampleUploader):
     name = "bacdive"
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
+        docs = load_pmid_ctfd(data_folder)
+        docs = standardize_funding(docs)
         docs = standardize_data(data_folder)
         docs = process_descriptions(docs)
         for doc in docs:

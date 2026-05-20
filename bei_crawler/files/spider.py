@@ -27,7 +27,7 @@ class BeiSpider(scrapy.Spider):
         }
     }
 
-    start_urls = ["https://www.beiresources.org/Catalog.aspx?f_instockflag=In+Stock%23%7e%23Temporarily+Out+of+Stock&pagesize=100"]
+    start_urls = ["https://www.beiresources.org/Catalog.aspx?f_instockflag=In+Stock%23%7e%23Temporarily+Out+of+Stock%23%7e%23Made%2bto%2bOrder&pagesize=100&page=1"]
 
     def build_form_payload(self, response):
 

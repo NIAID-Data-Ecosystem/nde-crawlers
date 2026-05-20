@@ -151,6 +151,9 @@ def parse():
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
             },
+            "conditionsOfAccess": "Open",
+            "license": "https://creativecommons.org/licenses/by/4.0/",
+            "isAccessibleForFree": False
         }
 
         if desc := general.get("description"):
@@ -255,10 +258,10 @@ def parse():
         for lit in _as_list(literature.get("literature")):
             entry = {}
             if pmid := lit.get("Pubmed-ID"):
-                # insert_value(output, "pmids", str(pmid))
+                insert_value(output, "pmids", str(pmid))
                 entry["pmid"] = str(pmid)
             if d := lit.get("DOI"):
-                # insert_value(output, "citation", d)
+                insert_value(output, "citation", {"doi": d})
                 entry["doi"] = d
             if title := lit.get("title"):
                 entry["name"] = title
