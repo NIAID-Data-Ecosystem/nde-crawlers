@@ -145,7 +145,7 @@ class NDEDataBuilder(builder.DataBuilder):
             delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
             self.logger.info(f"Deleted {delete_result.deleted_count} remaining duplicate records")
 
-    def identifier_deduplication(self, identifier_source_catalog, source_catalogs):
+    def identifier_deduplication(self, identifier_source_catalog, source_catalogs, prefer_matching_catalog_doc=False):
         """Given a primary source catalog (e.g., Data Discovery Engine) and a list of source catalogs
         (e.g., NCBI GEO), find and match the identifers from the primary source catalog to the _id fields of
         documents from the source catalogs. Merge the resulting documents.
@@ -153,6 +153,8 @@ class NDEDataBuilder(builder.DataBuilder):
         Args:
             identifier_source_catalog (str): The name of the source identifier catalog to search (e.g., "Data Discovery Engine")
             source_catalogs (list): A list of source catalogs to match against (e.g., ["NCBI GEO", "AccessClinicalData@NIAID"])
+            prefer_matching_catalog_doc (bool): When True, keep matching source catalog fields authoritative and
+                merge identifier-source catalog provenance into that record.
 
         """
         db = mongo.get_target_db()
@@ -250,15 +252,21 @@ class NDEDataBuilder(builder.DataBuilder):
         for result in results:
             records_to_delete.append(result.get("_id"))
 
-            recipient_doc = result["original_doc"]
-            for donor_doc in result["matching_catalogs"]:
+            identifier_doc = result["original_doc"]
+            for matching_doc in result["matching_catalogs"]:
+                if prefer_matching_catalog_doc:
+                    base_doc = matching_doc
+                    provenance_doc = identifier_doc
+                else:
+                    base_doc = identifier_doc
+                    provenance_doc = matching_doc
                 merged_doc = merge_struct(
-                    recipient_doc,
-                    donor_doc,
+                    base_doc,
+                    provenance_doc,
                     aslistofdict="includedInDataCatalog",
                     include=["includedInDataCatalog"],
                 )
-                merged_doc["_id"] = donor_doc["_id"]  # keep the donor id
+                merged_doc["_id"] = matching_doc["_id"]  # keep the matching source catalog id
                 bulk_operations.append(
                     UpdateOne(
                         {"_id": merged_doc["_id"]},
@@ -298,4 +306,5 @@ class NDEDataBuilder(builder.DataBuilder):
         self.identifier_deduplication(
             "Centers of Excellence for Influenza Research and Response (CEIRR) Resources",
             ["BEI Resources"],
+            prefer_matching_catalog_doc=True,
         )
