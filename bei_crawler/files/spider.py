@@ -9,10 +9,9 @@ import html
 import logging
 import os
 import re
+from urllib.parse import urlencode
 
 import scrapy
-from scrapy import FormRequest, Selector
-from scrapy_selenium import SeleniumRequest
 
 logger = logging.getLogger("nde-logger")
 
@@ -27,10 +26,9 @@ class BeiSpider(scrapy.Spider):
         }
     }
 
-    start_urls = ["https://www.beiresources.org/Catalog.aspx?f_instockflag=In+Stock%23%7e%23Temporarily+Out+of+Stock%23%7e%23Made%2bto%2bOrder&pagesize=100&page=1"]
+    start_urls = ["https://www.beiresources.org/Catalog.aspx?f_instockflag=In+Stock%23%7e%23Temporarily+Out+of+Stock%23%7e%23Made%2bto%2bOrder&pagesize=100"]
 
     def build_form_payload(self, response):
-
         form = response.xpath("//form[@id='Form']")
         if not form:
             raise RuntimeError("Could not find the BEI search form needed for pagination.")
@@ -71,9 +69,11 @@ class BeiSpider(scrapy.Spider):
         payload["__EVENTARGUMENT"] = f"Page${count}"
         logger.info(f"Submitting form to {action_url} with event argument {payload['__EVENTARGUMENT']}")
 
-        yield scrapy.FormRequest(
+        yield scrapy.Request(
             url=action_url,
-            formdata=payload,
+            method="POST",
+            body=urlencode(payload),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
             callback=self.parse,
             meta={"count": count + 1},
         )
