@@ -173,7 +173,7 @@ def parse():
                 ia = {"identifier": str(tax_id)}
                 if level == "strain":
                     ia["@type"] = "DefinedTerm"
-                insert_value(output, "infectiousAgent", ia)
+                insert_value(output, "infectiousAgent", {"name": ia})
                 break
 
         if doi := general.get("doi"):
