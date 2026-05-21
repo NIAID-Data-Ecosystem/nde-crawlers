@@ -276,9 +276,9 @@ def parse():
             if entry:
                 insert_value(output, "citedBy", entry)
 
-        # if output.get("pmids"):
-        #     if isinstance(output["pmids"], list):
-        #         output["pmids"] = ", ".join(output["pmids"])
+        if output.get("pmids"):
+            if isinstance(output["pmids"], list):
+                output["pmids"] = ", ".join(output["pmids"])
 
         # Reference → isBasedOn
         for ref in _as_list(references):
