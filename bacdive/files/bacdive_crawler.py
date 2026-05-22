@@ -179,10 +179,9 @@ def parse():
         if doi := general.get("doi"):
             insert_value(output, "doi", doi)
 
-        # LPSN synonyms → infectiousAgent.alternateName
         for syn in _as_list((natc.get("LPSN") or {}).get("synonyms")):
             if name := syn.get("synonym"):
-                insert_value(output, "infectiousAgent", {"alternateName": name})
+                insert_value(output, "infectiousAgent", {"name": name})
 
         # Culture-collection numbers → alternateIdentifier; DSM rows → sameAs URL
         ccns = []
