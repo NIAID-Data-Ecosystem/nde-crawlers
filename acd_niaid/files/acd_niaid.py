@@ -233,13 +233,14 @@ def parse():
                     result["pmids"] = citation_url.split("/")[-2]
             elif "doi" in citation_url:
                 doi_id = citation_url.split("/")[-1]
-                r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
-                if "pubmed" in r.url:
-                    pmid = r.url.split("/")[-2]
-                    if pmid.isdigit():
-                        result["pmids"] = r.url.split("/")[-2]
-                else:
-                    result["citation"] = None
+                result["citation"] = [{"doi": doi_id}]
+                # r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
+                # if "pubmed" in r.url:
+                #     pmid = r.url.split("/")[-2]
+                #     if pmid.isdigit():
+                #         result["pmids"] = r.url.split("/")[-2]
+                # else:
+                #     result["citation"] = None
             else:
                 result["citation"] = [{"url": citation_url}]
         else:
