@@ -285,6 +285,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  uniprot-crawler:
+    build:
+      context: uniprot
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   vdj-crawler:
     build:
       context: vdj
