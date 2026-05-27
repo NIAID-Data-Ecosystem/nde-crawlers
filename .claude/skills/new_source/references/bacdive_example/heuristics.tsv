@@ -1,0 +1,21 @@
+To ignore	
+* Culture and growth conditions	
+* Physiology and metabolism	
+	
+For Literature.literature	
+1. Parse objects for "Pubmed-ID" and map to citedBy.pmid -- use helper to fill in citation object	
+2. Parse objects for "doi" and map to citedBy.doi -- use helper to convert to pmid and fill in citaton object	
+3. No "Pubmed-ID" or "doi", parse object (title=name, etc. Ignore mesh and topic)	
+	
+General.NCBI tax id	
+1. Check first for a "strain" level NCBI tax id. If available, use that for the infectiousAgent.identifier field for a Definedterm object	
+3. If a 'strain' level NCBI Tax ID is NOT available, THEN use the 'species' level NCBI tax ID for the infectiousAgent.identifier field	
+	
+Assign	
+conditionsOfAccess	Open
+license	http://creativecommons.org/licenses/by/4.0/
+isAccessibleForFree	FALSE
+	
+Some of the key Sample metadat is stored elsewhere. To obtain it, check to see if there are ids in the following fields:	
+General.DSM-Number	
+Literature.culture collection no.	

@@ -1,0 +1,115 @@
+{
+  "General": {
+    "@ref": 24274,
+    "BacDive-ID": 132485,
+    "DSM-Number": 28473,
+    "keywords": [
+      "genome sequence",
+      "16S sequence",
+      "Bacteria",
+      "aerobe",
+      "Gram-negative"
+    ],
+    "description": "Lysobacter tolerans UM1 is an aerobe, Gram-negative, rod-shaped bacterium that forms circular colonies and was isolated from soil from hexachlorocyclohexane-contaminated dumpsite.",
+    "NCBI tax id": {
+      "NCBI tax id": 1604334,
+      "Matching level": "species"
+    },
+    "doi": "10.13145/bacdive132485.20251217.10"
+  },
+  "Name and taxonomic classification": {
+    "LPSN": {
+      "@ref": 20215,
+      "genus": "Lysobacter",
+      "species": "Lysobacter tolerans",
+      "synonyms": [
+        {"@ref": 20215, "synonym": "Luteimonas tolerans"},
+        {"@ref": 20215, "synonym": "Solilutibacter tolerans"}
+      ]
+    },
+    "strain designation": "UM1",
+    "type strain": "yes"
+  },
+  "Morphology": {
+    "cell morphology": {
+      "@ref": 43676,
+      "gram stain": "negative",
+      "cell shape": "rod-shaped",
+      "motility": "no",
+      "cell length": "1.5-2.5 µm"
+    },
+    "multicellular morphology": {
+      "@ref": 43676,
+      "complex name": "biofilm",
+      "complex color": "yellow"
+    }
+  },
+  "Isolation, sampling and environmental information": {
+    "isolation": [
+      {
+        "@ref": 24274,
+        "sample type": "soil from hexachlorocyclohexane-contaminated dumpsite",
+        "geographic location": "Lucknow, Ummari village",
+        "country": "India",
+        "origin.country": "IND",
+        "continent": "Asia",
+        "latitude": 26.85,
+        "longitude": 80.95,
+        "host species": null,
+        "isolation date": "2014-05-01",
+        "sampling date": null,
+        "enrichment culture composition": "minimal medium with HCH",
+        "isolation procedure": "serial dilution and plating"
+      }
+    ],
+    "isolation source categories": [
+      {"Cat1": "#Environmental", "Cat2": "#Terrestrial", "Cat3": "#Soil"}
+    ]
+  },
+  "Sequence information": {
+    "Genome sequences": {
+      "@ref": 66792,
+      "description": "IMG-taxon 2681812867 annotated assembly for Solilutibacter tolerans UM1",
+      "assembly level": "contig",
+      "INSDC accession": "GCA_900155935",
+      "NCBI tax ID": 1604334
+    },
+    "16S sequences": [
+      {
+        "@ref": 24274,
+        "description": "Lysobacter tolerans strain UM1 16S ribosomal RNA gene, partial sequence",
+        "accession": "KM888877",
+        "database": "nuccore"
+      }
+    ]
+  },
+  "Literature": {
+    "@ref": 24274,
+    "culture collection no.": "DSM 28473, KCTC 42936, MCC 2572",
+    "literature": [
+      {
+        "topic": "Phylogeny",
+        "Pubmed-ID": "26869334",
+        "title": "Luteimonas tolerans sp. nov., isolated from hexachlorocyclohexane-contaminated soil.",
+        "authors": "Rani P, Mukherjee U, Verma H, Kamra K, Lal R",
+        "journal": "Int J Syst Evol Microbiol",
+        "DOI": "10.1099/ijsem.0.000956",
+        "year": 2016
+      }
+    ]
+  },
+  "Reference": [
+    {
+      "@id": 20215,
+      "authors": "Parte, A.C., Sardà Carbasse, J., Meier-Kolthoff, J.P., Reimer, L.C. and Göker, M.",
+      "title": "List of Prokaryotic names with Standing in Nomenclature (LPSN) moves to the DSMZ",
+      "doi/url": "10.1099/ijsem.0.004332"
+    },
+    {
+      "@id": 24274,
+      "authors": "Curators of the DSMZ",
+      "catalogue": "Leibniz Institut DSMZ-Deutsche Sammlung von Mikroorganismen und Zellkulturen GmbH (DSM 28473)",
+      "doi/url": "https://www.dsmz.de/collection/catalogue/details/culture/DSM-28473"
+    }
+  ]
+}

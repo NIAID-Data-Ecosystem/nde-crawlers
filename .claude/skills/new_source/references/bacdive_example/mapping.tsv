@@ -1,0 +1,182 @@
+Terms	Example	Mapping	Notes
+General.@ref	5523		
+General.BacDive-ID	100	_id, identifier, url	convert to url for bacdive 
+General.DSM-Number	14760	identifier, url	convert to DSM url for includedInDataCatalog.url
+General.keywords[0]	genome sequence	keywords	
+General.keywords[1]	16S sequence	keywords	
+General.keywords[2]	Bacteria	keywords	
+General.keywords[3]	anaerobe	keywords	
+General.description	Phascolarctobacterium faecium QUM 3679 is an anaerobe bacterium that was isolated from koala faeces.	description	
+General.NCBI tax id[0].NCBI tax id	33025	infectiousAgent.identifier	See heuristics
+General.NCBI tax id[0].Matching level	species		
+General.NCBI tax id[1].NCBI tax id	1122957	infectiousAgent.identifier	Format as an NCBI Taxon DefinedTerm Object
+General.NCBI tax id[1].Matching level	strain		
+General.strain history.@ref	5523		
+General.strain history.history	<- R. Osawa, Kobe University, Graduate School of Science and Technology, Kobe, Japan; ACM 3679 <- ACM <- R. Osawa, Veterinary Service and Research, Brisbane, Australia {1992}		
+General.doi	10.13145/bacdive100.20251217.10	doi	This is the sample doi
+Name and taxonomic classification.LPSN.@ref	20215		
+Name and taxonomic classification.LPSN.description	domain/bacteria		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.keyword	phylum/bacillota		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.domain	Bacteria		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.phylum	Bacillota		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.class	Negativicutes		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.order	Acidaminococcales		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.family	Acidaminococcaceae		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.genus	Phascolarctobacterium		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.species	Phascolarctobacterium faecium		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.full scientific name	<I>Phascolarctobacterium</I> <I>faecium</I> Del Dot et al. 1994		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.LPSN.synonyms[0].@ref	20215		
+Name and taxonomic classification.LPSN.synonyms[0].synonym	Sapromyces laidlawi		infectiousAgent.alternateName
+Name and taxonomic classification.LPSN.synonyms[1].@ref	20215		
+Name and taxonomic classification.LPSN.synonyms[1].synonym	Acholeplasma laidlawii		infectiousAgent.alternateName
+Name and taxonomic classification.LPSN.synonyms[2].@ref	20215		
+Name and taxonomic classification.LPSN.synonyms[2].synonym	Mycoplasma laidlawii		infectiousAgent.alternateName
+Name and taxonomic classification.@ref	5523		
+Name and taxonomic classification.domain	Bacteria		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.phylum	Firmicutes		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.class	Negativicutes		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.order	Selenomonadales		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.family	Acidaminococcaceae		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.genus	Phascolarctobacterium		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.species	Phascolarctobacterium faecium		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.full scientific name	Phascolarctobacterium faecium Del Dot et al. 1994		Ignore -- this should be pulled with taxonomy api if the NCBI Taxonomy ID is properly formatted and saved
+Name and taxonomic classification.strain designation	QUM 3679		
+Name and taxonomic classification.type strain	yes		
+Name and taxonomic classification.variant	Isotype of BacDive ID 77		
+Isolation, sampling and environmental information.isolation.@ref	5523		
+Isolation, sampling and environmental information.isolation.sample type	koala faeces	sampleType	
+Isolation, sampling and environmental information.isolation.country	Australia	locationOfOrigin.name	set locationOfOrigin.administrativeType = 'country'
+Isolation, sampling and environmental information.isolation.origin.country	AUS	locationOfOrigin.identifier	
+Isolation, sampling and environmental information.isolation.continent	Australia and Oceania	spatialCoverage.name	
+Isolation, sampling and environmental information.isolation.geographic location	DSMZ		
+Isolation, sampling and environmental information.isolation.host species	Sphagnum	species.name	
+Isolation, sampling and environmental information.isolation.latitude	65.0167	locationOfOrigin.geo.latitude	
+Isolation, sampling and environmental information.isolation.longitude	35.7333	locationOfOrigin.geo.longitude	
+Isolation, sampling and environmental information.isolation.isolation date	1976	dateProcessed	
+Isolation, sampling and environmental information.isolation.sampling date	1982	dateCollected	
+Isolation, sampling and environmental information.isolation.enrichment culture	w+Sarc (water agar + nutrient bacteria cells)		
+Isolation, sampling and environmental information.isolation.enrichment culture composition	Agar (Difco) 15.0g CaCl2 x 2 H2O 0.1% Distilled water 1000.0 ml Adjust pH of agar to 7.2 with KOH before autoclaving.  Freshly grown Micrococcus luteus cells serve as food bacteria for the myxobacteria. The M. luteus cells are harvested from complex medium such as nutrient agar or broth, and mixed with sterile water to yield a paste. For example, a pellet after centrifugation is mixed with about the same volume of sterile water. Streak lines or a cross of the bacterial paste onto the agar s	collectionMethod	
+Isolation, sampling and environmental information.isolation.enrichment culture duration	21 days		
+Isolation, sampling and environmental information.isolation.enrichment culture temperature	20		
+Isolation, sampling and environmental information.isolation.isolation procedure	leaf imprinting method	collectionMethod	
+Isolation, sampling and environmental information.isolation source categories[0].Cat1	#Host	environmentalSystem	
+Isolation, sampling and environmental information.isolation source categories[0].Cat2	#Mammals	environmentalSystem	
+Isolation, sampling and environmental information.isolation source categories[1].Cat1	#Host Body Product	environmentalSystem	
+Isolation, sampling and environmental information.isolation source categories[1].Cat2	#Gastrointestinal tract	environmentalSystem	
+Isolation, sampling and environmental information.isolation source categories[1].Cat3	#Feces (Stool)	environmentalSystem	
+Sequence information.Genome sequences.@ref	66792		
+Sequence information.Genome sequences.description	ASM326927v1 assembly for Phascolarctobacterium faecium DSM 14760	isBasisFor.name	
+Sequence information.Genome sequences.assembly level	scaffold		
+Sequence information.Genome sequences.INSDC accession	GCA_003269275	isBasisFor.identifier	
+Sequence information.Genome sequences.BV-BRC accession	1122957.3		
+Sequence information.Genome sequences.IMG accession	2756170237		
+Sequence information.Genome sequences.NCBI tax ID	1122957		
+Sequence information.Genome sequences.score	69.77		
+Sequence information.16S sequences.@ref	5523		
+Sequence information.16S sequences.description	P.faecium (ACM3679) gene for 16S rRNA	isBasisFor.name	
+Sequence information.16S sequences.accession	X72865	isBasisFor.identifier	
+Sequence information.16S sequences.length	1511		
+Sequence information.16S sequences.database	nuccore		
+Sequence information.16S sequences.NCBI tax ID	33025		
+Sequence information.GC content.@ref	5523		
+Sequence information.GC content.GC-content	41-42		
+Sequence information.GC content.method	thermal denaturation, midpoint method (Tm)		
+Literature.@ref	5523		
+Literature.culture collection no.	DSM 14760, ACM 3679	identifier, includedInDataCatalog.archivedAt	see heuristics
+Literature.straininfo link.@ref	126262		
+Literature.straininfo link.straininfo	87670		
+Literature.literature[0].title	Effects of Enterococcus faecium DSM 7134 supplementation in different energy and crude protein density diets on ileal amino acid digestibility and intestinal shedding of lactobacilli and Escherichia coli in finishing pigs		
+Literature.literature[0].authors	Zhang ZF, Kim IH.		
+Literature.literature[0].journal	Anim Feed Sci Technol		
+Literature.literature[0].DOI	10.1016/j.anifeedsci.2014.12.015	citedBy.doi	parse all Literature.literature objects for pmids or dois, then use the pmid/doi helper to get citation info
+Literature.literature[0].year	2015		
+Literature.literature[1].title	Biological Detoxification of Aflatoxin B1 by Enterococcus faecium HB2-2		
+Literature.literature[1].authors	Feng J, Cao L, Du X, Zhang Y, Cong Y, He J, Zhang W.		
+Literature.literature[1].journal	Foods		
+Literature.literature[1].year	2024		
+Literature.literature[1].mesh	Biological degradation, Aflatoxin B1, Peanut Meal, Enterococcus faecium		
+Literature.literature[2].topic	Enzymology		
+Literature.literature[2].Pubmed-ID	11375166	citedBy.pmid	parse all Literature.literature objects for pmids or dois, then use the pmid/doi helper to get citation info
+Literature.literature[2].title	Detection of Lactobacillus, Pediococcus, Leuconostoc, and Weissella species in human feces by using group-specific PCR primers and denaturing gradient gel electrophoresis.		
+Literature.literature[2].authors	Walter J, Hertel C, Tannock GW, Lis CM, Munro K, Hammes WP.		
+Literature.literature[2].journal	Appl Environ Microbiol		
+Literature.literature[2].DOI	10.1128/aem.67.6.2578-2585.2001	citedBy.doi	
+Literature.literature[2].year	2001		
+Literature.literature[2].mesh	microbiology, isolation & purification, isolation & purification, methods		
+Literature.literature[2].topic2	Phylogeny		
+Literature.literature[3].topic	Metabolism		
+Literature.literature[3].Pubmed-ID	16736854	citedBy.pmid	
+Literature.literature[3].title	Influence of pre-, pro-, and synbiotics on the intestinal availability of different B-vitamins.		
+Literature.literature[3].authors	Branner GR, Roth-Maier DA.		
+Literature.literature[3].journal	Arch Anim Nutr		
+Literature.literature[3].DOI	10.1080/17450390600678985	citedBy.doi	
+Literature.literature[3].year	2006		
+Literature.literature[3].mesh	metabolism, chemistry, metabolism, pharmacokinetics, drug effects, pharmacology		
+Literature.literature[3].topic2	Pathogenicity		
+Literature.literature[4].topic	Pathogenicity		
+Literature.literature[4].Pubmed-ID	16867076	citedBy.pmid	
+Literature.literature[4].title	Dietary probiotic supplementation and resulting effects on performance, health status, and microbial characteristics of primiparous sows.		
+Literature.literature[4].authors	Bohmer BM, Kramer W, Roth-Maier DA.		
+Literature.literature[4].journal	J Anim Physiol Anim Nutr (Berl)		
+Literature.literature[4].DOI	10.1111/j.1439-0396.2005.00601.x	citedBy.doi	
+Literature.literature[4].year	2006		
+Literature.literature[4].mesh	physiology, growth & development, drug effects, physiology, physiology, Probiotics		
+Literature.phages.@ref	124042		
+Literature.phages.name	Actinomyces phage S3		
+Literature.phages.strain number	DSM 43013		
+Literature.phages.link	https://phagedive.dsmz.de/strain/755		
+Reference[0].@id	5523		
+Reference[0].authors	Curators of the DSMZ	isBasedOn.author	
+Reference[0].catalogue	Leibniz Institut DSMZ-Deutsche Sammlung von Mikroorganismen und Zellkulturen GmbH (DSM 14760)	isBasedOn.name	
+Reference[0].doi/url	https://www.dsmz.de/collection/catalogue/details/culture/DSM-14760	isBasedOn.url	
+Reference[1].@id	20215		
+Reference[1].authors	Parte, A.C., Sardà Carbasse, J., Meier-Kolthoff, J.P., Reimer, L.C. and Göker, M.	isBasedOn.author	
+Reference[1].title	List of Prokaryotic names with Standing in Nomenclature (LPSN) moves to the DSMZ	isBasedOn.name	
+Reference[1].doi/url	10.1099/ijsem.0.004332	isBasedOn.url	
+Reference[2].@id	66792		
+Reference[2].authors	Julia Koblitz, Joaquim Sardà, Lorenz Christian Reimer, Boyke Bunk, Jörg Overmann	isBasedOn.author	
+Reference[2].title	Automatically annotated for the DiASPora project (Digital Approaches for the Synthesis of Poorly Accessible Biodiversity Information)	isBasedOn.name	
+Reference[2].doi/url	https://diaspora-project.de/progress.html#genomes	isBasedOn.url	
+Reference[3].@id	125438		
+Reference[3].authors	Julia Koblitz, Lorenz Christian Reimer, Rüdiger Pukall, Jörg Overmann	isBasedOn.author	
+Reference[3].title	Predicting bacterial phenotypic traits through improved machine learning using high-quality, curated datasets	isBasedOn.name	
+Reference[3].doi/url	10.1101/2024.08.12.607695	isBasedOn.url	
+Reference[4].@id	125439		
+Reference[4].authors	Philipp Münch, René Mreches, Martin Binder, Hüseyin Anil Gündüz, Xiao-Yin To, Alice McHardy	isBasedOn.author	
+Reference[4].title	deepG: Deep Learning for Genome Sequence Data. R package version 0.3.1	isBasedOn.name	
+Reference[4].doi/url	https://github.com/GenomeNet/deepG	isBasedOn.url	
+Morphology.cell morphology[0].@ref	22965		
+Morphology.cell morphology[0].gram stain	negative	associatedPhenotype	Assign a DefinedTerm object based on value, if 'no', use 'gram negative'. if 'yes', use 'gram positive'
+Morphology.cell morphology[0].cell length	0.5-0.6 µm	associatedPhenotype	Format as QuantitativeValue object, unitText = um, minVal=0.5, maxVal=0.6, name = cell length
+Morphology.cell morphology[0].cell shape	coccus-shaped	associatedPhenotype.name	Format as DefinedTerm object
+Morphology.cell morphology[0].motility	no	associatedPhenotype	Assign a DefinedTerm object based on value, if 'no', use 'non-motile'. If 'yes', use 'motile'
+Morphology.cell morphology[1].@ref	67771		
+Morphology.cell morphology[1].cell shape	coccus-shaped		
+Morphology.cell morphology[2].@ref	67771		
+Morphology.cell morphology[2].gram stain	negative		
+Morphology.cell morphology[3].@ref	120258		
+Morphology.cell morphology[3].gram stain	negative		
+Morphology.cell morphology[3].cell shape	coccus-shaped		
+Morphology.cell morphology[3].motility	no		
+Morphology.colony morphology[0].@ref	22965		
+Morphology.colony morphology[0].type of hemolysis	gamma		
+Morphology.colony morphology[0].colony size	0.3-0.5 mm		
+Morphology.colony morphology[0].colony color	whitish		
+Morphology.colony morphology[0].colony shape	circular		
+Morphology.colony morphology[0].incubation period	2 days		
+Morphology.colony morphology[0].medium used	Columbia sheep blood agar		
+Morphology.colony morphology[1].@ref	120258		
+Morphology.multimedia.@ref	66793		
+Morphology.multimedia.multimedia content	EM_DSM_20731_1.jpg		
+Morphology.multimedia.caption	electron microscopic image		
+Morphology.multimedia.intellectual property rights	© HZI/Manfred Rohde		
+Morphology.pigmentation.@ref	22963		
+Morphology.pigmentation.production	yes		
+Morphology.pigmentation.color	yellow		
+Morphology.pigmentation.name	carotenoid pigment		
+Morphology.multicellular morphology.@ref	27781		
+Morphology.multicellular morphology.forms multicellular complex	yes		
+Morphology.multicellular morphology.complex name	sporangium	associatedPhenotype.name	Format as DefinedTerm object
+Morphology.multicellular morphology.further description	swollen		
+Morphology.multicellular morphology.medium name	ISP 2		
+Morphology.multicellular morphology.complex color	brown yellow translucent	associatedPhenotype.name	Format as DefinedTerm object
