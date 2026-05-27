@@ -571,8 +571,11 @@ def _get_pub_date(date: str):
         og_month = s_date[1].split("-")[0]
         day = s_date[2].split("-")[0]
         month = next((month for month in months if month in og_month), None)
-        if month:
+        if month and day.isdigit():
             return datetime.strptime(year + " " + month + " " + day, "%Y %b %d").date().isoformat()
+        elif month and day[:3] in months:
+            # malformed month-range like "2005 Feb Nov" — use the starting month
+            return datetime.strptime(year + " " + month, "%Y %b").date().isoformat()
         else:
             logger.warning("Need to update isoformat transformation: %s", date)
     # exception case there are quite a few entries with this case "2020 Jan - Feb"
