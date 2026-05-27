@@ -398,9 +398,6 @@ def update_record_species(rec, species_data):
     if isinstance(rec.get("infectiousAgent"), dict):
         rec["infectiousAgent"] = [rec["infectiousAgent"]]
 
-    existing_species = {spec["name"].lower(): i for i, spec in enumerate(rec.get("species", []))}
-    existing_infectious_agents = {spec["name"].lower(): i for i, spec in enumerate(rec.get("infectiousAgent", []))}
-
     abstract = rec.get("abstract", "")
     description = rec.get("description", "")
     title = rec.get("name", "")
