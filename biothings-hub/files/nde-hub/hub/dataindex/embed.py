@@ -119,20 +119,151 @@ def _add_embedding_field(es, index, field_name, dims, index_options=None):
 
 
 # ── text building ────────────────────────────────────────────────────────────
+_SAMPLE_TEXT_MAX_VALUES = 200
+_SAMPLE_TEXT_SKIP_KEYS = {
+    "@context",
+    "@id",
+    "@type",
+    "identifier",
+    "inDefinedTermSet",
+    "termCode",
+    "unitCode",
+    "url",
+}
+_SAMPLE_TEXT_QUANTITATIVE_KEYS = {"name", "value", "minValue", "maxValue", "unitText"}
+_SAMPLE_TEXT_QUANTITATIVE_SIGNAL_KEYS = {"value", "minValue", "maxValue", "unitText"}
+
+
+def _clean_text(value):
+    if not isinstance(value, str):
+        return None
+    value = " ".join(value.split()).strip()
+    return value or None
+
+
+def _append_unique_text(parts, seen, value):
+    value = _clean_text(value)
+    if not value:
+        return
+    key = value.casefold()
+    if key in seen:
+        return
+    seen.add(key)
+    parts.append(value)
+
+
+def _humanize_key(key):
+    if not key:
+        return None
+    words = []
+    current = []
+    previous = ""
+    for char in str(key).replace("_", " "):
+        if char.isupper() and previous and previous not in " -" and not previous.isupper():
+            words.append("".join(current))
+            current = [char.lower()]
+        else:
+            current.append(char.lower())
+        previous = char
+    if current:
+        words.append("".join(current))
+    return " ".join(" ".join(words).split()) or None
+
+
+def _format_quantitative_value(payload):
+    if not isinstance(payload, dict):
+        return None
+    if not any(key in payload for key in _SAMPLE_TEXT_QUANTITATIVE_SIGNAL_KEYS):
+        return None
+
+    pieces = []
+    for key in ("name", "value", "minValue", "maxValue", "unitText"):
+        if key not in payload:
+            continue
+        value = payload[key]
+        if isinstance(value, (str, int, float)):
+            pieces.append(str(value))
+    return _clean_text(" ".join(pieces))
+
+
+def _iter_sample_text_values(payload, label=None, emitted=None):
+    if emitted is None:
+        emitted = {"count": 0}
+    if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
+        return
+
+    if isinstance(payload, list):
+        for item in payload:
+            yield from _iter_sample_text_values(item, label=label, emitted=emitted)
+            if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
+                return
+        return
+
+    if isinstance(payload, dict):
+        quantitative_value = _format_quantitative_value(payload)
+        if quantitative_value:
+            emitted["count"] += 1
+            yield f"{label}: {quantitative_value}" if label else quantitative_value
+            if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
+                return
+
+        for key, value in payload.items():
+            if key in _SAMPLE_TEXT_SKIP_KEYS:
+                continue
+            if quantitative_value and key in _SAMPLE_TEXT_QUANTITATIVE_KEYS:
+                continue
+            child_label = label if key in {"name", "value"} and label else _humanize_key(key)
+            yield from _iter_sample_text_values(value, label=child_label, emitted=emitted)
+            if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
+                return
+        return
+
+    if isinstance(payload, bool):
+        if label == "sample availability":
+            value = "sample available" if payload else "sample unavailable"
+        else:
+            value = f"{label}: {payload}" if label else str(payload)
+        emitted["count"] += 1
+        yield value
+        return
+
+    if isinstance(payload, (str, int, float)):
+        value = str(payload)
+        emitted["count"] += 1
+        yield f"{label}: {value}" if label and label != "name" else value
+
+
+def _append_sample_text(parts, seen, sample):
+    sample_parts = []
+    sample_seen = set()
+    for value in _iter_sample_text_values(sample):
+        _append_unique_text(sample_parts, sample_seen, value)
+
+    if not sample_parts:
+        return
+
+    # Include an explicit marker so natural-language queries such as
+    # "malaria with sample data" can associate Datasets with sample metadata.
+    _append_unique_text(parts, seen, "Dataset sample metadata")
+    for value in sample_parts:
+        _append_unique_text(parts, seen, value)
+
+
 def _build_text(source):
     parts = []
+    seen = set()
 
     def _append_name(payload):
         if isinstance(payload, list):
             for item in payload:
                 if isinstance(item, dict) and item.get("name"):
-                    parts.append(item["name"])
+                    _append_unique_text(parts, seen, item["name"])
                 elif isinstance(item, str):
-                    parts.append(item)
+                    _append_unique_text(parts, seen, item)
         elif isinstance(payload, dict) and payload.get("name"):
-            parts.append(payload["name"])
+            _append_unique_text(parts, seen, payload["name"])
         elif isinstance(payload, str):
-            parts.append(payload)
+            _append_unique_text(parts, seen, payload)
 
     _append_name(source.get("author"))
     _append_name(source.get("measurementTechnique"))
@@ -147,9 +278,11 @@ def _build_text(source):
                 _append_name(f.get("funder"))
 
     if name := source.get("name"):
-        parts.append(name)
+        _append_unique_text(parts, seen, name)
     if desc := source.get("description"):
-        parts.append(desc)
+        _append_unique_text(parts, seen, desc)
+
+    _append_sample_text(parts, seen, source.get("sample"))
 
     return "\n\n".join(parts).strip()
 
