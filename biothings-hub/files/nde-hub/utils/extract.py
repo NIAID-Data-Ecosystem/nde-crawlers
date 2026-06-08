@@ -800,7 +800,9 @@ def process_species(doc_list):
         (sp["originalName"].lower() if "originalName" in sp else sp["name"].lower()): sp for sp in formatted_species
     }
 
-    return insert_species(doc_list, species_mapping) if formatted_species else doc_list
+    if formatted_species:
+        insert_species(docs_to_standardize, species_mapping)
+    return doc_list
 
 
 def fetch_species_from_db():
