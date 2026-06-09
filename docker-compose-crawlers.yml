@@ -291,6 +291,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  usidnet-crawler:
+    build:
+      context: usidnet
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   vdj-crawler:
     build:
       context: vdj
