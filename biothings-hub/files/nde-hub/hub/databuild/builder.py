@@ -152,7 +152,7 @@ class NDEDataBuilder(builder.DataBuilder):
 
         Args:
             identifier_source_catalog (str): The name of the source identifier catalog to search (e.g., "Data Discovery Engine")
-            source_catalogs (list): A list of source catalogs to match against (e.g., ["NCBI GEO", "AccessClinicalData@NIAID"])
+            source_catalogs (list): A list of source catalogs to match against (e.g., ["NCBI GEO", "accessclinicaldata@NIAID"])
             prefer_matching_catalog_doc (bool): When True, keep matching source catalog fields authoritative and
                 merge identifier-source catalog provenance into that record.
 

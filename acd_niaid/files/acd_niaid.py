@@ -48,7 +48,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04401579",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -56,7 +56,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04492475",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -64,7 +64,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04640168",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
             ]
@@ -80,7 +80,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04280705",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -88,7 +88,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04492475",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -96,7 +96,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04640168",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
             ]
@@ -112,7 +112,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04280705",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -120,7 +120,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04401579",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -128,7 +128,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04640168",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
             ]
@@ -144,7 +144,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04280705",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -152,7 +152,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04401579",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
                 {
@@ -160,7 +160,7 @@ def parse():
                     "identifier": "accessclinicaldata_NCT04492475",
                     "hasPart": {"identifier": "ACTT"},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "AccessClinicalData@NIAID"},
+                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
                     "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
                 },
             ]
@@ -257,7 +257,7 @@ def parse():
         result["_id"] = "accessclinicaldata_" + primary_id.lower()
         dataset_url = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + primary_id
         result["url"] = dataset_url
-        result["includedInDataCatalog"] = {"name": "AccessClinicalData@NIAID", "archivedAt": dataset_url}
+        result["includedInDataCatalog"] = {"name": "accessclinicaldata@NIAID", "archivedAt": dataset_url}
         result["@type"] = "Dataset"
 
         # Remove any keys with None values.
