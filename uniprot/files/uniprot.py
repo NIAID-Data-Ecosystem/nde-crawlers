@@ -390,18 +390,67 @@ def _taxonomy_name(taxonomy: dict[str, Any]) -> str:
     return taxonomy.get("scientificName") or taxonomy.get("commonName") or str(taxonomy.get("taxonId"))
 
 
-def _species_term(taxonomy: dict[str, Any]) -> dict[str, Any]:
+def _classify_taxonomy(taxonomy: dict[str, Any]) -> str:
+    scientific_names = [
+        item.get("scientificName")
+        for item in taxonomy.get("lineage", [])
+        if item.get("scientificName")
+    ]
+
+    if "Deuterostomia" in scientific_names:
+        return "host"
+
+    if "Embryophyta" in scientific_names and not any(
+        parasite in scientific_names
+        for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
+    ):
+        return "host"
+
+    if "Arthropoda" in scientific_names:
+        if "Acari" in scientific_names:
+            if "Ixodida" in scientific_names:
+                return "host"
+            return "infectiousAgent"
+        return "host"
+
+    return "infectiousAgent"
+
+
+def _organism_term(taxonomy: dict[str, Any]) -> dict[str, Any]:
     taxon_id = taxonomy.get("taxonId")
+    taxon_id = str(taxon_id) if taxon_id is not None else None
+    name = _taxonomy_name(taxonomy)
     term = {
         "@type": "DefinedTerm",
-        "name": _taxonomy_name(taxonomy),
-        "identifier": f"taxonomy:{taxon_id}" if taxon_id else None,
-        "url": f"http://purl.uniprot.org/taxonomy/{taxon_id}" if taxon_id else None,
+        "identifier": taxon_id,
         "inDefinedTermSet": "UniProt",
+        "url": f"https://www.uniprot.org/taxonomy/{taxon_id}" if taxon_id else None,
+        "originalName": name,
+        "isCurated": False,
+        "name": name,
+        "displayName": name,
+        "classification": _classify_taxonomy(taxonomy),
     }
-    if taxonomy.get("commonName"):
-        term["alternateName"] = taxonomy.get("commonName")
+
+    alternative_names = []
+    if common_name := taxonomy.get("commonName"):
+        term["commonName"] = common_name
+        term["displayName"] = f"{common_name} | {name}"
+        alternative_names.append(common_name)
+
+    if other_names := taxonomy.get("otherNames"):
+        alternative_names.extend(other_names)
+
+    if alternative_names:
+        term["alternateName"] = list(dict.fromkeys(alternative_names))
+
     return _clean(term)
+
+
+def _organism_schema_field(organism: dict[str, Any]) -> str:
+    if organism.get("classification") == "infectiousAgent":
+        return "infectiousAgent"
+    return "species"
 
 
 def _catalog(url: str, release: dict[str, Optional[str]]) -> dict[str, Any]:
@@ -485,6 +534,7 @@ def _base_record(
     keywords: list[str],
     date_modified: Optional[str] = None,
 ) -> dict[str, Any]:
+    organism = _organism_term(taxonomy) if taxonomy else None
     record = {
         "_id": record_id,
         "@type": "DataCollection",
@@ -510,10 +560,9 @@ def _base_record(
         "topicCategory": copy.deepcopy(TOPIC_CATEGORY),
         "usageInfo": copy.deepcopy(USAGE_INFO),
         "variableMeasured": copy.deepcopy(VARIABLE_MEASURED),
-        "species": [_species_term(taxonomy)] if taxonomy else None,
         "date": date_modified or release.get("release_date") or _today(),
         "dateModified": date_modified or release.get("release_date") or _today(),
-        "version": release.get("release"),
+        # "version": release.get("release"),
         "isAccessibleForFree": True,
         "keywords": copy.deepcopy(keywords),
         "exampleOfWork": _example_of_work(about, query_url),
@@ -523,6 +572,8 @@ def _base_record(
             release=release,
         ),
     }
+    if organism:
+        record[_organism_schema_field(organism)] = [organism]
     return _clean(record)
 
 
