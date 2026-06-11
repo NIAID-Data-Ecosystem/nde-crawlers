@@ -94,6 +94,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  empiar-crawler:
+    build:
+      context: empiar
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   dataverse-crawler:
     build:
       context: dataverse

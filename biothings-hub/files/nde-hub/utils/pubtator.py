@@ -809,6 +809,13 @@ def process_section(section, cursor_dict, is_species_section=False):
 
         new_obj = lookup_item(original_name, cursor_dict)
         if new_obj:
+            if (
+                is_species_section
+                and original_obj.get("classification")
+                and not new_obj.get("classification")
+            ):
+                new_obj = new_obj.copy()
+                new_obj["classification"] = original_obj["classification"]
             # Check if the retrieved object should be filtered as well
             if is_species_section:
                 should_filter = should_filter_term(new_obj.get("name"),

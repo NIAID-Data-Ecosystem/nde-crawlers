@@ -14,6 +14,7 @@ class NDEDataBuilder(builder.DataBuilder):
             "massive",
             "gse_ncbi_geo",
             "lincs",
+            "empiar",
             "omicsdi",
             "immport",
             "immunespace",
@@ -22,7 +23,8 @@ class NDEDataBuilder(builder.DataBuilder):
         ]
         # Reverse list b/c sources are upserted so highest priority needs to be merged last
         for source in reversed(priority):
-            other_sources.append(other_sources.pop(other_sources.index(source)))
+            if source in other_sources:
+                other_sources.append(other_sources.pop(other_sources.index(source)))
         self.logger.info("This is the merge order: %s", other_sources)
         return other_sources
 
@@ -290,6 +292,23 @@ class NDEDataBuilder(builder.DataBuilder):
             delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
             self.logger.info(f"Deleted {delete_result.deleted_count} duplicate records")
 
+    def delete_unmerged_empiar_records(self):
+        """Remove direct EMPIAR records that did not merge with OMICS-DI."""
+        db = mongo.get_target_db()
+        collection_name = self.target_backend.target_name
+        collection = db[collection_name]
+
+        delete_result = collection.delete_many(
+            {
+                "includedInDataCatalog.name": "Electron Microscopy Public Image Archive",
+                "$nor": [{"includedInDataCatalog.name": "Omics Discovery Index (OmicsDI)"}],
+            }
+        )
+        self.logger.info(
+            "Deleted %d direct-only EMPIAR records that did not merge with OMICS-DI",
+            delete_result.deleted_count,
+        )
+
     def post_merge(self, source_names, batch_size, job_manager):
         duplicate = "zenodo"
         sources = ["dryad", "tycho"]
@@ -308,3 +327,6 @@ class NDEDataBuilder(builder.DataBuilder):
             ["BEI Resources"],
             prefer_matching_catalog_doc=True,
         )
+
+        if "empiar" in source_names:
+            self.delete_unmerged_empiar_records()
