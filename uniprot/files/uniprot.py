@@ -39,7 +39,7 @@ PAGE_SIZE = int(os.environ.get("UNIPROT_PAGE_SIZE", "500"))
 TAXONOMY_CHUNK_SIZE = int(os.environ.get("UNIPROT_TAXONOMY_CHUNK_SIZE", "100"))
 DEFAULT_PROTEOME_QUERY = os.environ.get(
     "UNIPROT_PROTEOME_QUERY",
-    "proteome_type:1",
+    "proteome_type:REFERENCE",
 )
 
 SOURCE_ORGANIZATION = {
@@ -702,6 +702,8 @@ def _collect_proteomes(
         )
     )
     logger.info("Collected %s UniProt proteomes", len(proteomes))
+    if not proteomes:
+        logger.warning("UniProt proteome query returned no records: %s", query)
     return proteomes
 
 
