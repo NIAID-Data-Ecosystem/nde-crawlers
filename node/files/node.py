@@ -178,6 +178,14 @@ def parse():
             for sample in get_samples(session, table_info, project_id):
                 parsed_sample = parse_sample(sample)
                 if parsed_sample:
+                    parsed_sample["isBasisFor"] = {
+                        "@type": "Dataset",
+                        "identifier": output.get("identifier"),
+                        "url": output.get("url"),
+                    }
+                    if output.get("name"):
+                        parsed_sample["isBasisFor"]["name"] = output["name"]
+
                     yield parsed_sample
 
                     s["itemListElement"].append(

@@ -340,6 +340,7 @@ def build_dataset_sample_objects(sample_collections):
     aggregate_data = {}
     collection_size_total = 0
     collection_size_found = False
+    linked_sample_record_count = len(valid_collections)
     EMPTY_VALUES = (None, "", [], {}, set())
     sample_list_context = {"parent_url": None}
 
@@ -694,7 +695,11 @@ def build_dataset_sample_objects(sample_collections):
         else:
             sample_collection["itemListElement"] = sorted(item_list_entries)
 
-    if sample_collection.get("itemListElement"):
+    if linked_sample_record_count:
+        # Match the Resource page, which displays the generated Sample records
+        # linked through isBasisFor rather than every raw source sample entry.
+        _set_number_of_items(linked_sample_record_count)
+    elif sample_collection.get("itemListElement"):
         _set_number_of_items(len(sample_collection["itemListElement"]))
     elif collection_size_found:
         _set_number_of_items(collection_size_total)
