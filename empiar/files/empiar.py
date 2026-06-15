@@ -830,7 +830,8 @@ def parse(ids: Iterable[str] | None = None):
                 output["pmids"] = ",".join(pmids)
         if languages:
             languages = _unique(languages)
-            output["inLanguage"] = languages[0] if len(languages) == 1 else languages
+            language_terms = [{"name": language} for language in languages]
+            output["inLanguage"] = language_terms[0] if len(language_terms) == 1 else language_terms
 
         fundings = []
         for grant in _as_list(record.get("grant_references")):
