@@ -67,6 +67,15 @@ def _coerce_species_names(value):
     yield str(value).strip()
 
 
+def _variable_measured_entry(value):
+    if value is None:
+        return None
+    name = str(value).strip()
+    if not name or name.casefold() == "unknown":
+        return None
+    return {"name": name}
+
+
 def parse(record, dataset_name, _id, url):
     output = {
         "@context": "http://schema.org/",
@@ -297,11 +306,13 @@ def parse(record, dataset_name, _id, url):
 
         if vm_names := additional.get("omics_type"):
             for vm_name in vm_names:
-                vm.append({"name": vm_name})
+                if vm_entry := _variable_measured_entry(vm_name):
+                    vm.append(vm_entry)
 
         if vm_names := additional.get("study_factor"):
             for vm_name in vm_names:
-                vm.append({"name": vm_name})
+                if vm_entry := _variable_measured_entry(vm_name):
+                    vm.append(vm_entry)
 
         for key in ["species", "Organism", "taxonomy"]:
             if species_names := additional.get(key):
