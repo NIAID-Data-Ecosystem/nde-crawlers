@@ -207,13 +207,42 @@ def find_age(text):
 def get_samples(session, table_info, project_id):
     if table_info.get("data") and table_info["data"].get("sapTables"):
         for sample_table in table_info["data"]["sapTables"]:
-            data_type = sample_table["type"]
-            sap_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=sample&dataType={data_type}&total=0&pageNum=1&pageSize=100&sortKey=sapNo&sortType=asc").json()
-            pages = sap_info["data"]["sapTableData"]["totalPages"]
+            data_type = sample_table.get("type")
+            if not data_type:
+                logger.warning(f"Skipping sample table with missing type for project {project_id}: {sample_table}")
+                continue
+
+            def get_sample_page(page):
+                response = session.get(
+                    "https://www.biosino.org/node/api/app/project/getExpAndSampleList",
+                    params={
+                        "projectNo": project_id,
+                        "type": "sample",
+                        "dataType": data_type,
+                        "total": 0,
+                        "pageNum": page,
+                        "pageSize": 100,
+                        "sortKey": "sapNo",
+                        "sortType": "asc",
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                sap_table_data = data.get("sapTableData") if isinstance(data, dict) else None
+                if not isinstance(sap_table_data, dict):
+                    raise RuntimeError(
+                        f"Unexpected NODE sample response for project {project_id}, "
+                        f"data type {data_type!r}, page {page}: {payload}"
+                    )
+                return sap_table_data
+
+            sap_table_data = get_sample_page(1)
+            pages = sap_table_data["totalPages"]
             for page in range(1, pages + 1):
                 logger.info(f"Crawling sample info page {page} of {pages} for project {project_id}")
-                sap_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=sample&dataType={data_type}&total=0&pageNum={page}&pageSize=100&sortKey=sapNo&sortType=asc").json()
-                for sap in sap_info["data"]["sapTableData"]["content"]:
+                sap_table_data = get_sample_page(page)
+                for sap in sap_table_data.get("content", []):
                     yield sap
 
 def parse_sample(sample):
@@ -525,8 +554,6 @@ def add_aggregate_element(aggregate_element, sample):
     for key in keys:
         if key in sample:
             insert_value(aggregate_element, key, sample[key])
-
-
 
 
 

@@ -205,12 +205,38 @@ def parse():
             if table_info.get("data") and table_info["data"].get("expTables"):
                 for exp_table in table_info["data"]["expTables"]:
                     data_type = exp_table["type"]
-                    exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum=1&pageSize=100&sortKey=expNo&sortType=asc").json()
-                    pages = exp_info["data"]["expTableData"]["totalPages"]
+
+                    def get_experiment_page(page):
+                        response = session.get(
+                            "https://www.biosino.org/node/api/app/project/getExpAndSampleList",
+                            params={
+                                "projectNo": project_id,
+                                "type": "experiment",
+                                "dataType": data_type,
+                                "total": 0,
+                                "pageNum": page,
+                                "pageSize": 100,
+                                "sortKey": "expNo",
+                                "sortType": "asc",
+                            },
+                        )
+                        response.raise_for_status()
+                        payload = response.json()
+                        data = payload.get("data") if isinstance(payload, dict) else None
+                        exp_table_data = data.get("expTableData") if isinstance(data, dict) else None
+                        if not isinstance(exp_table_data, dict):
+                            raise RuntimeError(
+                                f"Unexpected NODE experiment response for project {project_id}, "
+                                f"data type {data_type!r}, page {page}: {payload}"
+                            )
+                        return exp_table_data
+
+                    exp_table_data = get_experiment_page(1)
+                    pages = exp_table_data["totalPages"]
                     for page in range(1, pages + 1):
                         logger.info(f"Crawling experiment info page {page} of {pages} for project {project_id}")
-                        exp_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleList?projectNo={project_id}&type=experiment&dataType={data_type}&total=0&pageNum={page}&pageSize=100&sortKey=expNo&sortType=asc").json()
-                        for exp in exp_info["data"]["expTableData"]["content"]:
+                        exp_table_data = get_experiment_page(page)
+                        for exp in exp_table_data.get("content", []):
                             if date_created := exp.get("createDate"):
                                 try:
                                     date_created = dateutil.parser.parse(date_created).date().isoformat()
