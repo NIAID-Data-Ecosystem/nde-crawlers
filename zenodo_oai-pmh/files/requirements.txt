@@ -1,3 +1,0 @@
-orjson
-python-dateutil
-Sickle
