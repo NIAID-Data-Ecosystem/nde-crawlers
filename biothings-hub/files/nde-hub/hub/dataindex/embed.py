@@ -2,7 +2,8 @@
 
 Generates dense-vector embeddings for Dataset, ComputationalTool, and
 ResourceCatalog documents and writes them back to the same ES index.
-Model inference is delegated to a remote embed server (see embed_server.py).
+Embeddings are reused from a local SQLite cache when possible, and model
+inference is delegated to a remote embed server (see embed_server.py).
 
 Can be imported and called from the hub indexer via ``run_embeddings()``,
 or executed standalone::
@@ -10,10 +11,13 @@ or executed standalone::
     python embed.py
 """
 
+import hashlib
 import logging
 import os
 import re
+import sqlite3
 import time
+from array import array
 
 import requests
 from elasticsearch import Elasticsearch, helpers
@@ -31,6 +35,17 @@ ES_REQUEST_TIMEOUT = int(os.getenv("ES_REQUEST_TIMEOUT", "120"))
 
 EMBED_SERVER_URL = os.getenv("EMBED_SERVER_URL", "http://su10:8485").rstrip("/")
 EMBED_REQUEST_TIMEOUT = int(os.getenv("EMBED_REQUEST_TIMEOUT", "300"))
+EMBED_CACHE_INDEX = os.getenv("EMBED_CACHE_INDEX", "").strip()
+EMBED_CACHE_DB_PATH = os.getenv(
+    "EMBED_CACHE_DB_PATH",
+    "/data/nde-hub/cache/embeddings/embedding_cache.db",
+).strip()
+# Bump these when the remote model/config or _build_text() semantics change.
+EMBED_MODEL_VERSION = os.getenv(
+    "EMBED_MODEL_VERSION",
+    "ibm-granite/granite-embedding-125m-english;normalize=true",
+).strip()
+EMBED_TEXT_VERSION = os.getenv("EMBED_TEXT_VERSION", "sample-summary-v1").strip()
 
 # ── model configs ────────────────────────────────────────────────────────────
 MODEL_CONFIGS = {
@@ -38,6 +53,8 @@ MODEL_CONFIGS = {
         "field_name": "ibmGraniteEmbedding",
         "dims": 768,
         "index_options": {"type": "int8_hnsw"},
+        "model_version": EMBED_MODEL_VERSION,
+        "text_version": EMBED_TEXT_VERSION,
     },
 }
 
@@ -117,6 +134,181 @@ def _add_embedding_field(es, index, field_name, dims, index_options=None):
         es.indices.put_mapping(index=index, body={"properties": {field_name: vector_props}})
     finally:
         _field_mapping_cache.pop(index, None)
+
+
+def _add_embedding_metadata_fields(es, index, field_names):
+    mapping = _field_mapping_cache.get(index)
+    if mapping is None:
+        mapping = es.indices.get_mapping(index=index)
+        _field_mapping_cache[index] = mapping
+
+    properties = mapping.get(index, {}).get("mappings", {}).get("properties", {})
+    missing = {
+        field_name: {"type": "keyword"}
+        for field_name in field_names
+        if field_name not in properties
+    }
+    if not missing:
+        return
+
+    try:
+        es.indices.put_mapping(index=index, body={"properties": missing})
+    finally:
+        _field_mapping_cache.pop(index, None)
+
+
+def _embedding_metadata_fields(target_field):
+    return {
+        "hash": f"{target_field}TextHash",
+        "model": f"{target_field}Model",
+        "text_version": f"{target_field}TextVersion",
+    }
+
+
+def _embedding_text_hash(model_name, model_version, text_version, text):
+    payload = "\n".join(
+        [
+            f"model={model_name}",
+            f"model_version={model_version}",
+            f"text_version={text_version}",
+            text,
+        ]
+    )
+    return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _serialize_vector(vector):
+    return array("f", (float(value) for value in vector)).tobytes()
+
+
+def _deserialize_vector(payload, dims):
+    vector = array("f")
+    vector.frombytes(payload)
+    if len(vector) != dims:
+        return None
+    return list(vector)
+
+
+def _normalize_vector(vector, dims):
+    if isinstance(vector, (str, bytes, dict)):
+        return None
+    try:
+        normalized = [float(value) for value in vector]
+    except (TypeError, ValueError):
+        return None
+    if len(normalized) != dims:
+        return None
+    return normalized
+
+
+def _open_embedding_cache(db_path, log):
+    db_path = (db_path or "").strip()
+    if db_path.lower() in {"", "0", "false", "off", "none"}:
+        return None
+
+    try:
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
+        conn = sqlite3.connect(db_path, timeout=60)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS embedding_cache (
+                text_hash TEXT PRIMARY KEY,
+                model_name TEXT NOT NULL,
+                model_version TEXT NOT NULL,
+                text_version TEXT NOT NULL,
+                dims INTEGER NOT NULL,
+                vector BLOB NOT NULL,
+                source_doc_id TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )"""
+        )
+        conn.commit()
+        log.info("Embedding SQLite cache enabled at '%s'", db_path)
+        return conn
+    except Exception:
+        log.exception("Could not open embedding SQLite cache at '%s'; continuing without it", db_path)
+        return None
+
+
+def _lookup_cached_embeddings(conn, text_hashes, dims):
+    if not conn or not text_hashes:
+        return {}
+
+    unique_hashes = list(dict.fromkeys(text_hashes))
+    placeholders = ",".join("?" for _ in unique_hashes)
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT text_hash, dims, vector FROM embedding_cache WHERE text_hash IN ({placeholders})",
+        unique_hashes,
+    )
+
+    cache = {}
+    for text_hash, cached_dims, payload in cursor.fetchall():
+        if cached_dims != dims:
+            continue
+        vector = _deserialize_vector(payload, dims)
+        if vector is not None:
+            cache[text_hash] = vector
+    return cache
+
+
+def _store_cached_embeddings(conn, rows, model_name, model_version, text_version, dims, log=None):
+    if not conn or not rows:
+        return True
+
+    now = int(time.time())
+    deduped_rows = list({row["text_hash"]: row for row in rows}.values())
+    try:
+        payloads = [
+            (
+                row["text_hash"],
+                model_name,
+                model_version,
+                text_version,
+                dims,
+                _serialize_vector(row["vector"]),
+                row.get("doc_id"),
+                now,
+                now,
+            )
+            for row in deduped_rows
+        ]
+        conn.executemany(
+            """INSERT INTO embedding_cache (
+                text_hash,
+                model_name,
+                model_version,
+                text_version,
+                dims,
+                vector,
+                source_doc_id,
+                created_at,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(text_hash) DO UPDATE SET
+                model_name = excluded.model_name,
+                model_version = excluded.model_version,
+                text_version = excluded.text_version,
+                dims = excluded.dims,
+                vector = excluded.vector,
+                source_doc_id = excluded.source_doc_id,
+                updated_at = excluded.updated_at""",
+            payloads,
+        )
+        conn.commit()
+        return True
+    except Exception:
+        (log or logger).exception("Embedding SQLite cache store failed; continuing without local cache")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
 
 
 # ── text building ────────────────────────────────────────────────────────────
@@ -454,7 +646,7 @@ def _eta(processed, total, start):
 
 
 # ── main entry point ─────────────────────────────────────────────────────────
-def run_embeddings(es_hosts, index_name, log=None):
+def run_embeddings(es_hosts, index_name, cache_index_name=None, log=None):
     """Generate and write embeddings for all applicable docs in *index_name*.
 
     Parameters
@@ -463,105 +655,471 @@ def run_embeddings(es_hosts, index_name, log=None):
         Elasticsearch host URL(s).
     index_name : str
         Target index name.
+    cache_index_name : str, optional
+        Previous index/cache index to reuse embeddings from when text hashes match.
     log : logging.Logger, optional
         Logger instance; falls back to the module logger.
     """
+    if log is None and cache_index_name is not None and not isinstance(cache_index_name, str):
+        log = cache_index_name
+        cache_index_name = None
+
     log = log or logger
     es = _make_es_client(es_hosts)
+    sqlite_cache = _open_embedding_cache(EMBED_CACHE_DB_PATH, log)
+    cache_index_name = (cache_index_name or EMBED_CACHE_INDEX or "").strip() or None
+    if cache_index_name == index_name:
+        log.warning("Ignoring embedding cache index '%s' because it matches target index", cache_index_name)
+        cache_index_name = None
 
-    for model_name, model_info in MODEL_CONFIGS.items():
-        target_field = model_info["field_name"]
-        log.info("=== Embedding model: %s  field: %s ===", model_name, target_field)
+    try:
+        for model_name, model_info in MODEL_CONFIGS.items():
+            sqlite_cache = _run_model_embeddings(
+                es,
+                index_name,
+                model_name,
+                model_info,
+                sqlite_cache,
+                cache_index_name,
+                log,
+            )
+    finally:
+        if sqlite_cache:
+            sqlite_cache.close()
 
-        _add_embedding_field(
-            es,
-            index_name,
+
+def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, cache_index_name, log):
+    target_field = model_info["field_name"]
+    metadata_fields = _embedding_metadata_fields(target_field)
+    model_version = model_info.get("model_version") or model_name
+    text_version = model_info.get("text_version") or "default"
+    dims = model_info["dims"]
+    log.info("=== Embedding model: %s  field: %s ===", model_name, target_field)
+
+    _add_embedding_field(
+        es,
+        index_name,
+        target_field,
+        dims,
+        index_options=model_info.get("index_options"),
+    )
+    _add_embedding_metadata_fields(es, index_name, metadata_fields.values())
+
+    # Ensure all recently-indexed docs are visible before querying.
+    es.indices.refresh(index=index_name)
+    active_cache_index = None
+    if cache_index_name:
+        if es.indices.exists(index=cache_index_name):
+            active_cache_index = cache_index_name
+            log.info("Embedding ES cache enabled for '%s' from '%s'", target_field, active_cache_index)
+        else:
+            log.warning("Embedding ES cache index '%s' does not exist; all misses will be embedded", cache_index_name)
+
+    update_filter = {
+        "bool": {
+            "filter": [{"terms": {"@type": DOC_TYPES}}],
+            "should": [
+                {"bool": {"must_not": [{"exists": {"field": target_field}}]}},
+                {"bool": {"must_not": [{"exists": {"field": metadata_fields["hash"]}}]}},
+                {"bool": {"must_not": [{"term": {metadata_fields["model"]: model_version}}]}},
+                {"bool": {"must_not": [{"term": {metadata_fields["text_version"]: text_version}}]}},
+            ],
+            "minimum_should_match": 1,
+        }
+    }
+    current_filter = {
+        "bool": {
+            "filter": [
+                {"terms": {"@type": DOC_TYPES}},
+                {"exists": {"field": target_field}},
+                {"exists": {"field": metadata_fields["hash"]}},
+                {"term": {metadata_fields["model"]: model_version}},
+                {"term": {metadata_fields["text_version"]: text_version}},
+            ],
+        }
+    }
+    update_scan_query = {
+        "_source": {"excludes": [target_field]},
+        "query": update_filter,
+    }
+    current_scan_query = {
+        "_source": {"excludes": [target_field]},
+        "query": current_filter,
+    }
+    update_total = es.count(index=index_name, body={"query": update_filter}).get("count", 0)
+    current_total = es.count(index=index_name, body={"query": current_filter}).get("count", 0)
+    total = update_total + current_total
+    if total == 0:
+        log.info(
+            "No documents need '%s' embedding checks (%s / %s). Skipping.",
             target_field,
-            model_info["dims"],
-            index_options=model_info.get("index_options"),
+            model_version,
+            text_version,
+        )
+        return sqlite_cache
+    log.info(
+        "Checking %d documents for '%s' (%d current candidates, %d missing/stale metadata)",
+        total,
+        target_field,
+        current_total,
+        update_total,
+    )
+
+    embedded = 0
+    reused = 0
+    sqlite_reused = 0
+    es_reused = 0
+    cache_miss = 0
+    skip_count = 0
+    unchanged = 0
+    cleared = 0
+    checked = 0
+    processed = 0
+    cache_batch: list[dict] = []
+    embed_batch: list[dict] = []
+    bulk_actions: list[dict] = []
+    seen_doc_ids = set()
+    start_time = time.time()
+
+    def _embedding_update_doc(vector, text_hash):
+        return {
+            target_field: vector,
+            metadata_fields["hash"]: text_hash,
+            metadata_fields["model"]: model_version,
+            metadata_fields["text_version"]: text_version,
+        }
+
+    def _log_progress():
+        log.info(
+            "Checked %d/%d (%d updated: %d embedded, %d reused, %d cleared; %d unchanged; ETA %s)",
+            checked,
+            total,
+            processed,
+            embedded,
+            reused,
+            cleared,
+            unchanged,
+            _eta(checked, total, start_time),
         )
 
-        # Ensure all recently-indexed docs are visible before querying.
-        es.indices.refresh(index=index_name)
+    def _flush_bulk():
+        nonlocal bulk_actions
+        if bulk_actions:
+            helpers.bulk(es, bulk_actions, stats_only=True, request_timeout=120)
+            bulk_actions = []
 
-        query = {
+    def _disable_sqlite_cache():
+        nonlocal sqlite_cache
+        conn = sqlite_cache
+        sqlite_cache = None
+        if not conn:
+            return
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    def _reuse_embedding(payload, vector, source):
+        nonlocal es_reused, processed, reused, sqlite_reused
+        bulk_actions.append(
+            {
+                "_op_type": "update",
+                "_index": index_name,
+                "_id": payload["doc_id"],
+                "doc": _embedding_update_doc(vector, payload["text_hash"]),
+                "doc_as_upsert": True,
+            }
+        )
+        reused += 1
+        processed += 1
+        if source == "sqlite":
+            sqlite_reused += 1
+        elif source == "es":
+            es_reused += 1
+        if processed % 1000 == 0:
+            _log_progress()
+        if len(bulk_actions) >= BULK_UPDATE_SIZE:
+            _flush_bulk()
+
+    def _clear_embedding(doc_id):
+        nonlocal cleared, processed
+        bulk_actions.append(
+            {
+                "_op_type": "update",
+                "_index": index_name,
+                "_id": doc_id,
+                "script": {
+                    "source": "for (field in params.fields) { ctx._source.remove(field); }",
+                    "params": {"fields": [target_field, *metadata_fields.values()]},
+                },
+            }
+        )
+        cleared += 1
+        processed += 1
+        if processed % 1000 == 0:
+            _log_progress()
+        if len(bulk_actions) >= BULK_UPDATE_SIZE:
+            _flush_bulk()
+
+    def _flush_embeds():
+        nonlocal embed_batch, embedded, processed, sqlite_cache
+        if not embed_batch:
+            return
+
+        unique_payloads = list({item["text_hash"]: item for item in embed_batch}.values())
+        texts = [item["text"] for item in unique_payloads]
+        vectors = _remote_embed(texts)
+        if len(vectors) != len(unique_payloads):
+            raise RuntimeError(
+                f"Embedding server returned {len(vectors)} vectors for {len(unique_payloads)} texts"
+            )
+
+        vectors_by_hash = {}
+        for payload, vec in zip(unique_payloads, vectors):
+            normalized = _normalize_vector(vec, dims)
+            if normalized is None:
+                raise RuntimeError(
+                    f"Embedding server returned an invalid vector for document {payload['doc_id']!r}"
+                )
+            vectors_by_hash[payload["text_hash"]] = normalized
+
+        cache_rows = []
+        for payload in embed_batch:
+            vec = vectors_by_hash[payload["text_hash"]]
+            bulk_actions.append(
+                {
+                    "_op_type": "update",
+                    "_index": index_name,
+                    "_id": payload["doc_id"],
+                    "doc": _embedding_update_doc(vec, payload["text_hash"]),
+                    "doc_as_upsert": True,
+                }
+            )
+            cache_rows.append(
+                {
+                    "doc_id": payload["doc_id"],
+                    "text_hash": payload["text_hash"],
+                    "vector": vec,
+                }
+            )
+            embedded += 1
+            processed += 1
+            if processed % 1000 == 0:
+                _log_progress()
+            if len(bulk_actions) >= BULK_UPDATE_SIZE:
+                _flush_bulk()
+        if sqlite_cache and not _store_cached_embeddings(
+            sqlite_cache,
+            cache_rows,
+            model_name,
+            model_version,
+            text_version,
+            dims,
+            log,
+        ):
+            _disable_sqlite_cache()
+        embed_batch = []
+
+    def _append_to_embed_batch(payload):
+        embed_batch.append(payload)
+        if len(embed_batch) >= EMBED_BATCH_SIZE:
+            _flush_embeds()
+
+    def _try_es_cache(payloads):
+        nonlocal active_cache_index, cache_miss, sqlite_cache
+        if not payloads:
+            return
+
+        if not active_cache_index:
+            for payload in payloads:
+                cache_miss += 1
+                _append_to_embed_batch(payload)
+            return
+
+        unique_hashes = list(dict.fromkeys(payload["text_hash"] for payload in payloads))
+        source_fields = [
+            target_field,
+            metadata_fields["hash"],
+            metadata_fields["model"],
+            metadata_fields["text_version"],
+        ]
+        body = {
+            "_source": source_fields,
+            "size": len(unique_hashes),
             "query": {
                 "bool": {
-                    "filter": [{"terms": {"@type": DOC_TYPES}}],
-                    "must_not": [{"exists": {"field": target_field}}],
+                    "filter": [
+                        {"terms": {metadata_fields["hash"]: unique_hashes}},
+                        {"term": {metadata_fields["model"]: model_version}},
+                        {"term": {metadata_fields["text_version"]: text_version}},
+                        {"exists": {"field": target_field}},
+                    ]
                 }
-            }
+            },
+            "collapse": {"field": metadata_fields["hash"]},
         }
-        total = es.count(index=index_name, body=query).get("count", 0)
-        if total == 0:
-            log.info("All documents already have field '%s'. Skipping.", target_field)
-            continue
-        log.info("Found %d documents missing '%s'", total, target_field)
+        try:
+            cache_res = es.search(
+                index=active_cache_index,
+                body=body,
+                request_timeout=ES_REQUEST_TIMEOUT,
+            )
+        except Exception:
+            log.exception(
+                "Embedding ES cache lookup failed for '%s'; disabling ES cache for this run",
+                active_cache_index,
+            )
+            active_cache_index = None
+            for payload in payloads:
+                cache_miss += 1
+                _append_to_embed_batch(payload)
+            return
 
-        embedded = 0
-        skip_count = 0
-        embed_batch: list[dict] = []
-        bulk_actions: list[dict] = []
-        start_time = time.time()
+        vectors_by_hash = {}
+        for cache_doc in cache_res.get("hits", {}).get("hits", []):
+            cache_source = cache_doc.get("_source") or {}
+            text_hash = cache_source.get(metadata_fields["hash"])
+            cached_vector = _normalize_vector(cache_source.get(target_field), dims)
+            if (
+                text_hash in unique_hashes
+                and cached_vector is not None
+                and cache_source.get(metadata_fields["model"]) == model_version
+                and cache_source.get(metadata_fields["text_version"]) == text_version
+            ):
+                vectors_by_hash[text_hash] = cached_vector
 
-        def _flush_bulk():
-            nonlocal bulk_actions
-            if bulk_actions:
-                helpers.bulk(es, bulk_actions, stats_only=True, request_timeout=120)
-                bulk_actions = []
-
-        def _flush_embeds():
-            nonlocal embed_batch, embedded
-            if not embed_batch:
-                return
-            texts = [item["text"] for item in embed_batch]
-            vectors = _remote_embed(texts)
-            for payload, vec in zip(embed_batch, vectors):
-                bulk_actions.append(
+        sqlite_cache_rows = []
+        for payload in payloads:
+            cached_vector = vectors_by_hash.get(payload["text_hash"])
+            if cached_vector is not None:
+                _reuse_embedding(payload, cached_vector, "es")
+                sqlite_cache_rows.append(
                     {
-                        "_op_type": "update",
-                        "_index": index_name,
-                        "_id": payload["doc_id"],
-                        "doc": {target_field: vec},
-                        "doc_as_upsert": True,
+                        "doc_id": payload["doc_id"],
+                        "text_hash": payload["text_hash"],
+                        "vector": cached_vector,
                     }
                 )
-                embedded += 1
-                if embedded % 1000 == 0:
-                    log.info(
-                        "Embedded %d/%d (ETA %s)", embedded, total, _eta(embedded, total, start_time)
-                    )
-                if len(bulk_actions) >= BULK_UPDATE_SIZE:
-                    _flush_bulk()
-            embed_batch = []
+            else:
+                cache_miss += 1
+                _append_to_embed_batch(payload)
 
-        scan_count = 0
-        for doc in helpers.scan(es, query=query, index=index_name, size=SCAN_BATCH_SIZE):
-            scan_count += 1
-            source = doc.get("_source", {})
-            if target_field in source:
-                skip_count += 1
+        if sqlite_cache and not _store_cached_embeddings(
+            sqlite_cache,
+            sqlite_cache_rows,
+            model_name,
+            model_version,
+            text_version,
+            dims,
+            log,
+        ):
+            _disable_sqlite_cache()
+
+    def _flush_cache_lookups():
+        nonlocal cache_batch, sqlite_cache
+        if not cache_batch:
+            return
+
+        remaining = cache_batch
+        if sqlite_cache:
+            try:
+                local_hits = _lookup_cached_embeddings(
+                    sqlite_cache,
+                    [payload["text_hash"] for payload in cache_batch],
+                    dims,
+                )
+            except Exception:
+                log.exception("Embedding SQLite cache lookup failed; disabling SQLite cache for this run")
+                _disable_sqlite_cache()
+                local_hits = {}
+
+            if local_hits:
+                remaining = []
+                for payload in cache_batch:
+                    cached_vector = local_hits.get(payload["text_hash"])
+                    if cached_vector is not None:
+                        _reuse_embedding(payload, cached_vector, "sqlite")
+                    else:
+                        remaining.append(payload)
+
+        _try_es_cache(remaining)
+        cache_batch = []
+
+    def _scan_for_updates(scan_query, verify_current_hash):
+        nonlocal checked, skip_count, unchanged
+        for doc in helpers.scan(es, query=scan_query, index=index_name, size=SCAN_BATCH_SIZE):
+            doc_id = doc["_id"]
+            if doc_id in seen_doc_ids:
                 continue
+            seen_doc_ids.add(doc_id)
+            checked += 1
+            source = doc.get("_source", {})
 
             text = _build_text(source)
             if not text:
+                skip_count += 1
+                _clear_embedding(doc_id)
+                if checked % 10000 == 0:
+                    _log_progress()
                 continue
 
-            embed_batch.append({"doc_id": doc["_id"], "text": text})
-            if len(embed_batch) >= EMBED_BATCH_SIZE:
-                _flush_embeds()
+            text_hash = _embedding_text_hash(
+                model_name,
+                model_version,
+                text_version,
+                text,
+            )
+            if verify_current_hash and source.get(metadata_fields["hash"]) == text_hash:
+                unchanged += 1
+                if checked % 10000 == 0:
+                    _log_progress()
+                continue
 
-            if scan_count % 10000 == 0:
-                log.info("Scanned %d/%d (ETA %s)", scan_count, total, _eta(scan_count, total, start_time))
+            cache_batch.append(
+                {
+                    "doc_id": doc_id,
+                    "text": text,
+                    "text_hash": text_hash,
+                }
+            )
+            if len(cache_batch) >= EMBED_BATCH_SIZE:
+                _flush_cache_lookups()
 
-        _flush_embeds()
-        _flush_bulk()
-        elapsed = _fmt_duration(time.time() - start_time)
-        log.info(
-            "Finished %s: %d/%d embeddings added, %d skipped (elapsed %s)",
-            target_field,
-            embedded,
-            total,
-            skip_count,
-            elapsed,
-        )
+            if checked % 10000 == 0:
+                _log_progress()
+
+    _scan_for_updates(current_scan_query, verify_current_hash=True)
+    _scan_for_updates(update_scan_query, verify_current_hash=False)
+
+    _flush_cache_lookups()
+    _flush_embeds()
+    _flush_bulk()
+    elapsed = _fmt_duration(time.time() - start_time)
+    log.info(
+        (
+            "Finished %s: %d/%d checked, %d updated (%d embedded, %d reused, %d cleared), "
+            "%d unchanged, %d cache misses, %d skipped empty text (elapsed %s)"
+        ),
+        target_field,
+        checked,
+        total,
+        processed,
+        embedded,
+        reused,
+        cleared,
+        unchanged,
+        cache_miss,
+        skip_count,
+        elapsed,
+    )
+    log.info(
+        "Cache reuse breakdown for %s: %d SQLite, %d ES",
+        target_field,
+        sqlite_reused,
+        es_reused,
+    )
+    return sqlite_cache
