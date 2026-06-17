@@ -12,6 +12,7 @@ or executed standalone::
 
 import logging
 import os
+import re
 import time
 
 import requests
@@ -119,19 +120,45 @@ def _add_embedding_field(es, index, field_name, dims, index_options=None):
 
 
 # ── text building ────────────────────────────────────────────────────────────
-_SAMPLE_TEXT_MAX_VALUES = 200
+_SAMPLE_TEXT_MAX_FIELD_VALUES = 6
+_SAMPLE_TEXT_MAX_TOTAL_VALUES = 40
 _SAMPLE_TEXT_SKIP_KEYS = {
     "@context",
     "@id",
     "@type",
+    "_id",
+    "additionalIdentifier",
     "identifier",
     "inDefinedTermSet",
+    "sameAs",
     "termCode",
     "unitCode",
     "url",
 }
+_SAMPLE_TEXT_REFERENCE_KEYS = {"itemListElement"}
 _SAMPLE_TEXT_QUANTITATIVE_KEYS = {"name", "value", "minValue", "maxValue", "unitText"}
 _SAMPLE_TEXT_QUANTITATIVE_SIGNAL_KEYS = {"value", "minValue", "maxValue", "unitText"}
+_SAMPLE_TEXT_FIELD_LABELS = {
+    "additionalType": ("sample category", "Sample categories"),
+    "associatedGenotype": ("associated genotype", "Associated genotypes"),
+    "associatedPhenotype": ("associated phenotype", "Associated phenotypes"),
+    "anatomicalStructure": ("anatomical structure", "Anatomical structures"),
+    "anatomicalSystem": ("anatomical system", "Anatomical systems"),
+    "cellType": ("cell type", "Cell types"),
+    "developmentalStage": ("developmental stage", "Developmental stages"),
+    "experimentalPurpose": ("experimental purpose", "Experimental purposes"),
+    "sampleAvailability": ("sample availability", "Sample availability"),
+    "sampleProcess": ("sample process", "Sample processes"),
+    "sampleQuantity": ("sample quantity", "Sample quantities"),
+    "sampleState": ("sample state", "Sample states"),
+    "sampleStorageTemperature": ("sample storage temperature", "Sample storage temperatures"),
+    "sampleType": ("sample type", "Sample types"),
+    "sex": ("sex", "Sex values"),
+}
+_SAMPLE_TEXT_ACCESSION_RE = re.compile(
+    r"^(SAMN|SRS|SRX|SRR|ERS|ERX|ERR|DRS|DRX|DRR|GSM|GSE)[A-Z0-9_.-]*\d$",
+    re.IGNORECASE,
+)
 
 
 def _clean_text(value):
@@ -186,67 +213,186 @@ def _format_quantitative_value(payload):
     return _clean_text(" ".join(pieces))
 
 
-def _iter_sample_text_values(payload, label=None, emitted=None):
-    if emitted is None:
-        emitted = {"count": 0}
-    if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
+def _scalar_to_text(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return _clean_text(str(value))
+    return None
+
+
+def _looks_like_low_semantic_identifier(value):
+    value = _clean_text(value)
+    if not value:
+        return True
+    if value.lower().startswith(("http://", "https://")):
+        return True
+    if _SAMPLE_TEXT_ACCESSION_RE.match(value):
+        return True
+
+    compact = value.replace("_", "").replace("-", "").replace(".", "")
+    if not compact.isalnum():
+        return False
+    alpha_count = sum(char.isalpha() for char in compact)
+    digit_count = sum(char.isdigit() for char in compact)
+    has_id_separator = any(separator in value for separator in ("_", "-", "."))
+
+    # Keep biological terms like H1N1 or COVID-19, but drop accession-like
+    # strings such as 1010108_1-Pm_HC1 that otherwise dominate the embedding.
+    if len(value) >= 12 and " " not in value and has_id_separator and digit_count:
+        return True
+    return len(value) >= 8 and has_id_separator and digit_count > alpha_count
+
+
+def _append_sample_summary_value(values_by_label, value_label, value, emitted):
+    if emitted["count"] >= _SAMPLE_TEXT_MAX_TOTAL_VALUES:
         return
 
+    value = _scalar_to_text(value)
+    if not value or _looks_like_low_semantic_identifier(value):
+        return
+
+    values = values_by_label.setdefault(value_label, [])
+    if len(values) >= _SAMPLE_TEXT_MAX_FIELD_VALUES:
+        return
+
+    key = value.casefold()
+    if key in {existing.casefold() for existing in values}:
+        return
+
+    values.append(value)
+    emitted["count"] += 1
+
+
+def _iter_sample_field_values(payload, field_key):
     if isinstance(payload, list):
         for item in payload:
-            yield from _iter_sample_text_values(item, label=label, emitted=emitted)
-            if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
-                return
+            yield from _iter_sample_field_values(item, field_key)
         return
 
     if isinstance(payload, dict):
         quantitative_value = _format_quantitative_value(payload)
         if quantitative_value:
-            emitted["count"] += 1
-            yield f"{label}: {quantitative_value}" if label else quantitative_value
-            if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
-                return
+            yield quantitative_value
+            return
+
+        for preferred_key in ("name", "value"):
+            value = _scalar_to_text(payload.get(preferred_key))
+            if value:
+                yield value
 
         for key, value in payload.items():
-            if key in _SAMPLE_TEXT_SKIP_KEYS:
+            if key in _SAMPLE_TEXT_SKIP_KEYS or key in _SAMPLE_TEXT_REFERENCE_KEYS:
                 continue
-            if quantitative_value and key in _SAMPLE_TEXT_QUANTITATIVE_KEYS:
+            if key in _SAMPLE_TEXT_QUANTITATIVE_KEYS:
                 continue
-            child_label = label if key in {"name", "value"} and label else _humanize_key(key)
-            yield from _iter_sample_text_values(value, label=child_label, emitted=emitted)
-            if emitted["count"] >= _SAMPLE_TEXT_MAX_VALUES:
-                return
+            yield from _iter_sample_field_values(value, field_key)
         return
 
     if isinstance(payload, bool):
-        if label == "sample availability":
-            value = "sample available" if payload else "sample unavailable"
+        if field_key == "sampleAvailability":
+            yield "sample available" if payload else "sample unavailable"
         else:
-            value = f"{label}: {payload}" if label else str(payload)
-        emitted["count"] += 1
-        yield value
+            yield "true" if payload else "false"
         return
 
-    if isinstance(payload, (str, int, float)):
-        value = str(payload)
-        emitted["count"] += 1
-        yield f"{label}: {value}" if label and label != "name" else value
+    value = _scalar_to_text(payload)
+    if value:
+        yield value
+
+
+def _extract_sample_count(sample):
+    if isinstance(sample, list):
+        return len(sample) or None
+    if not isinstance(sample, dict):
+        return None
+
+    number_of_items = sample.get("numberOfItems")
+    if isinstance(number_of_items, dict):
+        value = number_of_items.get("value")
+    else:
+        value = number_of_items
+
+    if isinstance(value, (int, float)):
+        return int(value) if float(value).is_integer() else value
+    if isinstance(value, str):
+        value = value.strip()
+        if value.isdigit():
+            return int(value)
+
+    item_list = sample.get("itemListElement")
+    if isinstance(item_list, list) and item_list:
+        return len(item_list)
+    return None
+
+
+def _collect_sample_summary(payload, field_labels, values_by_label, emitted):
+    if isinstance(payload, list):
+        for item in payload:
+            _collect_sample_summary(item, field_labels, values_by_label, emitted)
+        return
+
+    if not isinstance(payload, dict):
+        return
+
+    for key, value in payload.items():
+        if key in _SAMPLE_TEXT_SKIP_KEYS or key in _SAMPLE_TEXT_REFERENCE_KEYS:
+            continue
+
+        label_info = _SAMPLE_TEXT_FIELD_LABELS.get(key)
+        if label_info:
+            field_label, value_label = label_info
+            field_labels.add(field_label)
+            for field_value in _iter_sample_field_values(value, key):
+                _append_sample_summary_value(
+                    values_by_label,
+                    value_label,
+                    field_value,
+                    emitted,
+                )
+        else:
+            _collect_sample_summary(value, field_labels, values_by_label, emitted)
 
 
 def _append_sample_text(parts, seen, sample):
-    sample_parts = []
-    sample_seen = set()
-    for value in _iter_sample_text_values(sample):
-        _append_unique_text(sample_parts, sample_seen, value)
-
-    if not sample_parts:
+    if not sample:
         return
 
-    # Include an explicit marker so natural-language queries such as
-    # "malaria with sample data" can associate Datasets with sample metadata.
-    _append_unique_text(parts, seen, "Dataset sample metadata")
-    for value in sample_parts:
-        _append_unique_text(parts, seen, value)
+    field_labels = set()
+    values_by_label = {}
+    emitted = {"count": 0}
+    _collect_sample_summary(sample, field_labels, values_by_label, emitted)
+
+    # Keep the signal compact: say that sample metadata exists, summarize the
+    # useful sample dimensions, and avoid accession/reference dumps.
+    _append_unique_text(parts, seen, "Dataset has sample metadata")
+    _append_unique_text(parts, seen, "Dataset includes sample-level metadata")
+
+    sample_count = _extract_sample_count(sample)
+    if sample_count:
+        _append_unique_text(parts, seen, f"Dataset includes {sample_count} samples")
+
+    ordered_field_labels = [
+        field_label
+        for field_label, _value_label in _SAMPLE_TEXT_FIELD_LABELS.values()
+        if field_label in field_labels
+    ]
+    if ordered_field_labels:
+        _append_unique_text(
+            parts,
+            seen,
+            "Sample metadata includes " + ", ".join(ordered_field_labels),
+        )
+
+    for _field_label, value_label in _SAMPLE_TEXT_FIELD_LABELS.values():
+        values = values_by_label.get(value_label)
+        if values:
+            verb = "includes" if value_label == "Sample availability" else "include"
+            _append_unique_text(
+                parts,
+                seen,
+                f"{value_label} {verb} {', '.join(values)}",
+            )
 
 
 def _build_text(source):
@@ -279,10 +425,11 @@ def _build_text(source):
 
     if name := source.get("name"):
         _append_unique_text(parts, seen, name)
-    if desc := source.get("description"):
-        _append_unique_text(parts, seen, desc)
 
     _append_sample_text(parts, seen, source.get("sample"))
+
+    if desc := source.get("description"):
+        _append_unique_text(parts, seen, desc)
 
     return "\n\n".join(parts).strip()
 
