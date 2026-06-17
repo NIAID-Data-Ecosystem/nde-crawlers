@@ -335,7 +335,7 @@ services:
       - data:/data
   zenodo-crawler:
     build:
-      context: zenodo_oai-pmh
+      context: zenodo
       dockerfile: Dockerfile
     volumes:
       - data:/data
