@@ -153,7 +153,11 @@ def build_doc(content, record_id, types, missing_types):
     # name / title
     title = root.find(f".//{NS}titles/{NS}title")
     if title is not None and title.text:
-        output["name"] = title.text
+        if len(title.text) < 30000:
+            output["name"] = title.text
+        else:
+            logger.info("Title too long for record %s: %s", record_id, title.text[:100] + "...")
+
 
     # description
     descriptions = [
