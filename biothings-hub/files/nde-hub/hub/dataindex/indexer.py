@@ -1,3 +1,5 @@
+import os
+
 from biothings.hub.dataindex.indexer import Indexer
 from elasticsearch import AsyncElasticsearch
 
@@ -36,6 +38,9 @@ class NDEIndexer(Indexer):
 
     async def post_index(self, job_manager, *args, **kwargs):
         self.logger.info("Starting post-index embedding for index '%s'", self.es_index_name)
+        embedding_cache_index = os.getenv("EMBED_CACHE_INDEX", "").strip() or None
+        if embedding_cache_index:
+            self.logger.info("Using embedding cache index '%s'", embedding_cache_index)
 
         pinfo = self.pinfo.get_pinfo(
             step="post_index",
@@ -47,6 +52,7 @@ class NDEIndexer(Indexer):
             run_embeddings,
             self.es_client_args.get("hosts"),
             self.es_index_name,
+            embedding_cache_index,
         )
         await job
 
