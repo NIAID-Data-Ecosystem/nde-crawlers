@@ -80,6 +80,11 @@ class NCBIGeoSpider(scrapy.Spider):
         for acc_id in ids:
             yield scrapy.Request(url=prefix + str(acc_id))
 
+    async def start(self):
+        # Scrapy >= 2.13 calls start() instead of start_requests()
+        for request in self.start_requests():
+            yield request
+
     def parse(self, response):
 
         table = response.xpath(

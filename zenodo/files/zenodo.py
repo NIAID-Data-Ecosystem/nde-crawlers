@@ -30,52 +30,7 @@ TARBALL_URL = "https://zenodo.org/api/exporter/records-xml.tar.gz"
 # DataCite kernel-4 namespace, used as an ElementTree tag prefix.
 NS = "{http://datacite.org/schema/kernel-4}"
 
-# DataCite resourceTypeGeneral / resourceType -> schema.org @type
-GEN_TYPE = {
-    "annotationcollection": "Collection",
-    "article": "ScholarlyArticle",
-    "audiovisual": "MediaObject",
-    "book": "Book",
-    "bookchapter": "Chapter",
-    "collection": "Collection",
-    "conferencepaper": "ScholarlyArticle",
-    "datamanagementplan": "CreativeWork",
-    "dataset": "Dataset",
-    "deliverable": "CreativeWork",
-    "diagram": "ImageObject",
-    "drawing": "Drawing",
-    "figure": "ImageObject",
-    "image": "ImageObject",
-    "interactiveresource": "CreativeWork",
-    "journalarticle": "ScholarlyArticle",
-    "lesson": "LearningResource",
-    "model": "CreativeWork",
-    "other": "CreativeWork",
-    "outputmanagementplan": "CreativeWork",
-    "patent": "CreativeWork",
-    "peerreview": "Review",
-    "photo": "Photograph",
-    "physicalobject": "Thing",
-    "plot": "ImageObject",
-    "poster": "Poster",
-    "preprint": "ScholarlyArticle",
-    "presentation": "PresentationDigitalDocument",
-    "projectdeliverable": "CreativeWork",
-    "projectmilestone": "CreativeWork",
-    "proposal": "CreativeWork",
-    "publication": "ScholarlyArticle",
-    "report": "Report",
-    "section": "CreativeWork",
-    "software": "ComputationalTool",
-    "softwaredocumentation": "TechArticle",
-    "taxonomictreatment": "ScholarlyArticle",
-    "technicalnote": "TechArticle",
-    "thesis": "ScholarlyArticle",
-    "video": "VideoObject",
-    "workflow": "CreativeWork",
-    "workingpaper": "ScholarlyArticle",
-}
-
+# schema.org types for (resourceTypeGeneral, resourceType) pairs. Built at runtime from Zenodo's resource type vocabulary.
 def _build_type_mapping():
     mapping = {}
     request = requests.get("https://zenodo.org/api/vocabularies/resourcetypes?page=1").json()
@@ -132,6 +87,11 @@ def _apply_version(output, root, url):
     """If the record IsVersionOf a Zenodo DOI, point the doc at the concept (original) version."""
     version_ids = []
     for rel in root.findall(f".//{NS}relatedIdentifier"):
+        # A valid version identifier carries only relatedIdentifierType and
+        # relationType; any extra attribute (e.g. resourceTypeGeneral) marks a
+        # malformed entry whose text is not a clean DOI, so skip it.
+        if set(rel.attrib) != {"relatedIdentifierType", "relationType"}:
+            continue
         if (
             rel.get("relatedIdentifierType") == "DOI"
             and rel.get("relationType") == "IsVersionOf"
@@ -324,15 +284,22 @@ def parse(url=TARBALL_URL, limit=None):
 
     with tarfile.open(fileobj=resp.raw, mode="r|gz") as tar:
         members = itertools.islice(tar, limit) if limit else tar
-        for member in members:
+        for count, member in enumerate(members, start=1):
+            if count % 10000 == 0:
+                logger.info("Processed %s records", count)
             if not member.isfile():
                 continue
             record_id = os.path.splitext(os.path.basename(member.name))[0]
             content = tar.extractfile(member).read()
-            doc = build_doc(content, record_id, types, missing_types)
+            try:
+                doc = build_doc(content, record_id, types, missing_types)
+            except Exception as e:
+                logger.exception("Error processing record %s: %s", record_id, e)
+                raise
             if doc is not None:
                 yield doc
 
+    logger.info("Finished processing %s records", count)
     if missing_types:
         logger.warning("Missing type transformation: %s", list(missing_types.keys()))
 

@@ -365,13 +365,17 @@ def nde_upload_wrapper(func: Iterable[Dict]) -> Generator[dict, dict, Generator]
             if description := doc.get("description"):
                 try:
                     if isinstance(description, list):
-                        description = " ".join(description)
-                    # Check if the description contains an XML declaration
-                    if isinstance(description, str) and description.strip().startswith("<?xml"):
-                        # Convert to bytes if it's an XML string
-                        description = description.encode("utf-8")
-                    # Parse the description (works for both bytes and strings)
+                        description = " ".join(
+                            d.decode("utf-8", errors="replace") if isinstance(d, bytes) else d for d in description
+                        )
+                    # Decode bytes so the regex (a str pattern) never runs against a bytes-like object
+                    if isinstance(description, bytes):
+                        description = description.decode("utf-8", errors="replace")
+                    # Normalize line breaks before stripping the remaining HTML tags
                     description = re.sub(r"(<br\s*/?>|</p>)", "\n", description, flags=re.IGNORECASE)
+                    # lxml cannot parse a str carrying an XML encoding declaration, so re-encode that case only
+                    if description.strip().startswith("<?xml"):
+                        description = description.encode("utf-8")
                     description = html.fromstring(description).text_content()
                     doc["description"] = description
                 except etree.ParserError as e:

@@ -42,9 +42,15 @@ class USIDNETSpider(scrapy.Spider):
                 print(f"Failed to fetch page {page}. Status code: {response.status_code}")
 
     def start_requests(self):
+        # Scrapy < 2.13 entry point
         prefix = "https://www.coriell.org/0/Sections/Search/Sample_Detail.aspx?Ref="
         for catalog_id, doc in self.get_ids():
             yield scrapy.Request(url=prefix + str(catalog_id), callback=self.parse, meta={"doc": doc})
+
+    async def start(self):
+        # Scrapy >= 2.13 calls start() instead of start_requests()
+        for request in self.start_requests():
+            yield request
 
 
     def parse(self, response):

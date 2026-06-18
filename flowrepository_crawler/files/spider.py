@@ -64,6 +64,11 @@ class FlowRepositorySpider(scrapy.Spider):
             callback=self.get_urls,
         )
 
+    async def start(self):
+        # Scrapy >= 2.13 calls start() instead of start_requests()
+        for request in self.start_requests():
+            yield request
+
     def get_urls(self, response):
         id_urls = response.xpath('//td[@class="repid"]/a/@href').extract()
         for id_url in id_urls:
