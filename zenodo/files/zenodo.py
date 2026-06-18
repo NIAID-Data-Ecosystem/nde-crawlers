@@ -73,11 +73,11 @@ def _date_published(root):
     if el is None or not el.text:
         return None
     try:
-        return dateutil.parser.parse(el.text, ignoretz=True).isoformat()
+        return dateutil.parser.parse(el.text, ignoretz=True).date().isoformat()
     except (dateutil.parser.ParserError, ValueError):
         try:
             cleaned = el.text.split("/")[0].replace(" ", "").replace("_", "-")
-            return dateutil.parser.parse(cleaned, ignoretz=True).isoformat()
+            return dateutil.parser.parse(cleaned, ignoretz=True).date().isoformat()
         except Exception:
             logger.info("Could not parse date: %s", el.text)
             return None
