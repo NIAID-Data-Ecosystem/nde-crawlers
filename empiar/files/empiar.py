@@ -236,7 +236,7 @@ ALLOWED_OUTPUT_PATHS = {
     ("funding", "funder", "name"),
     ("funding", "identifier"),
     ("identifier",),
-    ("inLanguage",),
+    ("inLanguage", "name"),
     ("includedInDataCatalog", "alternateName"),
     ("includedInDataCatalog", "archivedAt"),
     ("includedInDataCatalog", "identifier"),
@@ -337,6 +337,25 @@ def _unique(values):
             unique_values.append(value)
             seen.add(key)
     return unique_values
+
+
+def _language_term(value):
+    if isinstance(value, dict):
+        value = value.get("name")
+    name = _clean_text(value)
+    return {"name": name} if name else None
+
+
+def _language_terms(value):
+    terms = []
+    for language in _as_list(value):
+        term = _language_term(language)
+        if term:
+            terms.append(term)
+    terms = _unique(terms)
+    if not terms:
+        return None
+    return terms[0] if len(terms) == 1 else terms
 
 
 def _numeric_id(accession):
@@ -444,6 +463,9 @@ def _has_non_metadata_value(value):
 
 
 def _filter_to_mapping(value: Any, path: tuple[str, ...] = ()):
+    if path == ("inLanguage",):
+        value = _language_terms(value)
+
     if path and _allows_full_subtree(path):
         return value
 
@@ -821,7 +843,7 @@ def parse(ids: Iterable[str] | None = None):
             parsed_citation = _citation_from_record(citation)
             if parsed_citation:
                 citations.append(parsed_citation)
-            if isinstance(citation, dict) and (language := _clean_text(citation.get("language"))):
+            if isinstance(citation, dict) and (language := _language_term(citation.get("language"))):
                 languages.append(language)
         if citations:
             output["citation"] = citations
@@ -829,9 +851,7 @@ def parse(ids: Iterable[str] | None = None):
             if pmids:
                 output["pmids"] = ",".join(pmids)
         if languages:
-            languages = _unique(languages)
-            language_terms = [{"name": language} for language in languages]
-            output["inLanguage"] = language_terms[0] if len(language_terms) == 1 else language_terms
+            output["inLanguage"] = _language_terms(languages)
 
         fundings = []
         for grant in _as_list(record.get("grant_references")):
