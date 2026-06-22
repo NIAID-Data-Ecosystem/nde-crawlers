@@ -77,36 +77,26 @@ class NDEDataBuilder(builder.DataBuilder):
                 [doc.get("_id") for doc in result["documents"] if doc["_id"].startswith(duplicate)]
             )
 
-            if len(result["documents"]) > 2:
-                # find all of the duplicate records
-                def is_valid_document(doc):
-                    if any(doc["_id"].startswith(source) for source in sources):
-                        return True
-                    if doc["_id"].startswith(duplicate):
-                        sdPublisher = doc.get("sdPublisher")
-                        if isinstance(sdPublisher, list):
-                            return any(
-                                any(source in pub.get("name", "").lower() for source in sources) for pub in sdPublisher
-                            )
-                        elif isinstance(sdPublisher, dict):
-                            return any(source in sdPublisher.get("name", "").lower() for source in sources)
-                    self.logger.error(f"Unexpected document with _id {doc['_id']} in deduplication group {group}. Document: {doc}")
-                    return False
+            # A single DOI can be shared by the duplicate source (e.g. zenodo), the
+            # authoritative source (e.g. dryad/tycho), and occasionally an unrelated
+            # source (e.g. figshare re-publishing the dataset under the same DOI).
+            # Select exactly one duplicate doc and one source doc to merge, ignoring
+            # any other sources, rather than crashing the whole post-merge job.
+            dupe_docs = [doc for doc in result["documents"] if doc["_id"].startswith(duplicate)]
+            source_docs = [
+                doc for doc in result["documents"] if any(doc["_id"].startswith(source) for source in sources)
+            ]
 
-                result["documents"] = [doc for doc in result["documents"] if is_valid_document(doc)]
+            if len(dupe_docs) != 1 or len(source_docs) != 1:
+                self.logger.warning(
+                    f"Skipping deduplication group {group}: expected one '{duplicate}' document and one "
+                    f"source document, but got {[doc['_id'] for doc in result['documents']]}"
+                )
+                continue
 
-            # TODO: If two sources have the same doi this will not work as expected so assert that the length is 2
-            # Will also need to handle includedInDataCatalog field if there are more than 2 sources
-            assert (
-                len(result["documents"]) == 2
-            ), f"Expected 2 documents when merging, but got {len(result['documents'])}. Documents: {result['documents']}"
-
-            for doc in result["documents"]:
-                if not doc["_id"].startswith(duplicate):
-                    _id = doc["_id"]
-                    source_includedInDataCatalog = doc.get("includedInDataCatalog")
-                else:
-                    dupe_includedInDataCatalog = doc.get("includedInDataCatalog")
+            _id = source_docs[0]["_id"]
+            source_includedInDataCatalog = source_docs[0].get("includedInDataCatalog")
+            dupe_includedInDataCatalog = dupe_docs[0].get("includedInDataCatalog")
 
             # merge the includedInDataCatalog field
             if not isinstance(source_includedInDataCatalog, list):
