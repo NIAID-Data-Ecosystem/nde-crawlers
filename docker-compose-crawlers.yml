@@ -193,6 +193,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+      - cache:/cache
   mendeley-crawler:
     build:
       context: mendeley

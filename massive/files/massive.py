@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 import logging
 import math
@@ -5,9 +6,10 @@ import os
 import time
 from datetime import datetime
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 import requests
 from requests.adapters import HTTPAdapter
+from sql_database import NDEDatabase
 from urllib3.util.retry import Retry
 
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +31,9 @@ FETCH_HTML_DETAILS = os.getenv("MASSIVE_FETCH_HTML_DETAILS", "true").casefold() 
 HTML_DETAILS_CACHE_PATH = os.getenv("MASSIVE_HTML_DETAILS_CACHE", "/cache/massive_html_details.json")
 HTML_DETAIL_SLEEP = float(os.getenv("MASSIVE_HTML_DETAIL_SLEEP", "0.2"))
 HTML_CACHE_SAVE_INTERVAL = int(os.getenv("MASSIVE_HTML_CACHE_SAVE_INTERVAL", "100"))
+USE_SQL_CACHE = os.getenv("MASSIVE_USE_SQL_CACHE", "true").casefold() in {"1", "true", "yes", "y"}
+SQL_CACHE_EXPIRE_DAYS = int(os.getenv("MASSIVE_SQL_CACHE_EXPIRE_DAYS", "30"))
+UPDATE_KNOWN_PAGE_LIMIT = int(os.getenv("MASSIVE_UPDATE_KNOWN_PAGE_LIMIT", "1"))
 
 
 def make_session():
@@ -149,7 +154,7 @@ def fetch_html_content(task, session=None):
 
 
 def parse_html_for_doi_and_license(html_content):
-    soup = BeautifulSoup(html_content, "html.parser")
+    soup = BeautifulSoup(html_content, "html.parser", parse_only=SoupStrainer("p"))
     p_tag = soup.find("p")
 
     doi = None
@@ -259,16 +264,23 @@ def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS,
     if px_accessions := _get_px_accessions(item):
         output["identifier"] = _unique_identifiers([identifier] + px_accessions)
 
+    doi = item.get("doi")
+    license_url = item.get("license")
+    if doi:
+        output["doi"] = doi
+    if license_url:
+        output["license"] = license_url
+
     if task := item.get("task"):
         output["url"] = f"{BASE_URL}/dataset.jsp?task={task}"
         output["includedInDataCatalog"]["archivedAt"] = output["url"]
 
-        if fetch_html_details:
-            doi, license_url = get_html_details(task, session=session, cache=html_details_cache)
-            if doi:
-                output["doi"] = doi
-            if license_url:
-                output["license"] = license_url
+        if fetch_html_details and (not doi or not license_url):
+            html_doi, html_license_url = get_html_details(task, session=session, cache=html_details_cache)
+            if not doi and html_doi:
+                output["doi"] = html_doi
+            if not license_url and html_license_url:
+                output["license"] = html_license_url
 
     if repo_path := item.get("repo_path"):
         path = repo_path.split("-")[-1]
@@ -279,12 +291,6 @@ def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS,
 
     if title := item.get("title"):
         output["name"] = title
-
-    if doi := item.get("doi"):
-        output["doi"] = doi
-
-    if license_url := item.get("license"):
-        output["license"] = license_url
 
     if sdPublisher := item.get("site"):
         output["sdPublisher"] = {"name": sdPublisher}
@@ -378,7 +384,249 @@ def parse_dataset(json_data, session=None, fetch_html_details=FETCH_HTML_DETAILS
     )
 
 
-def parse(
+def _expected_floor(total_rows, min_expected_records=MIN_EXPECTED_RECORDS, min_completion_ratio=MIN_COMPLETION_RATIO):
+    expected_floor = min_expected_records
+    if total_rows is not None:
+        expected_floor = max(expected_floor, math.ceil(total_rows * min_completion_ratio))
+    return expected_floor
+
+
+def _validate_record_count(count, total_rows=None, skipped=0, expected_floor=None):
+    expected_floor = expected_floor or _expected_floor(total_rows)
+    if count < expected_floor:
+        raise RuntimeError(
+            f"MassIVE crawl produced {count} records, below expected floor {expected_floor} "
+            f"(total_rows={total_rows}, skipped={skipped}). Refusing to publish a partial dump."
+        )
+
+
+class MassIVEDatabase(NDEDatabase):
+    SQL_DB = "massive.db"
+    EXPIRE = dt.timedelta(days=SQL_CACHE_EXPIRE_DAYS)
+
+    def __init__(
+        self,
+        fetch_html_details=FETCH_HTML_DETAILS,
+        min_expected_records=MIN_EXPECTED_RECORDS,
+        min_completion_ratio=MIN_COMPLETION_RATIO,
+    ):
+        super().__init__()
+        self.fetch_html_details = fetch_html_details
+        self.min_expected_records = min_expected_records
+        self.min_completion_ratio = min_completion_ratio
+        self.loaded_total_rows = None
+        self.loaded_expected_floor = None
+        self.update_cache_checked = False
+        self.updated_record_count = 0
+
+    def _cached_ids(self):
+        import sqlite3
+
+        with sqlite3.connect(self.db_path) as con:
+            c = con.cursor()
+            c.execute("""SELECT name FROM sqlite_master WHERE type='table' AND name='cache' COLLATE NOCASE""")
+            if not c.fetchone():
+                return set()
+            c.execute("SELECT _id FROM cache")
+            return {row[0] for row in c}
+
+    def _cache_record_for_item(self, item, session, html_details_cache=None):
+        identifier = item.get("dataset")
+        if not identifier:
+            return None
+
+        enriched_item = dict(item)
+        task = enriched_item.get("task")
+        if self.fetch_html_details and task and (not enriched_item.get("doi") or not enriched_item.get("license")):
+            doi, license_url = get_html_details(task, session=session, cache=html_details_cache)
+            if doi and not enriched_item.get("doi"):
+                enriched_item["doi"] = doi
+            if license_url and not enriched_item.get("license"):
+                enriched_item["license"] = license_url
+
+        return identifier.lower(), json.dumps(enriched_item, separators=(",", ":"))
+
+    def _save_html_details_cache_if_needed(self, html_details_cache, saved_cache_size):
+        if html_details_cache is None:
+            return saved_cache_size
+        if len(html_details_cache) - saved_cache_size >= HTML_CACHE_SAVE_INTERVAL:
+            save_html_details_cache(html_details_cache)
+            return len(html_details_cache)
+        return saved_cache_size
+
+    def load_cache(self):
+        count = 0
+        skipped = 0
+        total_rows = None
+        seen_ids = set()
+        html_details_cache = load_html_details_cache() if self.fetch_html_details else None
+        saved_cache_size = len(html_details_cache) if html_details_cache is not None else 0
+
+        try:
+            with make_session() as session:
+                for row_data, page_total_rows in fetch_dataset_pages(session=session):
+                    if page_total_rows is not None:
+                        total_rows = page_total_rows
+                    for item in row_data:
+                        identifier = item.get("dataset")
+                        if not identifier:
+                            skipped += 1
+                            continue
+
+                        cache_id = identifier.lower()
+                        if cache_id in seen_ids:
+                            logger.warning("Skipping duplicate MassIVE id %s", cache_id)
+                            skipped += 1
+                            continue
+                        seen_ids.add(cache_id)
+
+                        record = self._cache_record_for_item(item, session, html_details_cache=html_details_cache)
+                        if not record:
+                            skipped += 1
+                            continue
+
+                        count += 1
+                        if count % 1000 == 0:
+                            logger.info("Cached %s MassIVE datasets", count)
+
+                        saved_cache_size = self._save_html_details_cache_if_needed(
+                            html_details_cache,
+                            saved_cache_size,
+                        )
+
+                        yield record
+        finally:
+            if html_details_cache is not None and len(html_details_cache) != saved_cache_size:
+                save_html_details_cache(html_details_cache)
+
+        expected_floor = _expected_floor(
+            total_rows,
+            min_expected_records=self.min_expected_records,
+            min_completion_ratio=self.min_completion_ratio,
+        )
+        _validate_record_count(count, total_rows=total_rows, skipped=skipped, expected_floor=expected_floor)
+        self.loaded_total_rows = total_rows or count
+        self.loaded_expected_floor = expected_floor
+        logger.info("Finished loading MassIVE cache: cached=%s skipped=%s total_rows=%s", count, skipped, total_rows)
+
+    def mark_cache_complete(self):
+        if self.loaded_total_rows is not None:
+            self._upsert_metadata("total_rows", str(self.loaded_total_rows))
+        if self.loaded_expected_floor is not None:
+            self._upsert_metadata("expected_floor", str(self.loaded_expected_floor))
+        super().mark_cache_complete()
+
+    def update_cache(self):
+        if UPDATE_KNOWN_PAGE_LIMIT <= 0:
+            logger.info(
+                "MassIVE SQL cache updates disabled by MASSIVE_UPDATE_KNOWN_PAGE_LIMIT=%s",
+                UPDATE_KNOWN_PAGE_LIMIT,
+            )
+            return None
+
+        cached_ids = self._cached_ids()
+        if not cached_ids:
+            yield from self.load_cache()
+            return
+
+        count = 0
+        skipped = 0
+        html_details_cache = load_html_details_cache() if self.fetch_html_details else None
+        saved_cache_size = len(html_details_cache) if html_details_cache is not None else 0
+
+        try:
+            with make_session() as session:
+                for page_number, (row_data, _page_total_rows) in enumerate(
+                    fetch_dataset_pages(session=session),
+                    start=1,
+                ):
+                    if page_number > UPDATE_KNOWN_PAGE_LIMIT:
+                        break
+
+                    for item in row_data:
+                        identifier = item.get("dataset")
+                        if not identifier:
+                            skipped += 1
+                            continue
+                        cache_id = identifier.lower()
+                        if cache_id in cached_ids:
+                            continue
+
+                        record = self._cache_record_for_item(item, session, html_details_cache=html_details_cache)
+                        if not record:
+                            skipped += 1
+                            continue
+
+                        cached_ids.add(cache_id)
+                        count += 1
+                        yield record
+
+                        saved_cache_size = self._save_html_details_cache_if_needed(
+                            html_details_cache,
+                            saved_cache_size,
+                        )
+        finally:
+            if html_details_cache is not None and len(html_details_cache) != saved_cache_size:
+                save_html_details_cache(html_details_cache)
+
+        self.update_cache_checked = True
+        self.updated_record_count = count
+        logger.info("Finished updating MassIVE cache: new=%s skipped=%s", count, skipped)
+
+    def parse(self, records):
+        count = 0
+        skipped = 0
+        expected_floor = int(self.metadata_value("expected_floor") or MIN_EXPECTED_RECORDS)
+        total_rows = self.metadata_value("total_rows")
+        total_rows = int(total_rows) if total_rows else None
+
+        with make_session() as session:
+            for record_id, data in records:
+                try:
+                    item = json.loads(data)
+                    parsed_dataset = parse_dataset_row(
+                        item,
+                        session=session,
+                        fetch_html_details=False,
+                    )
+                except Exception as e:
+                    logger.warning("Could not parse cached MassIVE record %s: %s", record_id, e)
+                    skipped += 1
+                    continue
+
+                if not parsed_dataset:
+                    skipped += 1
+                    continue
+
+                count += 1
+                if count % 1000 == 0:
+                    logger.info("Parsed %s cached MassIVE datasets", count)
+                yield parsed_dataset
+
+        _validate_record_count(count, total_rows=total_rows, skipped=skipped, expected_floor=expected_floor)
+        logger.info("Finished MassIVE SQL cache parse: parsed=%s skipped=%s total_rows=%s", count, skipped, total_rows)
+
+    def upload(self):
+        if self.is_cache_expired() or self.NO_CACHE:
+            self.new_cache()
+            self.dump(self.load_cache())
+            self.mark_cache_complete()
+        else:
+            logger.info("Checking MassIVE SQL cache for new records.")
+            self.dump(self.update_cache())
+            if self.loaded_total_rows is not None:
+                self.mark_cache_complete()
+            elif self.update_cache_checked:
+                self.insert_last_updated()
+                if self.updated_record_count:
+                    logger.info("Updated MassIVE SQL cache with %s new records.", self.updated_record_count)
+                else:
+                    logger.info("No new MassIVE records found for SQL cache update.")
+
+        return self.parse(self.retreive_cache())
+
+
+def parse_live(
     fetch_html_details=FETCH_HTML_DETAILS,
     min_expected_records=MIN_EXPECTED_RECORDS,
     min_completion_ratio=MIN_COMPLETION_RATIO,
@@ -429,14 +677,31 @@ def parse(
         if html_details_cache is not None and len(html_details_cache) != saved_cache_size:
             save_html_details_cache(html_details_cache)
 
-    expected_floor = min_expected_records
-    if total_rows is not None:
-        expected_floor = max(expected_floor, math.ceil(total_rows * min_completion_ratio))
-
-    if count < expected_floor:
-        raise RuntimeError(
-            f"MassIVE crawl produced {count} records, below expected floor {expected_floor} "
-            f"(total_rows={total_rows}, skipped={skipped}). Refusing to publish a partial dump."
-        )
+    expected_floor = _expected_floor(
+        total_rows,
+        min_expected_records=min_expected_records,
+        min_completion_ratio=min_completion_ratio,
+    )
+    _validate_record_count(count, total_rows=total_rows, skipped=skipped, expected_floor=expected_floor)
 
     logger.info("Finished MassIVE crawl: parsed=%s skipped=%s total_rows=%s", count, skipped, total_rows)
+
+
+def parse(
+    fetch_html_details=FETCH_HTML_DETAILS,
+    min_expected_records=MIN_EXPECTED_RECORDS,
+    min_completion_ratio=MIN_COMPLETION_RATIO,
+):
+    if USE_SQL_CACHE:
+        database = MassIVEDatabase(
+            fetch_html_details=fetch_html_details,
+            min_expected_records=min_expected_records,
+            min_completion_ratio=min_completion_ratio,
+        )
+        yield from database.upload()
+    else:
+        yield from parse_live(
+            fetch_html_details=fetch_html_details,
+            min_expected_records=min_expected_records,
+            min_completion_ratio=min_completion_ratio,
+        )
