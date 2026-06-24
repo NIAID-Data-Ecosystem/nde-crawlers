@@ -214,6 +214,35 @@ def get_html_details(task, session=None, cache=None):
     return doi, license_url
 
 
+def _split_identifier_values(value):
+    if not value or str(value).casefold() == "null":
+        return []
+
+    for separator in ("###", ";", ","):
+        value = str(value).replace(separator, " ")
+    return [part.strip() for part in value.split() if part.strip()]
+
+
+def _unique_identifiers(identifiers):
+    unique = []
+    seen = set()
+    for identifier in identifiers:
+        key = identifier.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(identifier)
+    return unique
+
+
+def _get_px_accessions(item):
+    accessions = _split_identifier_values(item.get("px"))
+    for annotation in item.get("annotations") or []:
+        if annotation.get("name") == "px_accession":
+            accessions.extend(_split_identifier_values(annotation.get("value")))
+    return _unique_identifiers(accessions)
+
+
 def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS, html_details_cache=None):
     identifier = item.get("dataset")
     if not identifier:
@@ -226,6 +255,9 @@ def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS,
         "identifier": identifier,
         "_id": identifier.lower(),
     }
+
+    if px_accessions := _get_px_accessions(item):
+        output["identifier"] = _unique_identifiers([identifier] + px_accessions)
 
     if task := item.get("task"):
         output["url"] = f"{BASE_URL}/dataset.jsp?task={task}"

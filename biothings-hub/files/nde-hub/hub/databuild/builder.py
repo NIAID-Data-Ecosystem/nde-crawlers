@@ -157,9 +157,17 @@ class NDEDataBuilder(builder.DataBuilder):
             f"Aggregating documents with duplicate {identifier_source_catalog} and sources {source_catalogs} in {collection_name}"
         )
 
-        # Aggregation pipeline to match DDE documents with NCBI GEO documents
+        matching_doc_catalog_names = {
+            "$cond": {
+                "if": {"$isArray": "$$doc.includedInDataCatalog.name"},
+                "then": "$$doc.includedInDataCatalog.name",
+                "else": ["$$doc.includedInDataCatalog.name"],
+            }
+        }
+
+        # Aggregation pipeline to match identifier-source documents with source-catalog documents
         pipeline = [
-            # Stage 1: Match documents from Data Discovery Engine
+            # Stage 1: Match documents from the identifier source catalog
             {"$match": {"includedInDataCatalog.name": identifier_source_catalog}},
             # Stage 2: keep original doc and ensure identifier is an array
             {
@@ -195,7 +203,7 @@ class NDEDataBuilder(builder.DataBuilder):
                     "as": "matching_docs",
                 }
             },
-            # Stage 5: Keep only GEO matches (and drop any non-GEO doc that happened to match)
+            # Stage 5: Keep only matches from the requested source catalogs
             {
                 "$addFields": {
                     "matching_catalog_docs": {
@@ -203,9 +211,9 @@ class NDEDataBuilder(builder.DataBuilder):
                             "input": "$matching_docs",
                             "as": "doc",
                             "cond": {
-                                "$in": [
-                                    "$$doc.includedInDataCatalog.name",
-                                    source_catalogs,
+                                "$gt": [
+                                    {"$size": {"$setIntersection": [matching_doc_catalog_names, source_catalogs]}},
+                                    0,
                                 ]
                             },
                         }
@@ -307,6 +315,12 @@ class NDEDataBuilder(builder.DataBuilder):
         identifier_source_catalog = "Data Discovery Engine"
         source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject", "Protein Data Bank"]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
+
+        self.identifier_deduplication(
+            "ProteomeXchange",
+            ["MassIVE"],
+            prefer_matching_catalog_doc=True,
+        )
 
         # CEIRR reagents can also be cataloged in BEI Resources. The CEIRR
         # crawler emits BEI identifiers in the matching BEI _id form so this
