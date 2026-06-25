@@ -167,8 +167,15 @@ class NDEDataBuilder(builder.DataBuilder):
 
         # Aggregation pipeline to match identifier-source documents with source-catalog documents
         pipeline = [
-            # Stage 1: Match documents from the identifier source catalog
-            {"$match": {"includedInDataCatalog.name": identifier_source_catalog}},
+            # Stage 1: Match unmerged documents from the identifier source catalog
+            {
+                "$match": {
+                    "$and": [
+                        {"includedInDataCatalog.name": identifier_source_catalog},
+                        {"includedInDataCatalog.name": {"$nin": source_catalogs}},
+                    ]
+                }
+            },
             # Stage 2: keep original doc and ensure identifier is an array
             {
                 "$addFields": {
@@ -211,9 +218,18 @@ class NDEDataBuilder(builder.DataBuilder):
                             "input": "$matching_docs",
                             "as": "doc",
                             "cond": {
-                                "$gt": [
-                                    {"$size": {"$setIntersection": [matching_doc_catalog_names, source_catalogs]}},
-                                    0,
+                                "$and": [
+                                    {"$ne": ["$$doc._id", "$_id"]},
+                                    {
+                                        "$gt": [
+                                            {
+                                                "$size": {
+                                                    "$setIntersection": [matching_doc_catalog_names, source_catalogs]
+                                                }
+                                            },
+                                            0,
+                                        ]
+                                    },
                                 ]
                             },
                         }
