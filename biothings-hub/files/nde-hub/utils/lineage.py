@@ -10,6 +10,8 @@ DB_PATH = "/data/nde-hub/standardizers/lineage_lookup/lineage_lookup.db"
 
 _TAXA_CHUNK_SIZE = 1000
 _BATCH_SIZE = 1000
+_LINEAGE_TYPES = {"Dataset", "DataCollection", "ResourceCatalog"}
+_BIOTOOLS_CATALOG_NAME = "bio.tools"
 
 _mt = None
 
@@ -97,6 +99,46 @@ def _chunked(iterable: Iterable[int], chunk_size: int) -> Iterable[List[int]]:
         yield chunk
 
 
+def _iter_string_values(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_string_values(item)
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            yield from _iter_string_values(item)
+
+
+def _has_biosample_additional_type(record: dict) -> bool:
+    return any(value.strip() == "BioSample" for value in _iter_string_values(record.get("additionalType")))
+
+
+def _iter_catalog_names(value):
+    catalogs = value if isinstance(value, list) else [value]
+    for catalog in catalogs:
+        if isinstance(catalog, dict):
+            yield from _iter_string_values(catalog.get("name"))
+
+
+def _is_biotools_record(record: dict) -> bool:
+    return any(
+        value.strip().lower() == _BIOTOOLS_CATALOG_NAME
+        for value in _iter_catalog_names(record.get("includedInDataCatalog"))
+    )
+
+
+def _should_annotate_lineage(record: dict) -> bool:
+    record_types = set(_iter_string_values(record.get("@type")))
+    if record_types & _LINEAGE_TYPES:
+        return True
+    if "Sample" in record_types:
+        return _has_biosample_additional_type(record)
+    if "ComputationalTool" in record_types:
+        return _is_biotools_record(record)
+    return False
+
+
 def _extract_taxids(record: dict) -> Set[int]:
     taxids: Set[int] = set()
     for field in ["species", "infectiousAgent"]:
@@ -114,6 +156,12 @@ def _extract_taxids(record: dict) -> Set[int]:
             if taxid_str.isdigit():
                 taxids.add(int(taxid_str))
     return taxids
+
+
+def _remove_lineage(record: dict):
+    meta = record.get("_meta")
+    if isinstance(meta, dict):
+        meta.pop("lineage", None)
 
 
 def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: dict):
@@ -197,7 +245,10 @@ def _annotate_record(record: dict, lineage_cache: dict, parent_cache: dict):
             entry["parent_taxon"] = parent_taxon
         lineage_entries.append(entry)
 
-    record.setdefault("_meta", {})["lineage"] = lineage_entries
+    if lineage_entries:
+        record.setdefault("_meta", {})["lineage"] = lineage_entries
+    else:
+        _remove_lineage(record)
 
 
 def _iter_docs(docs):
@@ -211,17 +262,24 @@ def _iter_docs(docs):
 
 
 def _process_batch(batch: list):
+    eligible_records = []
     all_ids: Set[int] = set()
     for rec in batch:
-        all_ids.update(_extract_taxids(rec))
+        if _should_annotate_lineage(rec):
+            eligible_records.append(rec)
+            all_ids.update(_extract_taxids(rec))
+        else:
+            _remove_lineage(rec)
 
     lineage_cache: dict = {}
     parent_cache: dict = {}
     if all_ids:
         _fetch_taxon_info(all_ids, lineage_cache, parent_cache)
 
-    for rec in batch:
+    for rec in eligible_records:
         _annotate_record(rec, lineage_cache, parent_cache)
+
+    for rec in batch:
         yield rec
 
 
@@ -229,7 +287,8 @@ def process_lineage(docs):
     """Add taxonomy lineage to documents using a persistent SQLite-backed cache.
 
     Accepts an iterable of dicts (or a path to an ndjson directory) and yields
-    each document with ``_meta.lineage`` populated.  Taxon lookups are cached in
+    each document, with ``_meta.lineage`` populated only for portal/API-visible
+    record types that have numeric taxonomy IDs. Taxon lookups are cached in
     SQLite at ``DB_PATH`` so data persists across process restarts. In-memory
     lineage and parent dictionaries are scoped to one internal batch and are
     discarded before the next batch is processed.
