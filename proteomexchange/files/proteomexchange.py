@@ -142,7 +142,8 @@ def _parse_dataset(dataset):
         return None
 
     result["_id"] = pxd_id
-    result["identifier"] = pxd_id
+    massive_id = _get_term(identifiers, "MassIVE dataset identifier")
+    result["identifier"] = [pxd_id, massive_id] if massive_id else pxd_id
 
     doi = _get_term(identifiers, "Digital Object Identifier (DOI)")
     if doi:

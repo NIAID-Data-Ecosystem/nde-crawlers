@@ -157,10 +157,25 @@ class NDEDataBuilder(builder.DataBuilder):
             f"Aggregating documents with duplicate {identifier_source_catalog} and sources {source_catalogs} in {collection_name}"
         )
 
-        # Aggregation pipeline to match source identifier documents with source documents
+        matching_doc_catalog_names = {
+            "$cond": {
+                "if": {"$isArray": "$$doc.includedInDataCatalog.name"},
+                "then": "$$doc.includedInDataCatalog.name",
+                "else": ["$$doc.includedInDataCatalog.name"],
+            }
+        }
+
+        # Aggregation pipeline to match identifier-source documents with source-catalog documents
         pipeline = [
-            # Stage 1: Match documents from Data Discovery Engine
-            {"$match": {"includedInDataCatalog.name": identifier_source_catalog}},
+            # Stage 1: Match unmerged documents from the identifier source catalog
+            {
+                "$match": {
+                    "$and": [
+                        {"includedInDataCatalog.name": identifier_source_catalog},
+                        {"includedInDataCatalog.name": {"$nin": source_catalogs}},
+                    ]
+                }
+            },
             # Stage 2: keep original doc and ensure identifier is an array
             {
                 "$addFields": {
@@ -195,7 +210,7 @@ class NDEDataBuilder(builder.DataBuilder):
                     "as": "matching_docs",
                 }
             },
-            # Stage 5: Keep only source matches (and drop any non-source doc that happened to match)
+            # Stage 5: Keep only matches from the requested source catalogs
             {
                 "$addFields": {
                     "matching_catalog_docs": {
@@ -203,9 +218,18 @@ class NDEDataBuilder(builder.DataBuilder):
                             "input": "$matching_docs",
                             "as": "doc",
                             "cond": {
-                                "$in": [
-                                    "$$doc.includedInDataCatalog.name",
-                                    source_catalogs,
+                                "$and": [
+                                    {"$ne": ["$$doc._id", "$_id"]},
+                                    {
+                                        "$gt": [
+                                            {
+                                                "$size": {
+                                                    "$setIntersection": [matching_doc_catalog_names, source_catalogs]
+                                                }
+                                            },
+                                            0,
+                                        ]
+                                    },
                                 ]
                             },
                         }
@@ -308,7 +332,11 @@ class NDEDataBuilder(builder.DataBuilder):
         source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject", "Protein Data Bank"]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
 
-        self.identifier_deduplication("ProteomeXchange", ["MassIVE"], prefer_matching_catalog_doc=True)
+        self.identifier_deduplication(
+            "ProteomeXchange",
+            ["MassIVE"],
+            prefer_matching_catalog_doc=True,
+        )
 
         # CEIRR reagents can also be cataloged in BEI Resources. The CEIRR
         # crawler emits BEI identifiers in the matching BEI _id form so this
