@@ -138,8 +138,8 @@ class NDEDataBuilder(builder.DataBuilder):
             self.logger.info(f"Deleted {delete_result.deleted_count} remaining duplicate records")
 
     def identifier_deduplication(self, identifier_source_catalog, source_catalogs, prefer_matching_catalog_doc=False):
-        """Given a primary source catalog (e.g., Data Discovery Engine) and a list of source catalogs
-        (e.g., NCBI GEO), find and match the identifers from the primary source catalog to the _id fields of
+        """Given a source catalog (e.g., Data Discovery Engine) and a list of primary source catalogs
+        (e.g., NCBI GEO), find and match the identifers from the source catalog to the _id fields of
         documents from the source catalogs. Merge the resulting documents.
 
         Args:
@@ -157,7 +157,7 @@ class NDEDataBuilder(builder.DataBuilder):
             f"Aggregating documents with duplicate {identifier_source_catalog} and sources {source_catalogs} in {collection_name}"
         )
 
-        # Aggregation pipeline to match DDE documents with NCBI GEO documents
+        # Aggregation pipeline to match source identifier documents with source documents
         pipeline = [
             # Stage 1: Match documents from Data Discovery Engine
             {"$match": {"includedInDataCatalog.name": identifier_source_catalog}},
@@ -195,7 +195,7 @@ class NDEDataBuilder(builder.DataBuilder):
                     "as": "matching_docs",
                 }
             },
-            # Stage 5: Keep only GEO matches (and drop any non-GEO doc that happened to match)
+            # Stage 5: Keep only source matches (and drop any non-source doc that happened to match)
             {
                 "$addFields": {
                     "matching_catalog_docs": {
@@ -307,6 +307,8 @@ class NDEDataBuilder(builder.DataBuilder):
         identifier_source_catalog = "Data Discovery Engine"
         source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject", "Protein Data Bank"]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
+
+        self.identifier_deduplication("ProteomeXchange", ["MassIVE"], prefer_matching_catalog_doc=True)
 
         # CEIRR reagents can also be cataloged in BEI Resources. The CEIRR
         # crawler emits BEI identifiers in the matching BEI _id form so this
