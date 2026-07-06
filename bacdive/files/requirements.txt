@@ -3,3 +3,4 @@ orjson
 python-dateutil
 urllib3
 bacdive
+bs4

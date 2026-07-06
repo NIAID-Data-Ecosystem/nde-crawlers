@@ -1844,6 +1844,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "itemLocation": {
                 "properties": {
                     "@type": {"type": "text"},
+                    "administrativeType": {"type": "text"},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "geo": {
                         "properties": {
@@ -1930,6 +1931,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "sampleState": {"type": "text"},
             "sampleStorageTemperature": {
                 "properties": {
+                    "@type": {"type": "text"},
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
                     "name": {"type": "text"},

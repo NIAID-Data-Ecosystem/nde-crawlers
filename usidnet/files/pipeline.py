@@ -432,6 +432,7 @@ class USIDNETItemProcessorPipeline:
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
             },
+            "additionalType": "ExperimentalRunSample"
         }
 
         # ---- sampleType (prefer the descriptive "Product", fall back to "ProductTypeID")

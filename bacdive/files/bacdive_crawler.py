@@ -1,11 +1,17 @@
+import datetime
+import logging
 import re
 import time
 
-import bacdive
-import requests
-import datetime
 import dateutil.parser
-import logging
+import requests
+from atcc_crawler import get_atcc_data
+from ccug_crawler import get_ccug_data
+from jcm_crawler import get_jcm_data
+from kctc_crawler import get_kctc_data
+from ucccb_crawler import get_ucccb_data
+
+import bacdive
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -76,13 +82,14 @@ def iter_bacdive_records(ids=None, sleep=SLEEP):
 
 
 
-def _as_list(v) -> list[dict]:
-    """Coerce BacDive's union-typed fields (dict | list[dict] | None) to list[dict]."""
-    if isinstance(v, dict):
+def _as_list(v):
+    """Return a value as a list, or an empty list if None. If the value is already a list, return it unchanged."""
+    if v is None:
+        return []
+    if not isinstance(v, list):
         return [v]
-    if isinstance(v, list):
-        return [x for x in v if isinstance(x, dict)]
-    return []
+    return v
+
 
 
 _LENGTH_RE = re.compile(
@@ -120,6 +127,307 @@ def _to_iso_date(val):
         logger.warning(f"Could not parse date: {val}")
         return None
     return dt
+
+
+_TEMPERATURE_RE = re.compile(r"\s*(\d+(?:\.\d+)?)\s*(\S.*)?$")
+
+
+def parse_temperature(value, minimum=None, maximum=None):
+    """Parse temperature string(s) into a normalized QuantitativeValue dict.
+
+    ``value`` is the main/optimal temperature; optional ``minimum``/``maximum`` add
+    minValue/maxValue (UCCCB exposes the three separately). Sources differ in
+    spacing and degree glyph ('30°C', '30 ℃', '28ºC'), so the number is pulled out
+    with a regex and the unit is normalized to '°C'. Returns {} if nothing parses.
+    """
+    result = {}
+    for key, raw in (("value", value), ("minValue", minimum), ("maxValue", maximum)):
+        if raw and (m := _TEMPERATURE_RE.match(str(raw))):
+            result[key] = float(m.group(1))
+    if not result:
+        return {}
+    return {"@type": "QuantitativeValue", "unitText": "°C", **result}
+
+
+def get_sample_state(dsm_number):
+    """Return the DSMZ catalogue delivery forms for a DSM number, e.g.
+    ['Freeze Dried', 'Active culture on request', 'DNA']. Returns [] if unavailable.
+
+    The delivery forms are not exposed via the strains JSON API (its supplyForms field is
+    empty); they live in a static per-strain price fragment on the DSMZ website.
+    """
+    url = (
+        "https://www.dsmz.de/fileadmin/cataloguepriceinformation/"
+        f"priceinformation_DSM_{dsm_number}.html"
+    )
+    try:
+        resp = requests.get(url, timeout=20)
+    except requests.RequestException as e:
+        logger.warning(f"Could not fetch delivery forms for DSM {dsm_number}: {e}")
+        return []
+    if resp.status_code != 200:
+        return []
+    m = re.search(r"delivery forms and prices are:(.*?)Price Category", resp.text, re.S)
+    block = m.group(1) if m else resp.text
+    rows = re.findall(r'<td>([^<]+?)</td>\s*<td[^>]*>&nbsp;</td>\s*<td align="right">', block)
+    return [n.strip() for n in rows if n.strip().lower() != "delivery form"]
+
+
+def parse_dsm(ccn, output):
+    """Parse DSMZ catalogue data for a culture collection number (e.g. 'DSM 1234') and insert into the output dict.
+        Example:  https://www.dsmz.de/collection/catalogue/details/culture/DSM-14760
+                  https://api.strains.dsmz.de/dsm/14760
+                  https://api.bacdive.dsmz.de/v2/fetch/100
+    """
+    request_url = f"https://api.strains.dsmz.de/dsm/{ccn.split(' ')[1]}"
+    try:
+        resp = requests.get(request_url, timeout=20)
+    except requests.RequestException as e:
+        logger.warning(f"Could not fetch DSMZ strains data for {ccn}: {e}")
+        return
+    if resp.status_code != 200:
+        return
+    data = resp.json()
+    if not _as_list(data.get("collections")):
+        return
+    included_in_data_catalog = {
+        "@type": "DataCatalog",
+        "name": _as_list(data.get("collections"))[0].get("legalName"),
+        "url": "https://www.dsmz.de/",
+        "versionDate": datetime.date.today().isoformat(),
+        "archivedAt": f"https://www.dsmz.de/collection/catalogue/details/culture/{'-'.join(ccn.split(' '))}",
+    }
+    insert_value(output, "includedInDataCatalog", included_in_data_catalog)
+    item_location = {
+        "@type": "AdministrativeArea",
+        "name": "Germany",
+        "administrativeType": "Country",
+    }
+    insert_value(output, "itemLocation", item_location)
+    if sample_state := get_sample_state(ccn.split(" ")[1]):
+        insert_value(output, "sampleState", sample_state)
+        for state in _as_list(output["sampleState"]):
+            if "on request" in state.lower():
+                insert_value(output, "creativeWorkStatus", ["Available", "Bespoke"])
+                break
+
+    sample_storage = {}
+
+    if growth_temp := _as_list(data.get("growthConditions")):
+        if growth_temp[0].get("optimalTemperature") and growth_temp[0].get("minimalTemperature") and growth_temp[0].get("maximalTemperature"):
+            sample_storage["@type"] = "QuantitativeValue"
+            sample_storage["value"] = growth_temp[0].get("optimalTemperature")
+            sample_storage["minValue"] = growth_temp[0].get("minimalTemperature")
+            sample_storage["maxValue"] = growth_temp[0].get("maximalTemperature")
+            sample_storage["unitText"] = "°C"
+        elif test_temp := _as_list(growth_temp[0].get("testsTemperature")):
+            sample_storage["@type"] = "QuantitativeValue"
+            sample_storage["minValue"] = test_temp[0].get("minimal")
+            sample_storage["maxValue"] = test_temp[0].get("maximal")
+            sample_storage["unitText"] = "°C"
+
+    if sample_storage:
+        insert_value(output, "sampleStorageTemperature", sample_storage)
+
+    insert_value(output, "usageInfo", {"description": "Nagoya Protocol Restrictions"})
+
+    if date := _as_list(data.get("origin")):
+        if date[0].get("sampleDate"):
+            insert_value(output, "dateCollected", _to_iso_date(date[0].get("sampleDate")))
+
+    output["sampleAvailability"] = True
+
+def parse_kctc(ccn, output):
+    cnn = ccn.split(" ")[1]
+    data = get_kctc_data(cnn)
+    if not data:
+        logger.warning(f"Could not fetch KCTC data for {ccn}")
+        return
+    included_in_data_catalog = {
+        "@type": "DataCatalog",
+        "name": "Korean Collection for Type Cultures (KCTC)",
+        "url": "https://kctc.kribb.re.kr/",
+        "versionDate": datetime.date.today().isoformat(),
+        "archivedAt": f"https://kctc.kribb.re.kr/collections/view?sn={cnn}",
+    }
+    insert_value(output, "includedInDataCatalog", included_in_data_catalog)
+    item_location = {
+        "@type": "AdministrativeArea",
+        "name": "South Korea",
+        "administrativeType": "Country",
+    }
+    insert_value(output, "itemLocation", item_location)
+
+    insert_value(output, "sampleState", data.get("Price"))
+
+    if sample_storage := parse_temperature(data.get("Temperature")):
+        insert_value(output, "sampleStorageTemperature", sample_storage)
+
+    output["sampleAvailability"] = True
+
+    if mta := data.get("MTA Restrictions"):
+        insert_value(output, "usageInfo", {"description": mta})
+    if data.get("Price"):
+        insert_value(output, "creativeWorkStatus", ["Available"])
+
+def parse_jcm(ccn, output):
+    cnn = ccn.split(" ")[1]
+    data = get_jcm_data(cnn)
+    if not data:
+        logger.warning(f"Could not fetch JCM data for {ccn}")
+        return
+    included_in_data_catalog = {
+        "@type": "DataCatalog",
+        "name": "Japan Collection of Microorganisms (JCM)",
+        "url": "https://www.jcm.riken.jp/",
+        "versionDate": datetime.date.today().isoformat(),
+        "archivedAt": f"https://www.jcm.riken.jp/cgi-bin/jcm/jcm_number?JCM={cnn}",
+    }
+    insert_value(output, "includedInDataCatalog", included_in_data_catalog)
+
+    item_location = {
+        "@type": "AdministrativeArea",
+        "name": "Japan",
+        "administrativeType": "Country",
+    }
+    insert_value(output, "itemLocation", item_location)
+
+    if sample_storage := parse_temperature(data.get("Temperature")):
+        insert_value(output, "sampleStorageTemperature", sample_storage)
+
+    delivery = []
+    if d := data.get("Domestic"):
+        delivery.append(f"Domestic: {d}")
+    if o := data.get("Overseas"):
+        delivery.append(f"Overseas: {o}")
+    if delivery:
+        insert_value(output, "sampleState", " ".join(delivery))
+
+    insert_value(output, "sampleAvailability", True)
+
+    if data.get("Domestic") or data.get("Overseas"):
+        insert_value(output, "creativeWorkStatus", "Available")
+    if "culture on request" in data.get("Domestic", "").lower() or "culture on request" in data.get("Overseas", "").lower():
+        insert_value(output, "creativeWorkStatus", "Bespoke")
+
+    if spatial_coverage := data.get("Source"):
+        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+
+def parse_ccug(ccn, output):
+    ccn = ccn.split(" ")[1]
+    data = get_ccug_data(ccn)
+    if not data:
+        logger.warning(f"Could not fetch CCUG data for {ccn}")
+        return
+    included_in_data_catalog = {
+        "@type": "DataCatalog",
+        "name": "Culture Collection University of Gothenburg (CCUG)",
+        "url": "https://www.ccug.se/",
+        "versionDate": datetime.date.today().isoformat(),
+        "archivedAt": f"https://www.ccug.se/strain?id={ccn}",
+    }
+    insert_value(output, "includedInDataCatalog", included_in_data_catalog)
+
+    item_location = {
+        "@type": "AdministrativeArea",
+        "name": "Sweden",
+        "administrativeType": "Country",
+    }
+    insert_value(output, "itemLocation", item_location)
+
+    insert_value(output, "sampleState", "freeze-dried (lyophilized) biomass in sealed glass ampoules")
+
+    sample_storage = {
+        "@type": "QuantitativeValue",
+        "minValue": 4,
+        "maxValue": 8,
+        "unitText": "°C",
+    }
+    insert_value(output, "sampleStorageTemperature", sample_storage)
+    insert_value(output, "sampleAvailability", True)
+    insert_value(output, "creativeWorkStatus", "Available")
+    if spatial_coverage := data.get("Sample Origin"):
+        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+
+
+def parse_atcc(ccn, output):
+    ccn = ccn.split(" ")[1]
+    data = get_atcc_data(ccn)
+    if not data:
+        logger.warning(f"Could not fetch ATCC data for {ccn}")
+        return
+    included_in_data_catalog = {
+        "@type": "DataCatalog",
+        "name": "American Type Culture Collection (ATCC)",
+        "url": "https://www.atcc.org/",
+        "versionDate": datetime.date.today().isoformat(),
+        "archivedAt": f"https://www.atcc.org/products/{ccn}",
+    }
+    insert_value(output, "includedInDataCatalog", included_in_data_catalog)
+
+    item_location = {
+        "@type": "AdministrativeArea",
+        "name": "Worldwide",
+    }
+
+    insert_value(output, "itemLocation", item_location)
+    if sample_state := data.get("Product Format"):
+        insert_value(output, "sampleState", sample_state)
+
+    if sample_storage := parse_temperature(data.get("Temperature")):
+        insert_value(output, "sampleStorageTemperature", sample_storage)
+
+    insert_value(output, "sampleAvailability", True)
+
+    # Permits & Restrictions (list of {title, text}) -> single usageInfo description
+    permits = data.get("Permits & Restrictions") or []
+    if usage := " ".join(
+        ": ".join(part for part in (p.get("title"), p.get("text")) if part)
+        for p in permits
+    ):
+        insert_value(output, "usageInfo", {"description": usage})
+
+    insert_value(output, "creativeWorkStatus", "Available")
+
+    if spatial_coverage := data.get("Geographical isolation"):
+        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+
+def parse_ucccb(ccn, output):
+    data = get_ucccb_data(ccn)
+    if not data:
+        logger.warning(f"Could not fetch UCCCB data for {ccn}")
+        return
+    included_in_data_catalog = {
+        "@type": "DataCatalog",
+        "name": "University of Coimbra Bacteria Culture Collection (UCCCB)",
+        "url": "https://ucccb.uc.pt/",
+        "versionDate": datetime.date.today().isoformat(),
+        "archivedAt": f"https://ucccb.uc.pt/strain-details/?detail={ccn}",
+    }
+    insert_value(output, "includedInDataCatalog", included_in_data_catalog)
+
+    item_location = {
+        "@type": "AdministrativeArea",
+        "name": "Portugal",
+        "administrativeType": "Country",
+    }
+    insert_value(output, "itemLocation", item_location)
+
+    if sample_storage := parse_temperature(
+        data.get("Optimal Temperature(s)"),
+        data.get("Minimum Temperature"),
+        data.get("Maximum Temperature"),
+    ):
+        if name := data.get("Preservation Procedures Used"):
+            sample_storage["name"] = name
+        insert_value(output, "sampleStorageTemperature", sample_storage)
+
+    insert_value(output, "sampleAvailability", True)
+    insert_value(output, "creativeWorkStatus", "Available")
+    if spatial_coverage := data.get("Country"):
+        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+    if date := data.get("Date of isolation"):
+        insert_value(output, "dateCollected", _to_iso_date(date))
 
 
 def parse():
@@ -188,7 +496,8 @@ def parse():
         if ccn_str := literature.get("culture collection no."):
             ccns.extend(c.strip() for c in str(ccn_str).split(",") if c.strip())
         if dsm := general.get("DSM-Number"):
-            ccns.append(f"DSM {dsm}")
+            if f"DSM {dsm}" not in ccns:
+                ccns.append(f"DSM {dsm}")
         for ccn in dict.fromkeys(ccns):
             insert_value(output, "alternateIdentifier", ccn)
             if ccn.upper().startswith("DSM "):
@@ -198,6 +507,19 @@ def parse():
                     "sameAs",
                     f"https://www.dsmz.de/collection/catalogue/details/culture/DSM-{num}",
                 )
+
+            if ccn.upper().startswith("DSM"):
+                parse_dsm(ccn, output)
+            if ccn.upper().startswith("KCTC"):
+                parse_kctc(ccn, output)
+            if ccn.upper().startswith("JCM"):
+                parse_jcm(ccn, output)
+            if ccn.upper().startswith("CCUG"):
+                parse_ccug(ccn, output)
+            if ccn.upper().startswith("ATCC"):
+                parse_atcc(ccn, output)
+            if ccn.upper().startswith("UCCCB"):
+                parse_ucccb(ccn, output)
 
         # Isolation entries (single dict or list)
         for iso in _as_list(isolation_root.get("isolation")):
