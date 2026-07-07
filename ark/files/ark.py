@@ -501,7 +501,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
             for value in dict.fromkeys(biospecimen_subtype_values)
         ]
     if sample_components:
-        doc["sample"] = sample_components
+        doc["sample"] = {"@type": "Sample", **sample_components}
 
     # Health conditions from diagnosis
     diagnosis = row.get("diagnosis")
