@@ -634,4 +634,8 @@ def parse():
             if color := mc.get("complex color"):
                 insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": color})
 
+        if isinstance(output.get("includedInDataCatalog"), list):
+            output["additionalType"] = "ExperimentalRunSample"
+        else:
+            output["additionalType"] = "BioSample"
         yield output
