@@ -3,13 +3,16 @@ import logging
 import re
 
 import requests
-
 from api_secret import QIITA_EMAIL, QIITA_PASSWORD
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 BASE_URL = "https://qiita.ucsd.edu"
+
+
+def get_public_study_url(study_id):
+    return f"{BASE_URL}/public/?study_id={study_id}"
 
 
 def get_authenticated_session():
@@ -93,8 +96,9 @@ def parse():
             output["description"] = study_abstract
 
         if study_id := study.get("study_id"):
-            output["url"] = f"{BASE_URL}/study/description/{study_id}"
-            output["includedInDataCatalog"]["archivedAt"] = f"{BASE_URL}/study/description/{study_id}"
+            study_url = get_public_study_url(study_id)
+            output["url"] = study_url
+            output["includedInDataCatalog"]["archivedAt"] = study_url
             output["_id"] = f"qiita_{study_id}"
 
             # TODO use helper to import sample metadata to proper mapping
