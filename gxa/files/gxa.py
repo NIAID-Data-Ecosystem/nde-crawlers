@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import time
+import zipfile
 from typing import Iterable
 from urllib.parse import quote, urlencode, urljoin
 
@@ -34,6 +35,7 @@ DESIGN_VALUE_COLUMN_RE = re.compile(r"^(?P<kind>Sample Characteristic|Factor Val
 DESIGN_TERM_COLUMN_RE = re.compile(
     r"^(?P<kind>Sample Characteristic Ontology Term|Factor Value Ontology Term)\[(?P<property>.+)]$"
 )
+RESULT_FILE_EXTENSIONS = (".tsv",)
 
 INVALID_VALUES = {
     "",
@@ -267,8 +269,14 @@ def _absolute_url(path):
 
 
 def _request(session, url, response_type="json", required=True, retries=3):
+    if response_type == "json":
+        accept = "application/json"
+    elif response_type == "bytes":
+        accept = "text/plain,application/zip,application/octet-stream,application/json"
+    else:
+        accept = "text/plain,application/json"
     headers = {
-        "Accept": "application/json" if response_type == "json" else "text/plain,application/json",
+        "Accept": accept,
         "User-Agent": "nde-gxa-crawler/0.1",
     }
     for attempt in range(1, retries + 1):
@@ -282,7 +290,11 @@ def _request(session, url, response_type="json", required=True, retries=3):
                 logger.warning("Skipping unavailable GXA URL %s: HTTP %s", url, response.status_code)
                 return None
             response.raise_for_status()
-            return response.json() if response_type == "json" else response.text
+            if response_type == "json":
+                return response.json()
+            if response_type == "bytes":
+                return response.content
+            return response.text
         except (requests.RequestException, ValueError) as exc:
             if attempt == retries:
                 if required:
@@ -340,7 +352,45 @@ def _download_results(session, accession, raw_type):
         "type": raw_type,
     }
     url = EXPERIMENT_DOWNLOAD_URL_TEMPLATE.format(accession=accession, raw_type=raw_type)
-    return _request(session, f"{url}?{urlencode(params)}", response_type="text", required=False)
+    payload = _request(session, f"{url}?{urlencode(params)}", response_type="bytes", required=False)
+    return _extract_result_texts(payload, accession) if payload else []
+
+
+def _extract_result_texts(payload, accession):
+    if zipfile.is_zipfile(io.BytesIO(payload)):
+        result_texts = []
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            for info in sorted(archive.infolist(), key=lambda item: item.filename):
+                filename = info.filename
+                if filename.endswith("/"):
+                    continue
+                if not filename.casefold().endswith(RESULT_FILE_EXTENSIONS):
+                    logger.warning("Skipping non-TSV file %s in GXA experiment %s results archive", filename, accession)
+                    continue
+                result_texts.append(
+                    _decode_result_text(
+                        archive.read(info),
+                        f"GXA experiment {accession} results archive member {filename}",
+                    )
+                )
+        if not result_texts:
+            logger.warning("No TSV files found in GXA experiment %s results archive", accession)
+        return result_texts
+
+    return [_decode_result_text(payload, f"GXA experiment {accession} results")]
+
+
+def _decode_result_text(payload, context):
+    try:
+        text = payload.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = payload.decode("latin-1")
+
+    nul_count = text.count("\x00")
+    if nul_count:
+        logger.warning("Removing %s NUL characters from %s", nul_count, context)
+        text = text.replace("\x00", "")
+    return text
 
 
 def _fetch_design_terms(session, accession):
@@ -946,23 +996,24 @@ def parse(experiment_accessions: Iterable[str] | None = None):
             logger.warning("No contrasts found for GXA experiment %s", accession)
             continue
 
-        tsv_text = _download_results(session, accession, raw_type)
-        if not tsv_text:
+        result_texts = _download_results(session, accession, raw_type)
+        if not result_texts:
             continue
 
         design_terms = _fetch_design_terms(session, accession)
         experiment_records = 0
-        for result in _iter_tsv_results(tsv_text):
-            contrast = contrast_by_name.get(result["contrast_name"])
-            if not contrast:
-                logger.warning("No contrast metadata for %s in GXA experiment %s", result["contrast_name"], accession)
-                continue
-            yield _build_doc(result, summary, experiment_payload, contrast, raw_type, design_terms)
-            yielded_records += 1
-            experiment_records += 1
-            if MAX_RECORDS and yielded_records >= MAX_RECORDS:
-                logger.info("Reached GXA_MAX_RECORDS=%s", MAX_RECORDS)
-                return
+        for result_text in result_texts:
+            for result in _iter_tsv_results(result_text):
+                contrast = contrast_by_name.get(result["contrast_name"])
+                if not contrast:
+                    logger.warning("No contrast metadata for %s in GXA experiment %s", result["contrast_name"], accession)
+                    continue
+                yield _build_doc(result, summary, experiment_payload, contrast, raw_type, design_terms)
+                yielded_records += 1
+                experiment_records += 1
+                if MAX_RECORDS and yielded_records >= MAX_RECORDS:
+                    logger.info("Reached GXA_MAX_RECORDS=%s", MAX_RECORDS)
+                    return
 
         logger.info("Yielded %s inference records for GXA experiment %s", experiment_records, accession)
         time.sleep(SLEEP)
