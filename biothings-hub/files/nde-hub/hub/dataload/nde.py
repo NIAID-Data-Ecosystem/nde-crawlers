@@ -128,6 +128,75 @@ class NDESourceUploader(BaseSourceUploader):
 
     @classmethod
     def get_mapping(cls):
+        defined_term_mapping = {
+            "properties": {
+                "@id": {"type": "keyword"},
+                "@type": {"type": "keyword", "copy_to": ["all"]},
+                "additionalType": {"type": "keyword", "copy_to": ["all"]},
+                "alternateName": {
+                    "type": "keyword",
+                    "normalizer": "keyword_lowercase_normalizer",
+                    "copy_to": ["all"],
+                },
+                "description": {"type": "text", "copy_to": ["all"]},
+                "identifier": {"type": "text", "copy_to": ["all"]},
+                "inDefinedTermSet": {"type": "keyword", "copy_to": ["all"]},
+                "name": {
+                    "type": "keyword",
+                    "normalizer": "keyword_lowercase_normalizer",
+                    "copy_to": ["all"],
+                    "fields": {"raw": {"type": "keyword"}},
+                },
+                "propertyID": {"type": "keyword", "copy_to": ["all"]},
+                "sameAs": {"type": "keyword", "copy_to": ["all"]},
+                "url": {"type": "text", "copy_to": ["all"]},
+                "value": {"type": "text", "copy_to": ["all"]},
+            }
+        }
+        statistical_variable_mapping = {
+            "properties": {
+                **defined_term_mapping["properties"],
+                "constraintProperty": {"type": "keyword", "copy_to": ["all"]},
+                "populationType": {"type": "keyword", "copy_to": ["all"]},
+                "statType": {"type": "keyword", "copy_to": ["all"]},
+            }
+        }
+        creative_work_mapping = {
+            "properties": {
+                "@id": {"type": "keyword"},
+                "@type": {"type": "keyword", "copy_to": ["all"]},
+                "description": {"type": "text", "copy_to": ["all"]},
+                "identifier": {"type": "text", "copy_to": ["all"]},
+                "includedInDataCatalog": {
+                    "properties": {
+                        "@type": {"type": "text"},
+                        "alternateName": {"type": "keyword", "copy_to": ["all"]},
+                        "archivedAt": {"type": "text", "copy_to": ["all"]},
+                        "identifier": {"type": "keyword", "copy_to": ["all"]},
+                        "name": {"type": "keyword", "copy_to": ["all"]},
+                        "url": {"type": "text"},
+                        "versionDate": {"type": "date"},
+                    }
+                },
+                "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                "relationship": {"type": "text", "copy_to": ["all"]},
+                "url": {"type": "text", "copy_to": ["all"]},
+            }
+        }
+        semantic_triple_mapping = {
+            "properties": {
+                "@type": {"type": "keyword", "copy_to": ["all"]},
+                "inversePredicate": defined_term_mapping,
+                "isSymmetric": {"type": "boolean"},
+                "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+                "tripleObject": defined_term_mapping,
+                "tripleObjectQualifier": defined_term_mapping,
+                "triplePredicate": defined_term_mapping,
+                "triplePredicateQualifier": defined_term_mapping,
+                "tripleSubject": defined_term_mapping,
+                "tripleSubjectQualifier": defined_term_mapping,
+            }
+        }
         mapping = {
             "_meta": {
                 "properties": {
@@ -188,6 +257,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "reviewAspect": {"type": "text"},
                 }
             },
+            "analyticalMethod": defined_term_mapping,
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "applicationCategory": {
                 "type": "keyword",
@@ -840,6 +910,21 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "marginOfError": {
+                "properties": {
+                    "@type": {"type": "keyword"},
+                    "maxValue": {"type": "double"},
+                    "minValue": {"type": "double"},
+                    "name": {"type": "keyword", "copy_to": ["all"]},
+                    "unitCode": {"type": "keyword"},
+                    "unitText": {"type": "keyword"},
+                    "value": {"type": "double"},
+                }
+            },
+            "measuredProperty": defined_term_mapping,
+            "measurementDenominator": statistical_variable_mapping,
+            "measurementMethod": defined_term_mapping,
+            "measurementQualifier": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
             "mainEntityOfPage": {"type": "text"},
             "metadata_score": {"type": "float"},
             "name": {
@@ -852,6 +937,10 @@ class NDESourceUploader(BaseSourceUploader):
                 },
             },
             "nctid": {"type": "keyword", "copy_to": ["all"]},
+            "observationAbout": defined_term_mapping,
+            "observationDate": {"type": "date"},
+            "observationPeriod": {"type": "text", "copy_to": ["all"]},
+            "observationType": defined_term_mapping,
             "operatingSystem": {
                 "type": "keyword",
                 "normalizer": "keyword_lowercase_normalizer",
@@ -899,6 +988,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "aggregateElement": {
                         "properties": {
                             "additionalType": {"type": "keyword", "copy_to": ["all"]},
+                            "additionalProperty": defined_term_mapping,
                             "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
                             "associatedPhenotype": {
                                 "properties": {
@@ -991,6 +1081,7 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "additionalType": {"type": "keyword", "copy_to": ["all"]},
+                    "additionalProperty": defined_term_mapping,
                     "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
                     "associatedPhenotype": {
                         "properties": {
@@ -1064,9 +1155,9 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "sex": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
-
                 }
             },
+            "semanticMapping": semantic_triple_mapping,
             "sdPublisher": {
                 "properties": {
                     "@type": {"type": "keyword", "copy_to": ["all"]},
@@ -1198,6 +1289,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "subjectOf": creative_work_mapping,
             "temporalCoverage": {
                 "properties": {
                     "@type": {"type": "text"},
@@ -1234,6 +1326,8 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword", "copy_to": ["all"]},
                 }
             },
+            "unitCode": {"type": "keyword", "copy_to": ["all"]},
+            "unitText": {"type": "keyword", "copy_to": ["all"]},
             "url": {"type": "text", "copy_to": ["all"]},
             "usageInfo": {
                 "properties": {
@@ -1243,13 +1337,18 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "text", "copy_to": ["all"]},
                 }
             },
+            "value": {"type": "double"},
+            "valueReference": defined_term_mapping,
             "variableMeasured": {
                 "properties": {
+                    "@type": {"type": "keyword", "copy_to": ["all"]},
+                    "additionalType": {"type": "keyword", "copy_to": ["all"]},
                     "alternateName": {
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
                     },
+                    "constraintProperty": {"type": "keyword", "copy_to": ["all"]},
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -1274,7 +1373,10 @@ class NDESourceUploader(BaseSourceUploader):
                         "normalizer": "keyword_lowercase_normalizer",
                         "copy_to": ["all"],
                     },
+                    "populationType": {"type": "keyword", "copy_to": ["all"]},
+                    "statType": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
+                    "value": {"type": "text", "copy_to": ["all"]},
                 }
             },
             "version": {
