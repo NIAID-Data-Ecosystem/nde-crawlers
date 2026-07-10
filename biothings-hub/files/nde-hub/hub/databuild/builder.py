@@ -1,3 +1,6 @@
+import re
+from collections import defaultdict
+
 import biothings.hub.databuild.builder as builder
 import biothings.utils.mongo as mongo
 from biothings.utils.dataload import merge_struct
@@ -33,33 +36,62 @@ class NDEDataBuilder(builder.DataBuilder):
         collection_name = self.target_backend.target_name
         collection = db[collection_name]
 
-        self.logger.info(f"Agregating documents with duplicate {duplicate} and sources {sources} in {collection_name}")
-        pipeline = [
-            {"$match": {"doi": {"$ne": None}}},
-            {
-                "$group": {
-                    "_id": "$doi",
-                    "documents": {"$push": "$$ROOT"},
-                    "count": {"$sum": 1},
-                }
-            },
-            {
-                "$match": {
-                    "count": {"$gt": 1},
-                    "documents": {
-                        "$all": [
-                            {"$elemMatch": {"_id": {"$regex": f"^{duplicate}"}}},
-                            {"$elemMatch": {"_id": {"$regex": f"^({'|'.join(sources)})"}}},
-                        ]
-                    },
-                }
-            }
-        ]
+        projection = {"_id": 1, "doi": 1, "includedInDataCatalog": 1}
+        doi_filter = {"doi": {"$exists": True, "$nin": [None, ""]}}
 
-        # Add allowDiskUse to handle large datasets
-        results = collection.aggregate(pipeline, allowDiskUse=True, batchSize=100)
+        def prefix_query(source):
+            return {**doi_filter, "_id": {"$regex": f"^{re.escape(source)}"}}
 
-        self.logger.info("Aggregation complete. Merging and deleting duplicate records")
+        def doi_key(doc):
+            doi = doc.get("doi")
+            if not doi:
+                return None
+            if isinstance(doi, list):
+                doi = tuple(value for value in doi if value not in (None, ""))
+            return doi or None
+
+        def track_doc(docs_by_doi, counts_by_doi, key, doc):
+            counts_by_doi[key] += 1
+            if len(docs_by_doi[key]) < 2:
+                docs_by_doi[key].append(doc)
+
+        def scan_by_prefix(source):
+            cursor = collection.find(prefix_query(source), projection, no_cursor_timeout=True).batch_size(1000)
+            try:
+                yield from cursor
+            finally:
+                cursor.close()
+
+        self.logger.info(
+            f"Scanning documents with duplicate {duplicate} and sources {sources} in {collection_name}"
+        )
+
+        source_docs_by_doi = defaultdict(list)
+        source_counts_by_doi = defaultdict(int)
+        source_doc_count = 0
+        for source in sources:
+            for doc in scan_by_prefix(source):
+                key = doi_key(doc)
+                if key is not None:
+                    track_doc(source_docs_by_doi, source_counts_by_doi, key, doc)
+                    source_doc_count += 1
+
+        self.logger.info(
+            f"Found {len(source_docs_by_doi)} DOI groups from {source_doc_count} source records"
+        )
+
+        duplicate_docs_by_doi = defaultdict(list)
+        duplicate_counts_by_doi = defaultdict(int)
+        duplicate_doc_count = 0
+        for doc in scan_by_prefix(duplicate):
+            key = doi_key(doc)
+            if key in source_docs_by_doi:
+                track_doc(duplicate_docs_by_doi, duplicate_counts_by_doi, key, doc)
+                duplicate_doc_count += 1
+
+        self.logger.info(
+            f"Found {len(duplicate_docs_by_doi)} matching DOI groups from {duplicate_doc_count} duplicate records"
+        )
 
         # records to be deleted
         records_to_delete = []
@@ -67,30 +99,37 @@ class NDEDataBuilder(builder.DataBuilder):
         bulk_operations = []
         count = 0
 
-        # Process results in batches to avoid memory overflow
-        batch_count = 0
-        for group, result in enumerate(results, start=1):
-            batch_count += 1
+        def flush_writes():
+            nonlocal count
+            if not bulk_operations:
+                return
+            collection.bulk_write(bulk_operations)
+            count += len(bulk_operations)
+            self.logger.info(f"{count} records updated")
+            bulk_operations.clear()
+            delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
+            self.logger.info(f"Deleted {delete_result.deleted_count} duplicate records in batch")
+            records_to_delete.clear()
 
-            # add all records that start with duplicate in _id to records_to_delete
-            records_to_delete.extend(
-                [doc.get("_id") for doc in result["documents"] if doc["_id"].startswith(duplicate)]
-            )
-
+        group = 0
+        skipped_count = 0
+        for group, (doi, dupe_docs) in enumerate(duplicate_docs_by_doi.items(), start=1):
             # A single DOI can be shared by the duplicate source (e.g. zenodo), the
             # authoritative source (e.g. dryad/tycho), and occasionally an unrelated
             # source (e.g. figshare re-publishing the dataset under the same DOI).
             # Select exactly one duplicate doc and one source doc to merge, ignoring
             # any other sources, rather than crashing the whole post-merge job.
-            dupe_docs = [doc for doc in result["documents"] if doc["_id"].startswith(duplicate)]
-            source_docs = [
-                doc for doc in result["documents"] if any(doc["_id"].startswith(source) for source in sources)
-            ]
+            source_docs = source_docs_by_doi[doi]
+            dupe_count = duplicate_counts_by_doi[doi]
+            source_count = source_counts_by_doi[doi]
 
-            if len(dupe_docs) != 1 or len(source_docs) != 1:
+            if dupe_count != 1 or source_count != 1:
+                skipped_count += 1
+                sample_ids = [doc["_id"] for doc in [*dupe_docs, *source_docs]]
                 self.logger.warning(
                     f"Skipping deduplication group {group}: expected one '{duplicate}' document and one "
-                    f"source document, but got {[doc['_id'] for doc in result['documents']]}"
+                    f"source document, but got {dupe_count} duplicate documents and {source_count} "
+                    f"source documents. Sample IDs: {sample_ids}"
                 )
                 continue
 
@@ -109,33 +148,16 @@ class NDEDataBuilder(builder.DataBuilder):
                 {"$set": {"includedInDataCatalog": source_includedInDataCatalog + dupe_includedInDataCatalog}},
             )
             bulk_operations.append(update_op)
+            records_to_delete.extend(doc["_id"] for doc in dupe_docs)
 
-            # Process smaller batches more frequently
-            if len(bulk_operations) == 1000:  # Reduced from 10000
-                collection.bulk_write(bulk_operations)
-                bulk_operations = []
-                count += 1000
-                self.logger.info(f"{count} records updated")
+            if len(bulk_operations) == 1000:
+                flush_writes()
 
-            # Also process deletion batches to free memory
-            if len(records_to_delete) >= 5000:
-                delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
-                self.logger.info(f"Deleted {delete_result.deleted_count} duplicate records in batch")
-                records_to_delete = []
-
-        if bulk_operations:
-            collection.bulk_write(bulk_operations)
-            count += len(bulk_operations)
-            self.logger.info(f"{count} records updated")
+        flush_writes()
 
         self.logger.info(
-            f"Merging complete. {group} Groups found. Updated {count} records. Deleting remaining duplicate records"
+            f"Merging complete. {group} groups found. Updated {count} records. Skipped {skipped_count} groups"
         )
-
-        # Perform final bulk deletion of remaining duplicate records
-        if records_to_delete:
-            delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
-            self.logger.info(f"Deleted {delete_result.deleted_count} remaining duplicate records")
 
     def identifier_deduplication(self, identifier_source_catalog, source_catalogs, prefer_matching_catalog_doc=False):
         """Given a source catalog (e.g., Data Discovery Engine) and a list of primary source catalogs
@@ -335,16 +357,6 @@ class NDEDataBuilder(builder.DataBuilder):
         self.identifier_deduplication(
             "ProteomeXchange",
             ["MassIVE"],
-            prefer_matching_catalog_doc=True,
-        )
-
-        # CEIRR reagents can also be cataloged in BEI Resources. The CEIRR
-        # crawler emits BEI identifiers in the matching BEI _id form so this
-        # can merge CEIRR catalog provenance into the BEI record and remove
-        # the duplicate CEIRR document.
-        self.identifier_deduplication(
-            "Centers of Excellence for Influenza Research and Response (CEIRR) Resources",
-            ["BEI Resources"],
             prefer_matching_catalog_doc=True,
         )
 
