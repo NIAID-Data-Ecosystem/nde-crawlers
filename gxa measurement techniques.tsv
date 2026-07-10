@@ -1,9 +1,0 @@
-rawExperimentType	measurementTechnique	all_experiment_count	differential_experiment_count	example_accessions	current_analyticalMethod
-MICROARRAY_1COLOUR_MRNA_DIFFERENTIAL	Microarray 1-colour mRNA	2921	2921	E-ATMX-20; E-ATMX-25; E-ATMX-26	Expression Atlas microarray differential expression analysis
-RNASEQ_MRNA_DIFFERENTIAL	RNA-Seq mRNA	1256	1256	E-CURD-113; E-CURD-147; E-CURD-148	iRAP Pipeline
-MICROARRAY_1COLOUR_MICRORNA_DIFFERENTIAL	Microarray 1-colour miRNA	5	5	E-GEOD-13316; E-GEOD-23739; E-GEOD-25820	Expression Atlas microarray differential expression analysis
-PROTEOMICS_DIFFERENTIAL	Proteomics differential	4	4	E-PROT-39; E-PROT-59; E-PROT-67	Expression Atlas proteomics differential expression analysis
-MICROARRAY_2COLOUR_MRNA_DIFFERENTIAL	Microarray 2-colour mRNA	1	1	E-GEOD-43049	Expression Atlas microarray differential expression analysis
-PROTEOMICS_BASELINE	Proteomics	118	0	E-PROT-86; E-PROT-77; E-PROT-7	Expression Atlas proteomics differential expression analysis
-PROTEOMICS_BASELINE_DIA	Proteomics	1	0	E-PROT-60	Expression Atlas proteomics differential expression analysis
-RNASEQ_MRNA_BASELINE	RNA-Seq mRNA	256	0	E-MTAB-4045; E-GEOD-61857; E-GEOD-58856	iRAP Pipeline
