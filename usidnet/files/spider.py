@@ -80,6 +80,12 @@ class USIDNETSpider(scrapy.Spider):
                             data[prev_key] = [data[prev_key]]
                         data[prev_key].append(value.replace("\xa0", " "))
 
+        # Pricing (Coriell shows tiered prices as <span class="price">$0.00</span>USD).
+        # A price of $0.00 across all tiers means the sample is free.
+        prices = [p.strip() for p in response.xpath("//span[@class='price']/text()").getall() if p.strip()]
+        if prices:
+            data["Prices"] = prices
+
         yield data if data else None
 
 

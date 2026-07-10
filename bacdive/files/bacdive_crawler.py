@@ -129,6 +129,27 @@ def _to_iso_date(val):
     return dt
 
 
+def _extract_collection_number(ccn, prefix):
+    """Extract the collection-specific identifier from a culture collection string.
+
+    Handles forms like 'ATCC 123', 'ATCC-123', and 'ATCC123'.
+    Returns None when no identifier can be extracted.
+    """
+    raw = str(ccn or "").strip()
+    if not raw:
+        return None
+
+    match = re.match(rf"(?i)^{re.escape(prefix)}(?:[\s\-_:]+)?(.+)$", raw)
+    if match and (identifier := match.group(1).strip()):
+        return identifier
+
+    parts = raw.split(None, 1)
+    if len(parts) > 1 and parts[1].strip():
+        return parts[1].strip()
+
+    return None
+
+
 _TEMPERATURE_RE = re.compile(r"\s*(\d+(?:\.\d+)?)\s*(\S.*)?$")
 
 
@@ -179,7 +200,12 @@ def parse_dsm(ccn, output):
                   https://api.strains.dsmz.de/dsm/14760
                   https://api.bacdive.dsmz.de/v2/fetch/100
     """
-    request_url = f"https://api.strains.dsmz.de/dsm/{ccn.split(' ')[1]}"
+    dsm_number = _extract_collection_number(ccn, "DSM")
+    if not dsm_number:
+        logger.warning(f"Could not parse DSM number from culture collection value: {ccn}")
+        return
+
+    request_url = f"https://api.strains.dsmz.de/dsm/{dsm_number}"
     try:
         resp = requests.get(request_url, timeout=20)
     except requests.RequestException as e:
@@ -195,7 +221,7 @@ def parse_dsm(ccn, output):
         "name": _as_list(data.get("collections"))[0].get("legalName"),
         "url": "https://www.dsmz.de/",
         "versionDate": datetime.date.today().isoformat(),
-        "archivedAt": f"https://www.dsmz.de/collection/catalogue/details/culture/{'-'.join(ccn.split(' '))}",
+        "archivedAt": f"https://www.dsmz.de/collection/catalogue/details/culture/DSM-{dsm_number}",
     }
     insert_value(output, "includedInDataCatalog", included_in_data_catalog)
     item_location = {
@@ -204,7 +230,7 @@ def parse_dsm(ccn, output):
         "administrativeType": "Country",
     }
     insert_value(output, "itemLocation", item_location)
-    if sample_state := get_sample_state(ccn.split(" ")[1]):
+    if sample_state := get_sample_state(dsm_number):
         insert_value(output, "sampleState", sample_state)
         for state in _as_list(output["sampleState"]):
             if "on request" in state.lower():
@@ -238,8 +264,12 @@ def parse_dsm(ccn, output):
     output["sampleAvailability"] = True
 
 def parse_kctc(ccn, output):
-    cnn = ccn.split(" ")[1]
-    data = get_kctc_data(cnn)
+    kctc_number = _extract_collection_number(ccn, "KCTC")
+    if not kctc_number:
+        logger.warning(f"Could not parse KCTC number from culture collection value: {ccn}")
+        return
+
+    data = get_kctc_data(kctc_number)
     if not data:
         logger.warning(f"Could not fetch KCTC data for {ccn}")
         return
@@ -248,7 +278,7 @@ def parse_kctc(ccn, output):
         "name": "Korean Collection for Type Cultures (KCTC)",
         "url": "https://kctc.kribb.re.kr/",
         "versionDate": datetime.date.today().isoformat(),
-        "archivedAt": f"https://kctc.kribb.re.kr/collections/view?sn={cnn}",
+        "archivedAt": f"https://kctc.kribb.re.kr/collections/view?sn={kctc_number}",
     }
     insert_value(output, "includedInDataCatalog", included_in_data_catalog)
     item_location = {
@@ -271,8 +301,12 @@ def parse_kctc(ccn, output):
         insert_value(output, "creativeWorkStatus", ["Available"])
 
 def parse_jcm(ccn, output):
-    cnn = ccn.split(" ")[1]
-    data = get_jcm_data(cnn)
+    jcm_number = _extract_collection_number(ccn, "JCM")
+    if not jcm_number:
+        logger.warning(f"Could not parse JCM number from culture collection value: {ccn}")
+        return
+
+    data = get_jcm_data(jcm_number)
     if not data:
         logger.warning(f"Could not fetch JCM data for {ccn}")
         return
@@ -281,7 +315,7 @@ def parse_jcm(ccn, output):
         "name": "Japan Collection of Microorganisms (JCM)",
         "url": "https://www.jcm.riken.jp/",
         "versionDate": datetime.date.today().isoformat(),
-        "archivedAt": f"https://www.jcm.riken.jp/cgi-bin/jcm/jcm_number?JCM={cnn}",
+        "archivedAt": f"https://www.jcm.riken.jp/cgi-bin/jcm/jcm_number?JCM={jcm_number}",
     }
     insert_value(output, "includedInDataCatalog", included_in_data_catalog)
 
@@ -314,8 +348,12 @@ def parse_jcm(ccn, output):
         insert_value(output, "spatialCoverage", {"name": spatial_coverage})
 
 def parse_ccug(ccn, output):
-    ccn = ccn.split(" ")[1]
-    data = get_ccug_data(ccn)
+    ccug_number = _extract_collection_number(ccn, "CCUG")
+    if not ccug_number:
+        logger.warning(f"Could not parse CCUG number from culture collection value: {ccn}")
+        return
+
+    data = get_ccug_data(ccug_number)
     if not data:
         logger.warning(f"Could not fetch CCUG data for {ccn}")
         return
@@ -324,7 +362,7 @@ def parse_ccug(ccn, output):
         "name": "Culture Collection University of Gothenburg (CCUG)",
         "url": "https://www.ccug.se/",
         "versionDate": datetime.date.today().isoformat(),
-        "archivedAt": f"https://www.ccug.se/strain?id={ccn}",
+        "archivedAt": f"https://www.ccug.se/strain?id={ccug_number}",
     }
     insert_value(output, "includedInDataCatalog", included_in_data_catalog)
 
@@ -351,8 +389,12 @@ def parse_ccug(ccn, output):
 
 
 def parse_atcc(ccn, output):
-    ccn = ccn.split(" ")[1]
-    data = get_atcc_data(ccn)
+    atcc_number = _extract_collection_number(ccn, "ATCC")
+    if not atcc_number:
+        logger.warning(f"Could not parse ATCC number from culture collection value: {ccn}")
+        return
+
+    data = get_atcc_data(atcc_number)
     if not data:
         logger.warning(f"Could not fetch ATCC data for {ccn}")
         return
@@ -361,7 +403,7 @@ def parse_atcc(ccn, output):
         "name": "American Type Culture Collection (ATCC)",
         "url": "https://www.atcc.org/",
         "versionDate": datetime.date.today().isoformat(),
-        "archivedAt": f"https://www.atcc.org/products/{ccn}",
+        "archivedAt": f"https://www.atcc.org/products/{atcc_number}",
     }
     insert_value(output, "includedInDataCatalog", included_in_data_catalog)
 
@@ -509,16 +551,22 @@ def parse():
                 )
 
             if ccn.upper().startswith("DSM"):
+                logger.debug(f"Parsing DSMZ data for {ccn}...")
                 parse_dsm(ccn, output)
             if ccn.upper().startswith("KCTC"):
+                logger.debug(f"Parsing KCTC data for {ccn}...")
                 parse_kctc(ccn, output)
             if ccn.upper().startswith("JCM"):
+                logger.debug(f"Parsing JCM data for {ccn}...")
                 parse_jcm(ccn, output)
             if ccn.upper().startswith("CCUG"):
+                logger.debug(f"Parsing CCUG data for {ccn}...")
                 parse_ccug(ccn, output)
             if ccn.upper().startswith("ATCC"):
+                logger.debug(f"Parsing ATCC data for {ccn}...")
                 parse_atcc(ccn, output)
             if ccn.upper().startswith("UCCCB"):
+                logger.debug(f"Parsing UCCCB data for {ccn}...")
                 parse_ucccb(ccn, output)
 
         # Isolation entries (single dict or list)
@@ -635,7 +683,6 @@ def parse():
                 insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": color})
 
         if isinstance(output.get("includedInDataCatalog"), list):
-            output["additionalType"] = "ExperimentalRunSample"
-        else:
             output["additionalType"] = "BioSample"
+
         yield output

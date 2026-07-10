@@ -432,8 +432,20 @@ class USIDNETItemProcessorPipeline:
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
             },
-            "additionalType": "ExperimentalRunSample"
+            "additionalType": "BioSample",
+            "creativeWorkStatus": "Available",
+            "conditionsOfAccess": "Restricted",
+            "sampleAvailability": True,
         }
+
+        # ---- isAccessibleForFree (Coriell shows tiered pricing; any $0.00 tier => free)
+        amounts = []
+        for price in item.get("Prices") or []:
+            m = re.search(r"[-+]?\d+(?:\.\d+)?", str(price).replace(",", ""))
+            if m:
+                amounts.append(float(m.group()))
+        if amounts:
+            output["isAccessibleForFree"] = any(a == 0 for a in amounts)
 
         # ---- sampleType (prefer the descriptive "Product", fall back to "ProductTypeID")
         if product := _normalize(item.get("Product")):
