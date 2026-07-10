@@ -939,16 +939,7 @@ class NDESourceUploader(BaseSourceUploader):
             "nctid": {"type": "keyword", "copy_to": ["all"]},
             "observationAbout": defined_term_mapping,
             "observationDate": {"type": "date"},
-            "observationPeriod": {
-                "properties": {
-                    "@type": {"type": "keyword"},
-                    "duration": {"type": "text", "copy_to": ["all"]},
-                    "endDate": {"type": "date"},
-                    "name": {"type": "text", "copy_to": ["all"]},
-                    "startDate": {"type": "date"},
-                    "temporalType": {"type": "text", "copy_to": ["all"]},
-                }
-            },
+            "observationPeriod": {"type": "text", "copy_to": ["all"]},
             "observationType": defined_term_mapping,
             "operatingSystem": {
                 "type": "keyword",

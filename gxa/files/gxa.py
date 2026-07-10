@@ -91,6 +91,16 @@ SAMPLE_PROPERTIES_WITH_SPECIFIC_FIELDS = {
     "specimen with known storage state",
 }
 
+OBSERVATION_PERIOD_PROPERTIES = {
+    "duration of experiment",
+    "initial time point",
+    "sampling time",
+    "sampling time point",
+    "survival time",
+    "time",
+    "time from biopsy to failure/censoring days",
+}
+
 CATALOG = {
     "@type": "DataCatalog",
     "name": "Gene Expression Atlas",
@@ -128,6 +138,12 @@ MEASURED_PROPERTY = {
 
 NCIT_RELATIONSHIP_PROPERTY = "http://purl.obolibrary.org/obo/NCIT_C25648"
 FOLD_CHANGE_UNIT_CODE = "https://www.wikidata.org/wiki/Q17014303"
+FOLD_CHANGE_VALUE_REFERENCE = {
+    "@type": "DefinedTerm",
+    "description": "GXA differential expression values are reported as log2 fold change.",
+    "name": "log2 fold change",
+    "url": "https://www.ebi.ac.uk/gxa/download",
+}
 
 DIRECTION_TERMS = {
     "up": {
@@ -520,6 +536,26 @@ def _primary_condition(properties, side):
     return ", ".join(parts) if parts else None
 
 
+def _observation_period(properties):
+    periods = []
+    for prop in properties:
+        prop_name = clean_value(prop.get("propertyName"))
+        if not prop_name or _property_key(prop_name) not in OBSERVATION_PERIOD_PROPERTIES:
+            continue
+
+        test_value = clean_value(prop.get("testValue"))
+        reference_value = clean_value(prop.get("referenceValue"))
+        if test_value and reference_value and test_value != reference_value:
+            period = f"{prop_name}: {test_value} vs {reference_value}"
+        else:
+            period_value = test_value or reference_value
+            period = f"{prop_name}: {period_value}" if period_value else None
+        if period:
+            periods.append(period)
+
+    return "; ".join(_unique(periods)) if periods else None
+
+
 def _population_type(species):
     return "schema:Patient" if clean_value(species) == "Homo sapiens" else "schema:BioSample"
 
@@ -558,16 +594,34 @@ def _result_url(accession, gene_id, gene_name):
     return f"{EXPERIMENT_RESULTS_URL_TEMPLATE.format(accession=accession)}?geneQuery={gene_query}"
 
 
-def _dataset_subject(accession, description):
+def _assay_accessions(contrast):
+    accessions = []
+    for group_name in ("testAssayGroup", "referenceAssayGroup"):
+        group = contrast.get(group_name) or {}
+        assay_accessions = group.get("assayAccessions") or []
+        if isinstance(assay_accessions, str):
+            assay_accessions = [assay_accessions]
+        accessions.extend(clean_value(value) for value in assay_accessions)
+    return _unique(accessions)
+
+
+def _dataset_subject(accession, description, contrast):
     url = EXPERIMENT_RESULTS_URL_TEMPLATE.format(accession=accession)
+    identifiers = _unique([accession, *_assay_accessions(contrast)])
     dataset = {
         "@type": "Dataset",
-        "identifier": accession,
+        "identifier": _single_or_list(identifiers),
         "includedInDataCatalog": dict(CATALOG),
         "name": description or accession,
         "url": url,
     }
     return dataset
+
+
+def _primary_identifier(value):
+    if isinstance(value, list):
+        return value[0] if value else None
+    return value
 
 
 def _direction(fold_change):
@@ -583,6 +637,7 @@ def _direction(fold_change):
 
 
 def _semantic_mapping(gene, direction, subject_of, measurement_qualifier):
+    subject_identifier = _primary_identifier(subject_of.get("identifier"))
     mapping = {
         "@type": "SemanticTriple",
         "tripleSubject": {
@@ -602,11 +657,11 @@ def _semantic_mapping(gene, direction, subject_of, measurement_qualifier):
         },
         "tripleObject": {
             "@type": "PropertyValue",
-            "identifier": subject_of.get("identifier"),
+            "identifier": subject_identifier,
             "name": "Dataset",
             "propertyID": "schema.org/Dataset",
             "url": subject_of.get("url"),
-            "value": subject_of.get("identifier"),
+            "value": subject_identifier,
         },
         "tripleSubjectQualifier": [
             {"@type": "PropertyValue", "name": "aspect", "value": "abundance"},
@@ -772,7 +827,7 @@ def _build_doc(result, summary, experiment_payload, contrast, raw_type, design_t
     properties = _contrast_properties(contrast)
     direction = _direction(result["fold_change"])
     gene = _gene_term(result["gene_id"], result["gene_name"])
-    subject_of = _dataset_subject(accession, description)
+    subject_of = _dataset_subject(accession, description, contrast)
     test_condition = _factor_condition_text(properties, "test")
     reference_condition = _factor_condition_text(properties, "reference")
     measurement_qualifier = (
@@ -801,6 +856,7 @@ def _build_doc(result, summary, experiment_payload, contrast, raw_type, design_t
         "value": result["fold_change"],
         "unitText": "Log2 fold change",
         "unitCode": FOLD_CHANGE_UNIT_CODE,
+        "valueReference": dict(FOLD_CHANGE_VALUE_REFERENCE),
         "semanticMapping": _semantic_mapping(gene, direction, subject_of, measurement_qualifier),
         "topicCategory": [dict(term) for term in TOPIC_CATEGORY],
         "keywords": _unique([raw_type, "differential gene expression", direction["label"]]),
@@ -826,6 +882,9 @@ def _build_doc(result, summary, experiment_payload, contrast, raw_type, design_t
 
     if date_created := _parse_gxa_date(summary.get("loadDate")):
         doc["dateCreated"] = date_created
+
+    if observation_period := _observation_period(properties):
+        doc["observationPeriod"] = observation_period
 
     if health_conditions := _health_conditions(properties, design_terms):
         doc["healthCondition"] = health_conditions
