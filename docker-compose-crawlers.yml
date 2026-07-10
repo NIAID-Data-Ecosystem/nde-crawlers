@@ -151,6 +151,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  gxa-crawler:
+    build:
+      context: gxa
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   hca-crawler:
     build:
       context: hca
