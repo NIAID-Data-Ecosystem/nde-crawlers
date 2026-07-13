@@ -658,6 +658,17 @@ class NDESourceUploader(BaseSourceUploader):
                             "dateModified": {"type": "date"},
                         }
                     },
+                    "sameAs": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                            },
+                            "url": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
                 }
             },
             "identifier": {"type": "text", "copy_to": ["all"]},
@@ -737,6 +748,11 @@ class NDESourceUploader(BaseSourceUploader):
                     "isCurated": {"type": "boolean"},
                     "fromEXTRACT": {"type": "boolean"},
                     "fromPMID": {"type": "boolean"},
+                    "classification": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
@@ -1767,6 +1783,17 @@ class NDESourceSampleUploader(BaseSourceUploader):
                             "dateModified": {"type": "date"},
                         }
                     },
+                    "sameAs": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {
+                                "type": "keyword",
+                                "normalizer": "keyword_lowercase_normalizer",
+                                "copy_to": ["all"],
+                            },
+                            "url": {"type": "text", "copy_to": ["all"]},
+                        }
+                    },
                 }
             },
             "identifier": {"type": "text", "copy_to": ["all"]},
@@ -1806,6 +1833,11 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "isCurated": {"type": "boolean"},
                     "fromEXTRACT": {"type": "boolean"},
                     "fromPMID": {"type": "boolean"},
+                    "classification": {
+                        "type": "keyword",
+                        "normalizer": "keyword_lowercase_normalizer",
+                        "copy_to": ["all"],
+                    },
                     "curatedBy": {
                         "properties": {
                             "name": {"type": "keyword", "copy_to": ["all"]},
