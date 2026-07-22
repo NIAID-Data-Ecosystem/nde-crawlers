@@ -241,6 +241,13 @@ services:
     volumes:
       - data:/data
       - cache:/cache
+  ncbi_virus-crawler:
+    build:
+      context: ncbi_virus
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+      - cache:/cache
   ndex-crawler:
     build:
       context: ndex
