@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import hashlib
 import json
 import logging
 import os
 import re
+import sqlite3
 import time
 import urllib.error
 import urllib.parse
@@ -80,6 +82,16 @@ MAX_AGGREGATE_VALUES = int(os.environ.get("NCBI_VIRUS_MAX_AGGREGATE_VALUES", "50
 REQUEST_DELAY = float(os.environ.get("NCBI_VIRUS_REQUEST_DELAY", "0.34"))
 NCBI_API_KEY = os.environ.get("NCBI_API_KEY")
 DEDUP_ACCESSIONS = os.environ.get("NCBI_VIRUS_DEDUP_ACCESSIONS", "").lower() in {"1", "true", "yes"}
+USE_SQL_CACHE = os.environ.get("NCBI_VIRUS_USE_SQL_CACHE", "true").lower() in {"1", "true", "yes"}
+RESUME_INCOMPLETE_CACHE = os.environ.get("NCBI_VIRUS_RESUME_INCOMPLETE_CACHE", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+CACHE_EXPIRE_DAYS = int(os.environ.get("NCBI_VIRUS_CACHE_EXPIRE_DAYS", "30"))
+CACHE_DIR = os.environ.get("NCBI_VIRUS_CACHE_DIR", "/cache/ncbi_virus")
+CACHE_DB = os.environ.get("NCBI_VIRUS_CACHE_DB", "ncbi_virus.db")
+CACHE_SCHEMA_VERSION = "1"
 
 # ---------------------------------------------------------------------------
 # Static metadata from the approved mapping sheet
@@ -509,18 +521,21 @@ def _discover_seed_taxa() -> list[str]:
     return FALLBACK_SEED_TAXA[:MAX_SEED_TAXA] if MAX_SEED_TAXA else FALLBACK_SEED_TAXA
 
 
+def _fetch_report_page(taxon: str, page_token: Optional[str] = None) -> dict[str, Any]:
+    params: dict[str, Any] = {"page_size": min(PAGE_SIZE, 1000)}
+    if page_token:
+        params["page_token"] = page_token
+    return _fetch_json(f"/virus/taxon/{urllib.parse.quote(str(taxon))}/dataset_report", params)
+
+
 def _fetch_reports_for_seed(taxon: str) -> Iterator[dict[str, Any]]:
     page_token: Optional[str] = None
     page_count = 0
     record_count = 0
 
     while True:
-        params: dict[str, Any] = {"page_size": min(PAGE_SIZE, 1000)}
-        if page_token:
-            params["page_token"] = page_token
-
         logger.info("Fetching NCBI Virus reports for taxon %s page %s", taxon, page_count + 1)
-        data = _fetch_json(f"/virus/taxon/{urllib.parse.quote(str(taxon))}/dataset_report", params)
+        data = _fetch_report_page(taxon, page_token)
         reports = data.get("reports") or []
         total = data.get("total_count")
         if page_count == 0:
@@ -757,6 +772,45 @@ def _example_work_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]
 
 
 class TaxonAccumulator:
+    COUNTER_FIELDS = (
+        "virus_common_names",
+        "virus_strains",
+        "pangolin",
+        "keywords",
+        "source_databases",
+        "completeness",
+        "sample_sources",
+        "mol_types",
+        "purposes",
+        "lab_hosts",
+        "sample_sexes",
+        "sample_genotypes",
+        "sample_alternate_names",
+        "bioprojects",
+        "biosamples",
+        "sra_accessions",
+        "accessions",
+    )
+    DICT_FIELDS = (
+        "hosts",
+        "spatial_coverage",
+        "sample_locations",
+        "authors",
+    )
+    LIST_FIELDS = (
+        "example_works",
+        "sample_examples",
+    )
+    SCALAR_FIELDS = (
+        "tax_id",
+        "record_count",
+        "virus_name",
+        "earliest_release",
+        "latest_update",
+        "earliest_collection",
+        "latest_collection",
+    )
+
     def __init__(self, tax_id: str) -> None:
         self.tax_id = tax_id
         self.record_count = 0
@@ -788,6 +842,34 @@ class TaxonAccumulator:
         self.latest_update: Optional[str] = None
         self.earliest_collection: Optional[str] = None
         self.latest_collection: Optional[str] = None
+
+    def to_cache_dict(self) -> dict[str, Any]:
+        data = {field: getattr(self, field) for field in self.SCALAR_FIELDS}
+        for field in self.COUNTER_FIELDS:
+            data[field] = dict(getattr(self, field))
+        for field in self.DICT_FIELDS:
+            data[field] = getattr(self, field)
+        for field in self.LIST_FIELDS:
+            data[field] = getattr(self, field)
+        return data
+
+    @classmethod
+    def from_cache_dict(cls, data: dict[str, Any]) -> "TaxonAccumulator":
+        accumulator = cls(str(data["tax_id"]))
+        accumulator.record_count = int(data.get("record_count") or 0)
+        accumulator.virus_name = data.get("virus_name")
+        accumulator.earliest_release = data.get("earliest_release")
+        accumulator.latest_update = data.get("latest_update")
+        accumulator.earliest_collection = data.get("earliest_collection")
+        accumulator.latest_collection = data.get("latest_collection")
+
+        for field in cls.COUNTER_FIELDS:
+            setattr(accumulator, field, Counter(data.get(field) or {}))
+        for field in cls.DICT_FIELDS:
+            setattr(accumulator, field, data.get(field) or {})
+        for field in cls.LIST_FIELDS:
+            setattr(accumulator, field, data.get(field) or [])
+        return accumulator
 
     def add(self, report: dict[str, Any]) -> None:
         self.record_count += 1
@@ -1144,17 +1226,305 @@ class TaxonAccumulator:
 
 
 # ---------------------------------------------------------------------------
+# SQLite cache / resume support
+# ---------------------------------------------------------------------------
+
+
+class VirusSQLiteCache:
+    def __init__(self, seed_taxa: list[str]) -> None:
+        self.seed_taxa = seed_taxa
+        self.db_path = os.path.join(CACHE_DIR, CACHE_DB)
+        self.signature = self._build_signature()
+        self.complete_and_fresh = False
+
+    def _build_signature(self) -> str:
+        payload = {
+            "schema": CACHE_SCHEMA_VERSION,
+            "api_base": API_BASE,
+            "seed_taxa": self.seed_taxa,
+            "page_size": min(PAGE_SIZE, 1000),
+            "max_pages_per_seed": MAX_PAGES_PER_SEED,
+            "max_records_per_seed": MAX_RECORDS_PER_SEED,
+            "max_examples": MAX_EXAMPLES,
+            "max_aggregate_values": MAX_AGGREGATE_VALUES,
+            "dedup_accessions": DEDUP_ACCESSIONS,
+        }
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _connect(self) -> sqlite3.Connection:
+        con = sqlite3.connect(self.db_path, timeout=60)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA synchronous=NORMAL")
+        return con
+
+    def _init_schema(self) -> None:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with self._connect() as con:
+            con.execute(
+                """CREATE TABLE IF NOT EXISTS metadata (
+                    name text NOT NULL PRIMARY KEY,
+                    value text NOT NULL
+                )"""
+            )
+            con.execute(
+                """CREATE TABLE IF NOT EXISTS taxon_progress (
+                    seed_taxon text NOT NULL PRIMARY KEY,
+                    status text NOT NULL,
+                    next_page_token text,
+                    pages_fetched integer NOT NULL DEFAULT 0,
+                    records_seen integer NOT NULL DEFAULT 0,
+                    total_count integer,
+                    updated_at text NOT NULL
+                )"""
+            )
+            con.execute(
+                """CREATE TABLE IF NOT EXISTS taxon_aggregates (
+                    tax_id text NOT NULL PRIMARY KEY,
+                    data text NOT NULL,
+                    updated_at text NOT NULL
+                )"""
+            )
+            con.execute(
+                """CREATE TABLE IF NOT EXISTS seen_accessions (
+                    accession text NOT NULL PRIMARY KEY
+                )"""
+            )
+
+    def _metadata_value(self, con: sqlite3.Connection, name: str) -> Optional[str]:
+        row = con.execute("SELECT value FROM metadata WHERE name=?", (name,)).fetchone()
+        return row[0] if row else None
+
+    def _upsert_metadata(self, con: sqlite3.Connection, name: str, value: str) -> None:
+        con.execute(
+            """INSERT INTO metadata VALUES(?, ?)
+               ON CONFLICT(name) DO UPDATE SET value=excluded.value""",
+            (name, value),
+        )
+
+    def _today(self) -> str:
+        return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+    def _now(self) -> str:
+        return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _is_expired(self, con: sqlite3.Connection) -> bool:
+        date_created = self._metadata_value(con, "date_created")
+        if not date_created:
+            return True
+        try:
+            created = dt.date.fromisoformat(date_created)
+        except ValueError:
+            return True
+        today = dt.datetime.now(dt.timezone.utc).date()
+        return today - created >= dt.timedelta(days=CACHE_EXPIRE_DAYS)
+
+    def prepare(self) -> None:
+        self._init_schema()
+        with self._connect() as con:
+            cached_signature = self._metadata_value(con, "cache_signature")
+            load_complete = self._metadata_value(con, "load_complete") == "true"
+            schema_version = self._metadata_value(con, "schema_version")
+
+            if cached_signature != self.signature or schema_version != CACHE_SCHEMA_VERSION:
+                reason = "signature changed" if cached_signature else "cache missing"
+                self.new_cache(con, reason)
+                return
+
+            if self._is_expired(con):
+                self.new_cache(con, "cache expired")
+                return
+
+            if load_complete:
+                logger.info("Using complete NCBI Virus SQLite cache at %s", self.db_path)
+                self.complete_and_fresh = True
+                return
+
+            if RESUME_INCOMPLETE_CACHE:
+                logger.info("Resuming incomplete NCBI Virus SQLite cache at %s", self.db_path)
+                return
+
+            self.new_cache(con, "incomplete cache resume disabled")
+
+    def new_cache(self, con: Optional[sqlite3.Connection] = None, reason: str = "requested") -> None:
+        close_con = con is None
+        con = con or self._connect()
+        try:
+            logger.info("Creating new NCBI Virus SQLite cache at %s (%s)", self.db_path, reason)
+            con.execute("DELETE FROM taxon_progress")
+            con.execute("DELETE FROM taxon_aggregates")
+            con.execute("DELETE FROM seen_accessions")
+            con.execute("DELETE FROM metadata")
+            self._upsert_metadata(con, "date_created", self._today())
+            self._upsert_metadata(con, "date_updated", self._today())
+            self._upsert_metadata(con, "load_complete", "false")
+            self._upsert_metadata(con, "schema_version", CACHE_SCHEMA_VERSION)
+            self._upsert_metadata(con, "cache_signature", self.signature)
+            self.complete_and_fresh = False
+        finally:
+            if close_con:
+                con.commit()
+                con.close()
+
+    def mark_complete(self) -> None:
+        with self._connect() as con:
+            self._upsert_metadata(con, "load_complete", "true")
+            self._upsert_metadata(con, "date_updated", self._today())
+        self.complete_and_fresh = True
+        logger.info("Marked NCBI Virus SQLite cache complete")
+
+    def seed_progress(self, seed_taxon: str) -> dict[str, Any]:
+        with self._connect() as con:
+            row = con.execute(
+                """SELECT status, next_page_token, pages_fetched, records_seen, total_count
+                   FROM taxon_progress WHERE seed_taxon=?""",
+                (seed_taxon,),
+            ).fetchone()
+        if not row:
+            return {
+                "status": "not_started",
+                "next_page_token": None,
+                "pages_fetched": 0,
+                "records_seen": 0,
+                "total_count": None,
+            }
+        return {
+            "status": row[0],
+            "next_page_token": row[1],
+            "pages_fetched": int(row[2] or 0),
+            "records_seen": int(row[3] or 0),
+            "total_count": row[4],
+        }
+
+    def load_accumulator(self, tax_id: str) -> Optional[TaxonAccumulator]:
+        with self._connect() as con:
+            row = con.execute("SELECT data FROM taxon_aggregates WHERE tax_id=?", (tax_id,)).fetchone()
+        if not row:
+            return None
+        return TaxonAccumulator.from_cache_dict(json.loads(row[0]))
+
+    def has_seen_accession(self, accession: str) -> bool:
+        with self._connect() as con:
+            row = con.execute("SELECT accession FROM seen_accessions WHERE accession=?", (accession,)).fetchone()
+        return row is not None
+
+    def save_page(
+        self,
+        seed_taxon: str,
+        accumulators: dict[str, TaxonAccumulator],
+        touched_taxa: set[str],
+        seen_accessions: list[str],
+        next_page_token: Optional[str],
+        pages_fetched: int,
+        records_seen: int,
+        total_count: Optional[int],
+        status: str,
+    ) -> None:
+        now = self._now()
+        with self._connect() as con:
+            for tax_id in sorted(touched_taxa, key=lambda value: int(value) if value.isdigit() else value):
+                con.execute(
+                    """INSERT INTO taxon_aggregates VALUES(?, ?, ?)
+                       ON CONFLICT(tax_id) DO UPDATE SET
+                       data=excluded.data,
+                       updated_at=excluded.updated_at""",
+                    (
+                        tax_id,
+                        json.dumps(
+                            accumulators[tax_id].to_cache_dict(),
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                        now,
+                    ),
+                )
+
+            for accession in seen_accessions:
+                con.execute(
+                    "INSERT OR IGNORE INTO seen_accessions VALUES(?)",
+                    (accession,),
+                )
+
+            con.execute(
+                """INSERT INTO taxon_progress VALUES(?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(seed_taxon) DO UPDATE SET
+                   status=excluded.status,
+                   next_page_token=excluded.next_page_token,
+                   pages_fetched=excluded.pages_fetched,
+                   records_seen=excluded.records_seen,
+                   total_count=excluded.total_count,
+                   updated_at=excluded.updated_at""",
+                (
+                    seed_taxon,
+                    status,
+                    next_page_token,
+                    pages_fetched,
+                    records_seen,
+                    total_count,
+                    now,
+                ),
+            )
+
+        logger.info(
+            "Cached NCBI Virus seed %s page progress: status=%s pages=%s records=%s touched_taxa=%s",
+            seed_taxon,
+            status,
+            pages_fetched,
+            records_seen,
+            len(touched_taxa),
+        )
+
+    def iter_accumulators(self) -> Iterator[TaxonAccumulator]:
+        con = self._connect()
+        try:
+            cursor = con.execute("SELECT data FROM taxon_aggregates ORDER BY CAST(tax_id AS INTEGER)")
+            count = 0
+            for row in cursor:
+                count += 1
+                if count % 10000 == 0:
+                    logger.info("Loaded %s NCBI Virus cached aggregate records", count)
+                yield TaxonAccumulator.from_cache_dict(json.loads(row[0]))
+            logger.info("Finished loading %s NCBI Virus cached aggregate records", count)
+        finally:
+            con.close()
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
 
-def parse() -> Iterator[dict[str, Any]]:
-    """Yield NCBI Virus DataCollection records grouped by virus.tax_id."""
-    seed_taxa = _discover_seed_taxa()
+def _tax_id_sort_key(value: str) -> Any:
+    return int(value) if value.isdigit() else value
+
+
+def _add_report_to_accumulators(
+    report: dict[str, Any],
+    accumulators: dict[str, TaxonAccumulator],
+    cache: Optional[VirusSQLiteCache] = None,
+) -> Optional[str]:
+    accession = _report_accession(report)
+    virus = report.get("virus") or {}
+    tax_id = _clean_string(virus.get("tax_id"))
+    if not tax_id:
+        logger.warning("Skipping NCBI Virus report without virus.tax_id: %s", accession)
+        return None
+
+    accumulator = accumulators.get(tax_id)
+    if accumulator is None and cache is not None:
+        accumulator = cache.load_accumulator(tax_id)
+    if accumulator is None:
+        accumulator = TaxonAccumulator(tax_id)
+    accumulators[tax_id] = accumulator
+    accumulator.add(report)
+    return tax_id
+
+
+def _parse_without_cache(seed_taxa: list[str]) -> Iterator[dict[str, Any]]:
     accumulators: dict[str, TaxonAccumulator] = {}
     seen_accessions: set[str] = set()
-
     logger.info("Starting NCBI Virus parse with %d seed taxa", len(seed_taxa))
+
     for seed_taxon in seed_taxa:
         seed_records = 0
         for report in _fetch_reports_for_seed(seed_taxon):
@@ -1164,21 +1534,134 @@ def parse() -> Iterator[dict[str, Any]]:
                     continue
                 seen_accessions.add(accession)
 
-            virus = report.get("virus") or {}
-            tax_id = _clean_string(virus.get("tax_id"))
-            if not tax_id:
-                logger.warning("Skipping NCBI Virus report without virus.tax_id: %s", accession)
-                continue
-
-            accumulator = accumulators.setdefault(tax_id, TaxonAccumulator(tax_id))
-            accumulator.add(report)
-            seed_records += 1
+            if _add_report_to_accumulators(report, accumulators):
+                seed_records += 1
 
         logger.info("Seed taxon %s contributed %d source records", seed_taxon, seed_records)
 
     logger.info("Built %d NCBI Virus DataCollection groups", len(accumulators))
-    for tax_id in sorted(accumulators, key=lambda value: int(value) if value.isdigit() else value):
+    for tax_id in sorted(accumulators, key=_tax_id_sort_key):
         yield accumulators[tax_id].to_record()
+
+
+def _parse_with_cache(seed_taxa: list[str], cache: VirusSQLiteCache) -> Iterator[dict[str, Any]]:
+    cache.prepare()
+    if cache.complete_and_fresh:
+        for accumulator in cache.iter_accumulators():
+            yield accumulator.to_record()
+        return
+
+    logger.info("Starting cached NCBI Virus parse with %d seed taxa", len(seed_taxa))
+    for seed_taxon in seed_taxa:
+        progress = cache.seed_progress(seed_taxon)
+        if progress["status"] in {"complete", "limited"}:
+            logger.info(
+                "Skipping cached NCBI Virus seed %s; status=%s pages=%s records=%s",
+                seed_taxon,
+                progress["status"],
+                progress["pages_fetched"],
+                progress["records_seen"],
+            )
+            continue
+
+        page_token = progress["next_page_token"]
+        pages_fetched = progress["pages_fetched"]
+        records_seen = progress["records_seen"]
+        total_count = progress["total_count"]
+        accumulators: dict[str, TaxonAccumulator] = {}
+
+        while True:
+            logger.info("Fetching NCBI Virus reports for taxon %s page %s", seed_taxon, pages_fetched + 1)
+            data = _fetch_report_page(seed_taxon, page_token)
+            reports = data.get("reports") or []
+            total_count = data.get("total_count", total_count)
+            next_page_token = data.get("next_page_token") or data.get("nextPageToken")
+
+            if pages_fetched == 0:
+                logger.info("Taxon %s report total_count: %s", seed_taxon, total_count)
+
+            if not reports:
+                cache.save_page(
+                    seed_taxon=seed_taxon,
+                    accumulators=accumulators,
+                    touched_taxa=set(),
+                    seen_accessions=[],
+                    next_page_token=None,
+                    pages_fetched=pages_fetched,
+                    records_seen=records_seen,
+                    total_count=total_count,
+                    status="complete",
+                )
+                break
+
+            touched_taxa: set[str] = set()
+            page_seen_accessions: list[str] = []
+            page_seen_lookup: set[str] = set()
+            accepted_count = 0
+
+            for report in reports:
+                if MAX_RECORDS_PER_SEED and records_seen + accepted_count >= MAX_RECORDS_PER_SEED:
+                    break
+
+                accession = _report_accession(report)
+                if DEDUP_ACCESSIONS and accession:
+                    if accession in page_seen_lookup or cache.has_seen_accession(accession):
+                        continue
+                    page_seen_lookup.add(accession)
+                    page_seen_accessions.append(accession)
+
+                tax_id = _add_report_to_accumulators(report, accumulators, cache=cache)
+                if tax_id:
+                    touched_taxa.add(tax_id)
+                    accepted_count += 1
+
+            records_seen += accepted_count
+            pages_fetched += 1
+
+            status = "in_progress"
+            token_to_store = next_page_token
+            if MAX_RECORDS_PER_SEED and records_seen >= MAX_RECORDS_PER_SEED:
+                status = "limited"
+                token_to_store = None
+                logger.info("Reached NCBI_VIRUS_MAX_RECORDS_PER_SEED=%s for %s", MAX_RECORDS_PER_SEED, seed_taxon)
+            elif MAX_PAGES_PER_SEED and pages_fetched >= MAX_PAGES_PER_SEED:
+                status = "limited"
+                token_to_store = None
+                logger.info("Reached NCBI_VIRUS_MAX_PAGES_PER_SEED=%s for %s", MAX_PAGES_PER_SEED, seed_taxon)
+            elif not next_page_token:
+                status = "complete"
+                token_to_store = None
+
+            cache.save_page(
+                seed_taxon=seed_taxon,
+                accumulators=accumulators,
+                touched_taxa=touched_taxa,
+                seen_accessions=page_seen_accessions,
+                next_page_token=token_to_store,
+                pages_fetched=pages_fetched,
+                records_seen=records_seen,
+                total_count=total_count,
+                status=status,
+            )
+
+            if status in {"complete", "limited"}:
+                break
+
+            page_token = next_page_token
+            _sleep_between_requests()
+
+    cache.mark_complete()
+    for accumulator in cache.iter_accumulators():
+        yield accumulator.to_record()
+
+
+def parse() -> Iterator[dict[str, Any]]:
+    """Yield NCBI Virus DataCollection records grouped by virus.tax_id."""
+    seed_taxa = _discover_seed_taxa()
+    if USE_SQL_CACHE:
+        yield from _parse_with_cache(seed_taxa, VirusSQLiteCache(seed_taxa))
+    else:
+        yield from _parse_without_cache(seed_taxa)
 
 
 if __name__ == "__main__":

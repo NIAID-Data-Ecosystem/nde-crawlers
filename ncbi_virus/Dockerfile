@@ -49,8 +49,8 @@ USER root
 ARG CRONTAB=prod-crontab
 RUN mv docker-entrypoint.sh / && \
     mv ${CRONTAB} /etc/crontab
-RUN mkdir -p /data && chown -R biothings:biothings /data
+RUN mkdir -p /data /cache && chown -R biothings:biothings /data /cache
 ENV PYTHONPATH="."
-VOLUME [ "/data" ]
+VOLUME [ "/data", "/cache" ]
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/docker-entrypoint.sh"]
