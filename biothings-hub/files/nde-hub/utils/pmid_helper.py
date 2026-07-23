@@ -83,6 +83,19 @@ def remove_first_by_name(lst, target):
             break
 
 
+def is_bacdive_record(rec):
+    catalogs = rec.get("includedInDataCatalog")
+    if not isinstance(catalogs, list):
+        catalogs = [catalogs]
+
+    for catalog in catalogs:
+        if isinstance(catalog, dict) and str(catalog.get("name", "")).lower() == "bacdive":
+            return True
+        if isinstance(catalog, str) and catalog.lower() == "bacdive":
+            return True
+    return False
+
+
 def update_species_and_disease(rec, pmids):
     species = get_data_for_pmids(pmids, "species")
     if species:
@@ -393,6 +406,10 @@ def update_record_species(rec, species_data):
     """
     Updates the species in a given record based on abstract, description, and title.
     """
+    if is_bacdive_record(rec):
+        logger.info("Skipping PMID species augmentation for BacDive record %s", rec.get("_id"))
+        return
+
     if isinstance(rec.get("species"), dict):
         rec["species"] = [rec["species"]]
     if isinstance(rec.get("infectiousAgent"), dict):
