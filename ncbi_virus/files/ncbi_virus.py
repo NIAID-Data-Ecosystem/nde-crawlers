@@ -46,8 +46,10 @@ logger = logging.getLogger("nde-logger")
 API_BASE = "https://api.ncbi.nlm.nih.gov/datasets/v2"
 ROOT_VIRUS_TAXON = "10239"
 USER_AGENT = "nde-ncbi-virus-crawler/0.1"
-MAX_RETRIES = 4
-RETRY_BACKOFF = 10
+MAX_RETRIES = int(os.environ.get("NCBI_VIRUS_MAX_RETRIES", "4"))
+RETRY_BACKOFF = int(os.environ.get("NCBI_VIRUS_RETRY_BACKOFF", "10"))
+RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
+ADAPTIVE_PAGE_HTTP_STATUS_CODES = {500, 502, 503, 504}
 
 # Current top-level children under Viruses, used only if taxonomy discovery
 # fails. These values are intentionally broad seeds; exact output records are
@@ -74,6 +76,7 @@ FALLBACK_SEED_TAXA = [
 ]
 
 PAGE_SIZE = int(os.environ.get("NCBI_VIRUS_PAGE_SIZE", "1000"))
+MIN_PAGE_SIZE = int(os.environ.get("NCBI_VIRUS_MIN_PAGE_SIZE", "100"))
 MAX_PAGES_PER_SEED = int(os.environ.get("NCBI_VIRUS_MAX_PAGES_PER_SEED", "0"))
 MAX_RECORDS_PER_SEED = int(os.environ.get("NCBI_VIRUS_MAX_RECORDS_PER_SEED", "0"))
 MAX_SEED_TAXA = int(os.environ.get("NCBI_VIRUS_MAX_SEED_TAXA", "0"))
@@ -92,6 +95,7 @@ CACHE_EXPIRE_DAYS = int(os.environ.get("NCBI_VIRUS_CACHE_EXPIRE_DAYS", "30"))
 CACHE_DIR = os.environ.get("NCBI_VIRUS_CACHE_DIR", "/cache/ncbi_virus")
 CACHE_DB = os.environ.get("NCBI_VIRUS_CACHE_DB", "ncbi_virus.db")
 CACHE_SCHEMA_VERSION = "1"
+CACHE_TAXONOMY_HINT_VERSION = "1"
 
 # ---------------------------------------------------------------------------
 # Static metadata from the approved mapping sheet
@@ -299,35 +303,36 @@ def _make_property(name: str, value: Any, property_id: Optional[str] = None) -> 
     return prop
 
 
-def _taxonomy_identifier(tax_id: Any) -> Optional[str]:
+def _clean_taxonomy_id(tax_id: Any) -> Optional[str]:
     text = _clean_string(tax_id)
-    return f"taxonomy:{text}" if text else None
+    if not text:
+        return None
+
+    if "/" in text:
+        text = text.rstrip("/").split("/")[-1]
+    if "*" in text:
+        text = text.split("*")[-1]
+    if ":" in text:
+        text = text.split(":")[-1]
+    return _clean_string(text)
 
 
-def _taxonomy_url(tax_id: Any) -> Optional[str]:
-    text = _clean_string(tax_id)
-    return f"https://www.ncbi.nlm.nih.gov/taxonomy/{text}" if text else None
-
-
-def _taxonomy_term(tax_id: Any, name: Any, alternate_names: Optional[Iterable[Any]] = None) -> Optional[dict[str, Any]]:
+def _taxonomy_hint(tax_id: Any = None, name: Any = None) -> Optional[dict[str, Any]]:
     clean_name = _clean_string(name)
-    clean_id = _clean_string(tax_id)
+    clean_id = _clean_taxonomy_id(tax_id)
     if not clean_name and not clean_id:
         return None
 
-    term: dict[str, Any] = {"@type": "DefinedTerm"}
+    term: dict[str, Any] = {}
     if clean_name:
         term["name"] = clean_name
     if clean_id:
-        term["identifier"] = f"taxonomy:{clean_id}"
-        term["url"] = f"https://www.ncbi.nlm.nih.gov/taxonomy/{clean_id}"
-        term["inDefinedTermSet"] = "NCBI Taxonomy"
-
-    alts = [_clean_string(v) for v in alternate_names or []]
-    alts = [v for v in alts if v and v != clean_name]
-    if alts:
-        term["alternateName"] = _dedupe(alts)
+        term["identifier"] = clean_id
     return term
+
+
+def _cached_taxonomy_hint(term: dict[str, Any]) -> Optional[dict[str, Any]]:
+    return _taxonomy_hint(term.get("identifier"), term.get("name"))
 
 
 def _place(name: Any, alternate_name: Any = None) -> Optional[dict[str, Any]]:
@@ -423,6 +428,14 @@ def _collection_date_bounds(value: Any) -> tuple[Optional[str], Optional[str]]:
 # ---------------------------------------------------------------------------
 
 
+class NCBIHTTPError(RuntimeError):
+    def __init__(self, status_code: int, url: str, body: str) -> None:
+        self.status_code = status_code
+        self.url = url
+        self.body = body
+        super().__init__(f"HTTP {status_code} for {url}: {body[:500]}")
+
+
 def _fetch_json(path: str, params: Optional[dict[str, Any]] = None) -> Any:
     params = dict(params or {})
     if NCBI_API_KEY:
@@ -451,8 +464,8 @@ def _fetch_json(path: str, params: Optional[dict[str, Any]] = None) -> Any:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", "replace")
-            last_error = RuntimeError(f"HTTP {exc.code} for {url}: {body[:500]}")
-            if exc.code not in {429, 500, 502, 503, 504} or attempt == MAX_RETRIES:
+            last_error = NCBIHTTPError(exc.code, url, body)
+            if exc.code not in RETRYABLE_HTTP_STATUS_CODES or attempt == MAX_RETRIES:
                 raise last_error
         except Exception as exc:
             last_error = exc
@@ -464,6 +477,25 @@ def _fetch_json(path: str, params: Optional[dict[str, Any]] = None) -> Any:
         time.sleep(sleep_for)
 
     raise RuntimeError(f"Failed to fetch {url}") from last_error
+
+
+def _default_report_page_size() -> int:
+    return max(1, min(PAGE_SIZE, 1000))
+
+
+def _minimum_report_page_size() -> int:
+    return max(1, min(MIN_PAGE_SIZE, _default_report_page_size()))
+
+
+def _reduced_report_page_size(page_size: int) -> Optional[int]:
+    minimum = _minimum_report_page_size()
+    if page_size <= minimum:
+        return None
+    return max(minimum, page_size // 2)
+
+
+def _can_retry_with_smaller_page(exc: NCBIHTTPError, page_size: int) -> bool:
+    return exc.status_code in ADAPTIVE_PAGE_HTTP_STATUS_CODES and _reduced_report_page_size(page_size) is not None
 
 
 def _sleep_between_requests() -> None:
@@ -521,8 +553,12 @@ def _discover_seed_taxa() -> list[str]:
     return FALLBACK_SEED_TAXA[:MAX_SEED_TAXA] if MAX_SEED_TAXA else FALLBACK_SEED_TAXA
 
 
-def _fetch_report_page(taxon: str, page_token: Optional[str] = None) -> dict[str, Any]:
-    params: dict[str, Any] = {"page_size": min(PAGE_SIZE, 1000)}
+def _fetch_report_page(
+    taxon: str,
+    page_token: Optional[str] = None,
+    page_size: Optional[int] = None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"page_size": page_size or _default_report_page_size()}
     if page_token:
         params["page_token"] = page_token
     return _fetch_json(f"/virus/taxon/{urllib.parse.quote(str(taxon))}/dataset_report", params)
@@ -532,10 +568,30 @@ def _fetch_reports_for_seed(taxon: str) -> Iterator[dict[str, Any]]:
     page_token: Optional[str] = None
     page_count = 0
     record_count = 0
+    page_size = _default_report_page_size()
 
     while True:
-        logger.info("Fetching NCBI Virus reports for taxon %s page %s", taxon, page_count + 1)
-        data = _fetch_report_page(taxon, page_token)
+        logger.info(
+            "Fetching NCBI Virus reports for taxon %s page %s page_size=%s",
+            taxon,
+            page_count + 1,
+            page_size,
+        )
+        try:
+            data = _fetch_report_page(taxon, page_token, page_size=page_size)
+        except NCBIHTTPError as exc:
+            reduced_page_size = _reduced_report_page_size(page_size)
+            if not _can_retry_with_smaller_page(exc, page_size) or reduced_page_size is None:
+                raise
+            logger.warning(
+                "NCBI Virus request failed after retries for taxon %s page %s; reducing page_size from %s to %s",
+                taxon,
+                page_count + 1,
+                page_size,
+                reduced_page_size,
+            )
+            page_size = reduced_page_size
+            continue
         reports = data.get("reports") or []
         total = data.get("total_count")
         if page_count == 0:
@@ -935,10 +991,9 @@ class TaxonAccumulator:
 
         host = report.get("host") or {}
         host_names = host.get("infraspecific_names") or {}
-        host_term = _taxonomy_term(
+        host_term = _taxonomy_hint(
             host.get("tax_id"),
             host.get("organism_name"),
-            [host.get("common_name")],
         )
         if host_term:
             _add_limited_dict(self.hosts, host_term.get("identifier") or host_term.get("name"), host_term)
@@ -977,14 +1032,7 @@ class TaxonAccumulator:
                 self.sample_examples.append(sample)
 
     def _infectious_agent(self) -> dict[str, Any]:
-        alternate_names = []
-        alternate_names.extend(_counter_values(self.virus_common_names, 10))
-        alternate_names.extend(_counter_values(self.virus_strains, 10))
-        return _taxonomy_term(self.tax_id, self.virus_name or f"NCBI Taxonomy {self.tax_id}", alternate_names) or {
-            "@type": "DefinedTerm",
-            "identifier": f"taxonomy:{self.tax_id}",
-            "url": _taxonomy_url(self.tax_id),
-        }
+        return _taxonomy_hint(self.tax_id, self.virus_name) or {"identifier": self.tax_id}
 
     def _sample_collection(self) -> Optional[dict[str, Any]]:
         sample: dict[str, Any] = {
@@ -1319,6 +1367,55 @@ class VirusSQLiteCache:
         today = dt.datetime.now(dt.timezone.utc).date()
         return today - created >= dt.timedelta(days=CACHE_EXPIRE_DAYS)
 
+    def _migrate_taxonomy_hints(self, con: sqlite3.Connection) -> None:
+        if self._metadata_value(con, "taxonomy_hint_version") == CACHE_TAXONOMY_HINT_VERSION:
+            return
+
+        rows = con.execute("SELECT tax_id, data FROM taxon_aggregates").fetchall()
+        now = self._now()
+        migrated = 0
+        for tax_id, raw_data in rows:
+            try:
+                data = json.loads(raw_data)
+            except json.JSONDecodeError:
+                logger.warning("Skipping unreadable NCBI Virus cache row for tax_id=%s", tax_id)
+                continue
+
+            hosts = data.get("hosts")
+            if not isinstance(hosts, dict):
+                continue
+
+            changed = False
+            minimal_hosts: dict[str, Any] = {}
+            for key, host in hosts.items():
+                if isinstance(host, dict):
+                    hint = _cached_taxonomy_hint(host)
+                    if hint:
+                        hint_key = hint.get("identifier") or hint.get("name") or key
+                        minimal_hosts[hint_key] = hint
+                        changed = changed or hint != host or hint_key != key
+                        continue
+                minimal_hosts[key] = host
+
+            if not changed:
+                continue
+
+            data["hosts"] = minimal_hosts
+            con.execute(
+                "UPDATE taxon_aggregates SET data=?, updated_at=? WHERE tax_id=?",
+                (
+                    json.dumps(data, sort_keys=True, separators=(",", ":")),
+                    now,
+                    tax_id,
+                ),
+            )
+            migrated += 1
+
+        self._upsert_metadata(con, "taxonomy_hint_version", CACHE_TAXONOMY_HINT_VERSION)
+        if migrated:
+            self._upsert_metadata(con, "date_updated", self._today())
+            logger.info("Migrated %s NCBI Virus cached taxonomy aggregate rows", migrated)
+
     def prepare(self) -> None:
         self._init_schema()
         with self._connect() as con:
@@ -1334,6 +1431,8 @@ class VirusSQLiteCache:
             if self._is_expired(con):
                 self.new_cache(con, "cache expired")
                 return
+
+            self._migrate_taxonomy_hints(con)
 
             if load_complete:
                 logger.info("Using complete NCBI Virus SQLite cache at %s", self.db_path)
@@ -1360,6 +1459,7 @@ class VirusSQLiteCache:
             self._upsert_metadata(con, "load_complete", "false")
             self._upsert_metadata(con, "schema_version", CACHE_SCHEMA_VERSION)
             self._upsert_metadata(con, "cache_signature", self.signature)
+            self._upsert_metadata(con, "taxonomy_hint_version", CACHE_TAXONOMY_HINT_VERSION)
             self.complete_and_fresh = False
         finally:
             if close_con:
@@ -1569,10 +1669,31 @@ def _parse_with_cache(seed_taxa: list[str], cache: VirusSQLiteCache) -> Iterator
         records_seen = progress["records_seen"]
         total_count = progress["total_count"]
         accumulators: dict[str, TaxonAccumulator] = {}
+        page_size = _default_report_page_size()
 
         while True:
-            logger.info("Fetching NCBI Virus reports for taxon %s page %s", seed_taxon, pages_fetched + 1)
-            data = _fetch_report_page(seed_taxon, page_token)
+            logger.info(
+                "Fetching NCBI Virus reports for taxon %s page %s page_size=%s",
+                seed_taxon,
+                pages_fetched + 1,
+                page_size,
+            )
+            try:
+                data = _fetch_report_page(seed_taxon, page_token, page_size=page_size)
+            except NCBIHTTPError as exc:
+                reduced_page_size = _reduced_report_page_size(page_size)
+                if not _can_retry_with_smaller_page(exc, page_size) or reduced_page_size is None:
+                    raise
+                logger.warning(
+                    "NCBI Virus request failed after retries for taxon %s page %s; "
+                    "reducing page_size from %s to %s and retrying from the same cache cursor",
+                    seed_taxon,
+                    pages_fetched + 1,
+                    page_size,
+                    reduced_page_size,
+                )
+                page_size = reduced_page_size
+                continue
             reports = data.get("reports") or []
             total_count = data.get("total_count", total_count)
             next_page_token = data.get("next_page_token") or data.get("nextPageToken")

@@ -1,3 +1,4 @@
+import json
 import os.path
 
 import biothings
@@ -17,11 +18,13 @@ class NCBI_VIRUS_Dumper(DockerContainerDumper):
     SRC_ROOT_FOLDER = os.path.join(DATA_ARCHIVE_ROOT, SRC_NAME)
     SCHEDULE = "0 20 * * 6"  # Every Saturday at 8:00 PM
     UNCOMPRESS = True
+    VOLUMES = {"/opt/nde/cache": {"bind": "/cache", "mode": "rw"}}
     _docker_url = (
         f"docker://su07?image=nde-crawlers-{SRC_NAME}-crawler&tag=latest"
         f"&path=/data/{SRC_NAME}_crawled/data.ndjson"
         '&dump_command="/home/biothings/run-api-crawler.sh"'
         f"&container_name={SRC_NAME}_dumper&keep_container=false"
+        f"&volumes={json.dumps(VOLUMES)}"
     )
     SRC_URLS = [
         _docker_url,
