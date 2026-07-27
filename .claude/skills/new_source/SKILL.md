@@ -17,7 +17,7 @@ Before writing any files, ask the user (with `AskUserQuestion` if not already su
    - the crawler directory name (`<name>/`)
    - the hub source package name (`biothings-hub/files/nde-hub/hub/dataload/sources/<name>/`)
    - `SRC_NAME` on the dumper and `name` on the uploader
-   - the `_id` prefix (`<name>_<identifier>`)
+   - the `_id` prefix (`<name>_<identifier>`) **only when the identifier needs it** — see §"Deciding the `_id`: prefix vs. bare identifier"
    - the docker-compose service key (`<name>-crawler`)
 2. **Input directory** — a directory containing at least:
    - **Required:** one `*.tsv` or `*.csv` mapping file (each row maps a source field path → target schema.org field, with optional notes). Example format: see [references/bacdive_example/mapping.tsv](.claude/skills/new_source/references/bacdive_example/mapping.tsv).
@@ -72,7 +72,7 @@ Required structure, in this order:
 output = {
     "@context": "http://schema.org/",
     "@type": "<Type>",          # "Dataset" or "Sample" per --type
-    "_id": f"<name>_{_id}",
+    "_id": f"<name>_{_id}",     # OR just str(_id) — decide per §"Deciding the _id"
     "identifier": str(_id),
     "url": url,
     "distribution": [{"@type": "DataDownload", "contentUrl": url}],
@@ -87,6 +87,16 @@ output = {
 ```
 
 Use [references/bacdive_example/bacdive.py](.claude/skills/new_source/references/bacdive_example/bacdive.py) and [bacdive/files/bacdive_crawler.py](bacdive/files/bacdive_crawler.py) as the canonical shape.
+
+#### Deciding the `_id`: prefix vs. bare identifier
+
+The `_id` must be **globally unique** (records sharing an `_id` may be merged downstream). Historically we always prepended `<name>_`, but stripping that prefix later — when a mirror repo is found — breaks users' saved URLs. So **only prepend when the raw identifier actually risks a collision:**
+
+- **Structured mix of letters + numbers** (e.g. `GSE12345`, `PRJNA398089`, `E-MTAB-1234`) → **bare identifier**: `"_id": str(_id)`.
+- **All digits or all letters** → **prepend**: `"_id": f"<name>_{_id}"`, unless the scheme is well-established/well-adopted/registered with identifiers.org (then bare).
+- **Ambiguous** → default to prepending and review against existing `_id`s.
+
+Read [references/id_decision.md](.claude/skills/new_source/references/id_decision.md) for the full decision tree and the production-change tracking rule. `identifier` always stays the raw source value (`str(_id)`) regardless of the `_id` choice. **State the chosen form and its one-line reason in the end-of-run report** so the user can override.
 
 ### 3. Driving the parser from the mapping
 
@@ -214,4 +224,4 @@ When asked to demonstrate, run the skill against the bundled `references/bacdive
 
 ## Report at end
 
-When done, post a short summary listing every file created or modified, and call out any mapping rows you could not confidently convert (so the user can review).
+When done, post a short summary listing every file created or modified, and call out any mapping rows you could not confidently convert (so the user can review). Also state the `_id` decision (prefixed `<name>_...` vs. bare `identifier`) and the one-line reason from §"Deciding the `_id`", so the user can override if they know of a collision risk.
