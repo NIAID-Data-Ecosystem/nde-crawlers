@@ -244,6 +244,17 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
+def _affiliation_from_value(value: Any) -> Optional[dict[str, Any]]:
+    text = _clean_string(value)
+    if not text:
+        return None
+    parts = [_clean_string(part) for part in text.split(",")]
+    names = [part for part in parts if part]
+    if len(names) > 1:
+        return {"name": names}
+    return {"name": text}
+
+
 def _add_counter(counter: Counter[str], value: Any, limit: int = MAX_AGGREGATE_VALUES) -> None:
     text = _clean_string(value)
     if not text:
@@ -740,7 +751,7 @@ def _sample_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]]:
 
     purpose = _clean_enum(report.get("purpose_of_sampling"), "PURPOSE_OF_SAMPLING_")
     if purpose and purpose != "Unknown":
-        sample["experimentalPurpose"] = {"@type": "DefinedTerm", "name": purpose}
+        sample["experimentalPurpose"] = purpose
 
     lab_host = _clean_string(report.get("lab_host"))
     if lab_host:
@@ -1017,8 +1028,9 @@ class TaxonAccumulator:
             if not clean_name or clean_name in self.authors or len(self.authors) >= MAX_AGGREGATE_VALUES:
                 continue
             person = {"@type": "Person", "name": clean_name}
-            if affiliation:
-                person["affiliation"] = affiliation
+            affiliation_obj = _affiliation_from_value(affiliation)
+            if affiliation_obj:
+                person["affiliation"] = affiliation_obj
             self.authors[clean_name] = person
 
         if len(self.example_works) < MAX_EXAMPLES:
@@ -1058,10 +1070,7 @@ class TaxonAccumulator:
         if sample_types:
             aggregate["sampleType"] = _dedupe(sample_types)
 
-        purposes = [
-            {"@type": "DefinedTerm", "name": value}
-            for value in _counter_values(self.purposes, 25)
-        ]
+        purposes = _counter_values(self.purposes, 25)
         if purposes:
             aggregate["experimentalPurpose"] = purposes
 
