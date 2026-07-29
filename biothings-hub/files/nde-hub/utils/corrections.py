@@ -16,17 +16,11 @@ process.
 """
 
 import json
-import logging
 import math
-import os
 import threading
 
-import orjson
 import requests
-from config import token
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from config import logger, token
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -420,46 +414,3 @@ def apply_corrections(doc):
                     )
 
     return doc
-
-
-# ---------------------------------------------------------------------------
-# Document loading helper
-# ---------------------------------------------------------------------------
-def load_documents(data):
-    """
-    Yield documents from *data*, which is either:
-      - a directory path (str) containing a ``data.ndjson`` file, or
-      - an iterable of document dicts.
-
-    Unlike the legacy version, this is a generator - it does NOT load
-    everything into memory at once.
-    """
-    count = 0
-
-    if isinstance(data, str):
-        ndjson_file = os.path.join(data, "data.ndjson")
-        with open(ndjson_file, "rb") as f:
-            for line in f:
-                doc = orjson.loads(line)
-                yield doc
-                count += 1
-                if count % 10000 == 0:
-                    logging.info(f"Loaded {count} documents")
-    else:
-        yield from data
-
-
-# ---------------------------------------------------------------------------
-# Legacy / backward-compatible entry point
-# ---------------------------------------------------------------------------
-def corrections(data):
-    """
-    Load documents and apply corrections.
-
-    This is the **legacy** entry point kept for backward compatibility.
-    Prefer calling ``apply_corrections(doc)`` per-document in the upload
-    wrapper instead.  If both are used, deduplication in
-    ``update_source_organization`` prevents duplicate organizations.
-    """
-    for doc in load_documents(data):
-        yield apply_corrections(doc)

@@ -8,7 +8,7 @@ import config
 import requests
 from Bio import Entrez
 from config import GEO_API_KEY, GEO_EMAIL
-from utils.utils import retry
+from utils import retry
 
 biothings.config_for_app(config)
 

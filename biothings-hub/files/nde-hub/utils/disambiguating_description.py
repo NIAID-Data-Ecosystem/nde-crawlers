@@ -1,39 +1,34 @@
+"""Curated disambiguatingDescription summaries.
+
+Runs when the source has a CSV in `/data/nde-hub/disambiguating_descriptions/`
+mapping record ids to a processed summary.
+"""
+
 import csv
-import json
-import os
+from functools import lru_cache
+
+from config import logger
+
+LOOKUP_DIR = "/data/nde-hub/disambiguating_descriptions"
 
 
-def read_ndjson(file_path):
-    docs = []
-    with open(file_path, "r") as file:
-        for line in file:
-            docs.append(json.loads(line.strip()))
-    return docs
+def lookup_file(source):
+    return f"{LOOKUP_DIR}/{source}.csv"
 
 
-def add_disambiguating_description(docs, source_name):
-    """
-    Adds 'disambiguatingDescription' to documents from a CSV file located in the /data/nde-hub/disambiguating_descriptions/ directory.
+@lru_cache(maxsize=None)
+def load_descriptions(source):
+    """Load a source's summaries: {record id: disambiguating description}."""
+    with open(lookup_file(source), "r") as file:
+        descriptions = {row["_id"].lower(): row["Processed Summary"] for row in csv.DictReader(file)}
+    logger.info("Loaded %s disambiguating descriptions for %s", len(descriptions), source)
+    return descriptions
 
-    :param docs: List of dictionaries or string specifying the path to a ndjson file containing documents.
-    :param source_name: String specifying the name of the CSV file containing disambiguating descriptions.
-    :return: List of documents, potentially updated with separate 'disambiguatingDescription' objects.
-    """
 
-    if isinstance(docs, str):
-        file_path = os.path.join(docs, "data.ndjson")
-        docs = read_ndjson(file_path)
-
-    file_path = f"/data/nde-hub/disambiguating_descriptions/{source_name}.csv"
-    with open(file_path, "r") as file:
-        reader = csv.DictReader(file)
-        disambiguating_descriptions = {row["_id"].lower(): row["Processed Summary"] for row in reader}
-
-    updated_docs = []
+def add_disambiguating_description(docs, source):
+    """Add the curated disambiguatingDescription to every record in one batch."""
+    descriptions = load_descriptions(source)
     for doc in docs:
-        doc_id = doc["_id"].lower()
-        if doc_id in disambiguating_descriptions:
-            doc["disambiguatingDescription"] = disambiguating_descriptions[doc_id]
-        updated_docs.append(doc)
-
-    return updated_docs
+        if description := descriptions.get(doc["_id"].lower()):
+            doc["disambiguatingDescription"] = description
+        yield doc

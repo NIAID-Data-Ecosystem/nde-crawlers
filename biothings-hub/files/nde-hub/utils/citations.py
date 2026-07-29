@@ -1,0 +1,755 @@
+"""Citations, funding, species and health conditions derived from PubMed IDs.
+
+Runs whenever a batch of records carries `pmids`, `pmcs` or a `citation.doi`:
+
+  * `pmcs` and `citation.doi` are converted to PMIDs,
+  * PMIDs are batch-queried against NCBI E-utilities for citation + funding
+    metadata (cached in SQLite, so repeat runs skip NCBI entirely),
+  * species and diseases PubTator annotated on those PMIDs are added to the
+    record when the term also appears in its title / abstract / description.
+
+Helpful links used to write this module:
+https://biopython.org/docs/1.76/api/Bio.Entrez.html
+https://www.nlm.nih.gov/bsd/mms/medlineelements.html
+https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
+"""
+
+import csv
+import gzip
+import json
+import os
+import re
+import sqlite3
+import time
+import urllib.error
+from copy import copy
+from datetime import datetime
+from typing import Dict, Iterable, Optional
+
+import orjson
+import requests
+from Bio import Entrez, Medline
+from config import GEO_API_KEY, GEO_EMAIL, logger
+
+from .common import as_list, batched, dict_entries, retry
+from .funding import DB_PATH as FUNDING_DB_PATH, create_sqlite_db as create_funding_db, standardize_funder
+from .terms import DB_PATH as PUBTATOR_DB_PATH, get_species_details, query_condition
+
+PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
+PUBTATOR_DIR = "/data/nde-hub/standardizers/pmid_lookup/"
+
+# PubTator Central annotation dumps, keyed by the table they populate.
+PUBTATOR_DUMPS = {
+    "species": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTatorCentral/species2pubtatorcentral.gz",
+    "disease": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTatorCentral/disease2pubtatorcentral.gz",
+}
+
+# NCBI rejects an entire request if any id in it is malformed.
+_VALID_PMID_RE = re.compile(r"^[1-9]\d{0,8}$")
+
+# The PMC id converter accepts a couple hundred ids per request.
+_PMC_CHUNK_SIZE = 200
+
+# PubTator sometimes annotates these as diseases for COVID-19; they are not.
+_INCORRECT_COVID_TERMS = frozenset(
+    {
+        "novel tumor",
+        "hypervirulent covs",
+        "covr-covs",
+        "cancer stemness affords novel cancer",
+        "2 tumors",
+        "novel disease",
+        "novel icos deficiency",
+        "kucap-2 tumors",
+        "hif-1/hif-2",
+        "ncp",
+    }
+)
+_COVID_MESH_ID = "MESH:C000657245"
+_COVID_MESH_REPLACEMENT = "MESH:D000086382"
+
+# Species names PubTator picks up that are never the study organism.
+_SPECIES_BLACKLIST = frozenset({"PERCH", "D-FISH"})
+
+_pmid_conn = None
+_pubtator_conn = None
+_funding_conn = None
+_pubtator_cache = {}
+_dumps_checked = False
+
+
+# ---------------------------------------------------------------------------
+# Connections and one-time setup
+# ---------------------------------------------------------------------------
+def _get_pmid_conn():
+    """Open (once) the PMID lookup DB, creating its tables if needed."""
+    global _pmid_conn
+    if _pmid_conn is None:
+        os.makedirs(os.path.dirname(PMID_DB_PATH), exist_ok=True)
+        _pmid_conn = sqlite3.connect(PMID_DB_PATH)
+        cur = _pmid_conn.cursor()
+        for entity_type in PUBTATOR_DUMPS:
+            cur.execute(
+                f"""CREATE TABLE IF NOT EXISTS {entity_type}_data
+                       (pmid TEXT, entity_id TEXT, names TEXT, PRIMARY KEY (pmid, entity_id))"""
+            )
+        cur.execute("""CREATE TABLE IF NOT EXISTS eutils_cache (pmid TEXT PRIMARY KEY, data TEXT)""")
+        cur.execute("""CREATE TABLE IF NOT EXISTS doi_cache (doi TEXT PRIMARY KEY, pmid TEXT)""")
+        _pmid_conn.commit()
+    return _pmid_conn
+
+
+def _get_pubtator_conn():
+    global _pubtator_conn
+    if _pubtator_conn is None:
+        _pubtator_conn = sqlite3.connect(PUBTATOR_DB_PATH)
+    return _pubtator_conn
+
+
+def _get_funding_conn():
+    global _funding_conn
+    if _funding_conn is None:
+        _funding_conn = sqlite3.connect(FUNDING_DB_PATH)
+        create_funding_db(_funding_conn)
+    return _funding_conn
+
+
+def _refresh_pubtator_dumps():
+    """Download and load the PubTator annotation dumps if they changed upstream.
+
+    Runs at most once per process, and only once a source actually has PMIDs to
+    look up -- the dumps are large and the freshness check costs a request each.
+    """
+    global _dumps_checked
+    if _dumps_checked:
+        return
+    _dumps_checked = True
+    _get_pmid_conn()
+    os.makedirs(PUBTATOR_DIR, exist_ok=True)
+
+    for entity_type, url in PUBTATOR_DUMPS.items():
+        filename = os.path.basename(url)
+        if not _file_needs_update(url, filename):
+            continue
+        logger.info("Downloading %s data from %s...", entity_type, url)
+        _download_file(url, filename)
+        logger.info("Storing %s data...", entity_type)
+        _stream_and_store(filename, entity_type)
+
+
+def _download_file(url, local_filename):
+    full_path = os.path.join(PUBTATOR_DIR, local_filename)
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(full_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+
+def _file_needs_update(url, local_filename):
+    full_path = os.path.join(PUBTATOR_DIR, local_filename)
+    response = requests.head(url)
+    if response.status_code != 200:
+        logger.warning("Error %s - cannot check remote file's last modified time: %s", response.status_code, url)
+        return False
+
+    remote_last_modified = response.headers.get("Last-Modified")
+    if not remote_last_modified:
+        logger.warning("Cannot determine remote file's last modified time: %s", url)
+        return False
+
+    remote_last_modified = datetime.strptime(remote_last_modified, "%a, %d %b %Y %H:%M:%S GMT")
+    if not os.path.exists(full_path):
+        return True
+    return remote_last_modified > datetime.utcfromtimestamp(os.path.getmtime(full_path))
+
+
+def _stream_and_store(filename, entity_type):
+    conn = _get_pmid_conn()
+    cur = conn.cursor()
+    with gzip.open(os.path.join(PUBTATOR_DIR, filename), "rt") as file:
+        for row in csv.reader(file, delimiter="\t"):
+            cur.execute(
+                f"""INSERT INTO {entity_type}_data (pmid, entity_id, names) VALUES (?, ?, ?)
+                    ON CONFLICT(pmid, entity_id) DO UPDATE SET names=excluded.names;""",
+                (row[0], row[2], "|".join(row[3].split("|"))),
+            )
+    conn.commit()
+
+
+def get_data_for_pmids(pmids, entity_type):
+    """Return {entity_id: [names]} PubTator annotated on any of `pmids`."""
+    cur = _get_pmid_conn().cursor()
+    placeholders = ", ".join("?" for _ in pmids)
+    cur.execute(f"SELECT entity_id, names FROM {entity_type}_data WHERE pmid IN ({placeholders})", pmids)
+
+    data = {}
+    for entity_id, names in cur.fetchall():
+        data.setdefault(entity_id, []).extend(names.split("|"))
+    return data
+
+
+# ---------------------------------------------------------------------------
+# Standardized term lookups
+# ---------------------------------------------------------------------------
+def pubtator_lookup(name, table):
+    """Return a fresh copy of the cached standardized term for `name`, if any."""
+    cache_key = (name.lower().strip(), table)
+    if cache_key in _pubtator_cache:
+        return json.loads(_pubtator_cache[cache_key])
+    c = _get_pubtator_conn().cursor()
+    c.execute(f"SELECT * FROM {table} WHERE original_name=?", (cache_key[0],))
+    result = c.fetchone()
+    if result:
+        _pubtator_cache[cache_key] = result[1]
+        return json.loads(result[1])
+    return None
+
+
+def pubtator_add(name, table, standard_dict):
+    conn = _get_pubtator_conn()
+    c = conn.cursor()
+    c.execute(f"INSERT INTO {table} VALUES (?, ?)", (name.lower().strip(), standard_dict))
+    conn.commit()
+    _pubtator_cache[(name.lower().strip(), table)] = standard_dict
+
+
+def _as_augmented(term):
+    """Mark a standardized term as PMID-derived rather than curated."""
+    term["fromPMID"] = True
+    term["isCurated"] = False
+    term.pop("curatedBy", None)
+    term.pop("originalName", None)
+    return term
+
+
+@retry(7, 5)
+def get_disease_details(identifier, original_name):
+    """Standardize a disease from its MeSH id, preferring an existing ontology term."""
+    identifier = identifier.split(":")[-1]
+
+    if lookup_result := pubtator_lookup(original_name, "health_conditions"):
+        return _as_augmented(lookup_result)
+
+    logger.info("Converting %s from MeSH %s to standard format", original_name, identifier)
+    if non_mesh_result := query_condition(original_name, identifier):
+        pubtator_add(original_name, "health_conditions", json.dumps(non_mesh_result))
+        return _as_augmented(non_mesh_result)
+
+    logger.info("Fetching details for %s with ID %s", original_name, identifier)
+    disease_info = requests.get(f"https://id.nlm.nih.gov/mesh/{identifier}.json")
+    disease_info.raise_for_status()
+    disease_info = disease_info.json()
+
+    standard_dict = {
+        "@type": "DefinedTerm",
+        "identifier": identifier,
+        "inDefinedTermSet": "MeSH",
+        "url": f"https://id.nlm.nih.gov/mesh/{identifier}.html",
+        "isCurated": False,
+    }
+    if terms := disease_info.get("terms"):
+        alternative_names = []
+        for term in terms:
+            if term["preferred"]:
+                standard_dict["name"] = term["label"]
+            else:
+                alternative_names.append(term["label"])
+        if alternative_names:
+            standard_dict["alternateName"] = alternative_names
+    if label := disease_info.get("label"):
+        standard_dict["name"] = label["@value"]
+    if "name" not in standard_dict:
+        raise Exception(f"No name found for {identifier}")
+
+    pubtator_add(original_name, "health_conditions", json.dumps(standard_dict))
+    standard_dict["fromPMID"] = True
+    return standard_dict
+
+
+# ---------------------------------------------------------------------------
+# Adding PubTator species / diseases to a record
+# ---------------------------------------------------------------------------
+def remove_first_by_name(lst, target):
+    target_lower = target.lower()
+    for i, item in enumerate(lst):
+        if item.get("name", "").lower() == target_lower:
+            lst.pop(i)
+            break
+
+
+def is_bacdive_record(rec):
+    for catalog in as_list(rec.get("includedInDataCatalog")):
+        if isinstance(catalog, dict) and str(catalog.get("name", "")).lower() == "bacdive":
+            return True
+        if isinstance(catalog, str) and catalog.lower() == "bacdive":
+            return True
+    return False
+
+
+def _record_text(rec):
+    """The record text a PubTator term must appear in before we trust it."""
+    return (
+        rec.get("abstract", "").lower(),
+        rec.get("description", "").lower(),
+        rec.get("name", "").lower(),
+    )
+
+
+def _mentioned_in(name, haystacks):
+    name_lower = name.lower()
+    return any(name_lower in haystack for haystack in haystacks)
+
+
+def update_record_disease(rec, disease_data):
+    """Add PubTator diseases mentioned in the record's own text."""
+    if isinstance(rec.get("healthCondition"), dict):
+        rec["healthCondition"] = [rec["healthCondition"]]
+
+    haystacks = _record_text(rec)
+
+    for mesh_id, diseases in disease_data.items():
+        if "MESH" not in mesh_id:
+            logger.warning("Invalid MeSH ID %s", mesh_id)
+            continue
+        for disease in diseases:
+            name = disease.strip()
+            if not name or not mesh_id.strip():
+                logger.warning("Empty disease name or MeSH ID: %r / %r", name, mesh_id)
+                continue
+            if name.lower() in _INCORRECT_COVID_TERMS and mesh_id == _COVID_MESH_ID:
+                logger.warning("Incorrect Covid-19 mapping found for %s", name)
+                continue
+            if mesh_id == _COVID_MESH_ID:
+                mesh_id = _COVID_MESH_REPLACEMENT
+            if not _mentioned_in(name, haystacks):
+                continue
+
+            logger.info("Adding %s to record %s", name, rec["_id"])
+            try:
+                standardized_dict = get_disease_details(mesh_id, name)
+            except Exception as e:
+                logger.warning("Could not get details for %s with ID %s: %s", name, mesh_id, e)
+                continue
+
+            if any(d.get("name", "").lower() == name.lower() for d in rec.get("healthCondition", [])):
+                remove_first_by_name(rec["healthCondition"], name)
+            rec["healthCondition"] = rec.get("healthCondition", []) + [standardized_dict]
+            break
+
+
+def update_record_species(rec, species_data):
+    """Add PubTator species mentioned in the record's own text."""
+    if is_bacdive_record(rec):
+        logger.info("Skipping PMID species augmentation for BacDive record %s", rec.get("_id"))
+        return
+
+    if isinstance(rec.get("species"), dict):
+        rec["species"] = [rec["species"]]
+    if isinstance(rec.get("infectiousAgent"), dict):
+        rec["infectiousAgent"] = [rec["infectiousAgent"]]
+
+    haystacks = _record_text(rec)
+
+    for taxonomy_id, species_names in species_data.items():
+        for name in species_names:
+            name = name.strip()
+            if not name or not taxonomy_id.strip():
+                logger.warning("Empty species name or taxonomy ID: %r / %r", name, taxonomy_id)
+                continue
+            if not _mentioned_in(name, haystacks):
+                continue
+            if name in _SPECIES_BLACKLIST:
+                logger.info("Blacklisted: %s in record: %s, skipping", name, rec["_id"])
+                continue
+
+            if lookup_result := pubtator_lookup(name, "species"):
+                standardized_dict = _as_augmented(lookup_result)
+            else:
+                try:
+                    standardized_dict = get_species_details(name, taxonomy_id)
+                    pubtator_add(name, "species", json.dumps(standardized_dict))
+                    standardized_dict = _as_augmented(standardized_dict)
+                except Exception as e:
+                    logger.warning("Could not get details for %s with ID %s: %s", name, taxonomy_id, e)
+                    continue
+
+            if any(spec.get("name", "").lower() == name.lower() for spec in rec.get("species", [])):
+                remove_first_by_name(rec["species"], name)
+            elif any(spec.get("name", "").lower() == name.lower() for spec in rec.get("infectiousAgent", [])):
+                remove_first_by_name(rec["infectiousAgent"], name)
+
+            if standardized_dict.get("classification") == "infectiousAgent":
+                rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
+            else:
+                if "classification" not in standardized_dict:
+                    logger.warning("Could not classify %s with ID %s", name, taxonomy_id)
+                rec["species"] = rec.get("species", []) + [standardized_dict]
+            break
+
+
+# ---------------------------------------------------------------------------
+# Identifier conversion
+# ---------------------------------------------------------------------------
+@retry(7, 5)
+def _convert_pmc_chunk(pmc_ids, pmc_pmid):
+    base_url = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&format=json&"
+    request = requests.get(base_url + "ids=" + ",".join(pmc_ids)).json()
+    for record in request.get("records"):
+        if pmid := record.get("pmid"):
+            pmc_pmid[record.get("pmcid")] = str(pmid)
+    time.sleep(0.5)
+
+
+def _convert_pmcs(pmc_ids):
+    """Convert PMC ids to PMIDs, a couple hundred at a time."""
+    pmc_pmid = {}
+    for chunk in batched(sorted(set(pmc_ids)), _PMC_CHUNK_SIZE):
+        _convert_pmc_chunk(chunk, pmc_pmid)
+    return pmc_pmid
+
+
+@retry(7, 5)
+def _convert_doi(doi, doi_pmid):
+    """Resolve a DOI to a PMID via ESearch, caching the answer (including misses)."""
+    if doi in doi_pmid:
+        return
+
+    api_key = GEO_API_KEY
+    Entrez.email = GEO_EMAIL
+    if api_key:
+        Entrez.api_key = api_key
+
+    conn = _get_pmid_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT pmid FROM doi_cache WHERE doi = ?", (doi,))
+    row = cur.fetchone()
+    if row is not None:
+        doi_pmid[doi] = row[0]  # may be None if previously resolved to nothing
+        return
+
+    handle = Entrez.esearch(db="pubmed", term=f"{doi}[DOI]", retmode="json")
+    data = json.loads(handle.read())
+    handle.close()
+    pmids = data.get("esearchresult", {}).get("idlist", [])
+    result_pmid = pmids[0] if pmids else None
+    doi_pmid[doi] = result_pmid
+
+    cur.execute("INSERT OR REPLACE INTO doi_cache (doi, pmid) VALUES (?, ?)", (doi, result_pmid))
+    conn.commit()
+    time.sleep(0.05 if api_key else 0.35)
+
+
+# ---------------------------------------------------------------------------
+# E-utilities
+# ---------------------------------------------------------------------------
+def _get_pub_date(date: str):
+    """Turn a MedLine publication date such as "2000 Spring" into an ISO date.
+
+    https://www.nlm.nih.gov/bsd/mms/medlineelements.html#dp
+
+    Seasons use the metrological start (Winter: Dec 1, Spring: Mar 1,
+    Summer: Jun 1, Fall: Sep 1). Y/M/D-D takes the first day, Y/M or Y/M-M the
+    first day of that month, Y or Y-Y the first day of that year.
+    TODO: Not important since only one instance so far but fix edge case "2016 11-12"
+    """
+    months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    seasons = {"spring": " mar 1", "summer": " jun 1", "fall": " sep 1", "winter": " dec 1"}
+
+    s_date = date.lower().split()
+    date_len = len(s_date)
+    # if length is 1 can either be year or year-year
+    if date_len == 1:
+        return datetime.strptime(s_date[0].split("-")[0], "%Y").date().isoformat()
+    # if length is 2 can either be year season or year month or year month-month
+    if date_len == 2:
+        if s_date[1][:3] in months:
+            return datetime.strptime(s_date[0] + " " + s_date[1][:3], "%Y %b").date().isoformat()
+        if season := seasons.get(s_date[1]):
+            return datetime.strptime(s_date[0] + season, "%Y %b %d").date().isoformat()
+        logger.warning("Need to update isoformat transformation: %s", date)
+        return None
+    # if length is 3 should be year month day or year month day-day or year month-month day
+    if date_len == 3:
+        year = s_date[0]
+        og_month = s_date[1].split("-")[0]
+        day = s_date[2].split("-")[0]
+        month = next((month for month in months if month in og_month), None)
+        if month and day.isdigit():
+            return datetime.strptime(year + " " + month + " " + day, "%Y %b %d").date().isoformat()
+        if month and day[:3] in months:
+            # malformed month-range like "2005 Feb Nov" -- use the starting month
+            return datetime.strptime(year + " " + month, "%Y %b").date().isoformat()
+        logger.warning("Need to update isoformat transformation: %s", date)
+        return None
+    # exception case there are quite a few entries with this case "2020 Jan - Feb"
+    if date_len == 4 and s_date[1] in months and s_date[3] in months and s_date[2] == "-":
+        return datetime.strptime(s_date[0] + " " + s_date[1], "%Y %b").date().isoformat()
+    logger.warning("Need to update isoformat transformation: %s", date)
+    return None
+
+
+def _parse_citation(record):
+    citation = {}
+    if name := record.get("TI"):
+        citation["name"] = name
+    if pmid := record.get("PMID"):
+        citation["pmid"] = pmid
+        citation["identifier"] = "PMID:" + pmid
+        citation["url"] = "https://pubmed.ncbi.nlm.nih.gov/" + pmid + "/"
+    for aid in record.get("AID") or []:
+        if aid.endswith(" [doi]"):
+            citation["doi"] = aid[: -len(" [doi]")].strip()
+            break
+    if journal_name := record.get("JT"):
+        citation["journalName"] = journal_name
+    if date_published := record.get("DP"):
+        if date := _get_pub_date(date_published):
+            citation["datePublished"] = date
+
+    # make an empty list if there is some kind of author
+    if record.get("AU") or record.get("CN"):
+        citation["author"] = []
+    for author in record.get("AU") or []:
+        citation["author"].append({"@type": "Person", "name": author})
+    for corp_author in record.get("CN") or []:
+        citation["author"].append({"@type": "Organization", "name": corp_author})
+
+    if citation:
+        citation["fromPMID"] = True
+    return citation
+
+
+@retry(7, 30)
+def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
+    """Fetch citation and funding metadata for `pmids` in one pair of requests."""
+    Entrez.email = email
+    if api_key:
+        Entrez.api_key = api_key
+
+    ct_fd = {}
+    try:
+        handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="text")
+    except urllib.error.HTTPError as err:
+        logger.error("This is the length of the pmids %s", len(pmids))
+        logger.error("The list of pmids %s", pmids)
+        logger.error("HTTP url: %s", err.url)
+        raise err
+
+    for record in Medline.parse(handle):
+        ct_fd[record.get("PMID")] = {"citation": _parse_citation(record)}
+
+    # throttle request rates, NCBI says up to 10 requests per second with API Key, 3/s without.
+    time.sleep(0.1 if api_key else 0.35)
+
+    # get the funding using the xml file because of problems parsing the medline file
+    # https://www.nlm.nih.gov/bsd/mms/medlineelements.html#gr
+    handle = Entrez.efetch(db="pubmed", id=pmids, retmode="xml")
+    # Have to use Entrez.read() instead of Entrez.parse(): https://github.com/biopython/biopython/issues/1027
+    # This can get an incompleteread error, which the retry above covers.
+    records = Entrez.read(handle)["PubmedArticle"]
+
+    funder_conn = _get_funding_conn()  # reuse funding DB connection for all funder lookups
+    for record in records:
+        funding = []
+        for grant in record["MedlineCitation"]["Article"].get("GrantList") or []:
+            fund = {}
+            if grant_id := grant.get("GrantID"):
+                fund["identifier"] = str(grant_id)
+            if agency := grant.get("Agency"):
+                agency = str(agency)
+                fund["funder"] = standardize_funder(agency, conn=funder_conn) or {
+                    "@type": "Organization",
+                    "name": agency,
+                }
+            if grant.get("Agency") or grant.get("GrantID"):
+                fund["fromPMID"] = True
+            funding.append(fund)
+
+        pmid = record["MedlineCitation"].get("PMID")
+        if pmid and funding:
+            ct_fd.setdefault(pmid, {})["funding"] = funding
+
+    return ct_fd
+
+
+def _filter_valid_pmids(pmid_list):
+    """Drop malformed PMIDs, which would otherwise fail the whole NCBI request."""
+    valid = []
+    invalid = []
+    for raw in pmid_list:
+        pmid = str(raw).strip().lstrip("0")
+        if _VALID_PMID_RE.match(pmid):
+            valid.append(pmid)
+        else:
+            invalid.append(raw)
+    if invalid:
+        logger.warning("Dropping %d malformed PMID(s) before NCBI request: %s", len(invalid), invalid[:20])
+    return valid
+
+
+def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
+    """`batch_get_pmid_eutils` backed by a SQLite cache of previous results."""
+    conn = _get_pmid_conn()
+    cur = conn.cursor()
+
+    pmid_list = _filter_valid_pmids(pmid_list)
+    if not pmid_list:
+        return {}
+
+    placeholders = ", ".join("?" for _ in pmid_list)
+    cur.execute(f"SELECT pmid, data FROM eutils_cache WHERE pmid IN ({placeholders})", pmid_list)
+    cached_results = {row[0]: orjson.loads(row[1]) for row in cur.fetchall()}
+    uncached_pmids = [p for p in pmid_list if p not in cached_results]
+
+    if cached_results:
+        logger.info("PMID eutils cache: %d cached, %d to fetch", len(cached_results), len(uncached_pmids))
+
+    fresh_results = {}
+    if uncached_pmids:
+        fresh_results = batch_get_pmid_eutils(uncached_pmids, email, api_key)
+        for pmid, data in fresh_results.items():
+            cur.execute(
+                "INSERT OR REPLACE INTO eutils_cache (pmid, data) VALUES (?, ?)",
+                (str(pmid), orjson.dumps(data).decode("utf-8")),
+            )
+        conn.commit()
+
+    return {**cached_results, **fresh_results}
+
+
+# ---------------------------------------------------------------------------
+# The pipeline stage
+# ---------------------------------------------------------------------------
+def _attach_citation(rec, citation):
+    if rec_citation := rec.get("citation"):
+        # if the record originally had a citation field that is not a list, make it one
+        if not isinstance(rec_citation, list):
+            rec["citation"] = [rec_citation]
+        # drop the original DOI stub now that the enriched citation carries the DOI
+        if enriched_doi := citation.get("doi"):
+            rec["citation"] = [
+                c
+                for c in rec["citation"]
+                if not (isinstance(c, dict) and isinstance(c.get("doi"), str) and c["doi"].lower() == enriched_doi.lower())
+            ]
+        rec["citation"].append(citation)
+    else:
+        rec["citation"] = [citation]
+
+
+def _attach_funding(rec, funding):
+    if rec_funding := rec.get("funding"):
+        # if the record originally had a funding field that is not a list, make it one
+        if not isinstance(rec_funding, list):
+            rec["funding"] = [rec_funding]
+        rec["funding"] += funding
+    else:
+        rec["funding"] = copy(funding)
+
+
+def _collect_pmids(docs):
+    """Resolve every doc's pmcs / citation DOIs into its `pmids` field."""
+    pmc_ids = []
+    doi_pmid = {}
+    for doc in docs:
+        if pmcs := doc.get("pmcs"):
+            pmc_ids += [pmc.strip() for pmc in pmcs.split(",")]
+        for citation in dict_entries(doc, "citation"):
+            if doi := citation.get("doi"):
+                _convert_doi(doi, doi_pmid)
+
+    pmc_pmid = _convert_pmcs(pmc_ids) if pmc_ids else {}
+
+    pmid_list = set()
+    for doc in docs:
+        for pmc in [pmc.strip() for pmc in doc.pop("pmcs", "").split(",") if pmc.strip()]:
+            if pmid := pmc_pmid.get(pmc):
+                doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
+            else:
+                logger.info("There is an issue with this PMCID. PMCID: %s, rec_id: %s", pmc, doc["_id"])
+        for citation in dict_entries(doc, "citation"):
+            if pmid := doi_pmid.get(citation.get("doi")):
+                doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
+        if pmids := doc.get("pmids"):
+            pmid_list.update(pmid.strip() for pmid in pmids.split(","))
+
+    return sorted(pmid_list)
+
+
+def add_citations(docs):
+    """Add citations, funding, species and diseases from each record's PMIDs.
+
+    `docs` is one batch of records; PMIDs across the whole batch are queried in
+    a single request.
+    """
+    docs = list(docs)
+    _refresh_pubtator_dumps()
+
+    pmid_list = _collect_pmids(docs)
+    eutils_info = cached_batch_get_pmid_eutils(pmid_list, GEO_EMAIL, GEO_API_KEY) if pmid_list else {}
+
+    for rec in docs:
+        if pmids := rec.pop("pmids", None):
+            # fixes issue where pmid numbers under 10 are read as 04 instead of 4
+            pmids = sorted({pmid.strip().lstrip("0") for pmid in pmids.split(",")})
+            if species := get_data_for_pmids(pmids, "species"):
+                update_record_species(rec, species)
+            if diseases := get_data_for_pmids(pmids, "disease"):
+                update_record_disease(rec, diseases)
+
+            for pmid in pmids:
+                info = eutils_info.get(pmid)
+                if not info:
+                    # this covers records whose pmid does not resolve, e.g.
+                    # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
+                    logger.info("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
+                    continue
+                if citation := info.get("citation"):
+                    _attach_citation(rec, citation)
+                if funding := info.get("funding"):
+                    _attach_funding(rec, funding)
+        yield rec
+
+
+def standardize_fields(docs, batch_size=1000):
+    """Replace ScholarlyArticle PMID stubs with full citations (used by DDE).
+
+    Applies to `isBasedOn`, `isBasisFor`, `citedBy`, `isPartOf` and `hasPart`.
+    """
+    for batch in batched(docs, batch_size):
+        yield from _standardize_fields_batch(batch)
+
+
+def _standardize_fields_batch(docs):
+    fields = ["isBasedOn", "isBasisFor", "citedBy", "isPartOf", "hasPart"]
+
+    pmid_list = set()
+    for doc in docs:
+        for field in fields:
+            for entry in dict_entries(doc, field):
+                if entry.get("@type") == "ScholarlyArticle" and entry.get("pmid"):
+                    pmid_list.add(str(entry["pmid"]).strip())
+
+    eutils_info = cached_batch_get_pmid_eutils(sorted(pmid_list), GEO_EMAIL, GEO_API_KEY) if pmid_list else {}
+
+    for doc in docs:
+        for field in fields:
+            entries = as_list(doc.get(field))
+            if not entries:
+                continue
+            field_pmids = [
+                str(entry.get("pmid"))
+                for entry in entries
+                if isinstance(entry, dict) and entry.get("pmid") and entry.get("@type") == "ScholarlyArticle"
+            ]
+            doc[field] = [
+                entry
+                for entry in entries
+                if not (isinstance(entry, dict) and entry.get("pmid") and entry.get("@type") == "ScholarlyArticle")
+            ]
+            for pmid in field_pmids:
+                if citation := (eutils_info.get(pmid) or {}).get("citation"):
+                    citation["type"] = "ScholarlyArticle"
+                    doc[field].append(citation)
+        yield doc

@@ -5,7 +5,7 @@ import biothings
 import biothings.hub.dataload.dumper as dumper
 import config
 import requests
-from utils.utils import retry
+from utils import retry
 
 biothings.config_for_app(config)
 

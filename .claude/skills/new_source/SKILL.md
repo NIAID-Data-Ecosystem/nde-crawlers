@@ -112,7 +112,7 @@ For each row in the mapping file (skipping rows where the `Mapping` column is em
 
 ### 4. Enum fields — hard rules
 
-The upload-time validator in [biothings-hub/files/nde-hub/utils/utils.py](biothings-hub/files/nde-hub/utils/utils.py) (`check_schema`) **rejects records** with out-of-enum values for:
+The upload-time validator in [biothings-hub/files/nde-hub/utils/validate.py](biothings-hub/files/nde-hub/utils/validate.py) (`check_schema`) **rejects records** with out-of-enum values for:
 
 - `conditionsOfAccess` ∈ `{"Open", "Restricted", "Closed", "Embargoed"}`
 - `creativeWorkStatus` (only when `@type == "Sample"`) ∈ `{"Bespoke", "Available", "Backordered", "Retired"}`
@@ -123,7 +123,7 @@ Also: `version` must not be set (`check_schema` asserts `doc.get("version") is N
 
 ### 5. pmids / pmcs — exception
 
-`pmids` and `pmcs` are **not** in [nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py)'s mapping — the upload-time pmid helper handles them. If the source provides PubMed / PMC identifiers and the mapping requests `pmids` or `pmcs`:
+`pmids` and `pmcs` are **not** in [nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py)'s mapping — the pipeline's `citations` stage consumes them and removes them from the record. If the source provides PubMed / PMC identifiers and the mapping requests `pmids` or `pmcs`:
 
 - Emit a single **comma-separated string** (e.g. `"12345678, 23456789"`), not a list, not a list of dicts.
 - Do not validate these against `get_mapping()`.
@@ -140,45 +140,60 @@ Three files:
   from .uploader import <Name>Uploader  # noqa
   ```
 - `dumper.py` — model on [biothings-hub/files/nde-hub/hub/dataload/sources/bacdive/dumper.py](biothings-hub/files/nde-hub/hub/dataload/sources/bacdive/dumper.py). Must set `SRC_NAME = "<name>"` and a `SCHEDULE`. The `SRC_URLS` docker URI must reference `nde-crawlers-<name>-crawler`.
-- `uploader.py`:
+- `uploader.py` — normally just two lines of body:
+  ```python
+  from hub.dataload.nde import NDESourceUploader
+
+
+  class <Name>Uploader(NDESourceUploader):
+      name = "<name>"
+  ```
   - Subclass `NDESourceUploader` if `--type=Dataset`, `NDESourceSampleUploader` if `--type=Sample`. Import from `hub.dataload.nde`.
   - Set `name = "<name>"`.
-  - **Always** decorate `load_data` with `@nde_upload_wrapper` *if* you override it.
-  - **Only override `load_data`** if at least one helper from §7 is needed. If no helper applies, do not write a `load_data` method — let the base class default handle reading `data.ndjson`. The class body should then be just `name = "<name>"`.
+  - **Do not write a `load_data` method.** The base class already reads `data.ndjson` and runs every standardizer (see §7). Add `__metadata__` if the source needs `src_meta` / a merger.
+  - Only override `load_data` when the records need custom parsing that the crawler's `data.ndjson` doesn't already give you (see §7's "When to override `load_data`").
 
-### 7. Choosing helper functions for `load_data`
+### 7. Standardizers — the pipeline picks them, you don't
 
-Read [references/helper_instructions.md](.claude/skills/new_source/references/helper_instructions.md) and choose helpers by these rules:
+`@nde_upload_wrapper` (in [biothings-hub/files/nde-hub/utils/pipeline.py](biothings-hub/files/nde-hub/utils/pipeline.py)) runs **one** pipeline for every source, and each stage decides for itself whether it has anything to do — from the record contents, and for the curated-file stages from whether that source has a lookup file on disk. There is **no helper table to choose from and nothing to import**.
 
-| Condition in the parser output | Helper to import & call | Notes |
+| Stage | Runs when a record has | What it does |
 |---|---|---|
-| Output has `species` or `healthCondition` | `from utils.pubtator import standardize_data` | Pass `data_folder` or upstream `docs`. |
-| Output has `pmids`, `pmcs`, *or* `citation.doi` | `from utils.pmid_helper import load_pmid_ctfd` | Call **before** `standardize_data`. When `load_pmid_ctfd` is used, **also include `standardize_funding` and `standardize_data`** in the chain (order per the chain block below), even if the parser output doesn't otherwise trigger those rules. |
-| Output has `funding` | `from utils.funding_helper import standardize_funding` | First call in the chain — consumes `data_folder`. |
-| Output has a `description` | `from utils.extract import process_descriptions` | Call **after** `standardize_data`. |
-| Output has `measurementTechnique` | `from utils.measurement_technique_helper import process_measurement_technique` | Pass `self.name`. |
-| Topic categories needed (Zubair's TSVs in `/data/nde_hub/topic_categories/`) | `from utils.topic_category_helper import add_topic_category` | Pass `self.name`. |
-| Output has `nctid` | `from utils.nctid_helper import nctid_helper` | Derives measurement techniques from NCT trial info. |
-| `disambiguating_description` field is in scope (immport / clinepidb) | `from utils.disambiguating_description import add_disambiguating_description` | Source-restricted — use only for those two. |
-| Source is `vivli` | `from utils.clinical_trails_helper import load_ct_wrapper` | Source-restricted. |
-| Source is `dde` | `standardize_fields` / `handle_dde_docs` | Source-restricted. |
+| `citations` | `pmids`, `pmcs` or `citation.doi` | Citation + funding from NCBI E-utilities, plus PubTator species / diseases |
+| `funding` | `funding` | Curated NIH grant from the funding cache; CrossRef funder names |
+| `terms` | `species`, `infectiousAgent` or `healthCondition` | Standardizes them, splits hosts from infectious agents |
+| `descriptions` | a `description` and no taxonomy / health condition | Mines species + diseases out of the text via EXTRACT |
+| `measurement_technique` | `measurementTechnique` **and** `/data/nde-hub/standardizers/measurement_technique_lookup/<source>.csv` | Maps repository techniques to ontology terms |
+| `nctid` | `nctid` | measurementTechnique from the trial's study design |
+| `topic_category` | `/data/nde-hub/topic_categories/<source>.json` | Adds curated EDAM topics |
+| `disambiguating_description` | `/data/nde-hub/disambiguating_descriptions/<source>.csv` | Adds the curated summary |
+| `lineage` | always | `_meta.lineage` for the taxonomy browser |
 
-**Chain order** when multiple apply (matches existing sources):
+Then every record gets `sourceOrganization` corrections, `date`, `_meta.completeness`, a cleaned description, placeholder-term removal and `check_schema`.
 
+A source with no `funding` pays one dict lookup for the funding stage and nothing else, so **a new source needs no configuration**. The only knobs, both optional and rare:
+
+- `post_process(self, doc)` — the source's last word on a record, after every stage but before `lineage`. Return the document, or `None` to drop it. Use it for source-specific fixups or filtering (see [bei](biothings-hub/files/nde-hub/hub/dataload/sources/bei/uploader.py), [pdb](biothings-hub/files/nde-hub/hub/dataload/sources/pdb/uploader.py), [covid_radx](biothings-hub/files/nde-hub/hub/dataload/sources/covid_radx/uploader.py)).
+- `skip_stages = ("descriptions",)` — opt out of a stage. Only for a source whose volume makes a stage's per-record API calls impractical; not a metadata decision.
+
+**When to override `load_data`:** only when the records don't come straight out of `data.ndjson` — a custom parser ([ncbi_geo](biothings-hub/files/nde-hub/hub/dataload/sources/ncbi_geo/gse_uploader.py)), per-file jobs ([biostudies](biothings-hub/files/nde-hub/hub/dataload/sources/biostudies/uploader.py)), or source-restricted curation ([dde](biothings-hub/files/nde-hub/hub/dataload/sources/dde/uploader.py), [vivli](biothings-hub/files/nde-hub/hub/dataload/sources/vivli/uploader.py)). Then keep `@nde_upload_wrapper` on it and yield plain dicts:
+
+```python
+from hub.dataload.nde import NDESourceUploader
+from utils import nde_upload_wrapper
+
+from .parser import my_parser
+
+
+class <Name>Uploader(NDESourceUploader):
+    name = "<name>"
+
+    @nde_upload_wrapper
+    def load_data(self, data_folder):
+        yield from my_parser(data_folder)
 ```
-standardize_funding(data_folder)
-  → load_pmid_ctfd(...)
-  → standardize_data(...)
-  → process_descriptions(...)
-  → process_measurement_technique(..., self.name)
-  → nctid_helper(...)
-  → add_topic_category(..., self.name)
-  → add_disambiguating_description(..., self.name)
-```
 
-Only one of the entries in the chain takes `data_folder` (the first one); the rest take the previous generator. If none of the above apply, do not write `load_data`.
-
-Always include `from utils.utils import nde_upload_wrapper` and `@nde_upload_wrapper` on `load_data` when overridden.
+`utils.iter_ndjson(data_folder)` yields the crawler's records if you need them alongside custom logic. Never re-implement a pipeline stage inside `load_data`.
 
 ### 8. docker-compose-crawlers.yml
 
@@ -199,7 +214,7 @@ Use [docker-compose-crawlers.yml](docker-compose-crawlers.yml) lines around the 
 
 After writing the parser, do one verification pass:
 
-1. Open [biothings-hub/files/nde-hub/hub/dataload/nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py) and locate `NDESourceUploader.get_mapping` (line 130) if `--type=Dataset`, or `NDESourceSampleUploader.get_mapping` (line 1300) if `--type=Sample`.
+1. Open [biothings-hub/files/nde-hub/hub/dataload/nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py) and locate `NDESourceUploader.get_mapping` (~line 126) if `--type=Dataset`, or `NDESourceSampleUploader.get_mapping` (~line 1411) if `--type=Sample`.
 2. For every top-level field your `parse()` emits, confirm it exists in that mapping. Exceptions that are allowed even though absent: `_id`, `@context`, `@type`, `pmids`, `pmcs`, and `_meta` (added later by `add_metadata_score`).
 3. For every emitted field, confirm sub-keys you set match the mapping's sub-`properties`. If you've emitted `locationOfOrigin.administrativeType` but the mapping has no `administrativeType` property, either drop it or pick the correctly-named sub-key.
 4. Confirm enum constraints in §4 hold.

@@ -1,8 +1,5 @@
 from hub.dataload.nde import NDESourceUploader
 from utils.csv_helper import get_source_data
-from utils.funding_helper import standardize_funding
-from utils.pmid_helper import load_pmid_ctfd
-from utils.utils import nde_upload_wrapper
 
 # Example __metadata__ dictionary:
 # <SOURCE_NAME> = https://api.data.niaid.nih.gov/v1/metadata
@@ -30,10 +27,3 @@ class Biocontainers_Uploader(NDESourceUploader):
             }
         }
     }
-
-    @nde_upload_wrapper
-    def load_data(self, data_folder):
-        docs = load_pmid_ctfd(data_folder)
-        docs = standardize_funding(docs)
-        for doc in docs:
-            yield doc

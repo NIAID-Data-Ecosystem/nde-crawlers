@@ -4,13 +4,12 @@ import os
 import shutil
 import time
 
-import orjson
 from biothings.hub.dataload.dumper import BaseDumper
 from biothings.hub.dataload.storage import IgnoreDuplicatedStorage
 from biothings.hub.dataload.uploader import BaseSourceUploader
 from biothings.utils.dataload import merge_struct
 from config import CRAWLER_OUTPUT_DATA_ROOT, DATA_ARCHIVE_ROOT
-from utils.utils import nde_upload_wrapper
+from utils import iter_ndjson, nde_upload_wrapper
 
 __all__ = [
     "NDEFileSystemDumper",
@@ -121,10 +120,7 @@ class NDESourceUploader(BaseSourceUploader):
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
-        with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
-            for line in f:
-                doc = orjson.loads(line)
-                yield doc
+        yield from iter_ndjson(data_folder)
 
     @classmethod
     def get_mapping(cls):
@@ -416,7 +412,6 @@ class NDESourceUploader(BaseSourceUploader):
                     "url": {"type": "keyword"},
                 }
             },
-            "creativeWorkStatus": {"type": "keyword"},
             "creditText": {"type": "text"},
             "curatedBy": {
                 "properties": {
@@ -1409,10 +1404,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
-        with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
-            for line in f:
-                doc = orjson.loads(line)
-                yield doc
+        yield from iter_ndjson(data_folder)
 
     @classmethod
     def get_mapping(cls):

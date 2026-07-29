@@ -1,10 +1,6 @@
 import re
 
 from hub.dataload.nde import NDESourceSampleUploader
-from utils.extract import process_descriptions
-from utils.pubtator import standardize_data
-from utils.utils import nde_upload_wrapper
-
 
 AMBIGUOUS_TAXON_RE = re.compile(r"\b(?:unknown|unidentified)\b", re.IGNORECASE)
 TAXON_LABEL_FIELDS = ("name", "commonName", "displayName", "originalName")
@@ -45,30 +41,21 @@ def _filter_taxon_entries(value):
     return filtered if isinstance(value, list) else filtered[0]
 
 
-def remove_ambiguous_taxonomy(doc):
-    """Drop BEI sample taxonomy terms such as unknown or unidentified taxa."""
-    if doc.get("@type") != "Sample":
-        return doc
-
-    for field in TAXON_FIELDS:
-        if field not in doc:
-            continue
-        filtered = _filter_taxon_entries(doc[field])
-        if filtered is None:
-            doc.pop(field, None)
-        else:
-            doc[field] = filtered
-
-    return doc
-
-
 class BeiUploader(NDESourceSampleUploader):
     name = "bei"
 
-    @nde_upload_wrapper
-    def load_data(self, data_folder):
-        docs = standardize_data(data_folder)
-        docs = process_descriptions(docs)
-        for doc in docs:
-            remove_ambiguous_taxonomy(doc)
-            yield doc
+    def post_process(self, doc):
+        """Drop BEI sample taxonomy terms such as unknown or unidentified taxa."""
+        if doc.get("@type") != "Sample":
+            return doc
+
+        for field in TAXON_FIELDS:
+            if field not in doc:
+                continue
+            filtered = _filter_taxon_entries(doc[field])
+            if filtered is None:
+                doc.pop(field, None)
+            else:
+                doc[field] = filtered
+
+        return doc

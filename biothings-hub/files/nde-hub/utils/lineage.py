@@ -1,10 +1,17 @@
+"""Taxonomy lineage for the taxonomy browser.
+
+Adds `_meta.lineage` to the record types the portal exposes, from the numeric
+taxonomy identifiers on `species` / `infectiousAgent`. Taxon lookups are cached
+in SQLite so they persist across runs.
+"""
+
 import json
 import os
 import sqlite3
 from typing import Iterable, List, Set
 
-import orjson
 from biothings_client import get_client
+from config import logger
 
 DB_PATH = "/data/nde-hub/standardizers/lineage_lookup/lineage_lookup.db"
 
@@ -214,7 +221,7 @@ def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: di
                         parent_cache[taxid] = parent
                         parent_rows.append((taxid, parent))
             except Exception as e:
-                print(f"Error fetching lineage taxon info chunk: {e}")
+                logger.error("Error fetching lineage taxon info chunk: %s", e)
 
     _save_to_db(lineage_rows, parent_rows)
 
@@ -251,16 +258,6 @@ def _annotate_record(record: dict, lineage_cache: dict, parent_cache: dict):
         _remove_lineage(record)
 
 
-def _iter_docs(docs):
-    """Normalise *docs* into an iterator of dicts (handles path strings too)."""
-    if isinstance(docs, str):
-        with open(os.path.join(docs, "data.ndjson"), "rb") as f:
-            for line in f:
-                yield orjson.loads(line)
-    else:
-        yield from docs
-
-
 def _process_batch(batch: list):
     eligible_records = []
     all_ids: Set[int] = set()
@@ -286,18 +283,15 @@ def _process_batch(batch: list):
 def process_lineage(docs):
     """Add taxonomy lineage to documents using a persistent SQLite-backed cache.
 
-    Accepts an iterable of dicts (or a path to an ndjson directory) and yields
-    each document, with ``_meta.lineage`` populated only for portal/API-visible
-    record types that have numeric taxonomy IDs. Taxon lookups are cached in
-    SQLite at ``DB_PATH`` so data persists across process restarts. In-memory
-    lineage and parent dictionaries are scoped to one internal batch and are
-    discarded before the next batch is processed.
-
-    Documents are collected into small internal batches so that API calls are
-    amortised without ever materialising the full dataset in memory.
+    Yields each document, with ``_meta.lineage`` populated only for
+    portal/API-visible record types that have numeric taxonomy IDs. Taxon
+    lookups are cached in SQLite at ``DB_PATH`` so data persists across process
+    restarts. In-memory lineage and parent dictionaries are scoped to one
+    internal batch and are discarded before the next batch is processed, so API
+    calls are amortised without ever materialising the full dataset in memory.
     """
     batch: list = []
-    for doc in _iter_docs(docs):
+    for doc in docs:
         batch.append(doc)
         if len(batch) >= _BATCH_SIZE:
             yield from _process_batch(batch)

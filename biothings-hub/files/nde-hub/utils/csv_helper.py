@@ -1,3 +1,5 @@
+"""The source -> NDE field mapping an uploader advertises in `__metadata__.src_meta.schema`."""
+
 from biothings.utils.dataload import tab2dict
 
 
