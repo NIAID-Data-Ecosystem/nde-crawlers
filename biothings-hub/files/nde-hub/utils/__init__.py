@@ -10,13 +10,12 @@ The individual stages live in their own modules (`terms`, `citations`,
 pipeline from the records themselves -- sources do not import them.
 """
 
-from .common import as_list, batched, iter_ndjson, retry
+from .common import as_list, iter_ndjson, retry
 from .pipeline import STAGE_NAMES, finalize, nde_upload_wrapper, run_pipeline
 
 __all__ = [
     "STAGE_NAMES",
     "as_list",
-    "batched",
     "finalize",
     "iter_ndjson",
     "nde_upload_wrapper",

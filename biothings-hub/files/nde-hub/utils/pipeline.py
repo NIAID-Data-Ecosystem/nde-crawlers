@@ -33,11 +33,12 @@ stage it should not pay for.
 import functools
 import os
 import time
+from itertools import batched
 
 import bson
 from config import logger
 
-from .common import batched, dict_entries
+from .common import dict_entries
 from .corrections import apply_corrections
 from .validate import add_date, add_metadata_score, check_schema, clean_description, drop_placeholder_terms
 

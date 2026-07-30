@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.2
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_VERSION=3.12
 # This leverages a multistage build so that
 # dependencies are not always downloaded from the internet, speeding up the process
 # see https://docs.docker.com/develop/develop-images/multistage-build/

@@ -14,22 +14,18 @@ don't retry them. Species are split into `species` (hosts) and
 `infectiousAgent` from their UniProt lineage.
 """
 
-import atexit
 import datetime
 import json
-import math
 import os
 import re
-import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import closing
-from multiprocessing import Pool
+from itertools import batched
 
 import requests
 from config import logger
 
-from .common import as_list, batched
+from .common import as_list, sqlite
 
 DB_PATH = "/data/nde-hub/standardizers/pubtator_lookup/pubtator_lookup.db"
 SPECIES_CACHE_DB_PATH = "/data/nde-hub/standardizers/extract_lookup/extract_lookup.db"
@@ -60,11 +56,6 @@ _UNIPROT_SESSION = requests.Session()
 _lookup_cache = None
 _identifier_resolutions = {}
 _negative_species = set()
-_pool = None
-
-# Worker-side lookup dicts, populated by the pool initializer.
-_WORKER_HC = None
-_WORKER_SPECIES = None
 
 
 def reset_caches():
@@ -73,7 +64,6 @@ def reset_caches():
     _lookup_cache = None
     _negative_species.clear()
     _identifier_resolutions.clear()
-    _close_pool()
 
 
 # ---------------------------------------------------------------------------
@@ -106,14 +96,18 @@ class AliasLookupDict(dict):
     aliases_indexed = True
 
 
-def _ensure_lookup_db():
+_LOOKUP_DDL = (
+    "CREATE TABLE IF NOT EXISTS health_conditions (original_name text, standard_dict text)",
+    "CREATE TABLE IF NOT EXISTS species (original_name text, standard_dict text)",
+)
+
+
+def lookup_db():
+    """Open the PubTator lookup DB, creating it and its tables if needed."""
     db_dir = os.path.dirname(DB_PATH)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("""CREATE TABLE IF NOT EXISTS health_conditions (original_name text, standard_dict text)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS species (original_name text, standard_dict text)""")
+    return sqlite(DB_PATH, *_LOOKUP_DDL)
 
 
 def _add_lookup_alias(lookup_dict, alias, item_data):
@@ -148,13 +142,9 @@ def _lookup_dicts():
     """Load (once per upload) the health condition and species lookup dictionaries."""
     global _lookup_cache
     if _lookup_cache is None:
-        _ensure_lookup_db()
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("SELECT original_name, standard_dict FROM health_conditions")
-            hc_rows = c.fetchall()
-            c.execute("SELECT original_name, standard_dict FROM species")
-            species_rows = c.fetchall()
+        with lookup_db() as conn:
+            hc_rows = conn.execute("SELECT original_name, standard_dict FROM health_conditions").fetchall()
+            species_rows = conn.execute("SELECT original_name, standard_dict FROM species").fetchall()
         _lookup_cache = (_build_lookup_dict(hc_rows), _build_lookup_dict(species_rows))
         logger.info("Term lookup loaded: %s health conditions, %s species", len(_lookup_cache[0]), len(_lookup_cache[1]))
     return _lookup_cache
@@ -471,17 +461,14 @@ def _scan_doc(doc, species_dict, unstandardized):
 # ---------------------------------------------------------------------------
 # Resolving species the lookup DB doesn't know
 # ---------------------------------------------------------------------------
-def _species_cache_conn():
-    """Open a connection to the resolved-species cache.
+_SPECIES_CACHE_DDL = (
+    "CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)",
+    f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_SPECIES_TABLE} (original_name TEXT PRIMARY KEY)",
+)
 
-    A fresh connection per call: the UniProt resolvers write from a thread pool
-    and SQLite connections cannot be shared across threads.
-    """
-    conn = sqlite3.connect(SPECIES_CACHE_DB_PATH)
-    with conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
-        conn.execute(f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_SPECIES_TABLE} (original_name TEXT PRIMARY KEY)")
-    return conn
+
+def _species_cache():
+    return sqlite(SPECIES_CACHE_DB_PATH, *_SPECIES_CACHE_DDL)
 
 
 def _select_in_chunks(conn, query, keys):
@@ -497,7 +484,7 @@ def _load_species_cache(keys):
         return {}
     try:
         cache = {}
-        with closing(_species_cache_conn()) as conn:
+        with _species_cache() as conn:
             query = "SELECT original_name, standard_dict FROM species_details WHERE original_name IN ({placeholders})"
             for original_name, standard_dict in _select_in_chunks(conn, query, keys):
                 if standard_dict:
@@ -515,7 +502,7 @@ def _known_unresolvable(keys):
     if not remaining:
         return hits
     try:
-        with closing(_species_cache_conn()) as conn:
+        with _species_cache() as conn:
             query = f"SELECT original_name FROM {_NEGATIVE_SPECIES_TABLE} WHERE original_name IN ({{placeholders}})"
             for (original_name,) in _select_in_chunks(conn, query, remaining):
                 key = original_name.lower().strip()
@@ -528,7 +515,7 @@ def _known_unresolvable(keys):
 
 def _cache_species_details(species_details):
     try:
-        with closing(_species_cache_conn()) as conn, conn:
+        with _species_cache() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
                 (species_details["originalName"].lower().strip(), json.dumps(species_details)),
@@ -541,7 +528,7 @@ def _cache_negative_species(original_name):
     key = original_name.lower().strip()
     _negative_species.add(key)
     try:
-        with closing(_species_cache_conn()) as conn, conn:
+        with _species_cache() as conn:
             conn.execute(f"INSERT OR IGNORE INTO {_NEGATIVE_SPECIES_TABLE} (original_name) VALUES (?)", (key,))
     except Exception as e:
         logger.error("Error caching negative species: %s", e)
@@ -782,52 +769,15 @@ def standardize_doc_terms(doc, hc_dict, species_dict):
 
 
 # ---------------------------------------------------------------------------
-# Parallel transform
-# ---------------------------------------------------------------------------
-def _init_transform_worker(hc_dict, species_dict):
-    global _WORKER_HC, _WORKER_SPECIES
-    _WORKER_HC = hc_dict
-    _WORKER_SPECIES = species_dict
-
-
-def _transform_worker(doc):
-    return standardize_doc_terms(doc, _WORKER_HC or {}, _WORKER_SPECIES or {})
-
-
-def _close_pool():
-    global _pool
-    if _pool is not None:
-        _pool.terminate()
-        _pool = None
-
-
-def _get_pool(processes, hc_dict, species_dict):
-    """Create (once per upload) the worker pool that applies the lookup dictionaries."""
-    global _pool
-    if _pool is None:
-        _pool = Pool(processes, initializer=_init_transform_worker, initargs=(hc_dict, species_dict))
-        atexit.register(_close_pool)
-    return _pool
-
-
-def _transform_batch(docs, hc_dict, species_dict):
-    processes = int(os.environ.get("PUBTATOR_TRANSFORM_PROCESSES", "15"))
-    if processes <= 1 or len(docs) < processes:
-        for doc in docs:
-            yield standardize_doc_terms(doc, hc_dict, species_dict)
-        return
-
-    max_chunksize = int(os.environ.get("PUBTATOR_TRANSFORM_CHUNKSIZE", "500"))
-    chunksize = max(1, min(max_chunksize, math.ceil(len(docs) / processes)))
-    pool = _get_pool(processes, hc_dict, species_dict)
-    yield from pool.imap(_transform_worker, docs, chunksize=chunksize)
-
-
-# ---------------------------------------------------------------------------
 # The pipeline stage
 # ---------------------------------------------------------------------------
 def standardize_terms(docs):
-    """Standardize the species, infectiousAgent and healthCondition of one batch."""
+    """Standardize the species, infectiousAgent and healthCondition of one batch.
+
+    Applying the lookup dictionaries costs a few microseconds per record, so
+    this runs in-process: a worker pool spent more time pickling records than
+    the work itself, and each fork held its own copy of the lookup tables.
+    """
     docs = list(docs)
     hc_dict, species_dict = _lookup_dicts()
 
@@ -837,7 +787,8 @@ def standardize_terms(docs):
 
     resolved = _resolve_species(unstandardized)
 
-    for doc in _transform_batch(docs, hc_dict, species_dict):
+    for doc in docs:
+        standardize_doc_terms(doc, hc_dict, species_dict)
         if resolved:
             _apply_resolved_species(doc, resolved)
         yield doc

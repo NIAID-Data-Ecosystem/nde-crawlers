@@ -2,8 +2,10 @@
 
 import functools
 import os
+import sqlite3
 import time
 import traceback
+from contextlib import contextmanager
 
 import orjson
 from config import logger
@@ -33,23 +35,28 @@ def retry(retry_num, retry_sleep_sec):
     return decorator
 
 
-def batched(iterable, batch_size):
-    """Yield lists of at most `batch_size` items from `iterable`."""
-    batch = []
-    for item in iterable:
-        batch.append(item)
-        if len(batch) >= batch_size:
-            yield batch
-            batch = []
-    if batch:
-        yield batch
-
-
 def iter_ndjson(data_folder, filename="data.ndjson"):
     """Yield documents from `<data_folder>/<filename>`."""
     with open(os.path.join(os.fspath(data_folder), filename), "rb") as f:
         for line in f:
             yield orjson.loads(line)
+
+
+@contextmanager
+def sqlite(path, *setup):
+    """Open `path`, run any `setup` DDL, commit on success and always close.
+
+    A connection per call rather than a shared one: the species resolvers write
+    from a thread pool and SQLite connections cannot cross threads.
+    """
+    conn = sqlite3.connect(path)
+    try:
+        with conn:
+            for statement in setup:
+                conn.execute(statement)
+            yield conn
+    finally:
+        conn.close()
 
 
 def as_list(value):

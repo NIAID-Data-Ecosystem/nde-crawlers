@@ -24,6 +24,8 @@ import time
 import urllib.error
 from copy import copy
 from datetime import datetime
+from email.utils import parsedate_to_datetime
+from itertools import batched
 from typing import Dict, Iterable, Optional
 
 import orjson
@@ -31,7 +33,7 @@ import requests
 from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
-from .common import as_list, batched, dict_entries, retry
+from .common import as_list, dict_entries, retry
 from .funding import DB_PATH as FUNDING_DB_PATH, create_sqlite_db as create_funding_db, standardize_funder
 from .terms import DB_PATH as PUBTATOR_DB_PATH, get_species_details, query_condition
 
@@ -153,15 +155,21 @@ def _file_needs_update(url, local_filename):
         logger.warning("Error %s - cannot check remote file's last modified time: %s", response.status_code, url)
         return False
 
-    remote_last_modified = response.headers.get("Last-Modified")
-    if not remote_last_modified:
+    last_modified = response.headers.get("Last-Modified")
+    if not last_modified:
         logger.warning("Cannot determine remote file's last modified time: %s", url)
         return False
-
-    remote_last_modified = datetime.strptime(remote_last_modified, "%a, %d %b %Y %H:%M:%S GMT")
     if not os.path.exists(full_path):
         return True
-    return remote_last_modified > datetime.utcfromtimestamp(os.path.getmtime(full_path))
+
+    # parsedate_to_datetime handles every date form HTTP allows and returns an
+    # aware datetime, so compare POSIX timestamps and stay clear of naive/aware.
+    try:
+        remote_timestamp = parsedate_to_datetime(last_modified).timestamp()
+    except (TypeError, ValueError) as e:
+        logger.warning("Unparseable Last-Modified %r for %s: %s", last_modified, url, e)
+        return False
+    return remote_timestamp > os.path.getmtime(full_path)
 
 
 def _stream_and_store(filename, entity_type):

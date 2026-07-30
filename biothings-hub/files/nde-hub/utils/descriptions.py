@@ -9,14 +9,13 @@ time cost a request. The tagged names are then standardized the same way the
 
 import json
 import os
-import sqlite3
 import time
-from contextlib import closing
+from itertools import batched
 
 import requests
 from config import logger
 
-from .common import as_list
+from .common import as_list, sqlite
 from .terms import DB_PATH as PUBTATOR_DB_PATH, SPECIES_CACHE_DB_PATH as DB_PATH, query_condition
 
 _NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
@@ -83,6 +82,14 @@ ADVANCED_DROP_RULES = {
 }
 
 ONTOLOGY_PRIORITY = {"MONDO": 0, "HPO": 1, "DOID": 2, "NCIT": 3}
+
+_RESPONSE_CACHE_DDL = (
+    "CREATE TABLE IF NOT EXISTS species (ndeid TEXT PRIMARY KEY, text_response TEXT)",
+    "CREATE TABLE IF NOT EXISTS disease (ndeid TEXT PRIMARY KEY, text_response TEXT)",
+)
+_SPECIES_DETAILS_DDL = ("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)",)
+_HEALTH_CONDITIONS_DDL = ("CREATE TABLE IF NOT EXISTS health_conditions (original_name TEXT PRIMARY KEY, standard_dict TEXT)",)
+_NEGATIVE_DISEASE_DDL = (f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_DISEASE_TABLE} (original_name TEXT PRIMARY KEY)",)
 
 _species_cache = None
 _disease_cache = None
@@ -171,9 +178,8 @@ def _fetch_cached_responses(cursor, entity_type, ndeids):
         return {}
 
     out = {}
-    for i in range(0, len(ndeids), _SQL_CHUNK_SIZE):
-        chunk = ndeids[i : i + _SQL_CHUNK_SIZE]
-        placeholders = ",".join(["?"] * len(chunk))
+    for chunk in batched(ndeids, _SQL_CHUNK_SIZE):
+        placeholders = ",".join("?" for _ in chunk)
         cursor.execute(f"SELECT ndeid, text_response FROM {table} WHERE ndeid IN ({placeholders})", chunk)
         out.update(cursor.fetchall())
     return out
@@ -206,14 +212,9 @@ def _tagged_entities(cursor, ndeid, description, entity_type, cached):
 def _extract_entities(doc_list):
     """Add `fromEXTRACT` species / healthCondition stubs from each description."""
     count = 0
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite(DB_PATH, *_RESPONSE_CACHE_DDL) as conn:
         c = conn.cursor()
-        c.execute("CREATE TABLE IF NOT EXISTS species (ndeid TEXT PRIMARY KEY, text_response TEXT)")
-        c.execute("CREATE TABLE IF NOT EXISTS disease (ndeid TEXT PRIMARY KEY, text_response TEXT)")
-
-        for start in range(0, len(doc_list), _EXTRACT_CHUNK_SIZE):
-            chunk_docs = doc_list[start : start + _EXTRACT_CHUNK_SIZE]
-
+        for chunk_docs in batched(doc_list, _EXTRACT_CHUNK_SIZE):
             species_ids = []
             disease_ids = []
             for doc in chunk_docs:
@@ -334,15 +335,14 @@ def _cached_species():
     """Load (once per upload) the resolved-species cache."""
     global _species_cache
     if _species_cache is None:
-        with closing(sqlite3.connect(DB_PATH)) as conn:
-            conn.execute("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
+        with sqlite(DB_PATH, *_SPECIES_DETAILS_DDL) as conn:
             rows = conn.execute("SELECT original_name, standard_dict FROM species_details").fetchall()
         _species_cache = {row[0].lower().strip(): json.loads(row[1]) for row in rows if row[1]}
     return _species_cache
 
 
 def _cache_species_in_db(species_details):
-    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+    with sqlite(DB_PATH, *_SPECIES_DETAILS_DDL) as conn:
         conn.execute(
             "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
             (species_details["originalName"].lower().strip(), json.dumps(species_details)),
@@ -353,8 +353,7 @@ def _cached_diseases():
     """Load (once per upload) the standardized health condition cache."""
     global _disease_cache
     if _disease_cache is None:
-        with closing(sqlite3.connect(PUBTATOR_DB_PATH)) as conn:
-            conn.execute("CREATE TABLE IF NOT EXISTS health_conditions (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
+        with sqlite(PUBTATOR_DB_PATH, *_HEALTH_CONDITIONS_DDL) as conn:
             rows = conn.execute("SELECT original_name, standard_dict FROM health_conditions").fetchall()
         _disease_cache = {row[0].lower().strip(): json.loads(row[1]) for row in rows if row[1]}
     return _disease_cache
@@ -364,16 +363,14 @@ def _negative_disease_cache():
     """Load (once per upload) the disease names known to resolve to nothing."""
     global _negative_diseases
     if _negative_diseases is None:
-        with closing(sqlite3.connect(PUBTATOR_DB_PATH)) as conn:
-            conn.execute(f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_DISEASE_TABLE} (original_name TEXT PRIMARY KEY)")
+        with sqlite(PUBTATOR_DB_PATH, *_NEGATIVE_DISEASE_DDL) as conn:
             rows = conn.execute(f"SELECT original_name FROM {_NEGATIVE_DISEASE_TABLE}").fetchall()
         _negative_diseases = {row[0].lower().strip() for row in rows if row and row[0]}
     return _negative_diseases
 
 
 def _cache_disease_in_db(disease_details):
-    with closing(sqlite3.connect(PUBTATOR_DB_PATH)) as conn, conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS health_conditions (original_name TEXT PRIMARY KEY, standard_dict TEXT)")
+    with sqlite(PUBTATOR_DB_PATH, *_HEALTH_CONDITIONS_DDL) as conn:
         conn.execute(
             "INSERT OR REPLACE INTO health_conditions VALUES (?, ?)",
             (disease_details["originalName"].lower().strip(), json.dumps(disease_details)),
@@ -385,8 +382,7 @@ def _cache_negative_disease(disease_name):
     if not key:
         return
     _negative_disease_cache().add(key)
-    with closing(sqlite3.connect(PUBTATOR_DB_PATH)) as conn, conn:
-        conn.execute(f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_DISEASE_TABLE} (original_name TEXT PRIMARY KEY)")
+    with sqlite(PUBTATOR_DB_PATH, *_NEGATIVE_DISEASE_DDL) as conn:
         conn.execute(f"INSERT OR IGNORE INTO {_NEGATIVE_DISEASE_TABLE} (original_name) VALUES (?)", (key,))
 
 
