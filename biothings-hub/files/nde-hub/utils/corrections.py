@@ -22,6 +22,8 @@ import threading
 import requests
 from config import logger, token
 
+from .common import as_list
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -117,13 +119,8 @@ def update_source_organization(record_metadata, correction_organizations, approv
     Deduplication is based on the lowercase name (or url) of each organization,
     so calling this multiple times with the same correction is safe/idempotent.
     """
-    existing_orgs = record_metadata.get("sourceOrganization", [])
-
-    if not isinstance(existing_orgs, list):
-        existing_orgs = [existing_orgs]
-
     # Sanitize existing organizations.
-    existing_orgs = [sanitize_org(org) for org in existing_orgs]
+    existing_orgs = [sanitize_org(org) for org in as_list(record_metadata.get("sourceOrganization"))]
 
     # Gather identifiers already present (name or url, lowercased).
     existing_org_identifiers = {
@@ -334,13 +331,7 @@ def _match_funding(doc_funding, funding_patterns):
     if not doc_funding or not funding_patterns:
         return False
 
-    if isinstance(doc_funding, dict):
-        doc_funding = [doc_funding]
-
-    if not isinstance(doc_funding, list):
-        return False
-
-    for fund_entry in doc_funding:
+    for fund_entry in as_list(doc_funding):
         if not isinstance(fund_entry, dict):
             continue
         identifier = fund_entry.get("identifier")
