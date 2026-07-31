@@ -40,11 +40,34 @@ from .terms import DB_PATH as PUBTATOR_DB_PATH, get_species_details, query_condi
 PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
 PUBTATOR_DIR = "/data/nde-hub/standardizers/pmid_lookup/"
 
-# PubTator Central annotation dumps, keyed by the table they populate.
+# PubTator3 annotation dumps, keyed by the table they populate. Updated monthly.
+# Five tab-separated columns: PMID, Type, Concept ID, Mentions, Resource --
+# https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator3/README.txt
 PUBTATOR_DUMPS = {
-    "species": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTatorCentral/species2pubtatorcentral.gz",
-    "disease": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTatorCentral/disease2pubtatorcentral.gz",
+    "species": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator3/species2pubtator3.gz",
+    "disease": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator3/disease2pubtator3.gz",
 }
+
+# We keep three of them. They become `{species,disease}_data` rows of
+# (pmid, entity_id, names), which `get_data_for_pmids` reads back as
+# {concept id: [mentions]}. In the document that finally gets yielded:
+# The uniprot lineage of a species is used to classify it as either `species` or `infectiousAgent`.
+#   Concept ID -> the term's `identifier` and `url`. A taxon id for
+#                 species (resolved against UniProt); a MeSH id for disease, used to
+#                 find its MONDO/DOID/HPO/NCIT equivalent and kept only if there
+#                 isn't one.
+#   Mentions   -> the term's `name`. usually not part of the output. One of them has to appear in the record's
+#                 name, abstract or description before we add the term at all, and
+#                 the first match becomes the cache key. `name` usually comes from
+#                 UniProt or the ontology (MESH ID). mention is only used as `name` when
+#                 UniProt has no scientific name.
+#
+# So a "goats" mention on taxon 9925 yields species: [{name: "Capra hircus",
+# identifier: "9925", fromPMID: True, ...}] -- the mention itself is gone.
+_PMID_COLUMN, _CONCEPT_ID_COLUMN, _MENTIONS_COLUMN = 0, 2, 3
+
+# Rows per executemany when loading a dump; also how often the load commits.
+_DUMP_INSERT_BATCH = 50_000
 
 # NCBI rejects an entire request if any id in it is malformed.
 _VALID_PMID_RE = re.compile(r"^[1-9]\d{0,8}$")
@@ -78,6 +101,10 @@ _pubtator_conn = None
 _funding_conn = None
 _pubtator_cache = {}
 _dumps_checked = False
+
+
+class PubTatorDumpUnavailable(RuntimeError):
+    """A PubTator annotation dump could not be reached at its configured URL."""
 
 
 # ---------------------------------------------------------------------------
@@ -119,13 +146,14 @@ def _get_funding_conn():
 def _refresh_pubtator_dumps():
     """Download and load the PubTator annotation dumps if they changed upstream.
 
-    Runs at most once per process, and only once a source actually has PMIDs to
-    look up -- the dumps are large and the freshness check costs a request each.
+    Runs at most once per successful check per process, and only once a source
+    actually has PMIDs to look up -- the dumps are large and the freshness check
+    costs a request each. Raises `PubTatorDumpUnavailable` if a dump can't be
+    reached, rather than carrying on with whatever was loaded last.
     """
     global _dumps_checked
     if _dumps_checked:
         return
-    _dumps_checked = True
     _get_pmid_conn()
     os.makedirs(PUBTATOR_DIR, exist_ok=True)
 
@@ -138,6 +166,10 @@ def _refresh_pubtator_dumps():
         logger.info("Storing %s data...", entity_type)
         _stream_and_store(filename, entity_type)
 
+    # Only after every dump checked out, so a failure is raised again on the
+    # next call instead of being skipped as "already checked".
+    _dumps_checked = True
+
 
 def _download_file(url, local_filename):
     full_path = os.path.join(PUBTATOR_DIR, local_filename)
@@ -149,18 +181,29 @@ def _download_file(url, local_filename):
 
 
 def _file_needs_update(url, local_filename):
+    """True when the remote dump is newer than our copy.
+
+    Raises `PubTatorDumpUnavailable` if the URL doesn't resolve. NCBI has moved
+    these files before (PubTatorCentral -> PubTator3) and swallowing that just
+    means the annotation tables quietly serve years-old data, so a dead URL
+    fails the upload until `PUBTATOR_DUMPS` is corrected.
+    """
     full_path = os.path.join(PUBTATOR_DIR, local_filename)
     response = requests.head(url)
     if response.status_code != 200:
-        logger.warning("Error %s - cannot check remote file's last modified time: %s", response.status_code, url)
-        return False
+        raise PubTatorDumpUnavailable(
+            f"PubTator dump unreachable (HTTP {response.status_code}): {url}. "
+            f"Check {os.path.dirname(url)}/ and update PUBTATOR_DUMPS in utils/citations.py."
+        )
+
+    # No local copy: take whatever is there, headers or not.
+    if not os.path.exists(full_path):
+        return True
 
     last_modified = response.headers.get("Last-Modified")
     if not last_modified:
-        logger.warning("Cannot determine remote file's last modified time: %s", url)
+        logger.warning("No Last-Modified for %s; keeping the copy already on disk", url)
         return False
-    if not os.path.exists(full_path):
-        return True
 
     # parsedate_to_datetime handles every date form HTTP allows and returns an
     # aware datetime, so compare POSIX timestamps and stay clear of naive/aware.
@@ -172,17 +215,33 @@ def _file_needs_update(url, local_filename):
     return remote_timestamp > os.path.getmtime(full_path)
 
 
-def _stream_and_store(filename, entity_type):
-    conn = _get_pmid_conn()
-    cur = conn.cursor()
+def _dump_rows(filename):
+    """Yield (pmid, concept id, mentions) from a PubTator dump, skipping short rows."""
     with gzip.open(os.path.join(PUBTATOR_DIR, filename), "rt") as file:
         for row in csv.reader(file, delimiter="\t"):
-            cur.execute(
-                f"""INSERT INTO {entity_type}_data (pmid, entity_id, names) VALUES (?, ?, ?)
-                    ON CONFLICT(pmid, entity_id) DO UPDATE SET names=excluded.names;""",
-                (row[0], row[2], "|".join(row[3].split("|"))),
-            )
-    conn.commit()
+            if len(row) <= _MENTIONS_COLUMN:
+                continue
+            yield row[_PMID_COLUMN], row[_CONCEPT_ID_COLUMN], row[_MENTIONS_COLUMN]
+
+
+def _stream_and_store(filename, entity_type):
+    """Load a PubTator dump into its annotation table.
+
+    These files run to hundreds of millions of rows, so insert in batches and
+    commit as we go rather than building one enormous transaction.
+    """
+    conn = _get_pmid_conn()
+    upsert = f"""INSERT INTO {entity_type}_data (pmid, entity_id, names) VALUES (?, ?, ?)
+                 ON CONFLICT(pmid, entity_id) DO UPDATE SET names=excluded.names"""
+
+    total = 0
+    for rows in batched(_dump_rows(filename), _DUMP_INSERT_BATCH):
+        conn.executemany(upsert, rows)
+        conn.commit()
+        total += len(rows)
+        if total % (_DUMP_INSERT_BATCH * 20) == 0:
+            logger.info("Loaded %s %s annotations", f"{total:,}", entity_type)
+    logger.info("Loaded %s %s annotations from %s", f"{total:,}", entity_type, filename)
 
 
 def get_data_for_pmids(pmids, entity_type):
@@ -376,11 +435,14 @@ def update_record_species(rec, species_data):
             else:
                 try:
                     standardized_dict = get_species_details(name, taxonomy_id)
-                    pubtator_add(name, "species", json.dumps(standardized_dict))
-                    standardized_dict = _as_augmented(standardized_dict)
                 except Exception as e:
                     logger.warning("Could not get details for %s with ID %s: %s", name, taxonomy_id, e)
                     continue
+                if standardized_dict is None:
+                    logger.info("Skipping %s with ID %s: filtered by drop list", name, taxonomy_id)
+                    continue
+                pubtator_add(name, "species", json.dumps(standardized_dict))
+                standardized_dict = _as_augmented(standardized_dict)
 
             if any(spec.get("name", "").lower() == name.lower() for spec in rec.get("species", [])):
                 remove_first_by_name(rec["species"], name)
@@ -629,19 +691,35 @@ def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
 # ---------------------------------------------------------------------------
 # The pipeline stage
 # ---------------------------------------------------------------------------
+def _is_doi_stub(entry, enriched_doi):
+    """True when `entry` is the bare {"doi": ...} the parser left for this paper.
+
+    DOIs are case-insensitive, but registrars mint them in mixed case, so the
+    stub and the DOI E-utilities returns can differ only in casing.
+    """
+    return bool(enriched_doi) and isinstance(entry.get("doi"), str) and entry["doi"].lower() == enriched_doi
+
+
 def _attach_citation(rec, citation):
     if rec_citation := rec.get("citation"):
         # if the record originally had a citation field that is not a list, make it one
         if not isinstance(rec_citation, list):
             rec["citation"] = [rec_citation]
-        # drop the original DOI stub now that the enriched citation carries the DOI
-        if enriched_doi := citation.get("doi"):
-            rec["citation"] = [
-                c
-                for c in rec["citation"]
-                if not (isinstance(c, dict) and isinstance(c.get("doi"), str) and c["doi"].lower() == enriched_doi.lower())
-            ]
-        rec["citation"].append(citation)
+
+        # citation entries have to be objects, and the record's own DOI stub for
+        # this paper is now redundant -- the enriched citation carries that DOI.
+        enriched_doi = (citation.get("doi") or "").lower()
+        kept = []
+        for entry in rec["citation"]:
+            if not isinstance(entry, dict):
+                logger.warning("Dropping non-object citation %r from %s", entry, rec.get("_id"))
+                continue
+            if _is_doi_stub(entry, enriched_doi):
+                continue
+            kept.append(entry)
+
+        kept.append(citation)
+        rec["citation"] = kept
     else:
         rec["citation"] = [citation]
 
