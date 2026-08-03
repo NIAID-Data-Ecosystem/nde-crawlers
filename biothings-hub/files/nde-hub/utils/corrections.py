@@ -1,23 +1,5 @@
-"""
-Corrections module for applying sourceOrganization metadata from the
-nde-metadata-corrections GitHub repository.
-
-Documents are matched to corrections using two strategies:
-  1. ID-based:      Match document _id against pre-curated _records.txt lists.
-  2. Funding-based: Match document funding.identifier against grant patterns
-                    stored in correction JSONs (fundingIdentifiers field).
-
-Strategy 2 ensures that NEW records are corrected immediately at upload time
-without waiting for the records list to be regenerated externally.
-
-Corrections data is cached at the module level so it is fetched from GitHub
-once per uploader process and reused across all documents handled by that
-process.
-"""
-
 import json
 import math
-import threading
 
 import requests
 from config import logger, token
@@ -32,10 +14,12 @@ REPO = "nde-metadata-corrections"
 PROD_DIR = "collections_corrections_production"
 STAGING_DIR = "collections_corrections_staging"
 
+# Each correction is `<name>_records.txt` plus `<name>_correction.json`.
+RECORDS_SUFFIX = "_records.txt"
+
 # ---------------------------------------------------------------------------
-# Module-level cache (thread-safe)
+# Module-level cache, built once per uploader process
 # ---------------------------------------------------------------------------
-_cache_lock = threading.Lock()
 _corrections_cache = None
 
 
@@ -156,10 +140,10 @@ def fetch_correction_files(correction_name):
       - records_file_path: The full GitHub path to the records file.
     """
     prod_correction_file = f"{PROD_DIR}/{correction_name}_correction.json"
-    prod_records_file = f"{PROD_DIR}/{correction_name}_records.txt"
+    prod_records_file = f"{PROD_DIR}/{correction_name}{RECORDS_SUFFIX}"
 
     staging_correction_file = f"{STAGING_DIR}/{correction_name}_correction.json"
-    staging_records_file = f"{STAGING_DIR}/{correction_name}_records.txt"
+    staging_records_file = f"{STAGING_DIR}/{correction_name}{RECORDS_SUFFIX}"
 
     try:
         # Try production folder first.
@@ -208,25 +192,17 @@ def _build_corrections_index():
     index = {"by_id": {}, "by_funding": []}
     correction_names = {}  # name -> source_folder ("production" | "staging")
 
-    # --- Discover correction names from production and staging ---
-    try:
-        prod_files = list_github_files(OWNER, REPO, PROD_DIR)
-        for fname in prod_files:
-            if fname.endswith("_records.txt"):
-                name = fname[: -len("_records.txt")]
-                correction_names[name] = "production"
-    except Exception as e:
-        logger.error(f"Error listing production corrections: {e}")
-
-    try:
-        staging_files = list_github_files(OWNER, REPO, STAGING_DIR)
-        for fname in staging_files:
-            if fname.endswith("_records.txt"):
-                name = fname[: -len("_records.txt")]
-                if name not in correction_names:
-                    correction_names[name] = "staging"
-    except Exception as e:
-        logger.error(f"Error listing staging corrections: {e}")
+    # --- Discover correction names from production, then staging ---
+    # Each correction is a pair of files sharing a base name; the records file is
+    # what we list on, so every correction is discovered exactly once. Production
+    # is scanned first and setdefault keeps it winning over a staging namesake.
+    for directory, folder in ((PROD_DIR, "production"), (STAGING_DIR, "staging")):
+        try:
+            for fname in list_github_files(OWNER, REPO, directory):
+                if fname.endswith(RECORDS_SUFFIX):
+                    correction_names.setdefault(fname.removesuffix(RECORDS_SUFFIX), folder)
+        except Exception as e:
+            logger.error("Error listing %s corrections: %s", folder, e)
 
     logger.info(f"Discovered {len(correction_names)} correction(s) to load")
 
@@ -288,32 +264,22 @@ def _build_corrections_index():
 
 
 def get_corrections_index():
-    """
-    Return the cached corrections index, building it once per process.
-    Thread-safe; returns an empty index if the initial GitHub load fails.
+    """Return the corrections index, building it once per process.
+
+    A failed build is not cached, so the next document retries. Until one
+    succeeds an empty index is returned, letting documents flow through
+    uncorrected rather than failing the upload.
     """
     global _corrections_cache
 
-    with _cache_lock:
-        if _corrections_cache is not None:
-            return _corrections_cache
+    if _corrections_cache is None:
+        try:
+            _corrections_cache = _build_corrections_index()
+        except Exception as e:
+            logger.error("Failed to build corrections index: %s", e)
+            return {"by_id": {}, "by_funding": []}
 
-    # Build outside the lock (network I/O can be slow).
-    try:
-        index = _build_corrections_index()
-    except Exception as e:
-        logger.error(f"Failed to build corrections index: {e}")
-        with _cache_lock:
-            if _corrections_cache is not None:
-                logger.warning("Falling back to existing corrections cache")
-                return _corrections_cache
-        # Return empty index so documents can still flow through.
-        return {"by_id": {}, "by_funding": []}
-
-    with _cache_lock:
-        _corrections_cache = index
-
-    return index
+    return _corrections_cache
 
 
 # ---------------------------------------------------------------------------

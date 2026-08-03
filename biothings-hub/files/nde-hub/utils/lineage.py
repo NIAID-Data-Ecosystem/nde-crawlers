@@ -7,13 +7,13 @@ in SQLite so they persist across runs.
 
 import json
 import os
-import sqlite3
-from typing import Iterable, List, Set
+from itertools import batched
+from typing import Set
 
 from biothings_client import get_client
 from config import logger
 
-from .common import as_list, dict_entries
+from .common import as_list, dict_entries, sqlite
 
 DB_PATH = "/data/nde-hub/standardizers/lineage_lookup/lineage_lookup.db"
 
@@ -32,59 +32,47 @@ def _get_client():
     return _mt
 
 
-def _ensure_db():
-    """Create the SQLite database and tables if they don't exist."""
+_TAXON_DDL = (
+    "CREATE TABLE IF NOT EXISTS taxon_lineage (taxid INTEGER PRIMARY KEY, lineage TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS taxon_parent (taxid INTEGER PRIMARY KEY, parent_taxid INTEGER)",
+)
+
+
+def taxon_db():
+    """Open the taxon cache, creating it and its tables if needed."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS taxon_lineage "
-            "(taxid INTEGER PRIMARY KEY, lineage TEXT NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS taxon_parent "
-            "(taxid INTEGER PRIMARY KEY, parent_taxid INTEGER)"
-        )
+    return sqlite(DB_PATH, *_TAXON_DDL)
+
+
+def _load_cached(taxon_ids: Set[int], cache: dict, table: str, column: str, decode=None):
+    """Load `table` rows for the taxon ids not already in `cache`."""
+    missing_ids = set(taxon_ids) - set(cache)
+    if not missing_ids:
+        return
+
+    with taxon_db() as conn:
+        for chunk in batched(sorted(missing_ids), _TAXA_CHUNK_SIZE):
+            placeholders = ",".join("?" for _ in chunk)
+            rows = conn.execute(f"SELECT taxid, {column} FROM {table} WHERE taxid IN ({placeholders})", chunk)
+            for taxid, value in rows:
+                cache[taxid] = decode(value) if decode else value
 
 
 def _load_cached_lineages(taxon_ids: Set[int], lineage_cache: dict):
     """Load SQLite-cached lineage rows into a batch-local cache."""
-    missing_ids = set(taxon_ids) - set(lineage_cache)
-    if not missing_ids:
-        return
-
-    _ensure_db()
-    with sqlite3.connect(DB_PATH) as conn:
-        for chunk in _chunked(sorted(missing_ids), _TAXA_CHUNK_SIZE):
-            placeholders = ",".join("?" for _ in chunk)
-            for taxid, lineage_json in conn.execute(
-                f"SELECT taxid, lineage FROM taxon_lineage WHERE taxid IN ({placeholders})",
-                chunk,
-            ):
-                lineage_cache[taxid] = json.loads(lineage_json)
+    _load_cached(taxon_ids, lineage_cache, "taxon_lineage", "lineage", json.loads)
 
 
 def _load_cached_parents(taxon_ids: Set[int], parent_cache: dict):
     """Load SQLite-cached parent rows into a batch-local cache."""
-    missing_ids = set(taxon_ids) - set(parent_cache)
-    if not missing_ids:
-        return
-
-    _ensure_db()
-    with sqlite3.connect(DB_PATH) as conn:
-        for chunk in _chunked(sorted(missing_ids), _TAXA_CHUNK_SIZE):
-            placeholders = ",".join("?" for _ in chunk)
-            for taxid, parent in conn.execute(
-                f"SELECT taxid, parent_taxid FROM taxon_parent WHERE taxid IN ({placeholders})",
-                chunk,
-            ):
-                parent_cache[taxid] = parent
+    _load_cached(taxon_ids, parent_cache, "taxon_parent", "parent_taxid")
 
 
 def _save_to_db(lineage_rows: list, parent_rows: list):
     """Persist newly fetched taxon data to SQLite."""
     if not lineage_rows and not parent_rows:
         return
-    with sqlite3.connect(DB_PATH) as conn:
+    with taxon_db() as conn:
         if lineage_rows:
             conn.executemany(
                 "INSERT OR REPLACE INTO taxon_lineage (taxid, lineage) VALUES (?, ?)",
@@ -95,17 +83,6 @@ def _save_to_db(lineage_rows: list, parent_rows: list):
                 "INSERT OR REPLACE INTO taxon_parent (taxid, parent_taxid) VALUES (?, ?)",
                 parent_rows,
             )
-
-
-def _chunked(iterable: Iterable[int], chunk_size: int) -> Iterable[List[int]]:
-    chunk: List[int] = []
-    for item in iterable:
-        chunk.append(item)
-        if len(chunk) >= chunk_size:
-            yield chunk
-            chunk = []
-    if chunk:
-        yield chunk
 
 
 def _iter_string_values(value):
@@ -176,8 +153,8 @@ def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: di
 
     if new_ids:
         mt = _get_client()
-        for chunk in _chunked(sorted(new_ids), _TAXA_CHUNK_SIZE):
-            taxon_info_list = mt.gettaxa(chunk)
+        for chunk in batched(sorted(new_ids), _TAXA_CHUNK_SIZE):
+            taxon_info_list = mt.gettaxa(list(chunk))
             for taxon_info in taxon_info_list:
                 taxid = taxon_info.get("taxid")
                 lineage = taxon_info.get("lineage", [])
@@ -202,9 +179,9 @@ def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: di
     if missing:
         if mt is None:
             mt = _get_client()
-        for chunk in _chunked(sorted(missing), _TAXA_CHUNK_SIZE):
+        for chunk in batched(sorted(missing), _TAXA_CHUNK_SIZE):
             try:
-                info_list = mt.gettaxa(chunk)
+                info_list = mt.gettaxa(list(chunk))
                 for taxon_info in info_list:
                     taxid = taxon_info.get("taxid")
                     parent_taxid = taxon_info.get("parent_taxid")
@@ -268,8 +245,7 @@ def _process_batch(batch: list):
     for rec in eligible_records:
         _annotate_record(rec, lineage_cache, parent_cache)
 
-    for rec in batch:
-        yield rec
+    yield from batch
 
 
 def process_lineage(docs):
@@ -277,10 +253,9 @@ def process_lineage(docs):
 
     Yields each document, with ``_meta.lineage`` populated only for
     portal/API-visible record types that have numeric taxonomy IDs. Taxon
-    lookups are cached in SQLite at ``DB_PATH`` so data persists across process
-    restarts. In-memory lineage and parent dictionaries are scoped to one
-    internal batch and are discarded before the next batch is processed, so API
-    calls are amortised without ever materialising the full dataset in memory.
+    lookups are cached in SQLite at ``DB_PATH``.
+    In-memory lineage and parent dictionaries are scoped to one
+    internal batch and are discarded before the next batch is processed to avoid memory issues.
     """
     batch: list = []
     for doc in docs:

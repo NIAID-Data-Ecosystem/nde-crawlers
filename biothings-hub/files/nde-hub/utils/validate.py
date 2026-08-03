@@ -79,23 +79,26 @@ def clean_description(doc: Dict) -> Dict:
         return doc
 
     try:
-        if isinstance(description, list):
-            description = " ".join(
-                d.decode("utf-8", errors="replace") if isinstance(d, bytes) else d for d in description
-            )
-        # Decode bytes so the regex (a str pattern) never runs against a bytes-like object
-        if isinstance(description, bytes):
-            description = description.decode("utf-8", errors="replace")
-        # Normalize line breaks before stripping the remaining HTML tags
-        description = _BREAK_TAGS.sub("\n", description)
-        # lxml cannot parse a str carrying an XML encoding declaration, so re-encode that case only
-        if description.strip().startswith("<?xml"):
-            description = description.encode("utf-8")
-        doc["description"] = html.fromstring(description).text_content()
+        doc["description"] = _strip_html(description)
     except etree.ParserError as e:
         # At minimum, prevent the lxml error object from escaping
         logger.warning("ParserError while processing doc %s: %s", doc.get("_id"), str(e))
     return doc
+
+
+def _strip_html(description) -> str:
+    """Join a string / bytes / list description into one string of plain text."""
+    # Decode bytes so the regex (a str pattern) never runs against a bytes-like object
+    text = " ".join(
+        part.decode("utf-8", errors="replace") if isinstance(part, bytes) else part
+        for part in as_list(description)
+    )
+    # Normalize line breaks before stripping the remaining HTML tags
+    text = _BREAK_TAGS.sub("\n", text)
+    # lxml cannot parse a str carrying an XML encoding declaration, so re-encode that case only
+    if text.strip().startswith("<?xml"):
+        text = text.encode("utf-8")
+    return html.fromstring(text).text_content()
 
 
 def drop_placeholder_terms(doc: Dict) -> Dict:

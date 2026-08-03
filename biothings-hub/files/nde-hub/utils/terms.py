@@ -344,9 +344,9 @@ def get_species_details(original_name, identifier):
     return term
 
 
-def _get_uniprot_details(original_name, identifier, max_retries=3):
+def _get_uniprot_details(original_name, identifier):
     """Fetch species details from UniProt for our own resolution (not curated)."""
-    term = fetch_taxon(original_name, identifier, max_retries=max_retries)
+    term = fetch_taxon(original_name, identifier)
     term["isCurated"] = False
     # Nothing to classify from means we cannot call it a host.
     term.setdefault("classification", "infectiousAgent")

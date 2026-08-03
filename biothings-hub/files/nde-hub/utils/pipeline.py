@@ -269,7 +269,7 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
 
     logger.info("Pipeline for %s: %s", source, ", ".join(stage.name for stage in stages) or "no stages")
 
-    batch_size = batch_size or int(os.environ.get("NDE_PIPELINE_BATCH_SIZE", DEFAULT_BATCH_SIZE))
+    batch_size = batch_size or DEFAULT_BATCH_SIZE
     started = time.monotonic()
     ran = {}
     total = 0
@@ -311,7 +311,7 @@ def finalize(doc):
     clean_description(doc)
     drop_placeholder_terms(doc)
 
-    # Everything past this point should always be last in order
+    # final validation and size check
     check_schema(doc)
     doc["_id"] = doc["_id"].casefold()
     bson_size = len(bson.BSON.encode(doc))
