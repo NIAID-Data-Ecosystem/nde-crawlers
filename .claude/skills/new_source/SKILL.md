@@ -153,9 +153,9 @@ Three files:
   - **Do not write a `load_data` method.** The base class already reads `data.ndjson` and runs every standardizer (see §7). Add `__metadata__` if the source needs `src_meta` / a merger.
   - Only override `load_data` when the records need custom parsing that the crawler's `data.ndjson` doesn't already give you (see §7's "When to override `load_data`").
 
-### 7. Standardizers — the pipeline picks them, you don't
+### 7. Standardizers
 
-`@nde_upload_wrapper` (in [biothings-hub/files/nde-hub/utils/pipeline.py](biothings-hub/files/nde-hub/utils/pipeline.py)) runs **one** pipeline for every source, and each stage decides for itself whether it has anything to do — from the record contents, and for the curated-file stages from whether that source has a lookup file on disk. There is **no helper table to choose from and nothing to import**.
+`@nde_upload_wrapper` (in [biothings-hub/files/nde-hub/utils/pipeline.py](biothings-hub/files/nde-hub/utils/pipeline.py)) runs the same pipeline for every source. Each stage checks the records in front of it — and, for the curated-file stages, whether that source has a lookup file on disk — and skips itself if there is nothing to do. Uploaders do not import or call these.
 
 | Stage | Runs when a record has | What it does |
 |---|---|---|
@@ -164,17 +164,17 @@ Three files:
 | `terms` | `species`, `infectiousAgent` or `healthCondition` | Standardizes them, splits hosts from infectious agents |
 | `descriptions` | a `description` and no taxonomy / health condition | Mines species + diseases out of the text via EXTRACT |
 | `measurement_technique` | `measurementTechnique` **and** `/data/nde-hub/standardizers/measurement_technique_lookup/<source>.csv` | Maps repository techniques to ontology terms |
-| `nctid` | `nctid` | measurementTechnique from the trial's study design |
+| `nctid` | `nctid` **and** `/nvme/nde-hub/standardizers/nctid_lookup/nctid.csv` | measurementTechnique from the trial's study design |
 | `topic_category` | `/data/nde-hub/topic_categories/<source>.json` | Adds curated EDAM topics |
 | `disambiguating_description` | `/data/nde-hub/disambiguating_descriptions/<source>.csv` | Adds the curated summary |
 | `lineage` | always | `_meta.lineage` for the taxonomy browser |
 
 Then every record gets `sourceOrganization` corrections, `date`, `_meta.completeness`, a cleaned description, placeholder-term removal and `check_schema`.
 
-A source with no `funding` pays one dict lookup for the funding stage and nothing else, so **a new source needs no configuration**. The only knobs, both optional and rare:
+A stage that does not apply costs one dict lookup per record. Two optional settings on the uploader change the pipeline:
 
 - `post_process(self, doc)` — the source's last word on a record, after every stage but before `lineage`. Return the document, or `None` to drop it. Use it for source-specific fixups or filtering (see [bei](biothings-hub/files/nde-hub/hub/dataload/sources/bei/uploader.py), [pdb](biothings-hub/files/nde-hub/hub/dataload/sources/pdb/uploader.py), [covid_radx](biothings-hub/files/nde-hub/hub/dataload/sources/covid_radx/uploader.py)).
-- `skip_stages = ("descriptions",)` — opt out of a stage. Only for a source whose volume makes a stage's per-record API calls impractical; not a metadata decision.
+- `skip_stages = ("descriptions",)` — opt out of a stage. Use it when a source's volume makes a stage's per-record API calls impractical, not to express a metadata decision.
 
 **When to override `load_data`:** only when the records don't come straight out of `data.ndjson` — a custom parser ([ncbi_geo](biothings-hub/files/nde-hub/hub/dataload/sources/ncbi_geo/gse_uploader.py)), per-file jobs ([biostudies](biothings-hub/files/nde-hub/hub/dataload/sources/biostudies/uploader.py)), or source-restricted curation ([dde](biothings-hub/files/nde-hub/hub/dataload/sources/dde/uploader.py), [vivli](biothings-hub/files/nde-hub/hub/dataload/sources/vivli/uploader.py)). Then keep `@nde_upload_wrapper` on it and yield plain dicts:
 
@@ -214,7 +214,7 @@ Use [docker-compose-crawlers.yml](docker-compose-crawlers.yml) lines around the 
 
 After writing the parser, do one verification pass:
 
-1. Open [biothings-hub/files/nde-hub/hub/dataload/nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py) and locate `NDESourceUploader.get_mapping` (~line 126) if `--type=Dataset`, or `NDESourceSampleUploader.get_mapping` (~line 1411) if `--type=Sample`.
+1. Open [biothings-hub/files/nde-hub/hub/dataload/nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py) and locate `NDESourceUploader.get_mapping` (~line 126) if `--type=Dataset`, or `NDESourceSampleUploader.get_mapping` (~line 1410) if `--type=Sample`.
 2. For every top-level field your `parse()` emits, confirm it exists in that mapping. Exceptions that are allowed even though absent: `_id`, `@context`, `@type`, `pmids`, `pmcs`, and `_meta` (added later by `add_metadata_score`).
 3. For every emitted field, confirm sub-keys you set match the mapping's sub-`properties`. If you've emitted `locationOfOrigin.administrativeType` but the mapping has no `administrativeType` property, either drop it or pick the correctly-named sub-key.
 4. Confirm enum constraints in §4 hold.

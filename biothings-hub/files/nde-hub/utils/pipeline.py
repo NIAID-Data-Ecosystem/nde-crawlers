@@ -260,7 +260,16 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
     if unknown:
         raise ValueError("Unknown pipeline stage(s) in skip_stages: %s. Known stages: %s" % (sorted(unknown), list(STAGE_NAMES)))
 
-    stages = [stage for stage in STAGES if stage.name not in skip and stage.available(source)]
+    stages = []
+    skipped = {}
+    for stage in STAGES:
+        if stage.name in skip:
+            skipped[stage.name] = "skip_stages"
+        elif not stage.available(source):
+            skipped[stage.name] = "no lookup file"
+        else:
+            stages.append(stage)
+
     for stage in stages:
         stage.reset()
 
@@ -292,14 +301,18 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
 
         logger.info("Pipeline: %s documents processed (%s emitted)", total, yielded)
 
+    # A stage that was active but never applied had no record that needed it.
+    skipped.update({stage.name: "no matching records" for stage in stages if stage.name not in ran})
+
     logger.info(
-        "Pipeline for %s finished: %s documents, %s emitted, %.1fs, stages run: %s",
+        "Pipeline for %s finished: %s documents, %s emitted, %.1fs",
         source,
         total,
         yielded,
         time.monotonic() - started,
-        ran or "none",
     )
+    logger.info("Pipeline for %s ran: %s", source, ran or "no stages")
+    logger.info("Pipeline for %s skipped: %s", source, skipped or "nothing")
 
 
 def finalize(doc):
