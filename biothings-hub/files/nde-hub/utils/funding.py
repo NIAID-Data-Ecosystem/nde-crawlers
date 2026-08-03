@@ -13,66 +13,38 @@ RePORTER API itself.
 
 import json
 import re
-import sqlite3
 
-import orjson
 import requests
 from config import logger
 
+from .cache import SqliteCache
 from .common import as_list
 
 DB_PATH = "/data/nde-hub/standardizers/funding_lookup/funding_lookup.db"
 
-_conn = None
-_funder_cache = {}
+# normalize=False: both tables are keyed by the caller's own spelling -- grants by
+# `_funding_key` (which strips every space, not just the ends) and funders by the
+# raw name the source supplied.
+FUNDING_LOOKUP = SqliteCache(DB_PATH, "funding_lookup", "funding_id", "funding", memoize=False, normalize=False)
+FUNDERS = SqliteCache(DB_PATH, "funder_cache", "funder_name", "funder_data", normalize=False)
 
 
-def create_sqlite_db(conn):
-    """Create the funding cache tables if they don't exist."""
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS funding_lookup (funding_id TEXT PRIMARY KEY, funding TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS funder_cache (funder_name TEXT PRIMARY KEY, funder_data TEXT)""")
-    conn.commit()
-
-
-def _get_conn():
-    global _conn
-    if _conn is None:
-        _conn = sqlite3.connect(DB_PATH)
-        create_sqlite_db(_conn)
-    return _conn
+def reset_caches():
+    """Drop the process-wide caches so a new upload sees fresh lookup data."""
+    FUNDING_LOOKUP.reset()
+    FUNDERS.reset()
 
 
 def _funding_key(identifier):
     return identifier.replace(" ", "").lower()
 
 
-def batch_sqlite_lookup(conn, funding_ids):
-    """Look up many funding identifiers at once, returning {funding_id: funding}."""
-    if not funding_ids:
-        return {}
-    placeholders = ",".join("?" for _ in funding_ids)
-    c = conn.cursor()
-    c.execute(f"SELECT funding_id, funding FROM funding_lookup WHERE funding_id IN ({placeholders})", list(funding_ids))
-    funding_cache = {row[0]: orjson.loads(row[1]) for row in c.fetchall()}
-    logger.info("Found %s of %s funding records in the database", len(funding_cache), len(funding_ids))
-    return funding_cache
-
-
-def standardize_funder(funder, conn=None):
+def standardize_funder(funder):
     """Standardize a funder name against CrossRef, caching hits and misses."""
-    if funder in _funder_cache:
-        return json.loads(_funder_cache[funder])
-
-    conn = conn or _get_conn()
-    cursor = conn.cursor()
-    cursor.execute("SELECT funder_data FROM funder_cache WHERE funder_name = ?", (funder,))
-    result = cursor.fetchone()
-    if result:
-        _funder_cache[funder] = result[0]
-        cached_data = json.loads(result[0])
-        cached_data.setdefault("@type", "Organization")
-        return cached_data
+    if cached := FUNDERS.get(funder):
+        # Older rows predate @type always being set.
+        cached.setdefault("@type", "Organization")
+        return cached
 
     funder_name = re.sub(r"\([^)]*\)", "", funder).strip().replace("&", "and")
     funder_acronym_list = re.findall(r"\(([^)]*)\)", funder)
@@ -106,29 +78,25 @@ def standardize_funder(funder, conn=None):
         logger.info("NO FUNDING INFORMATION FOUND FOR %s, %s", funder_name, url)
         funder_dict = {"name": funder, "@type": "Organization"}
 
-    serialized = json.dumps(funder_dict)
-    cursor.execute("INSERT OR REPLACE INTO funder_cache (funder_name, funder_data) VALUES (?, ?)", (funder, serialized))
-    conn.commit()
-    _funder_cache[funder] = serialized
+    FUNDERS.put(funder, funder_dict)
     return funder_dict
 
 
-def _standardize_funders(entry, conn):
+def _standardize_funders(entry):
     """Standardize `entry["funder"]`, which may be a single funder or a list."""
     funder = entry.get("funder")
     if isinstance(funder, dict):
         if name := funder.get("name"):
-            entry["funder"] = standardize_funder(name, conn=conn)
+            entry["funder"] = standardize_funder(name)
     elif isinstance(funder, list):
         for i, funder_dict in enumerate(funder):
             if isinstance(funder_dict, dict) and (name := funder_dict.get("name")):
-                funder[i] = standardize_funder(name, conn=conn)
+                funder[i] = standardize_funder(name)
 
 
 def standardize_funding(docs):
     """Standardize the funding of one batch of records."""
     docs = list(docs)
-    conn = _get_conn()
 
     funding_ids = {
         _funding_key(entry["identifier"])
@@ -136,7 +104,8 @@ def standardize_funding(docs):
         for entry in as_list(doc.get("funding"))
         if isinstance(entry, dict) and entry.get("identifier")
     }
-    funding_cache = batch_sqlite_lookup(conn, funding_ids)
+    funding_cache = FUNDING_LOOKUP.get_many(funding_ids)
+    logger.info("Found %s of %s funding records in the cache", len(funding_cache), len(funding_ids))
 
     for doc in docs:
         funding = doc.get("funding")
@@ -156,7 +125,7 @@ def standardize_funding(docs):
                     logger.info("Not in cache: %s, skipping API lookup", _funding_key(identifier))
                 continue
             try:
-                _standardize_funders(entry, conn)
+                _standardize_funders(entry)
             except Exception as e:
                 logger.error("ERROR standardizing funder for %s, skipping: %s", doc.get("_id", "unknown id"), e)
 
@@ -170,15 +139,10 @@ def standardize_funding(docs):
 # Not called during upload: `standardize_funding` only reads the cache. Use
 # these to (re)populate `funding_lookup` from api.reporter.nih.gov.
 # ---------------------------------------------------------------------------
-def update_sqlite_db(conn, funding_id, new_funding):
+def update_sqlite_db(funding_id, new_funding):
     """Store a curated grant in the funding cache."""
-    logger.info("Updating funding information for %s in SQLite database.", funding_id)
-    c = conn.cursor()
-    c.execute(
-        "INSERT OR REPLACE INTO funding_lookup (funding_id, funding) VALUES (?, ?)",
-        (_funding_key(funding_id), orjson.dumps(new_funding).decode("utf-8")),
-    )
-    conn.commit()
+    logger.info("Updating funding information for %s in the funding cache.", funding_id)
+    FUNDING_LOOKUP.put(_funding_key(funding_id), new_funding)
 
 
 def is_valid_nih_funding_id(funding_id):

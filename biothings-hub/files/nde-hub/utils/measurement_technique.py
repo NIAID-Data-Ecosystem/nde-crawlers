@@ -7,13 +7,15 @@ different field (`Field` column, e.g. `keywords`).
 """
 
 import csv
-from functools import lru_cache
+from functools import cache
 from urllib.parse import quote
 
 import requests
 from config import logger
 from rdflib import Graph, URIRef
 from rdflib.namespace import RDFS, SKOS
+
+from .common import dict_entries
 
 LOOKUP_DIR = "/data/nde-hub/standardizers/measurement_technique_lookup"
 
@@ -28,9 +30,14 @@ def get_identifier(url):
     return parts[-1] if parts[-1] else "0000"
 
 
-@lru_cache(maxsize=500)
+@cache
 def fetch_term_name_from_url(url):
-    """Fetch an ontology term's label, preferring OLS then the raw RDF. None if unavailable."""
+    """Fetch an ontology term's label, preferring OLS then the raw RDF. None if unavailable.
+
+    Unbounded: the URLs come from the curated technique CSVs, so the key space is
+    bounded by those files, and the values are short labels. Evicting one would
+    only mean fetching it again.
+    """
     try:
         # Ontobee URLs carry the real IRI as a query parameter.
         if "ontobee.org" in url:
@@ -78,7 +85,7 @@ def _ols_label(iri):
     return terms[0].get("label") if terms else None
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_mapping(source):
     """Load a source's technique mapping: {repository technique: [target terms]}.
 
@@ -120,10 +127,7 @@ def append_to_field(doc, field, new_entry):
 
 def _apply_mapping(doc, mapping):
     new_mt = []
-    value = doc.get("measurementTechnique")
-    techniques = value if isinstance(value, list) else [value] if isinstance(value, dict) else []
-
-    for item in techniques:
+    for item in dict_entries(doc, "measurementTechnique"):
         original_name = item.get("name")
         if original_name not in mapping:
             new_mt.append(item)

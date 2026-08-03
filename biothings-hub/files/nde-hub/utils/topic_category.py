@@ -8,7 +8,7 @@ identifiers the record already carries.
 
 import json
 import os
-from functools import lru_cache
+from functools import cache
 
 import text2term
 from config import logger
@@ -28,7 +28,7 @@ def lookup_file(source):
     return f"{LOOKUP_DIR}/{source}.json"
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_topics(source):
     """Load a source's topics: ({record id: [topic]}, {topic: EDAM term}).
 

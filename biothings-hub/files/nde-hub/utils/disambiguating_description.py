@@ -5,7 +5,7 @@ mapping record ids to a processed summary.
 """
 
 import csv
-from functools import lru_cache
+from functools import cache
 
 from config import logger
 
@@ -16,7 +16,7 @@ def lookup_file(source):
     return f"{LOOKUP_DIR}/{source}.csv"
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_descriptions(source):
     """Load a source's summaries: {record id: disambiguating description}."""
     with open(lookup_file(source), "r") as file:

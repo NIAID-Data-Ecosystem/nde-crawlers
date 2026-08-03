@@ -6,7 +6,7 @@ matched against the curated NCIT mapping CSV, which yields up to three NCIT
 terms per design.
 """
 
-from functools import lru_cache
+from functools import cache, lru_cache
 
 import pandas as pd
 import requests
@@ -22,7 +22,7 @@ def lookup_file():
     return CSV_FILE
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_mapping():
     """Load the design -> NCIT mapping, upper-cased for matching."""
     df = pd.read_csv(CSV_FILE)
@@ -32,7 +32,6 @@ def load_mapping():
     return df
 
 
-@lru_cache(maxsize=4096)
 def fetch_trial(nctid):
     """Fetch one trial from clinicaltrials.gov."""
     logger.info("Fetching trial data for NCT ID: %s", nctid)
@@ -42,9 +41,13 @@ def fetch_trial(nctid):
     return response.json()
 
 
-@lru_cache(maxsize=256)
+@cache
 def get_ncit_name(iri):
-    """Resolve an NCIT IRI to its official term label."""
+    """Resolve an NCIT IRI to its official term label.
+
+    Unbounded: the IRIs come from the mapping CSV, so there are at most three per
+    row, and the values are short labels.
+    """
     identifier = iri.split("_")[-1]
     try:
         response = requests.get(f"https://www.ebi.ac.uk/ols/api/ontologies/ncit/terms?obo_id=NCIT:{identifier}")
@@ -70,6 +73,18 @@ def extract_trial_info(api_data):
         )
     except Exception as e:
         raise Exception("Error extracting trial info: " + str(e))
+
+
+@lru_cache(maxsize=4096)
+def trial_design(nctid):
+    """The (study_type, intervention_model, allocation, design_method) of one trial.
+
+    This is what gets cached rather than `fetch_trial`'s response: a response runs
+    to about a megabyte and only these four fields are ever read, so caching the
+    response held ~1 MB per trial instead of ~200 bytes. The bound stays because
+    the keys come from the records, not from a curated file.
+    """
+    return extract_trial_info(fetch_trial(nctid))
 
 
 def get_measurement_technique(design, mapping_df):
@@ -114,8 +129,7 @@ def add_nct_measurement_techniques(docs):
     for doc in docs:
         if nctid := doc.get("nctid"):
             try:
-                design = extract_trial_info(fetch_trial(nctid))
-                if measurement_techniques := get_measurement_technique(design, mapping_df):
+                if measurement_techniques := get_measurement_technique(trial_design(nctid), mapping_df):
                     doc["measurementTechnique"] = measurement_techniques
                     added += 1
             except Exception as e:

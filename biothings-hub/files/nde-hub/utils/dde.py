@@ -10,7 +10,7 @@ Used only by the `dde` source.
 
 import csv
 import datetime
-from functools import lru_cache
+from functools import cache
 from io import StringIO
 
 import requests
@@ -56,7 +56,7 @@ def process_csv_data(csv_content):
     return properties
 
 
-@lru_cache(maxsize=1)
+@cache
 def load_properties():
     """Fetch (once per upload) the ontology-per-property table."""
     properties = process_csv_data(requests.get(PROPERTIES_CSV_URL).text)

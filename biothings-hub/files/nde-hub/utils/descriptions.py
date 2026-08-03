@@ -7,7 +7,6 @@ time cost a request. The tagged names are then standardized the same way the
 `terms` stage standardizes curated ones, and marked `fromEXTRACT`.
 """
 
-import json
 import os
 import time
 from itertools import batched
@@ -15,9 +14,10 @@ from itertools import batched
 import requests
 from config import logger
 
+from .cache import SqliteCache, SqliteKeySet
 from .common import as_list, sqlite
 from .taxonomy import classify_from_lineage
-from .terms import DB_PATH as PUBTATOR_DB_PATH, SPECIES_CACHE_DB_PATH as DB_PATH, query_condition
+from .terms import DB_PATH as PUBTATOR_DB_PATH, SPECIES_CACHE_DB_PATH as DB_PATH, fetch_taxon, query_condition
 
 _NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
 
@@ -29,9 +29,6 @@ _CACHE_TABLES = {_SPECIES_TYPE: "species", _DISEASE_TYPE: "disease"}
 # SQLite allows 999 bound variables by default; keep headroom.
 _SQL_CHUNK_SIZE = 900
 _EXTRACT_CHUNK_SIZE = 5000
-
-# Reuse HTTP connections for UniProt lookups.
-_UNIPROT_SESSION = requests.Session()
 
 # Place names and terms EXTRACT reliably gets wrong.
 BASIC_DROP_LIST = frozenset(
@@ -88,21 +85,20 @@ _RESPONSE_CACHE_DDL = (
     "CREATE TABLE IF NOT EXISTS species (ndeid TEXT PRIMARY KEY, text_response TEXT)",
     "CREATE TABLE IF NOT EXISTS disease (ndeid TEXT PRIMARY KEY, text_response TEXT)",
 )
-_SPECIES_DETAILS_DDL = ("CREATE TABLE IF NOT EXISTS species_details (original_name TEXT PRIMARY KEY, standard_dict TEXT)",)
-_HEALTH_CONDITIONS_DDL = ("CREATE TABLE IF NOT EXISTS health_conditions (original_name TEXT PRIMARY KEY, standard_dict TEXT)",)
-_NEGATIVE_DISEASE_DDL = (f"CREATE TABLE IF NOT EXISTS {_NEGATIVE_DISEASE_TABLE} (original_name TEXT PRIMARY KEY)",)
 
-_species_cache = None
-_disease_cache = None
-_negative_diseases = None
+# These three are read for nearly every extracted term, so they are held whole.
+# Separate instances from the ones in `terms`, which reads the same two tables by
+# key -- the two stages cache independently on purpose.
+SPECIES_DETAILS = SqliteCache(DB_PATH, "species_details", preload=True)
+HEALTH_CONDITIONS = SqliteCache(PUBTATOR_DB_PATH, "health_conditions", preload=True)
+NEGATIVE_DISEASES = SqliteKeySet(PUBTATOR_DB_PATH, _NEGATIVE_DISEASE_TABLE, preload=True)
 
 
 def reset_caches():
     """Drop the process-wide caches so a new upload sees fresh lookup data."""
-    global _species_cache, _disease_cache, _negative_diseases
-    _species_cache = None
-    _disease_cache = None
-    _negative_diseases = None
+    SPECIES_DETAILS.reset()
+    HEALTH_CONDITIONS.reset()
+    NEGATIVE_DISEASES.reset()
 
 
 # ---------------------------------------------------------------------------
@@ -264,100 +260,12 @@ def _already_named(entries, name):
 # ---------------------------------------------------------------------------
 def get_species_details(original_name, identifier):
     """Standardize an extracted species name from its UniProt taxonomy entry."""
-    identifier = str(identifier).split("*")[-1]
-    species_info = _UNIPROT_SESSION.get(f"https://rest.uniprot.org/taxonomy/{identifier}", timeout=30)
-    species_info.raise_for_status()
-    species_info = species_info.json()
-
-    scientific_name = species_info.get("scientificName")
-    standard_dict = {
-        "@type": "DefinedTerm",
-        "identifier": identifier,
-        "inDefinedTermSet": "UniProt",
-        "url": f"https://www.uniprot.org/taxonomy/{identifier}",
-        "originalName": original_name,
-        "isCurated": False,
-        "fromEXTRACT": True,
-        "name": scientific_name or original_name,
-    }
-
-    alternative_names = []
-    if common_name := species_info.get("commonName"):
-        standard_dict["commonName"] = common_name
-        alternative_names.append(common_name)
-        standard_dict["displayName"] = f"{common_name} | {scientific_name}"
-    else:
-        standard_dict["displayName"] = scientific_name if scientific_name else original_name
-
-    alternative_names.extend(species_info.get("otherNames") or [])
-    if alternative_names:
-        standard_dict["alternateName"] = list(set(alternative_names))
-
-    if lineage := species_info.get("lineage"):
-        standard_dict["classification"] = classify_from_lineage(standard_dict["name"], lineage)
-        standard_dict["lineage"] = lineage
-    else:
-        logger.warning("No lineage found for %s", identifier)
-        standard_dict["classification"] = "infectiousAgent"
-    return standard_dict
-
-
-# ---------------------------------------------------------------------------
-# Lookup caches
-# ---------------------------------------------------------------------------
-def _cached_species():
-    """Load (once per upload) the resolved-species cache."""
-    global _species_cache
-    if _species_cache is None:
-        with sqlite(DB_PATH, *_SPECIES_DETAILS_DDL) as conn:
-            rows = conn.execute("SELECT original_name, standard_dict FROM species_details").fetchall()
-        _species_cache = {row[0].lower().strip(): json.loads(row[1]) for row in rows if row[1]}
-    return _species_cache
-
-
-def _cache_species_in_db(species_details):
-    with sqlite(DB_PATH, *_SPECIES_DETAILS_DDL) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO species_details VALUES (?, ?)",
-            (species_details["originalName"].lower().strip(), json.dumps(species_details)),
-        )
-
-
-def _cached_diseases():
-    """Load (once per upload) the standardized health condition cache."""
-    global _disease_cache
-    if _disease_cache is None:
-        with sqlite(PUBTATOR_DB_PATH, *_HEALTH_CONDITIONS_DDL) as conn:
-            rows = conn.execute("SELECT original_name, standard_dict FROM health_conditions").fetchall()
-        _disease_cache = {row[0].lower().strip(): json.loads(row[1]) for row in rows if row[1]}
-    return _disease_cache
-
-
-def _negative_disease_cache():
-    """Load (once per upload) the disease names known to resolve to nothing."""
-    global _negative_diseases
-    if _negative_diseases is None:
-        with sqlite(PUBTATOR_DB_PATH, *_NEGATIVE_DISEASE_DDL) as conn:
-            rows = conn.execute(f"SELECT original_name FROM {_NEGATIVE_DISEASE_TABLE}").fetchall()
-        _negative_diseases = {row[0].lower().strip() for row in rows if row and row[0]}
-    return _negative_diseases
-
-
-def _cache_disease_in_db(disease_details):
-    with sqlite(PUBTATOR_DB_PATH, *_HEALTH_CONDITIONS_DDL) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO health_conditions VALUES (?, ?)",
-            (disease_details["originalName"].lower().strip(), json.dumps(disease_details)),
-        )
-
-
-def _cache_negative_disease(disease_name):
-    key = disease_name.lower().strip()
-    if not key:
-        return
-    _negative_disease_cache().add(key)
-    with sqlite(PUBTATOR_DB_PATH, *_NEGATIVE_DISEASE_DDL) as conn:
-        conn.execute(f"INSERT OR IGNORE INTO {_NEGATIVE_DISEASE_TABLE} (original_name) VALUES (?)", (key,))
+    term = fetch_taxon(original_name, identifier, classify=classify_from_lineage)
+    # Nothing to classify from means we cannot call it a host.
+    term.setdefault("classification", "infectiousAgent")
+    term["isCurated"] = False
+    term["fromEXTRACT"] = True
+    return term
 
 
 # ---------------------------------------------------------------------------
@@ -476,8 +384,6 @@ def _insert_species(doc_list, species_mapping):
 
 def _standardize_extracted_species(doc_list):
     """Standardize species/infectiousAgent for records whose terms all came from EXTRACT."""
-    species_dict = _cached_species()
-
     for doc in doc_list:
         _normalize_term_entries(doc, "species")
         _normalize_term_entries(doc, "infectiousAgent")
@@ -498,11 +404,10 @@ def _standardize_extracted_species(doc_list):
         if term.get("fromEXTRACT", False) and term.get("name")
     }
     logger.info(
-        "Species standardization: total_docs=%s docs_to_standardize=%s unique_terms=%s cached=%s",
+        "Species standardization: total_docs=%s docs_to_standardize=%s unique_terms=%s",
         len(doc_list),
         len(docs_to_standardize),
         len(term_names),
-        len(species_dict),
     )
     if not term_names:
         return doc_list
@@ -511,15 +416,14 @@ def _standardize_extracted_species(doc_list):
     try:
         missing_terms = []
         for original_name in term_names:
-            standardized = species_dict.get(original_name.lower().strip())
+            standardized = SPECIES_DETAILS.get(original_name)
             if standardized:
-                # Copy: the cache is shared across every batch of this upload.
                 formatted_species.append(dict(standardized, fromEXTRACT=True, originalName=original_name))
             else:
                 missing_terms.append(original_name)
 
         if missing_terms:
-            formatted_species.extend(_resolve_missing_species(missing_terms, species_dict))
+            formatted_species.extend(_resolve_missing_species(missing_terms))
     except Exception as e:
         logger.error("Error during species standardization: %s", e)
         return doc_list
@@ -530,7 +434,7 @@ def _standardize_extracted_species(doc_list):
     return doc_list
 
 
-def _resolve_missing_species(missing_terms, species_dict):
+def _resolve_missing_species(missing_terms):
     """Map names to ncbitaxon with text2term, then fetch each taxon from UniProt."""
     import text2term
 
@@ -560,8 +464,7 @@ def _resolve_missing_species(missing_terms, species_dict):
         resolved.append(species_details)
         # The cached copy is the curated shape, without the fromEXTRACT marker.
         cacheable = {k: v for k, v in species_details.items() if k != "fromEXTRACT"}
-        _cache_species_in_db(cacheable)
-        species_dict[original_name.lower().strip()] = cacheable
+        SPECIES_DETAILS.put(original_name, cacheable)
 
     logger.info("Species standardization: resolved=%s failed=%s", len(resolved), failed)
     return resolved
@@ -599,8 +502,16 @@ def _remove_redundant_species(doc_list):
         curated_names = {
             agent["name"].strip().lower() for agent in doc["infectiousAgent"] if agent.get("isCurated", False) and agent.get("name")
         }
-        if curated_names:
-            doc["species"] = [sp for sp in doc["species"] if sp.get("name", "").strip().lower() not in curated_names]
+        if not curated_names:
+            continue
+
+        kept = [sp for sp in doc["species"] if sp.get("name", "").strip().lower() not in curated_names]
+        if kept:
+            doc["species"] = kept
+        else:
+            # Every species duplicated a curated agent. Drop the field rather than
+            # leave an empty list for later stages to trip over.
+            doc.pop("species", None)
     return doc_list
 
 
@@ -632,8 +543,6 @@ def _insert_disease(doc_list, disease_mapping):
 
 def _standardize_extracted_diseases(doc_list):
     """Standardize the health conditions of every record that has uncurated ones."""
-    disease_dict = _cached_diseases()
-    negative_disease_names = _negative_disease_cache()
 
     disease_names = set()
     for doc in doc_list:
@@ -645,11 +554,10 @@ def _standardize_extracted_diseases(doc_list):
     formatted_diseases = []
     for disease_name in disease_names:
         disease_key = disease_name.lower().strip()
-        if disease_key in negative_disease_names:
+        if disease_key in NEGATIVE_DISEASES:
             continue
 
-        if standardized := disease_dict.get(disease_key):
-            # Copy: the cache is shared across every batch of this upload.
+        if standardized := HEALTH_CONDITIONS.get(disease_key):
             formatted_diseases.append(dict(standardized, fromEXTRACT=True, originalName=disease_name))
             continue
 
@@ -660,14 +568,13 @@ def _standardize_extracted_diseases(doc_list):
             continue
 
         if not disease_details:
-            _cache_negative_disease(disease_name)
+            NEGATIVE_DISEASES.add(disease_name)
             continue
 
         disease_details.setdefault("originalName", disease_name)
         disease_details.pop("curatedBy", None)
         formatted_diseases.append(dict(disease_details, fromEXTRACT=True))
-        _cache_disease_in_db(disease_details)
-        disease_dict[disease_key] = disease_details
+        HEALTH_CONDITIONS.put(disease_key, disease_details)
 
     if not formatted_diseases:
         return doc_list

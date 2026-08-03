@@ -231,10 +231,9 @@ def check_schema(doc: Dict) -> Dict:
 
     catalogs = doc.get("includedInDataCatalog")
     assert catalogs, "includedInDataCatalog is None"
-    if isinstance(catalogs, list):
-        assert all(item.get("archivedAt") for item in catalogs), "includedInDataCatalog.archivedAt is None in one or more items"
-    else:
-        assert catalogs.get("archivedAt"), "includedInDataCatalog.archivedAt is None"
+    assert all(
+        item.get("archivedAt") for item in as_list(catalogs)
+    ), "includedInDataCatalog.archivedAt is None in one or more items"
 
     assert doc.get("version", None) is None, "Remove version field"
 

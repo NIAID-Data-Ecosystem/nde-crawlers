@@ -13,6 +13,8 @@ from typing import Iterable, List, Set
 from biothings_client import get_client
 from config import logger
 
+from .common import as_list, dict_entries
+
 DB_PATH = "/data/nde-hub/standardizers/lineage_lookup/lineage_lookup.db"
 
 _TAXA_CHUNK_SIZE = 1000
@@ -122,8 +124,7 @@ def _has_biosample_additional_type(record: dict) -> bool:
 
 
 def _iter_catalog_names(value):
-    catalogs = value if isinstance(value, list) else [value]
-    for catalog in catalogs:
+    for catalog in as_list(value):
         if isinstance(catalog, dict):
             yield from _iter_string_values(catalog.get("name"))
 
@@ -149,19 +150,10 @@ def _should_annotate_lineage(record: dict) -> bool:
 def _extract_taxids(record: dict) -> Set[int]:
     taxids: Set[int] = set()
     for field in ["species", "infectiousAgent"]:
-        value = record.get(field)
-        if value is None:
-            continue
-        items = value if isinstance(value, list) else [value]
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            taxid = item.get("identifier")
-            if taxid is None:
-                continue
-            taxid_str = str(taxid)
-            if taxid_str.isdigit():
-                taxids.add(int(taxid_str))
+        for item in dict_entries(record, field):
+            taxid = str(item.get("identifier"))
+            if taxid.isdigit():
+                taxids.add(int(taxid))
     return taxids
 
 

@@ -22,7 +22,6 @@ import re
 import sqlite3
 import time
 import urllib.error
-from copy import copy
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from itertools import batched
@@ -34,7 +33,7 @@ from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
 from .common import as_list, dict_entries, retry
-from .funding import DB_PATH as FUNDING_DB_PATH, create_sqlite_db as create_funding_db, standardize_funder
+from .funding import standardize_funder
 from .terms import DB_PATH as PUBTATOR_DB_PATH, get_species_details, query_condition
 
 PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
@@ -98,7 +97,6 @@ _SPECIES_BLACKLIST = frozenset({"PERCH", "D-FISH"})
 
 _pmid_conn = None
 _pubtator_conn = None
-_funding_conn = None
 _pubtator_cache = {}
 _dumps_checked = False
 
@@ -133,14 +131,6 @@ def _get_pubtator_conn():
     if _pubtator_conn is None:
         _pubtator_conn = sqlite3.connect(PUBTATOR_DB_PATH)
     return _pubtator_conn
-
-
-def _get_funding_conn():
-    global _funding_conn
-    if _funding_conn is None:
-        _funding_conn = sqlite3.connect(FUNDING_DB_PATH)
-        create_funding_db(_funding_conn)
-    return _funding_conn
 
 
 def _refresh_pubtator_dumps():
@@ -619,7 +609,6 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     # This can get an incompleteread error, which the retry above covers.
     records = Entrez.read(handle)["PubmedArticle"]
 
-    funder_conn = _get_funding_conn()  # reuse funding DB connection for all funder lookups
     for record in records:
         funding = []
         for grant in record["MedlineCitation"]["Article"].get("GrantList") or []:
@@ -628,10 +617,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
                 fund["identifier"] = str(grant_id)
             if agency := grant.get("Agency"):
                 agency = str(agency)
-                fund["funder"] = standardize_funder(agency, conn=funder_conn) or {
-                    "@type": "Organization",
-                    "name": agency,
-                }
+                fund["funder"] = standardize_funder(agency) or {"@type": "Organization", "name": agency}
             if grant.get("Agency") or grant.get("GrantID"):
                 fund["fromPMID"] = True
             funding.append(fund)
@@ -701,37 +687,24 @@ def _is_doi_stub(entry, enriched_doi):
 
 
 def _attach_citation(rec, citation):
-    if rec_citation := rec.get("citation"):
-        # if the record originally had a citation field that is not a list, make it one
-        if not isinstance(rec_citation, list):
-            rec["citation"] = [rec_citation]
+    # citation entries have to be objects, and the record's own DOI stub for this
+    # paper is now redundant -- the enriched citation carries that DOI.
+    enriched_doi = (citation.get("doi") or "").lower()
+    kept = []
+    for entry in as_list(rec.get("citation")):
+        if not isinstance(entry, dict):
+            logger.warning("Dropping non-object citation %r from %s", entry, rec.get("_id"))
+            continue
+        if _is_doi_stub(entry, enriched_doi):
+            continue
+        kept.append(entry)
 
-        # citation entries have to be objects, and the record's own DOI stub for
-        # this paper is now redundant -- the enriched citation carries that DOI.
-        enriched_doi = (citation.get("doi") or "").lower()
-        kept = []
-        for entry in rec["citation"]:
-            if not isinstance(entry, dict):
-                logger.warning("Dropping non-object citation %r from %s", entry, rec.get("_id"))
-                continue
-            if _is_doi_stub(entry, enriched_doi):
-                continue
-            kept.append(entry)
-
-        kept.append(citation)
-        rec["citation"] = kept
-    else:
-        rec["citation"] = [citation]
+    kept.append(citation)
+    rec["citation"] = kept
 
 
 def _attach_funding(rec, funding):
-    if rec_funding := rec.get("funding"):
-        # if the record originally had a funding field that is not a list, make it one
-        if not isinstance(rec_funding, list):
-            rec["funding"] = [rec_funding]
-        rec["funding"] += funding
-    else:
-        rec["funding"] = copy(funding)
+    rec["funding"] = as_list(rec.get("funding")) + list(funding)
 
 
 def _collect_pmids(docs):
