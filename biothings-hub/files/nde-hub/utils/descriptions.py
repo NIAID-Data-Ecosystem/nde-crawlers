@@ -16,6 +16,7 @@ import requests
 from config import logger
 
 from .common import as_list, sqlite
+from .taxonomy import classify_from_lineage
 from .terms import DB_PATH as PUBTATOR_DB_PATH, SPECIES_CACHE_DB_PATH as DB_PATH, query_condition
 
 _NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
@@ -261,33 +262,6 @@ def _already_named(entries, name):
 # ---------------------------------------------------------------------------
 # UniProt taxonomy for extracted species
 # ---------------------------------------------------------------------------
-def classify_from_lineage(scientific_name, lineage):
-    """Classify an extracted taxon as `host` or `infectiousAgent`.
-
-    Note: `terms.classify_from_lineage` recognises fewer hosts. The two paths
-    have diverged historically; unifying them would reclassify existing
-    records, so they are kept separate on purpose.
-    """
-    hosts = ["Deuterostomia", "Embryophyta", "Arthropoda", "Archaea", "Mollusca"]
-    if scientific_name in hosts:
-        return "host"
-
-    scientific_names = [item["scientificName"] for item in lineage]
-    if "Viruses" in scientific_names:
-        return "infectiousAgent"
-    if "Archaea" in scientific_names or "Mollusca" in scientific_names or "Deuterostomia" in scientific_names:
-        return "host"
-    if "Embryophyta" in scientific_names and not any(
-        parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
-    ):
-        return "host"
-    if "Arthropoda" in scientific_names:
-        if "Acari" in scientific_names and not ("Ixodida" in scientific_names or "Ixodes" in scientific_names):
-            return "infectiousAgent"
-        return "host"
-    return "infectiousAgent"
-
-
 def get_species_details(original_name, identifier):
     """Standardize an extracted species name from its UniProt taxonomy entry."""
     identifier = str(identifier).split("*")[-1]

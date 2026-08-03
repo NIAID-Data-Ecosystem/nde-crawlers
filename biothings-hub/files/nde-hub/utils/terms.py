@@ -26,6 +26,7 @@ import requests
 from config import logger
 
 from .common import as_list, sqlite
+from .taxonomy import classify_from_lineage
 
 DB_PATH = "/data/nde-hub/standardizers/pubtator_lookup/pubtator_lookup.db"
 SPECIES_CACHE_DB_PATH = "/data/nde-hub/standardizers/extract_lookup/extract_lookup.db"
@@ -263,28 +264,6 @@ def query_condition(health_condition, mesh_id=None):
 # ---------------------------------------------------------------------------
 # UniProt taxonomy
 # ---------------------------------------------------------------------------
-def classify_from_lineage(lineage):
-    """Classify a taxon as `host` or `infectiousAgent` from its UniProt lineage.
-
-    Note: `descriptions.classify_from_lineage` recognises a wider set of hosts.
-    The two paths have diverged historically; unifying them would reclassify
-    existing records, so they are kept separate on purpose.
-    """
-    scientific_names = [item["scientificName"] for item in lineage]
-
-    if "Deuterostomia" in scientific_names:
-        return "host"
-    if "Embryophyta" in scientific_names and not any(
-        parasite in scientific_names for parasite in ["Arceuthobium", "Cuscuta", "Orobanche", "Striga", "Phoradendron"]
-    ):
-        return "host"
-    if "Arthropoda" in scientific_names:
-        if "Acari" in scientific_names and "Ixodida" not in scientific_names:
-            return "infectiousAgent"
-        return "host"
-    return "infectiousAgent"
-
-
 def normalize_taxon_id(identifier):
     """Return a numeric NCBI taxonomy id, or None for non-taxon placeholders."""
     if not identifier:
@@ -326,7 +305,7 @@ def get_species_details(original_name, identifier):
     }
     _add_uniprot_names(standard_dict, species_info, original_name)
     if lineage := species_info.get("lineage"):
-        standard_dict["classification"] = classify_from_lineage(lineage)
+        standard_dict["classification"] = classify_from_lineage(standard_dict["name"], lineage)
     else:
         logger.warning("No lineage found for %s", identifier)
     return standard_dict
@@ -362,7 +341,7 @@ def _get_uniprot_details(original_name, identifier, max_retries=3):
     }
     _add_uniprot_names(standard_dict, species_info, original_name)
     if lineage := species_info.get("lineage"):
-        standard_dict["classification"] = classify_from_lineage(lineage)
+        standard_dict["classification"] = classify_from_lineage(standard_dict["name"], lineage)
         standard_dict["lineage"] = lineage
     else:
         logger.warning("No lineage found for %s", identifier)
