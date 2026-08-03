@@ -1,5 +1,6 @@
 # We can remove this line below after switched to biothings 0.11.x branch
 # and remove the config_hub.py file completely
+import logging
 import os
 import urllib.parse
 
@@ -49,7 +50,7 @@ ES_BACKUPS_FOLDER = f"{data_folder}/esbackup"
 SITEMAP_URLS = f"{data_folder}/sitemap_urls"
 
 LOG_FOLDER = f"{data_folder}/logs"
-logger = setup_default_log("hub", LOG_FOLDER)
+logger = setup_default_log("hub", LOG_FOLDER, level=logging.INFO)
 
 RUN_DIR = f"{data_folder}/run"
 
