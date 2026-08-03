@@ -1,33 +1,33 @@
 """The single upload pipeline that every NDE source runs through.
 
-`nde_upload_wrapper` decorates an uploader's `load_data` and applies every
-standardizer and augmenter the records actually need. A source never chooses
-helpers: each stage decides for itself whether it has anything to do, from
+`nde_upload_wrapper` decorates an uploader's `load_data` and runs the records
+through every applicable stage. A stage is applicable when
 
-  * the contents of the records in front of it (does any record carry `funding`,
+  * the records in front of it carry the field it works on (`funding`,
     `species`, `pmids`, ...), and
-  * whether that source has a curated lookup file on disk, for the stages that
-    are driven by one (`measurementTechnique`, `topicCategory`, ...).
+  * for the stages driven by a curated file (`measurementTechnique`,
+    `topicCategory`, ...), that file exists for this source.
 
-Stages that have nothing to do cost one dict lookup per record and never touch
-the network, a database, or their (often expensive) lookup tables, so a source
-pays nothing for a util its records don't trigger.
+An inapplicable stage costs one dict lookup per record and does not open its
+lookup tables, a database connection or the network.
 
-Records flow through in batches, so the batch-oriented stages get enough
-records to make their bulk lookups worthwhile while memory stays bounded no
-matter how large the source is.
+Records flow through in batches, so the batch-oriented stages have enough
+records to make their bulk lookups worthwhile while memory stays bounded
+regardless of source size.
 
 Usage in an uploader::
 
     class MySourceUploader(NDESourceUploader):
         name = "my_source"
 
-The base class already decorates `load_data`, so most sources declare nothing
-at all. Override `load_data` (keeping `@nde_upload_wrapper`) only when the
-records need custom parsing, and define `post_process(self, doc)` when a source
-needs the last word on a record -- return the document, or `None` to drop it.
-Set `skip_stages = ("descriptions",)` on the uploader to opt a source out of a
-stage it should not pay for.
+The base class already decorates `load_data`. Override it (keeping
+`@nde_upload_wrapper`) when the records need custom parsing. Two optional
+settings on the uploader change the pipeline:
+
+    post_process(self, doc)      applied after every stage but before
+                                 `lineage`; return the document or None to
+                                 drop it
+    skip_stages = ("...",)       stage names this source should not run
 """
 
 import functools
@@ -120,7 +120,8 @@ def _needs_descriptions(doc):
 
 
 # ---------------------------------------------------------------------------
-# Stage runners (imported lazily so a source only pays for what it runs)
+# Stage runners. Each imports its module on call, so a hub process only loads
+# text2term, pandas, rdflib and Bio for the stages a source actually runs.
 # ---------------------------------------------------------------------------
 def _run_citations(docs, source):
     from .citations import add_citations
