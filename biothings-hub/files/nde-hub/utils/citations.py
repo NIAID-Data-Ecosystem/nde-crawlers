@@ -288,12 +288,12 @@ def get_disease_details(identifier, original_name):
     if lookup_result := pubtator_lookup(original_name, "health_conditions"):
         return _as_augmented(lookup_result)
 
-    logger.info("Converting %s from MeSH %s to standard format", original_name, identifier)
+    logger.debug("Converting %s from MeSH %s to standard format", original_name, identifier)
     if non_mesh_result := query_condition(original_name, identifier):
         pubtator_add(original_name, "health_conditions", json.dumps(non_mesh_result))
         return _as_augmented(non_mesh_result)
 
-    logger.info("Fetching details for %s with ID %s", original_name, identifier)
+    logger.debug("Fetching details for %s with ID %s", original_name, identifier)
     disease_info = requests.get(f"https://id.nlm.nih.gov/mesh/{identifier}.json")
     disease_info.raise_for_status()
     disease_info = disease_info.json()
@@ -367,22 +367,22 @@ def update_record_disease(rec, disease_data):
 
     for mesh_id, diseases in disease_data.items():
         if "MESH" not in mesh_id:
-            logger.warning("Invalid MeSH ID %s", mesh_id)
+            logger.debug("Invalid MeSH ID %s", mesh_id)
             continue
         for disease in diseases:
             name = disease.strip()
             if not name or not mesh_id.strip():
-                logger.warning("Empty disease name or MeSH ID: %r / %r", name, mesh_id)
+                logger.debug("Empty disease name or MeSH ID: %r / %r", name, mesh_id)
                 continue
             if name.lower() in _INCORRECT_COVID_TERMS and mesh_id == _COVID_MESH_ID:
-                logger.warning("Incorrect Covid-19 mapping found for %s", name)
+                logger.debug("Incorrect Covid-19 mapping found for %s", name)
                 continue
             if mesh_id == _COVID_MESH_ID:
                 mesh_id = _COVID_MESH_REPLACEMENT
             if not _mentioned_in(name, haystacks):
                 continue
 
-            logger.info("Adding %s to record %s", name, rec["_id"])
+            logger.debug("Adding %s to record %s", name, rec["_id"])
             try:
                 standardized_dict = get_disease_details(mesh_id, name)
             except Exception as e:
@@ -398,7 +398,7 @@ def update_record_disease(rec, disease_data):
 def update_record_species(rec, species_data):
     """Add PubTator species mentioned in the record's own text."""
     if is_bacdive_record(rec):
-        logger.info("Skipping PMID species augmentation for BacDive record %s", rec.get("_id"))
+        logger.debug("Skipping PMID species augmentation for BacDive record %s", rec.get("_id"))
         return
 
     if isinstance(rec.get("species"), dict):
@@ -412,12 +412,12 @@ def update_record_species(rec, species_data):
         for name in species_names:
             name = name.strip()
             if not name or not taxonomy_id.strip():
-                logger.warning("Empty species name or taxonomy ID: %r / %r", name, taxonomy_id)
+                logger.debug("Empty species name or taxonomy ID: %r / %r", name, taxonomy_id)
                 continue
             if not _mentioned_in(name, haystacks):
                 continue
             if name in _SPECIES_BLACKLIST:
-                logger.info("Blacklisted: %s in record: %s, skipping", name, rec["_id"])
+                logger.debug("Blacklisted: %s in record: %s, skipping", name, rec["_id"])
                 continue
 
             if lookup_result := pubtator_lookup(name, "species"):
@@ -429,7 +429,7 @@ def update_record_species(rec, species_data):
                     logger.warning("Could not get details for %s with ID %s: %s", name, taxonomy_id, e)
                     continue
                 if standardized_dict is None:
-                    logger.info("Skipping %s with ID %s: filtered by drop list", name, taxonomy_id)
+                    logger.debug("Skipping %s with ID %s: filtered by drop list", name, taxonomy_id)
                     continue
                 pubtator_add(name, "species", json.dumps(standardized_dict))
                 standardized_dict = _as_augmented(standardized_dict)
@@ -443,7 +443,7 @@ def update_record_species(rec, species_data):
                 rec["infectiousAgent"] = rec.get("infectiousAgent", []) + [standardized_dict]
             else:
                 if "classification" not in standardized_dict:
-                    logger.warning("Could not classify %s with ID %s", name, taxonomy_id)
+                    logger.debug("Could not classify %s with ID %s", name, taxonomy_id)
                 rec["species"] = rec.get("species", []) + [standardized_dict]
             break
 
@@ -659,7 +659,7 @@ def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
     uncached_pmids = [p for p in pmid_list if p not in cached_results]
 
     if cached_results:
-        logger.info("PMID eutils cache: %d cached, %d to fetch", len(cached_results), len(uncached_pmids))
+        logger.debug("PMID eutils cache: %d cached, %d to fetch", len(cached_results), len(uncached_pmids))
 
     fresh_results = {}
     if uncached_pmids:
@@ -726,7 +726,7 @@ def _collect_pmids(docs):
             if pmid := pmc_pmid.get(pmc):
                 doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
             else:
-                logger.info("There is an issue with this PMCID. PMCID: %s, rec_id: %s", pmc, doc["_id"])
+                logger.debug("There is an issue with this PMCID. PMCID: %s, rec_id: %s", pmc, doc["_id"])
         for citation in dict_entries(doc, "citation"):
             if pmid := doi_pmid.get(citation.get("doi")):
                 doc["pmids"] = doc.get("pmids") + "," + pmid if doc.get("pmids") else pmid
@@ -762,7 +762,7 @@ def add_citations(docs):
                 if not info:
                     # this covers records whose pmid does not resolve, e.g.
                     # https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE41964
-                    logger.info("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
+                    logger.debug("There is an issue with this pmid. PMID: %s, rec_id: %s", pmid, rec["_id"])
                     continue
                 if citation := info.get("citation"):
                     _attach_citation(rec, citation)

@@ -26,7 +26,7 @@ def retry(retry_num, retry_sleep_sec):
                     logger.error(err)
                     logger.error(traceback.format_exc())
                     time.sleep(retry_sleep_sec)
-                logger.info("Retrying failed func %s. Trying attempt %s of %s.", func, attempt + 1, retry_num)
+                logger.debug("Retrying failed func %s. Trying attempt %s of %s.", func, attempt + 1, retry_num)
             logger.error("func %s retry failed", func)
             raise Exception("Exceed max retry num: {} failed. Last error: {!r}".format(retry_num, last_exc)) from last_exc
 

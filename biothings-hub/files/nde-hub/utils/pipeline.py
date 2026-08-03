@@ -79,7 +79,7 @@ class Stage:
         path = self._lookup_file(source)
         if path and os.path.exists(path):
             return True
-        logger.info("Pipeline: no %s lookup file for %s (%s), skipping stage", self.name, source, path)
+        logger.debug("Pipeline: no %s lookup file for %s (%s), skipping stage", self.name, source, path)
         return False
 
 

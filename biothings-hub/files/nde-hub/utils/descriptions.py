@@ -137,11 +137,11 @@ def filter_species_by_advanced_rules(species_mapping, species_list):
         match = _matches_drop_rule(species, details.get("identifier", ""), _lineage_ids(details))
         if match:
             term_name, rule = match
-            logger.info("Filtering species '%s' - drop rule for '%s': %s", species, term_name, rule["rationale"])
+            logger.debug("Filtering species '%s' - drop rule for '%s': %s", species, term_name, rule["rationale"])
             to_remove.add(species)
 
     if to_remove:
-        logger.info("Filtered out %s species based on advanced drop rules: %s", len(to_remove), to_remove)
+        logger.debug("Filtered out %s species based on advanced drop rules: %s", len(to_remove), to_remove)
     return [species for species in species_list if species not in to_remove]
 
 
@@ -564,7 +564,7 @@ def _standardize_extracted_diseases(doc_list):
         try:
             disease_details = query_condition(disease_name)
         except Exception as e:
-            logger.info("An error occurred while processing %s: %s", disease_name, e)
+            logger.debug("An error occurred while processing %s: %s", disease_name, e)
             continue
 
         if not disease_details:

@@ -34,7 +34,7 @@ def load_mapping():
 
 def fetch_trial(nctid):
     """Fetch one trial from clinicaltrials.gov."""
-    logger.info("Fetching trial data for NCT ID: %s", nctid)
+    logger.debug("Fetching trial data for NCT ID: %s", nctid)
     response = requests.get(f"https://clinicaltrials.gov/api/int/studies/{nctid}")
     if response.status_code != 200:
         raise Exception(f"Error fetching data for {nctid}: {response.status_code}")
@@ -97,7 +97,7 @@ def get_measurement_technique(design, mapping_df):
         & (mapping_df["designmethod"] == design_method)
     ]
     if filtered.empty:
-        logger.info("No mapping found for design: %s", design)
+        logger.debug("No mapping found for design: %s", design)
         return []
 
     row = filtered.iloc[0]
@@ -117,7 +117,7 @@ def get_measurement_technique(design, mapping_df):
                 "url": iri,
             }
         )
-    logger.info("Found %s measurementTechnique entries for design: %s", len(measurement_techniques), design)
+    logger.debug("Found %s measurementTechnique entries for design: %s", len(measurement_techniques), design)
     return measurement_techniques
 
 

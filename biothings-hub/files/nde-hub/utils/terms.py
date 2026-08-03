@@ -79,14 +79,14 @@ def should_filter_term(term_name, identifier=None):
         return False
 
     if term_name.lower().strip() in DROP_LIST_TERMS:
-        logger.info("Filtering term '%s': place name", term_name)
+        logger.debug("Filtering term '%s': place name", term_name)
         return True
 
     if identifier:
         clean_id = str(identifier).split("*")[-1].strip()
         for term_config in DROP_LIST_TERMS.values():
             if term_config["id"] == clean_id:
-                logger.info("Filtering term '%s' by ID %s: place name", term_name, clean_id)
+                logger.debug("Filtering term '%s' by ID %s: place name", term_name, clean_id)
                 return True
     return False
 
@@ -192,8 +192,8 @@ def _retry_request(url, retries=7):
         try:
             return response.json()
         except json.decoder.JSONDecodeError:
-            logger.info("Retrying...")
-    logger.info("Failed to decode JSON")
+            logger.debug("Retrying...")
+    logger.debug("Failed to decode JSON")
     return None
 
 
@@ -231,18 +231,18 @@ def _handle_response(data, condition, base_url, match_condition=True):
         if not term_name:
             continue
         if not match_condition:
-            logger.info("Found %s via xrefs.mesh in ontology: %s", condition, base_url.split("/")[-1])
+            logger.debug("Found %s via xrefs.mesh in ontology: %s", condition, base_url.split("/")[-1])
             return create_return_object(hit, alternate_names, condition)
         condition_lower = condition.lower().strip()
         if term_name.lower().strip() == condition_lower or any(name.lower().strip() == condition_lower for name in alternate_names):
-            logger.info("Found %s in ontology: %s", condition, base_url.split("/")[-1])
+            logger.debug("Found %s in ontology: %s", condition, base_url.split("/")[-1])
             return create_return_object(hit, alternate_names, condition)
     return None
 
 
 def query_condition(health_condition, mesh_id=None):
     """Look a health condition up in MONDO, HPO, DOID then NCIT."""
-    logger.info('Querying for "%s"...', health_condition)
+    logger.debug('Querying for "%s"...', health_condition)
     for base_url in ONTOLOGY_URLS:
         try:
             if mesh_id:
@@ -259,8 +259,8 @@ def query_condition(health_condition, mesh_id=None):
                 if result := _handle_response(data, health_condition, base_url):
                     return result
         except Exception as e:
-            logger.info("An error occurred while querying %s: %s", base_url, e)
-    logger.info("Unable to find %s", health_condition)
+            logger.debug("An error occurred while querying %s: %s", base_url, e)
+    logger.debug("Unable to find %s", health_condition)
     return None
 
 
@@ -319,7 +319,7 @@ def fetch_taxon(original_name, identifier, classify=classify_from_lineage, max_r
         standard_dict["classification"] = classify(standard_dict["name"], lineage)
         standard_dict["lineage"] = lineage
     else:
-        logger.warning("No lineage found for %s", taxon_id)
+        logger.debug("No lineage found for %s", taxon_id)
     return standard_dict
 
 
@@ -328,9 +328,9 @@ def get_species_details(original_name, identifier):
 
     Used when a PubTator annotation supplies the taxon id.
     """
-    logger.info("Getting details for %s", original_name)
+    logger.debug("Getting details for %s", original_name)
     if should_filter_term(original_name, identifier):
-        logger.info("Skipping %s: filtered by drop list", original_name)
+        logger.debug("Skipping %s: filtered by drop list", original_name)
         return None
 
     term = fetch_taxon(original_name, identifier)
@@ -426,7 +426,7 @@ def _scan_doc(doc, species_dict, unstandardized):
             if not name:
                 name = _resolve_name_via_identifier(entry, field)
                 if not name:
-                    logger.info("Skipping %s entry without resolvable name: %s", field, entry)
+                    logger.debug("Skipping %s entry without resolvable name: %s", field, entry)
                     continue
 
             if field not in _SPECIES_FIELDS or "inDefinedTermSet" in entry:
@@ -450,7 +450,7 @@ def _resolve_one(original_name, taxon_id):
     try:
         return key, _get_uniprot_details(original_name, taxon_id)
     except ValueError as e:
-        logger.info("Skipping UniProt lookup for %s (ID %s): %s", original_name, taxon_id, e)
+        logger.debug("Skipping UniProt lookup for %s (ID %s): %s", original_name, taxon_id, e)
         return key, None
     except Exception as e:
         logger.warning("UniProt lookup failed for %s (ID %s): %s", original_name, taxon_id, e)
@@ -613,7 +613,7 @@ def _standardize_section(section, lookup_dict, is_species_section=False):
                 continue
 
         if is_species_section and should_filter_term(original_name, original_obj.get("identifier")):
-            logger.info("Filtering out '%s' from species section", original_name)
+            logger.debug("Filtering out '%s' from species section", original_name)
             continue
 
         new_obj = lookup_item(original_name, lookup_dict)
@@ -626,7 +626,7 @@ def _standardize_section(section, lookup_dict, is_species_section=False):
                 new_obj = new_obj.copy()
                 new_obj["classification"] = original_obj["classification"]
             if should_filter_term(new_obj.get("name"), new_obj.get("identifier")):
-                logger.info("Filtering out retrieved '%s'", new_obj.get("name"))
+                logger.debug("Filtering out retrieved '%s'", new_obj.get("name"))
                 continue
         new_section.append(new_obj)
     return new_section

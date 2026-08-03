@@ -152,7 +152,7 @@ def fetch_correction_files(correction_name):
         approved = correction_json.get("approved", True)
         records_file_path = prod_records_file
     except Exception as prod_error:
-        logger.info(
+        logger.debug(
             f"Production file for '{correction_name}' not found ({prod_error}). "
             "Trying staging folder."
         )
@@ -246,7 +246,7 @@ def _build_corrections_index():
                     }
                 )
 
-            logger.info(
+            logger.debug(
                 f"Loaded correction '{correction_name}': "
                 f"{len(record_ids)} record IDs, "
                 f"{len(funding_ids)} funding patterns "

@@ -124,7 +124,7 @@ def de_duplicate_dicts(dict_list):
 
 def get_in_defined_term_set(doc, properties_dict):
     """Curate every term in `doc` whose URL belongs to a known ontology."""
-    logger.info("Processing doc: %s", doc.get("_id"))
+    logger.debug("Processing doc: %s", doc.get("_id"))
     nde_properties = {
         "species": species_func,
         "infectiousAgent": species_func,

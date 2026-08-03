@@ -61,7 +61,7 @@ def standardize_funder(funder):
 
     funder_dict = {}
     if "message" not in data or "items" not in data["message"]:
-        logger.info("No message in response for %s, %s", funder_name, url)
+        logger.debug("No message in response for %s, %s", funder_name, url)
     else:
         for item in data["message"]["items"]:
             alt_names = [alt_name.lower() for alt_name in item.get("alt-names", [])]
@@ -75,7 +75,7 @@ def standardize_funder(funder):
                 break
 
     if not funder_dict:
-        logger.info("NO FUNDING INFORMATION FOUND FOR %s, %s", funder_name, url)
+        logger.debug("NO FUNDING INFORMATION FOUND FOR %s, %s", funder_name, url)
         funder_dict = {"name": funder, "@type": "Organization"}
 
     FUNDERS.put(funder, funder_dict)
@@ -105,7 +105,7 @@ def standardize_funding(docs):
         if isinstance(entry, dict) and entry.get("identifier")
     }
     funding_cache = FUNDING_LOOKUP.get_many(funding_ids)
-    logger.info("Found %s of %s funding records in the cache", len(funding_cache), len(funding_ids))
+    logger.debug("Found %s of %s funding records in the cache", len(funding_cache), len(funding_ids))
 
     for doc in docs:
         funding = doc.get("funding")
@@ -122,7 +122,7 @@ def standardize_funding(docs):
                 if cached := funding_cache.get(_funding_key(identifier)):
                     entries[i] = cached
                 else:
-                    logger.info("Not in cache: %s, skipping API lookup", _funding_key(identifier))
+                    logger.debug("Not in cache: %s, skipping API lookup", _funding_key(identifier))
                 continue
             try:
                 _standardize_funders(entry)
@@ -141,7 +141,7 @@ def standardize_funding(docs):
 # ---------------------------------------------------------------------------
 def update_sqlite_db(funding_id, new_funding):
     """Store a curated grant in the funding cache."""
-    logger.info("Updating funding information for %s in the funding cache.", funding_id)
+    logger.debug("Updating funding information for %s in the funding cache.", funding_id)
     FUNDING_LOOKUP.put(_funding_key(funding_id), new_funding)
 
 
@@ -171,7 +171,7 @@ def is_valid_nih_funding_id(funding_id):
 def update_funding(funding_id):
     """Fetch the parent project for `funding_id` from NIH RePORTER."""
     if not is_valid_nih_funding_id(funding_id):
-        logger.info("INVALID FUNDING ID FOR %s", funding_id)
+        logger.debug("INVALID FUNDING ID FOR %s", funding_id)
         return None
 
     funding_id = funding_id.replace("NIH", "")
@@ -218,49 +218,49 @@ def update_funding(funding_id):
             logger.error("ERROR for %s request, skipping: %s", count, e)
             continue
         if funding_data == ["Invalid project number"]:
-            logger.info("INVALID PROJECT NUMBER FOR %s", funding_id)
+            logger.debug("INVALID PROJECT NUMBER FOR %s", funding_id)
             return None
         if funding_data["meta"]["total"] == 0:
-            logger.info("NO RESULTS FOUND FOR %s", funding_id)
+            logger.debug("NO RESULTS FOUND FOR %s", funding_id)
             return None
         data.extend(funding_data["results"])
         offset += 500
         if offset >= funding_data["meta"]["total"]:
             break
 
-    logger.info("FOUND %s RESULTS FOR %s", len(data), funding_id)
+    logger.debug("FOUND %s RESULTS FOR %s", len(data), funding_id)
     year = data[0]["fiscal_year"]
     parent = [obj for obj in data if obj["fiscal_year"] == year and obj["subproject_id"] is None]
 
     if not parent:
-        logger.info("NO PARENT PROJECT FOUND FOR %s", funding_id)
+        logger.debug("NO PARENT PROJECT FOUND FOR %s", funding_id)
         return None
     if len(parent) == 1:
-        logger.info("FOUND PARENT PROJECT FOR %s", funding_id)
+        logger.debug("FOUND PARENT PROJECT FOR %s", funding_id)
         return build_funding_dict(parent[0])
 
-    logger.info("MULTIPLE PARENT PROJECTS FOUND FOR %s", funding_id)
+    logger.debug("MULTIPLE PARENT PROJECTS FOUND FOR %s", funding_id)
     parent = sorted(
         (i for i in parent if i["award_amount"] is not None),
         key=lambda x: x["award_amount"],
         reverse=True,
     )
     if not parent:
-        logger.info("NO PARENT PROJECTS WITH AWARD AMOUNT FOUND FOR %s", funding_id)
+        logger.debug("NO PARENT PROJECTS WITH AWARD AMOUNT FOUND FOR %s", funding_id)
         return None
 
     largest_amount_parents = [i for i in parent if i["award_amount"] == parent[0]["award_amount"]]
     if len(largest_amount_parents) == 1:
-        logger.info("USING LARGEST AWARD AMOUNT PARENT FOR %s", funding_id)
+        logger.debug("USING LARGEST AWARD AMOUNT PARENT FOR %s", funding_id)
         return build_funding_dict(largest_amount_parents[0])
 
-    logger.info("MULTIPLE PARENTS WITH LARGEST AMOUNT FOUND FOR %s", funding_id)
+    logger.debug("MULTIPLE PARENTS WITH LARGEST AMOUNT FOUND FOR %s", funding_id)
     for large_parent in largest_amount_parents:
         split = large_parent.get("project_num_split")
         if split is not None and split["appl_type_code"] == "1":
-            logger.info("USING PARENT WITH APPLICATION TYPE 1 FOR %s", funding_id)
+            logger.debug("USING PARENT WITH APPLICATION TYPE 1 FOR %s", funding_id)
             return build_funding_dict(large_parent)
-    logger.info("NO PARENT WITH APPLICATION TYPE 1 FOUND FOR %s, USING FIRST INDEX", funding_id)
+    logger.debug("NO PARENT WITH APPLICATION TYPE 1 FOUND FOR %s, USING FIRST INDEX", funding_id)
     return build_funding_dict(largest_amount_parents[0])
 
 
