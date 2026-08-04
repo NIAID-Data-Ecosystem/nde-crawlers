@@ -176,17 +176,6 @@ class NDESourceUploader(BaseSourceUploader):
                 },
                 "name": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
                 "relationship": {"type": "text", "copy_to": ["all"]},
-                "sameAs": {
-                    "properties": {
-                        "identifier": {"type": "text", "copy_to": ["all"]},
-                        "name": {
-                            "type": "keyword",
-                            "normalizer": "keyword_lowercase_normalizer",
-                            "copy_to": ["all"],
-                        },
-                        "url": {"type": "text", "copy_to": ["all"]},
-                    }
-                },
                 "url": {"type": "text", "copy_to": ["all"]},
             }
         }
