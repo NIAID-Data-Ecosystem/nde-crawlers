@@ -19,7 +19,6 @@ STUDIES_URL = "https://immunespace.org/api_kb/get_study_id_dropdown"
 SIGNATURES_URL = "https://immunespace.org/api_kb/get_full_signatures_data/?"
 SIGNATURE_RESULTS_URL = "https://immunespace.org/query/results/?ordering_tab=signatures_tab"
 STUDY_URL_TEMPLATE = "https://immunespace.org/query/study/{study_id}"
-DISCOVERY_PORTAL_RESOURCE_URL_TEMPLATE = "https://data.niaid.nih.gov/resources?id={record_id}"
 REQUEST_TIMEOUT = 120
 
 SIGNATURE_FIELDS = {
@@ -242,7 +241,7 @@ def _subject_dataset(group, crawl_date):
         "identifier": _single_or_list(identifiers),
         "includedInDataCatalog": _catalog(crawl_date),
         "name": primary_study,
-        "sameAs": DISCOVERY_PORTAL_RESOURCE_URL_TEMPLATE.format(record_id=primary_study.casefold()),
+        "sameAs": primary_study.casefold(),
         "url": STUDY_URL_TEMPLATE.format(study_id=primary_study),
     }
 
