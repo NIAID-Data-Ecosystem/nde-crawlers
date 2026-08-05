@@ -9,6 +9,7 @@ time cost a request. The tagged names are then standardized the same way the
 
 import os
 import time
+from email.utils import parsedate_to_datetime
 from itertools import batched
 
 import requests
@@ -17,7 +18,9 @@ from config import logger
 from .cache import SqliteCache, SqliteKeySet
 from .common import as_list, sqlite
 from .taxonomy import classify_from_lineage
-from .terms import DB_PATH as PUBTATOR_DB_PATH, SPECIES_CACHE_DB_PATH as DB_PATH, fetch_taxon, query_condition
+from .terms import DB_PATH as PUBTATOR_DB_PATH
+from .terms import SPECIES_CACHE_DB_PATH as DB_PATH
+from .terms import fetch_taxon, query_condition
 
 _NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
 
@@ -29,13 +32,31 @@ _CACHE_TABLES = {_SPECIES_TYPE: "species", _DISEASE_TYPE: "disease"}
 # SQLite allows 999 bound variables by default; keep headroom.
 _SQL_CHUNK_SIZE = 900
 _EXTRACT_CHUNK_SIZE = 5000
+_EXTRACT_URL = "http://tagger.jensenlab.org/GetEntities"
+_EXTRACT_TIMEOUT = (5, 60)
+_EXTRACT_MAX_ATTEMPTS = 4
+_EXTRACT_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+# Reuse the connection to EXTRACT. Requests' module-level helpers create a new
+# session per call, which pays the TCP setup cost again for every document.
+_EXTRACT_SESSION = requests.Session()
 
 # Place names and terms EXTRACT reliably gets wrong.
 BASIC_DROP_LIST = frozenset(
     {
-        "tonga", "alabama", "argentina", "namibia", "panama",
-        "virginia", "bulgaria", "togo", "serendip", "arizona",
-        "california", "omicron", "sonoma",
+        "tonga",
+        "alabama",
+        "argentina",
+        "namibia",
+        "panama",
+        "virginia",
+        "bulgaria",
+        "togo",
+        "serendip",
+        "arizona",
+        "california",
+        "omicron",
+        "sonoma",
     }
 )
 
@@ -148,12 +169,70 @@ def filter_species_by_advanced_rules(species_mapping, species_list):
 # ---------------------------------------------------------------------------
 # The EXTRACT tagger
 # ---------------------------------------------------------------------------
-def query_extract_api(description, entity_type):
-    response = requests.get(
-        "http://tagger.jensenlab.org/GetEntities",
-        params={"document": description, "entity_types": entity_type, "format": "tsv"},
-    )
-    return response.text
+def _entity_types_param(entity_types):
+    """Format one or more EXTRACT entity type codes for the API."""
+    if isinstance(entity_types, str):
+        return entity_types
+    return " ".join(entity_types)
+
+
+def _retry_delay(response, attempt):
+    """Honor Retry-After when possible, otherwise use exponential backoff."""
+    retry_after = response.headers.get("Retry-After")
+    if retry_after:
+        try:
+            return max(0.0, float(retry_after))
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(retry_after)
+                return max(0.0, retry_at.timestamp() - time.time())
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return float(2**attempt)
+
+
+def query_extract_api(description, entity_types, session=None):
+    """Query EXTRACT for one or more entity types, retrying transient failures."""
+    entity_types = _entity_types_param(entity_types)
+    session = session or _EXTRACT_SESSION
+
+    for attempt in range(_EXTRACT_MAX_ATTEMPTS):
+        try:
+            response = session.get(
+                _EXTRACT_URL,
+                params={"document": description, "entity_types": entity_types, "format": "tsv"},
+                timeout=_EXTRACT_TIMEOUT,
+            )
+        except (requests.ConnectionError, requests.Timeout) as e:
+            if attempt + 1 == _EXTRACT_MAX_ATTEMPTS:
+                raise
+            delay = float(2**attempt)
+            logger.warning(
+                "EXTRACT request failed for entity types %s (%s); retrying in %.1fs",
+                entity_types,
+                e,
+                delay,
+            )
+            time.sleep(delay)
+            continue
+
+        if response.status_code in _EXTRACT_RETRY_STATUSES:
+            if attempt + 1 == _EXTRACT_MAX_ATTEMPTS:
+                response.raise_for_status()
+            delay = _retry_delay(response, attempt)
+            logger.warning(
+                "EXTRACT returned HTTP %s for entity types %s; retrying in %.1fs",
+                response.status_code,
+                entity_types,
+                delay,
+            )
+            time.sleep(delay)
+            continue
+
+        response.raise_for_status()
+        return response.text
+
+    raise RuntimeError("EXTRACT retry loop ended unexpectedly")
 
 
 def _iter_extract_tsv_lines(text_response):
@@ -166,6 +245,16 @@ def _iter_extract_tsv_lines(text_response):
         if len(parts) < 3:
             continue
         yield parts[0], parts[1], parts[2]
+
+
+def _response_for_entity_type(text_response, entity_type):
+    """Return only the TSV rows for one type from a combined EXTRACT response."""
+    lines = []
+    for line in (text_response or "").splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) >= 3 and parts[1] == entity_type:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 def _fetch_cached_responses(cursor, entity_type, ndeids):
@@ -182,18 +271,20 @@ def _fetch_cached_responses(cursor, entity_type, ndeids):
     return out
 
 
-def _cache_response(cursor, ndeid, text_response, entity_type):
-    table = _CACHE_TABLES.get(entity_type)
-    if table:
-        cursor.execute(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)", (ndeid, text_response))
+def _cache_responses(rows_by_type):
+    """Write fetched responses in one short transaction after network I/O."""
+    if not any(rows_by_type.values()):
+        return
+
+    with sqlite(DB_PATH, *_RESPONSE_CACHE_DDL) as conn:
+        for entity_type, rows in rows_by_type.items():
+            table = _CACHE_TABLES.get(entity_type)
+            if table and rows:
+                conn.executemany(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)", rows)
 
 
-def _tagged_entities(cursor, ndeid, description, entity_type, cached):
-    """Return the entity names EXTRACT tags in `description`, using the cache."""
-    response_text = cached.get(ndeid)
-    if response_text is None:
-        response_text = query_extract_api(description, entity_type)
-        _cache_response(cursor, ndeid, response_text, entity_type)
+def _tagged_entities(response_text, entity_type):
+    """Return the entity names of `entity_type` from an EXTRACT response."""
     if not response_text:
         return []
 
@@ -208,46 +299,117 @@ def _tagged_entities(cursor, ndeid, description, entity_type, cached):
 
 def _extract_entities(doc_list):
     """Add `fromEXTRACT` species / healthCondition stubs from each description."""
+    started = time.monotonic()
     count = 0
-    with sqlite(DB_PATH, *_RESPONSE_CACHE_DDL) as conn:
-        c = conn.cursor()
-        for chunk_docs in batched(doc_list, _EXTRACT_CHUNK_SIZE):
-            species_ids = []
-            disease_ids = []
-            for doc in chunk_docs:
-                if not doc.get("description"):
-                    continue
-                if "species" not in doc and "infectiousAgent" not in doc:
-                    species_ids.append(doc["_id"].lower())
-                if "healthCondition" not in doc:
-                    disease_ids.append(doc["_id"].lower())
+    requested = {_SPECIES_TYPE: 0, _DISEASE_TYPE: 0}
+    cache_hits = 0
+    cache_misses = 0
+    api_calls = 0
+    combined_calls = 0
+    api_seconds = 0.0
 
+    for chunk_docs in batched(doc_list, _EXTRACT_CHUNK_SIZE):
+        species_ids = []
+        disease_ids = []
+        for doc in chunk_docs:
+            if not doc.get("description"):
+                continue
+            if "species" not in doc and "infectiousAgent" not in doc:
+                species_ids.append(doc["_id"].lower())
+            if "healthCondition" not in doc:
+                disease_ids.append(doc["_id"].lower())
+
+        # Read and close SQLite before making any network requests. Previously
+        # the transaction stayed open for the entire (often multi-minute) loop.
+        with sqlite(DB_PATH, *_RESPONSE_CACHE_DDL) as conn:
+            c = conn.cursor()
             cached_species = _fetch_cached_responses(c, _SPECIES_TYPE, species_ids)
             cached_disease = _fetch_cached_responses(c, _DISEASE_TYPE, disease_ids)
 
-            for doc in chunk_docs:
-                count += 1
-                if count % 1000 == 0:
-                    logger.info("EXTRACT: processed %s documents", count)
+        cached_by_type = {_SPECIES_TYPE: cached_species, _DISEASE_TYPE: cached_disease}
+        pending_writes = {_SPECIES_TYPE: [], _DISEASE_TYPE: []}
 
-                description = doc.get("description")
-                if not description:
-                    continue
-                ndeid = doc["_id"].lower()
+        for doc in chunk_docs:
+            count += 1
+            if count % 1000 == 0:
+                logger.info("EXTRACT: processed %s documents", count)
+
+            description = doc.get("description")
+            if not description:
+                continue
+            ndeid = doc["_id"].lower()
+            needed_types = []
+            if "species" not in doc and "infectiousAgent" not in doc:
+                needed_types.append(_SPECIES_TYPE)
+            if "healthCondition" not in doc:
+                needed_types.append(_DISEASE_TYPE)
+
+            responses = {}
+            missing_types = []
+            for entity_type in needed_types:
+                requested[entity_type] += 1
+                response_text = cached_by_type[entity_type].get(ndeid)
+                if response_text is None:
+                    cache_misses += 1
+                    missing_types.append(entity_type)
+                else:
+                    cache_hits += 1
+                    responses[entity_type] = response_text
+
+            if missing_types:
+                api_calls += 1
+                if len(missing_types) > 1:
+                    combined_calls += 1
+                api_started = time.monotonic()
                 try:
-                    if "species" not in doc and "infectiousAgent" not in doc:
-                        for name, onto_id in _tagged_entities(c, ndeid, description, _SPECIES_TYPE, cached_species):
-                            species = doc.setdefault("species", [])
-                            if not _already_named(species, name):
-                                species.append({"name": name, "identifier": onto_id, "fromEXTRACT": True})
-
-                    if "healthCondition" not in doc:
-                        for name, _ in _tagged_entities(c, ndeid, description, _DISEASE_TYPE, cached_disease):
-                            conditions = doc.setdefault("healthCondition", [])
-                            if not _already_named(conditions, name):
-                                conditions.append({"name": name})
+                    fetched_response = query_extract_api(description, missing_types)
                 except Exception as e:
-                    logger.error("Error processing document %s: %s", doc.get("_id"), e)
+                    logger.error("Error querying EXTRACT for document %s: %s", doc.get("_id"), e)
+                else:
+                    for entity_type in missing_types:
+                        # A combined request is split before caching, preserving
+                        # the existing one-entity-type-per-table cache contents.
+                        response_text = (
+                            _response_for_entity_type(fetched_response, entity_type)
+                            if len(missing_types) > 1
+                            else fetched_response
+                        )
+                        responses[entity_type] = response_text
+                        cached_by_type[entity_type][ndeid] = response_text
+                        pending_writes[entity_type].append((ndeid, response_text))
+                finally:
+                    api_seconds += time.monotonic() - api_started
+
+            try:
+                if _SPECIES_TYPE in responses:
+                    for name, onto_id in _tagged_entities(responses[_SPECIES_TYPE], _SPECIES_TYPE):
+                        species = doc.setdefault("species", [])
+                        if not _already_named(species, name):
+                            species.append({"name": name, "identifier": onto_id, "fromEXTRACT": True})
+
+                if _DISEASE_TYPE in responses:
+                    for name, _ in _tagged_entities(responses[_DISEASE_TYPE], _DISEASE_TYPE):
+                        conditions = doc.setdefault("healthCondition", [])
+                        if not _already_named(conditions, name):
+                            conditions.append({"name": name})
+            except Exception as e:
+                logger.error("Error processing EXTRACT response for document %s: %s", doc.get("_id"), e)
+
+        _cache_responses(pending_writes)
+
+    logger.info(
+        "EXTRACT: docs=%s species_requested=%s disease_requested=%s cache_hits=%s "
+        "cache_misses=%s api_calls=%s combined_calls=%s api_seconds=%.1fs total_seconds=%.1fs",
+        count,
+        requested[_SPECIES_TYPE],
+        requested[_DISEASE_TYPE],
+        cache_hits,
+        cache_misses,
+        api_calls,
+        combined_calls,
+        api_seconds,
+        time.monotonic() - started,
+    )
     return doc_list
 
 
@@ -449,7 +611,9 @@ def _resolve_missing_species(missing_terms):
     # text2term can return several mappings per term; keep the best one only so
     # we make one UniProt request per term.
     results = results.drop_duplicates(subset=["Source Term"], keep="first")
-    logger.info("Species standardization: text2term produced %s rows in %.1fs", len(results), time.monotonic() - started)
+    logger.info(
+        "Species standardization: text2term produced %s rows in %.1fs", len(results), time.monotonic() - started
+    )
 
     resolved = []
     failed = 0
@@ -500,7 +664,9 @@ def _remove_redundant_species(doc_list):
         if "infectiousAgent" not in doc or "species" not in doc:
             continue
         curated_names = {
-            agent["name"].strip().lower() for agent in doc["infectiousAgent"] if agent.get("isCurated", False) and agent.get("name")
+            agent["name"].strip().lower()
+            for agent in doc["infectiousAgent"]
+            if agent.get("isCurated", False) and agent.get("name")
         }
         if not curated_names:
             continue
@@ -549,7 +715,9 @@ def _standardize_extracted_diseases(doc_list):
         if "healthCondition" not in doc:
             continue
         _normalize_term_entries(doc, "healthCondition")
-        disease_names.update(term["name"] for term in doc["healthCondition"] if "isCurated" not in term and term.get("name"))
+        disease_names.update(
+            term["name"] for term in doc["healthCondition"] if "isCurated" not in term and term.get("name")
+        )
 
     formatted_diseases = []
     for disease_name in disease_names:
@@ -618,10 +786,31 @@ def _dedupe_diseases(doc_list):
 def augment_from_descriptions(docs):
     """Mine species and health conditions out of each record's description."""
     doc_list = list(docs)
-    _extract_entities(doc_list)
-    _standardize_extracted_species(doc_list)
-    _dedupe_species(doc_list)
-    _remove_redundant_species(doc_list)
-    _standardize_extracted_diseases(doc_list)
-    _dedupe_diseases(doc_list)
+    started = time.monotonic()
+    timings = {}
+    steps = (
+        ("extract", _extract_entities),
+        ("standardize_species", _standardize_extracted_species),
+        ("dedupe_species", _dedupe_species),
+        ("remove_redundant_species", _remove_redundant_species),
+        ("standardize_diseases", _standardize_extracted_diseases),
+        ("dedupe_diseases", _dedupe_diseases),
+    )
+    for name, step in steps:
+        step_started = time.monotonic()
+        step(doc_list)
+        timings[name] = time.monotonic() - step_started
+
+    logger.info(
+        "Descriptions: docs=%s extract=%.1fs standardize_species=%.1fs dedupe_species=%.1fs "
+        "remove_redundant_species=%.1fs standardize_diseases=%.1fs dedupe_diseases=%.1fs total=%.1fs",
+        len(doc_list),
+        timings["extract"],
+        timings["standardize_species"],
+        timings["dedupe_species"],
+        timings["remove_redundant_species"],
+        timings["standardize_diseases"],
+        timings["dedupe_diseases"],
+        time.monotonic() - started,
+    )
     return doc_list
