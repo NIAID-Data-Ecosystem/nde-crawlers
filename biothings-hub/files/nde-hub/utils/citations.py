@@ -453,6 +453,11 @@ def _term_matches_mention(term, mention):
         normalized_label = _normalize_term_text(label)
         if normalized_label == normalized_mention:
             return True
+        # Biomedical labels vary in punctuation even when their alphanumeric
+        # form is identical (for example SARS-CoV-2 vs SARS-CoV2). Equality of
+        # the complete compact form is safe; substring matching is not.
+        if compact_mention and _compact_term_text(label) == compact_mention:
+            return True
         if compact_mention in _SAFE_SHORT_MENTIONS:
             label_tokens = normalized_label.split()
             acronym = "".join(token[0] for token in label_tokens if token)
