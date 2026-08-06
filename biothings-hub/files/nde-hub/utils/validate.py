@@ -31,6 +31,9 @@ from .common import as_list
 AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
 
 CONDITIONS_OF_ACCESS = ["Open", "Restricted", "Closed", "Embargoed"]
+# A ResourceCatalog covers many resources whose access terms differ, so it may
+# also be marked "Varied".
+RESOURCE_CATALOG_CONDITIONS_OF_ACCESS = CONDITIONS_OF_ACCESS + ["Varied"]
 CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
 
 # Source data sometimes emits literal placeholders ("Not provided", "Unknown",
@@ -241,9 +244,14 @@ def check_schema(doc: Dict) -> Dict:
     assert doc.get("version", None) is None, "Remove version field"
 
     if coa := doc.get("conditionsOfAccess"):
-        assert coa in CONDITIONS_OF_ACCESS, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (
+        allowed = (
+            RESOURCE_CATALOG_CONDITIONS_OF_ACCESS
+            if doc.get("@type") == "ResourceCatalog"
+            else CONDITIONS_OF_ACCESS
+        )
+        assert coa in allowed, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (
             coa,
-            CONDITIONS_OF_ACCESS,
+            allowed,
         )
 
     if doc.get("@type") == "Sample" and (cws := doc.get("creativeWorkStatus")) is not None:
