@@ -24,7 +24,6 @@ import time
 import urllib.error
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from functools import lru_cache
 from itertools import batched
 from typing import Dict, Iterable, Optional
 
@@ -35,6 +34,11 @@ from config import GEO_API_KEY, GEO_EMAIL, logger
 
 from .common import as_list, dict_entries, retry
 from .funding import standardize_funder
+from .term_matching import is_ambiguous_short_mention as _is_ambiguous_short_mention
+from .term_matching import mentioned_in as _mentioned_in
+from .term_matching import normalize_term_text as _normalize_term_text
+from .term_matching import species_term_matches_mention as _species_term_matches_mention
+from .term_matching import term_matches_mention as _term_matches_mention
 from .terms import DB_PATH as PUBTATOR_DB_PATH, get_species_details, query_condition
 
 PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
@@ -96,25 +100,6 @@ _COVID_MESH_REPLACEMENT = "MESH:D000086382"
 # Species names PubTator picks up that are never the study organism.
 _SPECIES_BLACKLIST = frozenset({"PERCH", "D-FISH"})
 
-# PubTator3 contains many short names and acronyms. A raw substring check turns
-# names such as "MS", "SAM", "PP" and "non" into matches inside unrelated
-# words. Most short tokens are too ambiguous to augment automatically. Keep a
-# deliberately small allowlist for well-established biomedical abbreviations.
-_SAFE_SHORT_MENTIONS = frozenset(
-    {
-        "aids",
-        "covid19",
-        "ebv",
-        "hiv",
-        "hpv",
-        "hsv",
-        "mers",
-        "rsv",
-        "sars",
-        "tb",
-    }
-)
-
 # These are real words, but not useful health conditions on their own. They are
 # common in study prose and PubTator3 sometimes annotates them as diseases or
 # maps them to generic NCIT concepts.
@@ -126,7 +111,9 @@ _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
         "cell",
         "child",
         "children",
+        "chronic",
         "clinical",
+        "dead",
         "death",
         "development",
         "faeces",
@@ -134,9 +121,12 @@ _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
         "food insecurity",
         "geographic",
         "infant",
+        "infected",
         "infection",
         "infections",
+        "infectious",
         "infectious disease",
+        "inflammatory",
         "low",
         "maternal",
         "mortality",
@@ -147,6 +137,7 @@ _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
         "systemic",
         "wash",
         "weight",
+        "weight gain",
     }
 )
 
@@ -159,19 +150,16 @@ _NON_CONDITION_TERM_NAMES = frozenset(
         "death domain",
         "feces",
         "food insecurity",
+        "infected with sars cov 2",
+        "inflammatory",
         "mortality rate",
         "newborn",
         "nutrition",
         "protozoal",
+        "weight gain",
     }
 )
 _NON_CONDITION_TERM_PREFIXES = ("how often experienced ", "obsolete ")
-
-_IRREGULAR_SPECIES_PLURALS = {
-    "bacteria": "bacterium",
-    "fungi": "fungus",
-    "mice": "mouse",
-}
 
 _pmid_conn = None
 _pubtator_conn = None
@@ -398,101 +386,10 @@ def _as_augmented(term):
     return term
 
 
-def _normalize_term_text(value):
-    """Normalize a mention or ontology label for conservative comparison."""
-    return " ".join(re.findall(r"[\w]+", str(value or "").casefold()))
-
-
-def _compact_term_text(value):
-    return "".join(character for character in str(value or "").casefold() if character.isalnum())
-
-
-def _is_ambiguous_short_mention(name):
-    """True when a short PubTator mention is unsafe without disambiguation."""
-    compact = _compact_term_text(name)
-    if not compact or compact in _SAFE_SHORT_MENTIONS:
-        return False
-    return len(compact) <= 3 or (str(name).strip().isupper() and len(compact) <= 8)
-
-
-def _term_labels(term):
-    # `originalName` is the raw input saved for provenance. It cannot validate
-    # the ontology mapping because it necessarily repeats `mention`, even when
-    # the resolved ontology hit is unrelated.
-    for field in ("name", "commonName"):
-        if term.get(field):
-            yield term[field]
-    yield from as_list(term.get("alternateName"))
-    # UniProt display names commonly have the form "Human | Homo sapiens".
-    # Each side is a useful label, while the combined presentation string is
-    # not a mention that would occur naturally in source text.
-    if display_name := term.get("displayName"):
-        yield from (part.strip() for part in str(display_name).split("|") if part.strip())
-
-
 def _is_non_condition_term(term):
     """True for resolved concepts that cannot represent a health condition."""
     normalized_name = _normalize_term_text(term.get("name"))
     return normalized_name in _NON_CONDITION_TERM_NAMES or normalized_name.startswith(_NON_CONDITION_TERM_PREFIXES)
-
-
-def _term_matches_mention(term, mention):
-    """Require the resolved ontology term to agree with the PubTator mention.
-
-    A MeSH cross-reference can resolve to an unrelated first hit. Exact label or
-    synonym agreement prevents mappings such as ACTT-1 -> renal cell carcinoma
-    and SAM -> a chemotherapy regimen. The short allowlist may also match a
-    standalone token or conventional acronym in a longer ontology label.
-    """
-    normalized_mention = _normalize_term_text(mention)
-    compact_mention = _compact_term_text(mention)
-    if not normalized_mention:
-        return False
-
-    for label in _term_labels(term):
-        normalized_label = _normalize_term_text(label)
-        if normalized_label == normalized_mention:
-            return True
-        # Biomedical labels vary in punctuation even when their alphanumeric
-        # form is identical (for example SARS-CoV-2 vs SARS-CoV2). Equality of
-        # the complete compact form is safe; substring matching is not.
-        if compact_mention and _compact_term_text(label) == compact_mention:
-            return True
-        if compact_mention in _SAFE_SHORT_MENTIONS:
-            label_tokens = normalized_label.split()
-            acronym = "".join(token[0] for token in label_tokens if token)
-            if compact_mention in label_tokens or compact_mention == acronym:
-                return True
-    return False
-
-
-def _singularize_species_mention(value):
-    """Normalize a simple plural species/common name without fuzzy matching."""
-    words = _normalize_term_text(value).split()
-    if not words:
-        return ""
-
-    last_word = words[-1]
-    if last_word in _IRREGULAR_SPECIES_PLURALS:
-        words[-1] = _IRREGULAR_SPECIES_PLURALS[last_word]
-    elif last_word.endswith("ies") and len(last_word) > 4:
-        words[-1] = f"{last_word[:-3]}y"
-    elif last_word.endswith(("ches", "shes", "uses", "xes", "zes")):
-        words[-1] = last_word[:-2]
-    elif last_word.endswith("s") and not last_word.endswith(("is", "ss", "us")):
-        words[-1] = last_word[:-1]
-    return " ".join(words)
-
-
-def _species_term_matches_mention(term, mention):
-    """Match a taxon label to a mention, allowing only simple plural forms."""
-    if _term_matches_mention(term, mention):
-        return True
-    singular_mention = _singularize_species_mention(mention)
-    return bool(
-        singular_mention
-        and any(_singularize_species_mention(label) == singular_mention for label in _term_labels(term))
-    )
 
 
 @retry(7, 5)
@@ -588,21 +485,6 @@ def _record_text(rec):
         rec.get("description", "").lower(),
         rec.get("name", "").lower(),
     )
-
-
-@lru_cache(maxsize=16_384)
-def _mention_pattern(name):
-    words = str(name or "").strip().split()
-    if not words:
-        return None
-    escaped = r"\s+".join(re.escape(word) for word in words)
-    return re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
-
-
-def _mentioned_in(name, haystacks):
-    """True only for a complete mention, never a substring of another word."""
-    pattern = _mention_pattern(name)
-    return bool(pattern and any(pattern.search(haystack) for haystack in haystacks))
 
 
 def update_record_disease(rec, disease_data):

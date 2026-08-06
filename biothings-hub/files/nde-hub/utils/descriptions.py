@@ -18,6 +18,8 @@ from config import logger
 from .cache import SqliteCache, SqliteKeySet
 from .common import as_list, sqlite
 from .taxonomy import classify_from_lineage
+from .term_matching import mentioned_in
+from .term_matching import species_term_matches_mention
 from .terms import DB_PATH as PUBTATOR_DB_PATH
 from .terms import SPECIES_CACHE_DB_PATH as DB_PATH
 from .terms import fetch_taxon, query_condition
@@ -53,6 +55,7 @@ BASIC_DROP_LIST = frozenset(
         "bulgaria",
         "togo",
         "serendip",
+        "vector",
         "arizona",
         "california",
         "omicron",
@@ -97,6 +100,11 @@ ADVANCED_DROP_RULES = {
         "id": "441235",
         "ignore_children": False,
         "rationale": "Likelihood it's a place rather than organism is very high",
+    },
+    "vector": {
+        "id": "2971083",
+        "ignore_children": False,
+        "rationale": "generic study language rather than an organism",
     },
 }
 
@@ -383,12 +391,24 @@ def _extract_entities(doc_list):
             try:
                 if _SPECIES_TYPE in responses:
                     for name, onto_id in _tagged_entities(responses[_SPECIES_TYPE], _SPECIES_TYPE):
+                        if not mentioned_in(name, (description,)):
+                            logger.debug("Skipping EXTRACT species substring %r in %s", name, doc.get("_id"))
+                            continue
                         species = doc.setdefault("species", [])
-                        if not _already_named(species, name):
+                        # EXTRACT can return several taxonomy candidates for one
+                        # mention. Keep each candidate until UniProt labels let
+                        # us select the one that actually agrees with the text.
+                        if not any(
+                            entry.get("name") == name and str(entry.get("identifier")) == str(onto_id)
+                            for entry in species
+                        ):
                             species.append({"name": name, "identifier": onto_id, "fromEXTRACT": True})
 
                 if _DISEASE_TYPE in responses:
                     for name, _ in _tagged_entities(responses[_DISEASE_TYPE], _DISEASE_TYPE):
+                        if not mentioned_in(name, (description,)):
+                            logger.debug("Skipping EXTRACT disease substring %r in %s", name, doc.get("_id"))
+                            continue
                         conditions = doc.setdefault("healthCondition", [])
                         if not _already_named(conditions, name):
                             conditions.append({"name": name})
@@ -565,6 +585,16 @@ def _standardize_extracted_species(doc_list):
         for term in as_list(doc.get(field))
         if term.get("fromEXTRACT", False) and term.get("name")
     }
+    candidate_identifiers = {}
+    for doc in docs_to_standardize:
+        for field in ("species", "infectiousAgent"):
+            for term in as_list(doc.get(field)):
+                if not term.get("fromEXTRACT", False) or not term.get("name") or not term.get("identifier"):
+                    continue
+                candidates = candidate_identifiers.setdefault(term["name"], [])
+                identifier = str(term["identifier"])
+                if identifier not in candidates:
+                    candidates.append(identifier)
     logger.info(
         "Species standardization: total_docs=%s docs_to_standardize=%s unique_terms=%s",
         len(doc_list),
@@ -579,57 +609,101 @@ def _standardize_extracted_species(doc_list):
         missing_terms = []
         for original_name in term_names:
             standardized = SPECIES_DETAILS.get(original_name)
-            if standardized:
+            if standardized and species_term_matches_mention(standardized, original_name):
                 formatted_species.append(dict(standardized, fromEXTRACT=True, originalName=original_name))
             else:
+                if standardized:
+                    logger.debug(
+                        "Ignoring incompatible cached EXTRACT species mapping for %s: %s",
+                        original_name,
+                        standardized.get("name"),
+                    )
                 missing_terms.append(original_name)
 
         if missing_terms:
-            formatted_species.extend(_resolve_missing_species(missing_terms))
+            formatted_species.extend(_resolve_missing_species(missing_terms, candidate_identifiers))
     except Exception as e:
         logger.error("Error during species standardization: %s", e)
         return doc_list
 
-    if formatted_species:
-        species_mapping = {(sp.get("originalName") or sp["name"]).lower(): sp for sp in formatted_species}
-        _insert_species(docs_to_standardize, species_mapping)
+    species_mapping = {(sp.get("originalName") or sp["name"]).lower(): sp for sp in formatted_species}
+    # Run insertion even when every candidate was rejected. It intentionally
+    # removes uncurated EXTRACT stubs that could not be standardized safely.
+    _insert_species(docs_to_standardize, species_mapping)
     return doc_list
 
 
-def _resolve_missing_species(missing_terms):
+def _resolve_missing_species(missing_terms, candidate_identifiers=None):
     """Map names to ncbitaxon with text2term, then fetch each taxon from UniProt."""
+    candidate_identifiers = candidate_identifiers or {}
+    resolved = []
+    unresolved = []
+
+    # EXTRACT supplies taxonomy IDs and sometimes returns several candidates
+    # for an abbreviated name. Prefer a candidate whose authoritative UniProt
+    # label matches before asking text2term to infer a taxon from the name.
+    for original_name in missing_terms:
+        species_details = None
+        for identifier in candidate_identifiers.get(original_name, ()):
+            try:
+                candidate = get_species_details(original_name, identifier)
+            except Exception:
+                continue
+            if species_term_matches_mention(candidate, original_name):
+                species_details = candidate
+                break
+
+        if species_details:
+            resolved.append(species_details)
+            cacheable = {k: v for k, v in species_details.items() if k != "fromEXTRACT"}
+            SPECIES_DETAILS.put(original_name, cacheable)
+        else:
+            unresolved.append(original_name)
+
+    if not unresolved:
+        logger.info("Species standardization: resolved=%s failed=0", len(resolved))
+        return resolved
+
     import text2term
 
-    logger.info("Species standardization: running text2term for %s missing terms", len(missing_terms))
+    logger.info("Species standardization: running text2term for %s missing terms", len(unresolved))
     if not os.path.exists("cache/ncbitaxon"):
         logger.info("Species standardization: building text2term ncbitaxon cache (cache/ncbitaxon)")
         text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
 
     started = time.monotonic()
-    results = text2term.map_terms(missing_terms, "ncbitaxon", use_cache=True)
+    results = text2term.map_terms(unresolved, "ncbitaxon", use_cache=True)
     results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
-    # text2term can return several mappings per term; keep the best one only so
-    # we make one UniProt request per term.
-    results = results.drop_duplicates(subset=["Source Term"], keep="first")
     logger.info(
         "Species standardization: text2term produced %s rows in %.1fs", len(results), time.monotonic() - started
     )
 
-    resolved = []
-    failed = 0
+    attempted = {}
+    resolved_names = set()
     for _, row in results.iterrows():
         original_name = row["Source Term"]
+        if original_name in resolved_names or attempted.get(original_name, 0) >= 5:
+            continue
+        attempted[original_name] = attempted.get(original_name, 0) + 1
         identifier = row["Mapped Term CURIE"].split(":")[1]  # e.g. 'NCBITAXON:ID'
         try:
             species_details = get_species_details(original_name, identifier)
         except Exception:
-            failed += 1
+            continue
+        if not species_term_matches_mention(species_details, original_name):
+            logger.debug(
+                "Ignoring incompatible EXTRACT species mapping for %s: %s",
+                original_name,
+                species_details.get("name"),
+            )
             continue
         resolved.append(species_details)
+        resolved_names.add(original_name)
         # The cached copy is the curated shape, without the fromEXTRACT marker.
         cacheable = {k: v for k, v in species_details.items() if k != "fromEXTRACT"}
         SPECIES_DETAILS.put(original_name, cacheable)
 
+    failed = len(missing_terms) - len(resolved)
     logger.info("Species standardization: resolved=%s failed=%s", len(resolved), failed)
     return resolved
 
