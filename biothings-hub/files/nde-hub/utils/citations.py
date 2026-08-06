@@ -24,6 +24,7 @@ import time
 import urllib.error
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from functools import lru_cache
 from itertools import batched
 from typing import Dict, Iterable, Optional
 
@@ -95,9 +96,52 @@ _COVID_MESH_REPLACEMENT = "MESH:D000086382"
 # Species names PubTator picks up that are never the study organism.
 _SPECIES_BLACKLIST = frozenset({"PERCH", "D-FISH"})
 
+# PubTator3 contains many short names and acronyms. A raw substring check turns
+# names such as "MS", "SAM", "PP" and "non" into matches inside unrelated
+# words. Most short tokens are too ambiguous to augment automatically. Keep a
+# deliberately small allowlist for well-established biomedical abbreviations.
+_SAFE_SHORT_MENTIONS = frozenset(
+    {
+        "aids",
+        "covid19",
+        "ebv",
+        "hiv",
+        "hpv",
+        "hsv",
+        "mers",
+        "rsv",
+        "sars",
+        "tb",
+    }
+)
+
+# These are real words, but not useful health conditions on their own. They are
+# common in study prose and PubTator3 sometimes annotates them as diseases or
+# maps them to generic NCIT concepts.
+_NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
+    {
+        "acute",
+        "antibiotic",
+        "blood",
+        "cell",
+        "child",
+        "children",
+        "clinical",
+        "development",
+        "geographic",
+        "infant",
+        "low",
+        "maternal",
+        "systemic",
+        "wash",
+        "weight",
+    }
+)
+
 _pmid_conn = None
 _pubtator_conn = None
 _pubtator_cache = {}
+_incompatible_disease_terms = set()
 _dumps_checked = False
 
 
@@ -163,11 +207,20 @@ def _refresh_pubtator_dumps():
 
 def _download_file(url, local_filename):
     full_path = os.path.join(PUBTATOR_DIR, local_filename)
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(full_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
+    partial_path = f"{full_path}.part"
+    try:
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(partial_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        os.replace(partial_path, full_path)
+    except Exception:
+        try:
+            os.remove(partial_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _file_needs_update(url, local_filename):
@@ -215,22 +268,48 @@ def _dump_rows(filename):
 
 
 def _stream_and_store(filename, entity_type):
-    """Load a PubTator dump into its annotation table.
+    """Replace one PubTator annotation table from a complete dump.
 
-    These files run to hundreds of millions of rows, so insert in batches and
-    commit as we go rather than building one enormous transaction.
+    The staging table is committed in batches because these dumps contain
+    hundreds of millions of rows. The active table remains untouched until the
+    load completes, then the two are swapped in one transaction. This both
+    preserves the old cache after an interrupted load and removes annotations
+    that disappeared upstream instead of retaining them through upserts.
     """
+    if entity_type not in PUBTATOR_DUMPS:
+        raise ValueError(f"Unknown PubTator entity type: {entity_type}")
+
     conn = _get_pmid_conn()
-    upsert = f"""INSERT INTO {entity_type}_data (pmid, entity_id, names) VALUES (?, ?, ?)
-                 ON CONFLICT(pmid, entity_id) DO UPDATE SET names=excluded.names"""
+    active_table = f"{entity_type}_data"
+    staging_table = f"{active_table}_staging"
+    conn.execute(f"DROP TABLE IF EXISTS {staging_table}")
+    conn.execute(
+        f"""CREATE TABLE {staging_table}
+               (pmid TEXT, entity_id TEXT, names TEXT, PRIMARY KEY (pmid, entity_id))"""
+    )
+    conn.commit()
 
     total = 0
-    for rows in batched(_dump_rows(filename), _DUMP_INSERT_BATCH):
-        conn.executemany(upsert, rows)
+    try:
+        insert = f"""INSERT INTO {staging_table} (pmid, entity_id, names) VALUES (?, ?, ?)
+                     ON CONFLICT(pmid, entity_id) DO UPDATE SET names=excluded.names"""
+        for rows in batched(_dump_rows(filename), _DUMP_INSERT_BATCH):
+            conn.executemany(insert, rows)
+            conn.commit()
+            total += len(rows)
+            if total % (_DUMP_INSERT_BATCH * 20) == 0:
+                logger.info("Loaded %s %s annotations", f"{total:,}", entity_type)
+
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(f"DROP TABLE {active_table}")
+        conn.execute(f"ALTER TABLE {staging_table} RENAME TO {active_table}")
         conn.commit()
-        total += len(rows)
-        if total % (_DUMP_INSERT_BATCH * 20) == 0:
-            logger.info("Loaded %s %s annotations", f"{total:,}", entity_type)
+    except Exception:
+        conn.rollback()
+        conn.execute(f"DROP TABLE IF EXISTS {staging_table}")
+        conn.commit()
+        raise
+
     logger.info("Loaded %s %s annotations from %s", f"{total:,}", entity_type, filename)
 
 
@@ -266,9 +345,13 @@ def pubtator_lookup(name, table):
 def pubtator_add(name, table, standard_dict):
     conn = _get_pubtator_conn()
     c = conn.cursor()
-    c.execute(f"INSERT INTO {table} VALUES (?, ?)", (name.lower().strip(), standard_dict))
+    normalized_name = name.lower().strip()
+    # Keep one authoritative mapping for each mention. This also lets a newly
+    # validated result replace a stale incompatible entry already on disk.
+    c.execute(f"DELETE FROM {table} WHERE original_name=?", (normalized_name,))
+    c.execute(f"INSERT INTO {table} VALUES (?, ?)", (normalized_name, standard_dict))
     conn.commit()
-    _pubtator_cache[(name.lower().strip(), table)] = standard_dict
+    _pubtator_cache[(normalized_name, table)] = standard_dict
 
 
 def _as_augmented(term):
@@ -280,18 +363,86 @@ def _as_augmented(term):
     return term
 
 
+def _normalize_term_text(value):
+    """Normalize a mention or ontology label for conservative comparison."""
+    return " ".join(re.findall(r"[\w]+", str(value or "").casefold()))
+
+
+def _compact_term_text(value):
+    return "".join(character for character in str(value or "").casefold() if character.isalnum())
+
+
+def _is_ambiguous_short_mention(name):
+    """True when a short PubTator mention is unsafe without disambiguation."""
+    compact = _compact_term_text(name)
+    if not compact or compact in _SAFE_SHORT_MENTIONS:
+        return False
+    return len(compact) <= 3 or (str(name).strip().isupper() and len(compact) <= 8)
+
+
+def _term_labels(term):
+    # `originalName` is the raw input saved for provenance. It cannot validate
+    # the ontology mapping because it necessarily repeats `mention`, even when
+    # the resolved ontology hit is unrelated.
+    if term.get("name"):
+        yield term["name"]
+    yield from as_list(term.get("alternateName"))
+
+
+def _term_matches_mention(term, mention):
+    """Require the resolved ontology term to agree with the PubTator mention.
+
+    A MeSH cross-reference can resolve to an unrelated first hit. Exact label or
+    synonym agreement prevents mappings such as ACTT-1 -> renal cell carcinoma
+    and SAM -> a chemotherapy regimen. The short allowlist may also match a
+    standalone token or conventional acronym in a longer ontology label.
+    """
+    normalized_mention = _normalize_term_text(mention)
+    compact_mention = _compact_term_text(mention)
+    if not normalized_mention:
+        return False
+
+    for label in _term_labels(term):
+        normalized_label = _normalize_term_text(label)
+        if normalized_label == normalized_mention:
+            return True
+        if compact_mention in _SAFE_SHORT_MENTIONS:
+            label_tokens = normalized_label.split()
+            acronym = "".join(token[0] for token in label_tokens if token)
+            if compact_mention in label_tokens or compact_mention == acronym:
+                return True
+    return False
+
+
 @retry(7, 5)
 def get_disease_details(identifier, original_name):
     """Standardize a disease from its MeSH id, preferring an existing ontology term."""
     identifier = identifier.split(":")[-1]
+    cache_key = (identifier, original_name.casefold().strip())
+
+    if cache_key in _incompatible_disease_terms:
+        return None
 
     if lookup_result := pubtator_lookup(original_name, "health_conditions"):
-        return _as_augmented(lookup_result)
+        if _term_matches_mention(lookup_result, original_name):
+            return _as_augmented(lookup_result)
+        logger.debug(
+            "Ignoring incompatible cached disease mapping for %s: %s",
+            original_name,
+            lookup_result.get("name"),
+        )
 
     logger.debug("Converting %s from MeSH %s to standard format", original_name, identifier)
     if non_mesh_result := query_condition(original_name, identifier):
-        pubtator_add(original_name, "health_conditions", json.dumps(non_mesh_result))
-        return _as_augmented(non_mesh_result)
+        if not _term_matches_mention(non_mesh_result, original_name):
+            logger.debug(
+                "Ignoring incompatible ontology mapping for %s: %s",
+                original_name,
+                non_mesh_result.get("name"),
+            )
+        else:
+            pubtator_add(original_name, "health_conditions", json.dumps(non_mesh_result))
+            return _as_augmented(non_mesh_result)
 
     logger.debug("Fetching details for %s with ID %s", original_name, identifier)
     disease_info = requests.get(f"https://id.nlm.nih.gov/mesh/{identifier}.json")
@@ -318,6 +469,11 @@ def get_disease_details(identifier, original_name):
         standard_dict["name"] = label["@value"]
     if "name" not in standard_dict:
         raise Exception(f"No name found for {identifier}")
+
+    if not _term_matches_mention(standard_dict, original_name):
+        logger.debug("Ignoring incompatible MeSH mapping for %s: %s", original_name, standard_dict.get("name"))
+        _incompatible_disease_terms.add(cache_key)
+        return None
 
     pubtator_add(original_name, "health_conditions", json.dumps(standard_dict))
     standard_dict["fromPMID"] = True
@@ -353,9 +509,19 @@ def _record_text(rec):
     )
 
 
+@lru_cache(maxsize=16_384)
+def _mention_pattern(name):
+    words = str(name or "").strip().split()
+    if not words:
+        return None
+    escaped = r"\s+".join(re.escape(word) for word in words)
+    return re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
+
+
 def _mentioned_in(name, haystacks):
-    name_lower = name.lower()
-    return any(name_lower in haystack for haystack in haystacks)
+    """True only for a complete mention, never a substring of another word."""
+    pattern = _mention_pattern(name)
+    return bool(pattern and any(pattern.search(haystack) for haystack in haystacks))
 
 
 def update_record_disease(rec, disease_data):
@@ -381,12 +547,20 @@ def update_record_disease(rec, disease_data):
                 mesh_id = _COVID_MESH_REPLACEMENT
             if not _mentioned_in(name, haystacks):
                 continue
+            if _is_ambiguous_short_mention(name):
+                logger.debug("Skipping ambiguous short disease mention %r in %s", name, rec.get("_id"))
+                continue
+            if _normalize_term_text(name) in _NON_SPECIFIC_DISEASE_MENTIONS:
+                logger.debug("Skipping non-specific disease mention %r in %s", name, rec.get("_id"))
+                continue
 
             logger.debug("Adding %s to record %s", name, rec["_id"])
             try:
                 standardized_dict = get_disease_details(mesh_id, name)
             except Exception as e:
                 logger.warning("Could not get details for %s with ID %s: %s", name, mesh_id, e)
+                continue
+            if not standardized_dict:
                 continue
 
             if any(d.get("name", "").lower() == name.lower() for d in rec.get("healthCondition", [])):
@@ -416,7 +590,10 @@ def update_record_species(rec, species_data):
                 continue
             if not _mentioned_in(name, haystacks):
                 continue
-            if name in _SPECIES_BLACKLIST:
+            if _is_ambiguous_short_mention(name):
+                logger.debug("Skipping ambiguous short species mention %r in %s", name, rec.get("_id"))
+                continue
+            if name.upper() in _SPECIES_BLACKLIST:
                 logger.debug("Blacklisted: %s in record: %s, skipping", name, rec["_id"])
                 continue
 
@@ -453,7 +630,9 @@ def update_record_species(rec, species_data):
 # ---------------------------------------------------------------------------
 @retry(7, 5)
 def _convert_pmc_chunk(pmc_ids, pmc_pmid):
-    base_url = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&format=json&"
+    base_url = (
+        "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=my_tool&email=my_email@example.com&format=json&"
+    )
     request = requests.get(base_url + "ids=" + ",".join(pmc_ids)).json()
     for record in request.get("records"):
         if pmid := record.get("pmid"):
