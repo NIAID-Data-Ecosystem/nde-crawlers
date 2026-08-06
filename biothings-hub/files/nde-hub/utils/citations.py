@@ -127,16 +127,51 @@ _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
         "child",
         "children",
         "clinical",
+        "death",
         "development",
+        "faeces",
+        "feces",
+        "food insecurity",
         "geographic",
         "infant",
+        "infection",
+        "infections",
+        "infectious disease",
         "low",
         "maternal",
+        "mortality",
+        "mortality rate",
+        "newborn",
+        "nutrition",
+        "protozoal",
         "systemic",
         "wash",
         "weight",
     }
 )
+
+# A matching synonym is normally enough to validate an ontology lookup, but a
+# few ontology entries are measurements, demographic groups or other concepts
+# that should never be emitted as `healthCondition`. Reject only unambiguous
+# cases here; symptoms and broad disease families remain eligible.
+_NON_CONDITION_TERM_NAMES = frozenset(
+    {
+        "death domain",
+        "feces",
+        "food insecurity",
+        "mortality rate",
+        "newborn",
+        "nutrition",
+        "protozoal",
+    }
+)
+_NON_CONDITION_TERM_PREFIXES = ("how often experienced ", "obsolete ")
+
+_IRREGULAR_SPECIES_PLURALS = {
+    "bacteria": "bacterium",
+    "fungi": "fungus",
+    "mice": "mouse",
+}
 
 _pmid_conn = None
 _pubtator_conn = None
@@ -384,9 +419,21 @@ def _term_labels(term):
     # `originalName` is the raw input saved for provenance. It cannot validate
     # the ontology mapping because it necessarily repeats `mention`, even when
     # the resolved ontology hit is unrelated.
-    if term.get("name"):
-        yield term["name"]
+    for field in ("name", "commonName"):
+        if term.get(field):
+            yield term[field]
     yield from as_list(term.get("alternateName"))
+    # UniProt display names commonly have the form "Human | Homo sapiens".
+    # Each side is a useful label, while the combined presentation string is
+    # not a mention that would occur naturally in source text.
+    if display_name := term.get("displayName"):
+        yield from (part.strip() for part in str(display_name).split("|") if part.strip())
+
+
+def _is_non_condition_term(term):
+    """True for resolved concepts that cannot represent a health condition."""
+    normalized_name = _normalize_term_text(term.get("name"))
+    return normalized_name in _NON_CONDITION_TERM_NAMES or normalized_name.startswith(_NON_CONDITION_TERM_PREFIXES)
 
 
 def _term_matches_mention(term, mention):
@@ -414,6 +461,35 @@ def _term_matches_mention(term, mention):
     return False
 
 
+def _singularize_species_mention(value):
+    """Normalize a simple plural species/common name without fuzzy matching."""
+    words = _normalize_term_text(value).split()
+    if not words:
+        return ""
+
+    last_word = words[-1]
+    if last_word in _IRREGULAR_SPECIES_PLURALS:
+        words[-1] = _IRREGULAR_SPECIES_PLURALS[last_word]
+    elif last_word.endswith("ies") and len(last_word) > 4:
+        words[-1] = f"{last_word[:-3]}y"
+    elif last_word.endswith(("ches", "shes", "uses", "xes", "zes")):
+        words[-1] = last_word[:-2]
+    elif last_word.endswith("s") and not last_word.endswith(("is", "ss", "us")):
+        words[-1] = last_word[:-1]
+    return " ".join(words)
+
+
+def _species_term_matches_mention(term, mention):
+    """Match a taxon label to a mention, allowing only simple plural forms."""
+    if _term_matches_mention(term, mention):
+        return True
+    singular_mention = _singularize_species_mention(mention)
+    return bool(
+        singular_mention
+        and any(_singularize_species_mention(label) == singular_mention for label in _term_labels(term))
+    )
+
+
 @retry(7, 5)
 def get_disease_details(identifier, original_name):
     """Standardize a disease from its MeSH id, preferring an existing ontology term."""
@@ -424,7 +500,7 @@ def get_disease_details(identifier, original_name):
         return None
 
     if lookup_result := pubtator_lookup(original_name, "health_conditions"):
-        if _term_matches_mention(lookup_result, original_name):
+        if not _is_non_condition_term(lookup_result) and _term_matches_mention(lookup_result, original_name):
             return _as_augmented(lookup_result)
         logger.debug(
             "Ignoring incompatible cached disease mapping for %s: %s",
@@ -434,7 +510,7 @@ def get_disease_details(identifier, original_name):
 
     logger.debug("Converting %s from MeSH %s to standard format", original_name, identifier)
     if non_mesh_result := query_condition(original_name, identifier):
-        if not _term_matches_mention(non_mesh_result, original_name):
+        if _is_non_condition_term(non_mesh_result) or not _term_matches_mention(non_mesh_result, original_name):
             logger.debug(
                 "Ignoring incompatible ontology mapping for %s: %s",
                 original_name,
@@ -470,7 +546,7 @@ def get_disease_details(identifier, original_name):
     if "name" not in standard_dict:
         raise Exception(f"No name found for {identifier}")
 
-    if not _term_matches_mention(standard_dict, original_name):
+    if _is_non_condition_term(standard_dict) or not _term_matches_mention(standard_dict, original_name):
         logger.debug("Ignoring incompatible MeSH mapping for %s: %s", original_name, standard_dict.get("name"))
         _incompatible_disease_terms.add(cache_key)
         return None
@@ -598,6 +674,13 @@ def update_record_species(rec, species_data):
                 continue
 
             if lookup_result := pubtator_lookup(name, "species"):
+                if not _species_term_matches_mention(lookup_result, name):
+                    logger.debug(
+                        "Ignoring incompatible cached species mapping for %s: %s",
+                        name,
+                        lookup_result.get("name"),
+                    )
+                    continue
                 standardized_dict = _as_augmented(lookup_result)
             else:
                 try:
@@ -607,6 +690,13 @@ def update_record_species(rec, species_data):
                     continue
                 if standardized_dict is None:
                     logger.debug("Skipping %s with ID %s: filtered by drop list", name, taxonomy_id)
+                    continue
+                if not _species_term_matches_mention(standardized_dict, name):
+                    logger.debug(
+                        "Ignoring incompatible species mapping for %s: %s",
+                        name,
+                        standardized_dict.get("name"),
+                    )
                     continue
                 pubtator_add(name, "species", json.dumps(standardized_dict))
                 standardized_dict = _as_augmented(standardized_dict)
