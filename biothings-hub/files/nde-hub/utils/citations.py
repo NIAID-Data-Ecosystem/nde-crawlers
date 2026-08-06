@@ -116,6 +116,10 @@ _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
         "dead",
         "death",
         "development",
+        "die",
+        "died",
+        "deaths",
+        "dying",
         "faeces",
         "feces",
         "food insecurity",
@@ -147,6 +151,8 @@ _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
 # cases here; symptoms and broad disease families remain eligible.
 _NON_CONDITION_TERM_NAMES = frozenset(
     {
+        "dead",
+        "death",
         "death domain",
         "feces",
         "food insecurity",

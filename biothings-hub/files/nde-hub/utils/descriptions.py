@@ -20,6 +20,7 @@ from .common import as_list, sqlite
 from .taxonomy import classify_from_lineage
 from .term_matching import mentioned_in
 from .term_matching import species_term_matches_mention
+from .term_matching import term_matches_mention
 from .terms import DB_PATH as PUBTATOR_DB_PATH
 from .terms import SPECIES_CACHE_DB_PATH as DB_PATH
 from .terms import fetch_taxon, query_condition
@@ -53,9 +54,12 @@ BASIC_DROP_LIST = frozenset(
         "panama",
         "virginia",
         "bulgaria",
+        "arge",
         "togo",
         "serendip",
         "vector",
+        "metagenome",
+        "gut microbiome",
         "arizona",
         "california",
         "omicron",
@@ -105,6 +109,21 @@ ADVANCED_DROP_RULES = {
         "id": "2971083",
         "ignore_children": False,
         "rationale": "generic study language rather than an organism",
+    },
+    "arge": {
+        "id": "95269",
+        "ignore_children": False,
+        "rationale": "HTML-split substring of 'Large-scale' rather than an organism",
+    },
+    "metagenome": {
+        "id": "256318",
+        "ignore_children": False,
+        "rationale": "environmental sequence collection rather than an organism",
+    },
+    "gut microbiome": {
+        "id": "749906",
+        "ignore_children": False,
+        "rationale": "environmental sample rather than an infectious agent",
     },
 }
 
@@ -794,14 +813,21 @@ def _standardize_extracted_diseases(doc_list):
         )
 
     formatted_diseases = []
+    incompatible_names = set()
     for disease_name in disease_names:
         disease_key = disease_name.lower().strip()
         if disease_key in NEGATIVE_DISEASES:
             continue
 
         if standardized := HEALTH_CONDITIONS.get(disease_key):
-            formatted_diseases.append(dict(standardized, fromEXTRACT=True, originalName=disease_name))
-            continue
+            if term_matches_mention(standardized, disease_name):
+                formatted_diseases.append(dict(standardized, fromEXTRACT=True, originalName=disease_name))
+                continue
+            logger.debug(
+                "Ignoring incompatible cached EXTRACT disease mapping for %s: %s",
+                disease_name,
+                standardized.get("name"),
+            )
 
         try:
             disease_details = query_condition(disease_name)
@@ -812,11 +838,34 @@ def _standardize_extracted_diseases(doc_list):
         if not disease_details:
             NEGATIVE_DISEASES.add(disease_name)
             continue
+        if not term_matches_mention(disease_details, disease_name):
+            logger.debug(
+                "Ignoring incompatible EXTRACT disease mapping for %s: %s",
+                disease_name,
+                disease_details.get("name"),
+            )
+            incompatible_names.add(disease_key)
+            continue
 
         disease_details.setdefault("originalName", disease_name)
         disease_details.pop("curatedBy", None)
         formatted_diseases.append(dict(disease_details, fromEXTRACT=True))
         HEALTH_CONDITIONS.put(disease_key, disease_details)
+
+    if incompatible_names:
+        for doc in doc_list:
+            if "healthCondition" not in doc:
+                continue
+            kept = [
+                disease
+                for disease in doc["healthCondition"]
+                if disease.get("isCurated") is not None
+                or (disease.get("name") or "").lower().strip() not in incompatible_names
+            ]
+            if kept:
+                doc["healthCondition"] = kept
+            else:
+                doc.pop("healthCondition", None)
 
     if not formatted_diseases:
         return doc_list
