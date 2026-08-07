@@ -16,7 +16,7 @@ import requests
 from config import logger
 
 from .cache import SqliteCache, SqliteKeySet
-from .common import as_list, sqlite
+from .common import as_list, sqlite, supports_description_enrichment
 from .taxonomy import classify_from_lineage
 from .term_matching import mentioned_in
 from .term_matching import species_term_matches_mention
@@ -908,7 +908,9 @@ def _dedupe_diseases(doc_list):
 # ---------------------------------------------------------------------------
 def augment_from_descriptions(docs):
     """Mine species and health conditions out of each record's description."""
-    doc_list = list(docs)
+    # Keep this guard at the augmentation boundary as well as in the pipeline.
+    # The cache-prewarming utility calls this function directly.
+    doc_list = [doc for doc in docs if supports_description_enrichment(doc)]
     started = time.monotonic()
     timings = {}
     steps = (

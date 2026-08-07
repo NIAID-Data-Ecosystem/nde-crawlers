@@ -11,6 +11,9 @@ import orjson
 from config import logger
 
 
+DESCRIPTION_ENRICHMENT_TYPES = frozenset({"Dataset", "DataCollection", "ResourceCatalog"})
+
+
 def retry(retry_num, retry_sleep_sec):
     """Retry a function `retry_num` times, sleeping `retry_sleep_sec` between attempts."""
 
@@ -66,6 +69,16 @@ def as_list(value):
     if isinstance(value, list):
         return value
     return [value]
+
+
+def supports_description_enrichment(doc):
+    """True for resource records and BioSample-flavoured Sample records."""
+    record_types = {value for value in as_list(doc.get("@type")) if isinstance(value, str)}
+    if record_types & DESCRIPTION_ENRICHMENT_TYPES:
+        return True
+
+    additional_types = {value for value in as_list(doc.get("additionalType")) if isinstance(value, str)}
+    return "Sample" in record_types and "BioSample" in additional_types
 
 
 def dict_entries(doc, field):

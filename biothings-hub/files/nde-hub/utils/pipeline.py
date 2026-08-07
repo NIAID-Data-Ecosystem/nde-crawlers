@@ -38,7 +38,7 @@ from itertools import batched
 import bson
 from config import logger
 
-from .common import dict_entries
+from .common import dict_entries, supports_description_enrichment
 from .corrections import apply_corrections
 from .validate import add_date, add_metadata_score, check_schema, clean_description, drop_placeholder_terms
 
@@ -114,7 +114,7 @@ def _needs_terms(doc):
 def _needs_descriptions(doc):
     # EXTRACT only mines a record for the entities it is missing, so a record
     # that already carries both taxonomy and health conditions has nothing to gain.
-    if not doc.get("description"):
+    if not supports_description_enrichment(doc) or not doc.get("description"):
         return False
     return ("species" not in doc and "infectiousAgent" not in doc) or "healthCondition" not in doc
 
@@ -144,7 +144,14 @@ def _run_terms(docs, source):
 def _run_descriptions(docs, source):
     from .descriptions import augment_from_descriptions
 
-    return augment_from_descriptions(docs)
+    # Stage.applies only gates the batch. Filter again here so an eligible
+    # Dataset in a mixed batch does not send neighbouring ineligible records
+    # (for example ordinary Samples) to EXTRACT.
+    doc_list = list(docs)
+    eligible = [doc for doc in doc_list if _needs_descriptions(doc)]
+    if eligible:
+        augment_from_descriptions(eligible)
+    return doc_list
 
 
 def _run_measurement_technique(docs, source):
