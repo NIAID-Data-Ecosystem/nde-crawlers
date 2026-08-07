@@ -230,42 +230,42 @@ def _ratio(score, total):
 
 def check_schema(doc: Dict) -> Dict:
     """Assert the document is safe to insert into MongoDB and valid per the NDE schema."""
-    assert isinstance(doc, dict), "doc is not a dict"
-    assert doc.get("_id"), "_id is None"
-    assert doc.get("@type"), "@type is None"
-    assert doc.get("url"), "url is None"
+    doc_id = doc.get("_id") if isinstance(doc, dict) else None
+
+    def failure(message):
+        return f"{message} [record _id={doc_id!r}]"
+
+    assert isinstance(doc, dict), failure("doc is not a dict")
+    assert doc.get("_id"), failure("_id is None")
+    assert doc.get("@type"), failure("@type is None")
+    assert doc.get("url"), failure("url is None")
 
     catalogs = doc.get("includedInDataCatalog")
-    assert catalogs, "includedInDataCatalog is None"
-    assert all(
-        item.get("archivedAt") for item in as_list(catalogs)
-    ), "includedInDataCatalog.archivedAt is None in one or more items"
+    assert catalogs, failure("includedInDataCatalog is None")
+    assert all(isinstance(item, dict) and item.get("archivedAt") for item in as_list(catalogs)), failure(
+        "includedInDataCatalog.archivedAt is None in one or more items"
+    )
 
-    assert doc.get("version", None) is None, "Remove version field"
+    assert doc.get("version", None) is None, failure("Remove version field")
 
     if coa := doc.get("conditionsOfAccess"):
         allowed = (
-            RESOURCE_CATALOG_CONDITIONS_OF_ACCESS
-            if doc.get("@type") == "ResourceCatalog"
-            else CONDITIONS_OF_ACCESS
+            RESOURCE_CATALOG_CONDITIONS_OF_ACCESS if doc.get("@type") == "ResourceCatalog" else CONDITIONS_OF_ACCESS
         )
-        assert coa in allowed, "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (
-            coa,
-            allowed,
+        assert coa in allowed, failure(
+            "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, allowed)
         )
 
     if doc.get("@type") == "Sample" and (cws := doc.get("creativeWorkStatus")) is not None:
         if isinstance(cws, (list, tuple, set)):
-            assert cws, "creativeWorkStatus cannot be empty"
+            assert cws, failure("creativeWorkStatus cannot be empty")
             invalid = [status for status in cws if status not in CREATIVE_WORK_STATUS]
-            assert not invalid, "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (
-                cws,
-                CREATIVE_WORK_STATUS,
+            assert not invalid, failure(
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS)
             )
         else:
-            assert cws in CREATIVE_WORK_STATUS, "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (
-                cws,
-                CREATIVE_WORK_STATUS,
+            assert cws in CREATIVE_WORK_STATUS, failure(
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS)
             )
 
     return doc

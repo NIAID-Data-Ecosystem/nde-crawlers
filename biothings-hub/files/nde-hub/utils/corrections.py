@@ -1,6 +1,11 @@
+import fcntl
 import json
 import math
+import os
+import tempfile
+import time
 
+import config
 import requests
 from config import logger, token
 
@@ -17,8 +22,15 @@ STAGING_DIR = "collections_corrections_staging"
 # Each correction is `<name>_records.txt` plus `<name>_correction.json`.
 RECORDS_SUFFIX = "_records.txt"
 
+# Every uploader runs in its own process. Keep a short-lived shared snapshot so
+# one process fetches correction definitions from GitHub and the others reuse
+# exactly the same index for the upload wave.
+_CORRECTIONS_CACHE_VERSION = 1
+_CORRECTIONS_CACHE_FILENAME = "nde-corrections-index-v1.json"
+_CORRECTIONS_CACHE_TTL_SECONDS = 24 * 60 * 60
+
 # ---------------------------------------------------------------------------
-# Module-level cache, built once per uploader process
+# Module-level cache, loaded once per uploader process
 # ---------------------------------------------------------------------------
 _corrections_cache = None
 
@@ -263,21 +275,124 @@ def _build_corrections_index():
     return index
 
 
-def get_corrections_index():
-    """Return the corrections index, building it once per process.
+def _shared_cache_path():
+    cache_folder = os.environ.get("CORRECTIONS_CACHE_FOLDER") or getattr(config, "CACHE_FOLDER", None)
+    if not cache_folder:
+        return None
+    return os.path.join(cache_folder, _CORRECTIONS_CACHE_FILENAME)
 
-    A failed build is not cached, so the next document retries. Until one
-    succeeds an empty index is returned, letting documents flow through
-    uncorrected rather than failing the upload.
+
+def _valid_corrections_index(index):
+    return (
+        isinstance(index, dict) and isinstance(index.get("by_id"), dict) and isinstance(index.get("by_funding"), list)
+    )
+
+
+def _read_shared_cache(path, allow_stale=False):
+    with open(path, encoding="utf-8") as cache_file:
+        payload = json.load(cache_file)
+
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("version") != _CORRECTIONS_CACHE_VERSION:
+        return None
+    index = payload.get("index")
+    if not _valid_corrections_index(index):
+        return None
+
+    created_at = float(payload["created_at"])
+    age = max(0.0, time.time() - created_at)
+    if not allow_stale and age > _CORRECTIONS_CACHE_TTL_SECONDS:
+        return None
+    return index, age
+
+
+def _write_shared_cache(path, index):
+    cache_folder = os.path.dirname(path)
+    fd, temporary_path = tempfile.mkstemp(prefix=".nde-corrections-", suffix=".json", dir=cache_folder)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as cache_file:
+            json.dump(
+                {
+                    "version": _CORRECTIONS_CACHE_VERSION,
+                    "created_at": time.time(),
+                    "index": index,
+                },
+                cache_file,
+                separators=(",", ":"),
+            )
+        os.replace(temporary_path, path)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _load_or_build_corrections_index():
+    """Load a fresh shared index, or build it once under a process lock."""
+    path = _shared_cache_path()
+    if path is None:
+        return _build_corrections_index()
+
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        lock_file = open(f"{path}.lock", "a+", encoding="utf-8")
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    except OSError as e:
+        if "lock_file" in locals():
+            lock_file.close()
+        logger.warning("Corrections shared cache is unavailable (%s); building a process-local index", e)
+        return _build_corrections_index()
+
+    try:
+        try:
+            cached = _read_shared_cache(path)
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError, ValueError, OSError):
+            cached = None
+        if cached is not None:
+            index, age = cached
+            logger.info("Loaded corrections index from shared cache (%.0fs old)", age)
+            return index
+
+        try:
+            stale = _read_shared_cache(path, allow_stale=True)
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError, ValueError, OSError):
+            stale = None
+
+        logger.info("Corrections shared cache is missing or stale; refreshing it from GitHub")
+        index = _build_corrections_index()
+        if not index["by_id"] and not index["by_funding"]:
+            if stale is not None:
+                logger.warning("Correction refresh returned an empty index; using the stale shared snapshot")
+                return stale[0]
+            return index
+
+        try:
+            _write_shared_cache(path, index)
+        except OSError as e:
+            logger.warning("Could not write corrections shared cache: %s", e)
+        return index
+    finally:
+        lock_file.close()
+
+
+def get_corrections_index():
+    """Return the corrections index, loading it once per process.
+
+    The on-disk snapshot is shared by uploader processes for 24 hours. Until a
+    refresh succeeds an empty index (or a stale shared index) is returned,
+    letting documents flow through rather than failing the upload.
     """
     global _corrections_cache
 
     if _corrections_cache is None:
         try:
-            _corrections_cache = _build_corrections_index()
+            _corrections_cache = _load_or_build_corrections_index()
         except Exception as e:
             logger.error("Failed to build corrections index: %s", e)
-            return {"by_id": {}, "by_funding": []}
+            _corrections_cache = {"by_id": {}, "by_funding": []}
 
     return _corrections_cache
 

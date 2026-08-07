@@ -3,8 +3,10 @@
 Runs for any record that has a description but is missing taxonomy or health
 conditions. Descriptions go to the EXTRACT tagger (tagger.jensenlab.org), whose
 response is cached in SQLite per record id, so only records seen for the first
-time cost a request. The tagged names are then standardized the same way the
-`terms` stage standardizes curated ones, and marked `fromEXTRACT`.
+time cost a request. Request failures are cached briefly and repeated service
+failures open a worker-local circuit breaker. The tagged names are then
+standardized the same way the `terms` stage standardizes curated ones, and
+marked `fromEXTRACT`.
 """
 
 import os
@@ -35,10 +37,21 @@ _CACHE_TABLES = {_SPECIES_TYPE: "species", _DISEASE_TYPE: "disease"}
 # SQLite allows 999 bound variables by default; keep headroom.
 _SQL_CHUNK_SIZE = 900
 _EXTRACT_CHUNK_SIZE = 5000
-_EXTRACT_URL = "http://tagger.jensenlab.org/GetEntities"
+_EXTRACT_URL = "https://tagger.jensenlab.org/GetEntities"
 _EXTRACT_TIMEOUT = (5, 60)
 _EXTRACT_MAX_ATTEMPTS = 4
 _EXTRACT_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+_EXTRACT_FAILURE_TTL_SECONDS = 60 * 60
+_EXTRACT_CIRCUIT_FAILURE_THRESHOLD = 3
+_EXTRACT_CIRCUIT_COOLDOWN_SECONDS = 60 * 60
+
+
+class ExtractCircuitOpen(RuntimeError):
+    """Raised when EXTRACT requests are paused after repeated service failures."""
+
+
+_extract_circuit_failures = 0
+_extract_circuit_open_until = 0.0
 
 # Reuse the connection to EXTRACT. Requests' module-level helpers create a new
 # session per call, which pays the TCP setup cost again for every document.
@@ -133,6 +146,16 @@ _RESPONSE_CACHE_DDL = (
     "CREATE TABLE IF NOT EXISTS species (ndeid TEXT PRIMARY KEY, text_response TEXT)",
     "CREATE TABLE IF NOT EXISTS disease (ndeid TEXT PRIMARY KEY, text_response TEXT)",
 )
+_FAILURE_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS extract_failures (
+    ndeid TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    retry_after REAL NOT NULL,
+    error TEXT,
+    PRIMARY KEY (ndeid, entity_type)
+)
+"""
+_EXTRACT_CACHE_DDL = (*_RESPONSE_CACHE_DDL, _FAILURE_CACHE_DDL)
 
 # These three are read for nearly every extracted term, so they are held whole.
 # Separate instances from the ones in `terms`, which reads the same two tables by
@@ -218,20 +241,72 @@ def _retry_delay(response, attempt):
     return float(2**attempt)
 
 
+def _reset_extract_circuit():
+    """Reset process-local EXTRACT service failure state."""
+    global _extract_circuit_failures, _extract_circuit_open_until
+    _extract_circuit_failures = 0
+    _extract_circuit_open_until = 0.0
+
+
+def _extract_circuit_is_open():
+    """True while this worker is cooling down after repeated EXTRACT failures."""
+    global _extract_circuit_failures, _extract_circuit_open_until
+    if not _extract_circuit_open_until:
+        return False
+    if time.monotonic() < _extract_circuit_open_until:
+        return True
+
+    logger.info("EXTRACT circuit-breaker cooldown ended; requests will resume")
+    _extract_circuit_failures = 0
+    _extract_circuit_open_until = 0.0
+    return False
+
+
+def _record_extract_service_failure(reason, open_immediately=False):
+    """Open the process-local circuit after repeated service-level failures."""
+    global _extract_circuit_failures, _extract_circuit_open_until
+    _extract_circuit_failures += 1
+    if not open_immediately and _extract_circuit_failures < _EXTRACT_CIRCUIT_FAILURE_THRESHOLD:
+        return
+
+    _extract_circuit_open_until = time.monotonic() + _EXTRACT_CIRCUIT_COOLDOWN_SECONDS
+    logger.warning(
+        "EXTRACT circuit breaker opened for %.0fs after %s consecutive service failures; last failure: %s",
+        _EXTRACT_CIRCUIT_COOLDOWN_SECONDS,
+        _extract_circuit_failures,
+        reason,
+    )
+
+
+def _extract_request(session, params):
+    """Keep descriptions in the request body and avoid URL-length limits."""
+    return session.post(_EXTRACT_URL, data=params, timeout=_EXTRACT_TIMEOUT)
+
+
+def _extract_error_summary(error):
+    """Describe a request failure without copying the record text into logs or SQLite."""
+    if isinstance(error, requests.HTTPError) and error.response is not None:
+        return f"HTTP {error.response.status_code}"
+    if isinstance(error, requests.RequestException):
+        return type(error).__name__
+    return f"{type(error).__name__}: {error}"[:500]
+
+
 def query_extract_api(description, entity_types, session=None):
     """Query EXTRACT for one or more entity types, retrying transient failures."""
+    if _extract_circuit_is_open():
+        raise ExtractCircuitOpen("EXTRACT circuit breaker is open")
+
     entity_types = _entity_types_param(entity_types)
     session = session or _EXTRACT_SESSION
+    params = {"document": description, "entity_types": entity_types, "format": "tsv"}
 
     for attempt in range(_EXTRACT_MAX_ATTEMPTS):
         try:
-            response = session.get(
-                _EXTRACT_URL,
-                params={"document": description, "entity_types": entity_types, "format": "tsv"},
-                timeout=_EXTRACT_TIMEOUT,
-            )
+            response = _extract_request(session, params)
         except (requests.ConnectionError, requests.Timeout) as e:
             if attempt + 1 == _EXTRACT_MAX_ATTEMPTS:
+                _record_extract_service_failure(e)
                 raise
             delay = float(2**attempt)
             logger.warning(
@@ -245,6 +320,7 @@ def query_extract_api(description, entity_types, session=None):
 
         if response.status_code in _EXTRACT_RETRY_STATUSES:
             if attempt + 1 == _EXTRACT_MAX_ATTEMPTS:
+                _record_extract_service_failure(f"HTTP {response.status_code}")
                 response.raise_for_status()
             delay = _retry_delay(response, attempt)
             logger.warning(
@@ -256,7 +332,16 @@ def query_extract_api(description, entity_types, session=None):
             time.sleep(delay)
             continue
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            if response.status_code == 403:
+                _record_extract_service_failure("HTTP 403", open_immediately=True)
+            else:
+                _reset_extract_circuit()
+            raise
+
+        _reset_extract_circuit()
         return response.text
 
     raise RuntimeError("EXTRACT retry loop ended unexpectedly")
@@ -298,16 +383,43 @@ def _fetch_cached_responses(cursor, entity_type, ndeids):
     return out
 
 
-def _cache_responses(rows_by_type):
-    """Write fetched responses in one short transaction after network I/O."""
-    if not any(rows_by_type.values()):
+def _fetch_cached_failures(cursor, entity_type, ndeids, now):
+    """Fetch record ids whose latest EXTRACT failure is still cooling down."""
+    if not ndeids:
+        return set()
+
+    out = set()
+    for chunk in batched(ndeids, _SQL_CHUNK_SIZE):
+        placeholders = ",".join("?" for _ in chunk)
+        cursor.execute(
+            f"SELECT ndeid FROM extract_failures "
+            f"WHERE entity_type = ? AND retry_after > ? AND ndeid IN ({placeholders})",
+            (entity_type, now, *chunk),
+        )
+        out.update(row[0] for row in cursor.fetchall())
+    return out
+
+
+def _cache_extract_results(rows_by_type, failed_rows):
+    """Write fetched responses and temporary failures after network I/O."""
+    if not any(rows_by_type.values()) and not failed_rows:
         return
 
-    with sqlite(DB_PATH, *_RESPONSE_CACHE_DDL) as conn:
+    with sqlite(DB_PATH, *_EXTRACT_CACHE_DDL) as conn:
+        if failed_rows:
+            conn.executemany(
+                "INSERT OR REPLACE INTO extract_failures "
+                "(ndeid, entity_type, retry_after, error) VALUES (?, ?, ?, ?)",
+                failed_rows,
+            )
         for entity_type, rows in rows_by_type.items():
             table = _CACHE_TABLES.get(entity_type)
             if table and rows:
                 conn.executemany(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)", rows)
+                conn.executemany(
+                    "DELETE FROM extract_failures WHERE ndeid = ? AND entity_type = ?",
+                    ((ndeid, entity_type) for ndeid, _ in rows),
+                )
 
 
 def _tagged_entities(response_text, entity_type):
@@ -331,8 +443,10 @@ def _extract_entities(doc_list):
     requested = {_SPECIES_TYPE: 0, _DISEASE_TYPE: 0}
     cache_hits = 0
     cache_misses = 0
+    failure_cache_hits = 0
     api_calls = 0
     combined_calls = 0
+    circuit_skips = 0
     api_seconds = 0.0
 
     for chunk_docs in batched(doc_list, _EXTRACT_CHUNK_SIZE):
@@ -348,13 +462,18 @@ def _extract_entities(doc_list):
 
         # Read and close SQLite before making any network requests. Previously
         # the transaction stayed open for the entire (often multi-minute) loop.
-        with sqlite(DB_PATH, *_RESPONSE_CACHE_DDL) as conn:
+        with sqlite(DB_PATH, *_EXTRACT_CACHE_DDL) as conn:
             c = conn.cursor()
             cached_species = _fetch_cached_responses(c, _SPECIES_TYPE, species_ids)
             cached_disease = _fetch_cached_responses(c, _DISEASE_TYPE, disease_ids)
+            now = time.time()
+            failed_species = _fetch_cached_failures(c, _SPECIES_TYPE, species_ids, now)
+            failed_disease = _fetch_cached_failures(c, _DISEASE_TYPE, disease_ids, now)
 
         cached_by_type = {_SPECIES_TYPE: cached_species, _DISEASE_TYPE: cached_disease}
+        failed_by_type = {_SPECIES_TYPE: failed_species, _DISEASE_TYPE: failed_disease}
         pending_writes = {_SPECIES_TYPE: [], _DISEASE_TYPE: []}
+        pending_failures = []
 
         for doc in chunk_docs:
             count += 1
@@ -378,34 +497,47 @@ def _extract_entities(doc_list):
                 response_text = cached_by_type[entity_type].get(ndeid)
                 if response_text is None:
                     cache_misses += 1
-                    missing_types.append(entity_type)
+                    if ndeid in failed_by_type[entity_type]:
+                        failure_cache_hits += 1
+                    else:
+                        missing_types.append(entity_type)
                 else:
                     cache_hits += 1
                     responses[entity_type] = response_text
 
             if missing_types:
-                api_calls += 1
-                if len(missing_types) > 1:
-                    combined_calls += 1
-                api_started = time.monotonic()
-                try:
-                    fetched_response = query_extract_api(description, missing_types)
-                except Exception as e:
-                    logger.error("Error querying EXTRACT for document %s: %s", doc.get("_id"), e)
+                if _extract_circuit_is_open():
+                    circuit_skips += 1
                 else:
-                    for entity_type in missing_types:
-                        # A combined request is split before caching, preserving
-                        # the existing one-entity-type-per-table cache contents.
-                        response_text = (
-                            _response_for_entity_type(fetched_response, entity_type)
-                            if len(missing_types) > 1
-                            else fetched_response
+                    api_calls += 1
+                    if len(missing_types) > 1:
+                        combined_calls += 1
+                    api_started = time.monotonic()
+                    try:
+                        fetched_response = query_extract_api(description, missing_types)
+                    except ExtractCircuitOpen:
+                        circuit_skips += 1
+                    except Exception as e:
+                        error = _extract_error_summary(e)
+                        logger.error("Error querying EXTRACT for document %s: %s", doc.get("_id"), error)
+                        retry_after = time.time() + _EXTRACT_FAILURE_TTL_SECONDS
+                        pending_failures.extend(
+                            (ndeid, entity_type, retry_after, error) for entity_type in missing_types
                         )
-                        responses[entity_type] = response_text
-                        cached_by_type[entity_type][ndeid] = response_text
-                        pending_writes[entity_type].append((ndeid, response_text))
-                finally:
-                    api_seconds += time.monotonic() - api_started
+                    else:
+                        for entity_type in missing_types:
+                            # A combined request is split before caching, preserving
+                            # the existing one-entity-type-per-table cache contents.
+                            response_text = (
+                                _response_for_entity_type(fetched_response, entity_type)
+                                if len(missing_types) > 1
+                                else fetched_response
+                            )
+                            responses[entity_type] = response_text
+                            cached_by_type[entity_type][ndeid] = response_text
+                            pending_writes[entity_type].append((ndeid, response_text))
+                    finally:
+                        api_seconds += time.monotonic() - api_started
 
             try:
                 if _SPECIES_TYPE in responses:
@@ -434,18 +566,21 @@ def _extract_entities(doc_list):
             except Exception as e:
                 logger.error("Error processing EXTRACT response for document %s: %s", doc.get("_id"), e)
 
-        _cache_responses(pending_writes)
+        _cache_extract_results(pending_writes, pending_failures)
 
     logger.info(
         "EXTRACT: docs=%s species_requested=%s disease_requested=%s cache_hits=%s "
-        "cache_misses=%s api_calls=%s combined_calls=%s api_seconds=%.1fs total_seconds=%.1fs",
+        "cache_misses=%s failure_cache_hits=%s api_calls=%s combined_calls=%s "
+        "circuit_skips=%s api_seconds=%.1fs total_seconds=%.1fs",
         count,
         requested[_SPECIES_TYPE],
         requested[_DISEASE_TYPE],
         cache_hits,
         cache_misses,
+        failure_cache_hits,
         api_calls,
         combined_calls,
+        circuit_skips,
         api_seconds,
         time.monotonic() - started,
     )
