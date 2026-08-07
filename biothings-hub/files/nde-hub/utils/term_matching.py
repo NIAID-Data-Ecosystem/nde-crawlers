@@ -133,8 +133,13 @@ def species_term_matches_mention(term, mention):
     # another explicitly contains the abbreviated form. For example, UniProt
     # describes Plasmodium vivax as "malaria parasite P. vivax"; a coincidental
     # Phyllostachys vivax candidate has no such label.
+    # Compare the corroborating abbreviated label after punctuation
+    # normalization so both ``P. falciparum`` and ``P.falciparum`` match the
+    # same authoritative synonym. The full scientific-name check above still
+    # prevents the initial from expanding to an unrelated genus.
+    normalized_abbreviation = normalize_term_text(mention)
     return any(_scientific_name_abbreviation_matches(mention, label) for label in labels) and any(
-        mentioned_in(mention, (label,)) for label in labels
+        mentioned_in(normalized_abbreviation, (normalize_term_text(label),)) for label in labels
     )
 
 
