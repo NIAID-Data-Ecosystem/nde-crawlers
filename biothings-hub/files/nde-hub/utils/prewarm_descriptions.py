@@ -16,6 +16,11 @@ from config import logger
 from .descriptions import augment_from_descriptions, reset_caches
 
 
+def _augment_for_prewarm(docs):
+    """Run description enrichment without the uploader's record-type filter."""
+    return augment_from_descriptions(docs, filter_supported_types=False)
+
+
 def iter_ndjson(path):
     """Yield documents from the NDJSON file at `path`."""
     with open(path, "rb") as stream:
@@ -28,7 +33,7 @@ def iter_ndjson(path):
                 raise ValueError(f"Invalid JSON on line {line_number} of {path}: {e}") from e
 
 
-def prewarm_descriptions(path, batch_size=1000, limit=None, augment=augment_from_descriptions):
+def prewarm_descriptions(path, batch_size=1000, limit=None, augment=_augment_for_prewarm):
     """Populate description-related caches from `path`; return documents read."""
     path = os.path.abspath(os.fspath(path))
     if batch_size < 1:

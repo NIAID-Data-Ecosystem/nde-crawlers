@@ -20,11 +20,13 @@ from config import logger
 from .cache import SqliteCache, SqliteKeySet
 from .common import as_list, sqlite, supports_description_enrichment
 from .taxonomy import classify_from_lineage
-from .term_matching import is_ambiguous_short_mention
-from .term_matching import mentioned_in
-from .term_matching import species_term_matches_mention
-from .term_matching import term_labels
-from .term_matching import term_matches_mention
+from .term_matching import (
+    is_ambiguous_short_mention,
+    mentioned_in,
+    species_term_matches_mention,
+    term_labels,
+    term_matches_mention,
+)
 from .terms import DB_PATH as PUBTATOR_DB_PATH
 from .terms import SPECIES_CACHE_DB_PATH as DB_PATH
 from .terms import fetch_taxon, query_condition
@@ -1113,11 +1115,17 @@ def _dedupe_diseases(doc_list):
 # ---------------------------------------------------------------------------
 # The pipeline stage
 # ---------------------------------------------------------------------------
-def augment_from_descriptions(docs):
-    """Mine species and health conditions out of each record's description."""
+def augment_from_descriptions(docs, *, filter_supported_types=True):
+    """Mine species and health conditions out of each record's description.
+
+    Normal pipeline callers retain the record-type guard. Cache prewarming can
+    disable it so sources that are temporarily skipping this stage can still
+    populate their caches offline.
+    """
     # Keep this guard at the augmentation boundary as well as in the pipeline.
-    # The cache-prewarming utility calls this function directly.
-    doc_list = [doc for doc in docs if supports_description_enrichment(doc)]
+    doc_list = list(docs)
+    if filter_supported_types:
+        doc_list = [doc for doc in doc_list if supports_description_enrichment(doc)]
     started = time.monotonic()
     timings = {}
     steps = (
