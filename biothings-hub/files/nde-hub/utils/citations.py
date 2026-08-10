@@ -79,6 +79,11 @@ _VALID_PMID_RE = re.compile(r"^[1-9]\d{0,8}$")
 # The PMC id converter accepts a couple hundred ids per request.
 _PMC_CHUNK_SIZE = 200
 
+_MESH_REQUEST_ATTEMPTS = 7
+_MESH_REQUEST_RETRY_SECONDS = 5
+_MESH_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+_MESH_TIMEOUT = (5, 30)
+
 # PubTator sometimes annotates these as diseases for COVID-19; they are not.
 _INCORRECT_COVID_TERMS = frozenset(
     {
@@ -398,7 +403,64 @@ def _is_non_condition_term(term):
     return normalized_name in _NON_CONDITION_TERM_NAMES or normalized_name.startswith(_NON_CONDITION_TERM_PREFIXES)
 
 
-@retry(7, 5)
+def _mesh_literal(value, preferred_language="en"):
+    """Return one string from a JSON-LD literal or list of literals."""
+    if isinstance(value, str):
+        return value
+
+    literals = []
+    for item in as_list(value):
+        if not isinstance(item, dict) or not item.get("@value"):
+            continue
+        literals.append(item)
+
+    if not literals:
+        return None
+    for item in literals:
+        if item.get("@language") == preferred_language:
+            return item["@value"]
+    for item in literals:
+        if not item.get("@language"):
+            return item["@value"]
+    return literals[0]["@value"]
+
+
+def _fetch_mesh_record(identifier):
+    """Fetch MeSH JSON, retrying only transient request failures."""
+    url = f"https://id.nlm.nih.gov/mesh/{identifier}.json"
+    for attempt in range(_MESH_REQUEST_ATTEMPTS):
+        try:
+            response = requests.get(url, timeout=_MESH_TIMEOUT)
+            response.raise_for_status()
+        except requests.HTTPError as error:
+            status_code = error.response.status_code if error.response is not None else None
+            if status_code not in _MESH_RETRY_STATUSES or attempt + 1 == _MESH_REQUEST_ATTEMPTS:
+                raise
+            logger.warning(
+                "MeSH returned HTTP %s for %s; retrying in %ss",
+                status_code,
+                identifier,
+                _MESH_REQUEST_RETRY_SECONDS,
+            )
+        except (requests.ConnectionError, requests.Timeout) as error:
+            if attempt + 1 == _MESH_REQUEST_ATTEMPTS:
+                raise
+            logger.warning(
+                "MeSH request failed for %s (%s); retrying in %ss",
+                identifier,
+                type(error).__name__,
+                _MESH_REQUEST_RETRY_SECONDS,
+            )
+        else:
+            # JSON decoding and schema errors are deterministic for a response;
+            # keep them outside the retry handlers so they fail immediately.
+            return response.json()
+
+        time.sleep(_MESH_REQUEST_RETRY_SECONDS)
+
+    raise RuntimeError("MeSH request retry loop ended unexpectedly")
+
+
 def get_disease_details(identifier, original_name):
     """Standardize a disease from its MeSH id, preferring an existing ontology term."""
     identifier = identifier.split(":")[-1]
@@ -429,9 +491,7 @@ def get_disease_details(identifier, original_name):
             return _as_augmented(non_mesh_result)
 
     logger.debug("Fetching details for %s with ID %s", original_name, identifier)
-    disease_info = requests.get(f"https://id.nlm.nih.gov/mesh/{identifier}.json")
-    disease_info.raise_for_status()
-    disease_info = disease_info.json()
+    disease_info = _fetch_mesh_record(identifier)
 
     standard_dict = {
         "@type": "DefinedTerm",
@@ -443,14 +503,16 @@ def get_disease_details(identifier, original_name):
     if terms := disease_info.get("terms"):
         alternative_names = []
         for term in terms:
-            if term["preferred"]:
-                standard_dict["name"] = term["label"]
+            if not isinstance(term, dict) or not (term_label := _mesh_literal(term.get("label"))):
+                continue
+            if term.get("preferred"):
+                standard_dict["name"] = term_label
             else:
-                alternative_names.append(term["label"])
+                alternative_names.append(term_label)
         if alternative_names:
             standard_dict["alternateName"] = alternative_names
-    if label := disease_info.get("label"):
-        standard_dict["name"] = label["@value"]
+    if label := _mesh_literal(disease_info.get("label")):
+        standard_dict["name"] = label
     if "name" not in standard_dict:
         raise Exception(f"No name found for {identifier}")
 
