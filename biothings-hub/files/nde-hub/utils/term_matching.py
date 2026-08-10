@@ -9,13 +9,22 @@ SAFE_SHORT_MENTIONS = frozenset(
         "aids",
         "covid19",
         "ebv",
+        "h1n1",
+        "h3n2",
+        "h5n1",
+        "hbv",
+        "hcv",
         "hiv",
         "hpv",
         "hsv",
         "mers",
+        "merscov",
         "rsv",
         "sars",
+        "sarscov",
+        "sarscov2",
         "tb",
+        "zikv",
     }
 )
 

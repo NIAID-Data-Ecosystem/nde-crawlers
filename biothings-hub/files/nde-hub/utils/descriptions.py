@@ -20,8 +20,10 @@ from config import logger
 from .cache import SqliteCache, SqliteKeySet
 from .common import as_list, sqlite, supports_description_enrichment
 from .taxonomy import classify_from_lineage
+from .term_matching import is_ambiguous_short_mention
 from .term_matching import mentioned_in
 from .term_matching import species_term_matches_mention
+from .term_matching import term_labels
 from .term_matching import term_matches_mention
 from .terms import DB_PATH as PUBTATOR_DB_PATH
 from .terms import SPECIES_CACHE_DB_PATH as DB_PATH
@@ -137,6 +139,56 @@ ADVANCED_DROP_RULES = {
         "id": "749906",
         "ignore_children": False,
         "rationale": "environmental sample rather than an infectious agent",
+    },
+    "age strata": {
+        "id": "1208515",
+        "ignore_children": False,
+        "rationale": "demographic phrase matched to the Agestrata taxon",
+    },
+    "matara": {
+        "id": "2612617",
+        "ignore_children": False,
+        "rationale": "place name matched to an unrelated taxon",
+    },
+    "kerala": {
+        "id": "2249684",
+        "ignore_children": False,
+        "rationale": "place name matched to an unrelated taxon",
+    },
+    "transformation": {
+        "id": "2839062",
+        "ignore_children": False,
+        "rationale": "generic biomedical process matched to an unrelated taxon",
+    },
+    "scleroderma": {
+        "id": "68787",
+        "ignore_children": False,
+        "rationale": "disease mention matched to the Scleroderma fungus taxon",
+    },
+    "syncope": {
+        "id": "1271638",
+        "ignore_children": False,
+        "rationale": "clinical condition matched to an unrelated taxon",
+    },
+    "latina": {
+        "id": "1325907",
+        "ignore_children": False,
+        "rationale": "demographic term matched to an unrelated taxon",
+    },
+    "human microbiome": {
+        "id": "646099",
+        "ignore_children": False,
+        "rationale": "microbiome study phrase rather than an infectious agent",
+    },
+    "venus": {
+        "id": "55714",
+        "ignore_children": False,
+        "rationale": "fluorescent reporter name matched to the Venus taxon",
+    },
+    "napo": {
+        "id": "706958",
+        "ignore_children": False,
+        "rationale": "river/place name matched to an unrelated taxon",
     },
 }
 
@@ -604,6 +656,22 @@ def get_species_details(original_name, identifier):
     return term
 
 
+def _species_candidate_matches_mention(term, mention):
+    """True when a taxon label safely supports an EXTRACT mention.
+
+    Short acronyms are especially collision-prone. Require their original
+    casing to occur in an authoritative UniProt label, while retaining the
+    shared allowlist for well-known biomedical acronyms such as HCV and H1N1.
+    """
+    if not species_term_matches_mention(term, mention):
+        return False
+    if not is_ambiguous_short_mention(mention):
+        return True
+
+    normalized_mention = " ".join(str(mention).split())
+    return any(" ".join(str(label).split()) == normalized_mention for label in term_labels(term))
+
+
 # ---------------------------------------------------------------------------
 # Standardizing extracted species
 # ---------------------------------------------------------------------------
@@ -763,7 +831,7 @@ def _standardize_extracted_species(doc_list):
         missing_terms = []
         for original_name in term_names:
             standardized = SPECIES_DETAILS.get(original_name)
-            if standardized and species_term_matches_mention(standardized, original_name):
+            if standardized and _species_candidate_matches_mention(standardized, original_name):
                 formatted_species.append(dict(standardized, fromEXTRACT=True, originalName=original_name))
             else:
                 if standardized:
@@ -803,7 +871,7 @@ def _resolve_missing_species(missing_terms, candidate_identifiers=None):
                 candidate = get_species_details(original_name, identifier)
             except Exception:
                 continue
-            if species_term_matches_mention(candidate, original_name):
+            if _species_candidate_matches_mention(candidate, original_name):
                 species_details = candidate
                 break
 
@@ -844,7 +912,7 @@ def _resolve_missing_species(missing_terms, candidate_identifiers=None):
             species_details = get_species_details(original_name, identifier)
         except Exception:
             continue
-        if not species_term_matches_mention(species_details, original_name):
+        if not _species_candidate_matches_mention(species_details, original_name):
             logger.debug(
                 "Ignoring incompatible EXTRACT species mapping for %s: %s",
                 original_name,
@@ -871,13 +939,17 @@ def _dedupe_species(doc_list):
             seen = set()
             kept = []
             for entry in doc[field]:
+                # Description-specific deny rules must never remove a curated
+                # or source-provided taxon that merely shares the same label.
+                # Filter before recording the identifier so a rejected EXTRACT
+                # entry cannot hide a later source-provided duplicate.
+                if entry.get("fromEXTRACT", False) and should_filter_species_entry(entry):
+                    continue
                 identifier = entry.get("identifier")
                 if identifier is not None:
                     if identifier in seen:
                         continue
                     seen.add(identifier)
-                if should_filter_species_entry(entry):
-                    continue
                 kept.append(entry)
             if kept:
                 doc[field] = kept
