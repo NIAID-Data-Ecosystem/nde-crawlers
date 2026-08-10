@@ -19,7 +19,9 @@ from config import logger
 from .common import as_list
 from .terms import get_species_details, query_condition
 
-PROPERTIES_CSV_URL = "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
+PROPERTIES_CSV_URL = (
+    "https://docs.google.com/spreadsheets/d/107WVX39r_a6xBGZ_gCku0LBNRWWBmk9x7Dg53wj1SiI/export?format=csv"
+)
 
 HEALTH_CONDITION_TERM_SETS = ("MeSH", "DOID", "NCIT", "MONDO")
 

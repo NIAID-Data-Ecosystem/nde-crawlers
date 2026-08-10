@@ -150,7 +150,9 @@ def _lookup_dicts():
             hc_rows = conn.execute("SELECT original_name, standard_dict FROM health_conditions").fetchall()
             species_rows = conn.execute("SELECT original_name, standard_dict FROM species").fetchall()
         _lookup_cache = (_build_lookup_dict(hc_rows), _build_lookup_dict(species_rows))
-        logger.info("Term lookup loaded: %s health conditions, %s species", len(_lookup_cache[0]), len(_lookup_cache[1]))
+        logger.info(
+            "Term lookup loaded: %s health conditions, %s species", len(_lookup_cache[0]), len(_lookup_cache[1])
+        )
     return _lookup_cache
 
 
@@ -234,7 +236,9 @@ def _handle_response(data, condition, base_url, match_condition=True):
             logger.debug("Found %s via xrefs.mesh in ontology: %s", condition, base_url.split("/")[-1])
             return create_return_object(hit, alternate_names, condition)
         condition_lower = condition.lower().strip()
-        if term_name.lower().strip() == condition_lower or any(name.lower().strip() == condition_lower for name in alternate_names):
+        if term_name.lower().strip() == condition_lower or any(
+            name.lower().strip() == condition_lower for name in alternate_names
+        ):
             logger.debug("Found %s in ontology: %s", condition, base_url.split("/")[-1])
             return create_return_object(hit, alternate_names, condition)
     return None
@@ -547,8 +551,12 @@ def _resolve_species(unstandardized):
 
 def _apply_resolved_species(doc, resolved):
     """Replace a record's unstandardized species/infectiousAgent with resolved terms."""
-    entries = [(field, entry) for field in _SPECIES_FIELDS for entry in as_list(doc.get(field)) if isinstance(entry, dict)]
-    if not any("inDefinedTermSet" not in entry and "curatedBy" not in entry and "name" in entry for _, entry in entries):
+    entries = [
+        (field, entry) for field in _SPECIES_FIELDS for entry in as_list(doc.get(field)) if isinstance(entry, dict)
+    ]
+    if not any(
+        "inDefinedTermSet" not in entry and "curatedBy" not in entry and "name" in entry for _, entry in entries
+    ):
         return
 
     new_species = []

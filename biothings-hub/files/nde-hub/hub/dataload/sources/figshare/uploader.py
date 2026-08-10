@@ -7,7 +7,7 @@ from utils import iter_ndjson, nde_upload_wrapper
 
 logging.basicConfig(level=logging.INFO)
 
-_SPECIAL_CHARS_RE = re.compile(r"[!@#$%^&*()\[\]{};:,<>?/|\\~`]" )
+_SPECIAL_CHARS_RE = re.compile(r"[!@#$%^&*()\[\]{};:,<>?/|\\~`]")
 
 
 def load_mapping_sheet_from_csv(csv_file):
@@ -54,7 +54,11 @@ def process_documents(documents, mapping_index):
                         # logging.debug(f"Keyword '{keyword}' ignored due to mapping decision.")
                     else:
                         # Only add if not ignored and not duplicated
-                        if better_mapping and better_mapping.lower() != "ignored" and better_mapping not in unique_names:
+                        if (
+                            better_mapping
+                            and better_mapping.lower() != "ignored"
+                            and better_mapping not in unique_names
+                        ):
                             unique_names.add(better_mapping)
                             topic_terms.append((better_mapping, mapping["Mapped Term CURIE"]))
                             # logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")

@@ -43,11 +43,25 @@ CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
 # to mark them as already-processed.
 PLACEHOLDER_TERMS = frozenset(
     {
-        "", "-", "--", "n/a", "n.a.", "na",
-        "none", "null", "nan",
-        "not available", "not provided", "not known", "not specified",
-        "not applicable", "no data", "missing", "unknown",
-        "normal", "disease",
+        "",
+        "-",
+        "--",
+        "n/a",
+        "n.a.",
+        "na",
+        "none",
+        "null",
+        "nan",
+        "not available",
+        "not provided",
+        "not known",
+        "not specified",
+        "not applicable",
+        "no data",
+        "missing",
+        "unknown",
+        "normal",
+        "disease",
     }
 )
 
@@ -93,8 +107,7 @@ def _strip_html(description) -> str:
     """Join a string / bytes / list description into one string of plain text."""
     # Decode bytes so the regex (a str pattern) never runs against a bytes-like object
     text = " ".join(
-        part.decode("utf-8", errors="replace") if isinstance(part, bytes) else part
-        for part in as_list(description)
+        part.decode("utf-8", errors="replace") if isinstance(part, bytes) else part for part in as_list(description)
     )
     # Normalize line breaks before stripping the remaining HTML tags
     text = _BREAK_TAGS.sub("\n", text)
@@ -139,7 +152,9 @@ def add_date(doc: Dict) -> Dict:
     `dateModified` when the document has none of its own.
     """
     distribution_dates = sorted(
-        dist.get("dateModified") for dist in as_list(doc.get("distribution")) if isinstance(dist, dict) and dist.get("dateModified")
+        dist.get("dateModified")
+        for dist in as_list(doc.get("distribution"))
+        if isinstance(dist, dict) and dist.get("dateModified")
     )
 
     if not doc.get("dateModified") and distribution_dates:
@@ -167,7 +182,9 @@ def is_purely_augmented(field: str, field_content) -> bool:
         field_content = [field_content]
     if not isinstance(field_content, list):
         return False
-    return all(isinstance(item, dict) and any(item.get(flag, False) for flag in AUGMENTED_FLAGS) for item in field_content)
+    return all(
+        isinstance(item, dict) and any(item.get(flag, False) for flag in AUGMENTED_FLAGS) for item in field_content
+    )
 
 
 def check_augmented_fields(doc: Dict, fields) -> list:
@@ -175,7 +192,10 @@ def check_augmented_fields(doc: Dict, fields) -> list:
     return [
         field
         for field in fields
-        if any(isinstance(item, dict) and any(item.get(flag, False) for flag in AUGMENTED_FLAGS) for item in as_list(doc.get(field)))
+        if any(
+            isinstance(item, dict) and any(item.get(flag, False) for flag in AUGMENTED_FLAGS)
+            for item in as_list(doc.get(field))
+        )
     ]
 
 

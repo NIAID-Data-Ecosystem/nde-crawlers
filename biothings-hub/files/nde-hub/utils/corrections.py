@@ -120,9 +120,7 @@ def update_source_organization(record_metadata, correction_organizations, approv
 
     # Gather identifiers already present (name or url, lowercased).
     existing_org_identifiers = {
-        (org.get("name") or org.get("url")).lower()
-        for org in existing_orgs
-        if (org.get("name") or org.get("url"))
+        (org.get("name") or org.get("url")).lower() for org in existing_orgs if (org.get("name") or org.get("url"))
     }
 
     # Sanitize and merge new correction organizations.
@@ -164,10 +162,7 @@ def fetch_correction_files(correction_name):
         approved = correction_json.get("approved", True)
         records_file_path = prod_records_file
     except Exception as prod_error:
-        logger.debug(
-            f"Production file for '{correction_name}' not found ({prod_error}). "
-            "Trying staging folder."
-        )
+        logger.debug(f"Production file for '{correction_name}' not found ({prod_error}). " "Trying staging folder.")
         correction_content = get_github_file_content(OWNER, REPO, staging_correction_file)
         correction_json = json.loads(correction_content)
         approved = correction_json.get("approved", False)
@@ -269,8 +264,7 @@ def _build_corrections_index():
 
     id_count = sum(len(v) for v in index["by_id"].values())
     logger.info(
-        f"Corrections index built: {id_count} ID mappings, "
-        f"{len(index['by_funding'])} funding-based entries"
+        f"Corrections index built: {id_count} ID mappings, " f"{len(index['by_funding'])} funding-based entries"
     )
     return index
 
@@ -467,8 +461,7 @@ def apply_corrections(doc):
                 doc = update_source_organization(doc, correction["organizations"], correction["approved"])
                 applied_corrections.add(cname)
                 logger.debug(
-                    f"Applied correction '{cname}' to '{doc_id}' "
-                    f"(matched by ID, approved={correction['approved']})"
+                    f"Applied correction '{cname}' to '{doc_id}' " f"(matched by ID, approved={correction['approved']})"
                 )
 
     # --- Strategy 2: Funding-based matching ---

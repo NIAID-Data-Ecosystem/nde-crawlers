@@ -187,7 +187,9 @@ class SqliteKeySet(_SqliteBacked):
     """
 
     def __init__(self, db_path, table, key_column="original_name", preload=False, normalize=True):
-        super().__init__(db_path, table, key_column, f"{key_column} TEXT PRIMARY KEY", preload=preload, normalize=normalize)
+        super().__init__(
+            db_path, table, key_column, f"{key_column} TEXT PRIMARY KEY", preload=preload, normalize=normalize
+        )
         self._keys = set()
 
     def reset(self):

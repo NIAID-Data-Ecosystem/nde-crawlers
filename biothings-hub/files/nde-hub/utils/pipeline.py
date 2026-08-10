@@ -227,7 +227,12 @@ STAGES = (
     Stage("funding", _run_funding, _any_doc(_needs_funding)),
     Stage("terms", _run_terms, _any_doc(_needs_terms), reset=_reset_terms),
     Stage("descriptions", _run_descriptions, _any_doc(_needs_descriptions), reset=_reset_descriptions),
-    Stage("measurement_technique", _run_measurement_technique, _any_doc(lambda doc: bool(doc.get("measurementTechnique"))), _measurement_technique_file),
+    Stage(
+        "measurement_technique",
+        _run_measurement_technique,
+        _any_doc(lambda doc: bool(doc.get("measurementTechnique"))),
+        _measurement_technique_file,
+    ),
     Stage("nctid", _run_nctid, _any_doc(lambda doc: bool(doc.get("nctid"))), _nctid_file),
     Stage("topic_category", _run_topic_category, _always, _topic_category_file),
     Stage("disambiguating_description", _run_disambiguating_description, _always, _disambiguating_description_file),
@@ -265,7 +270,9 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
     """
     unknown = set(skip) - set(STAGE_NAMES)
     if unknown:
-        raise ValueError("Unknown pipeline stage(s) in skip_stages: %s. Known stages: %s" % (sorted(unknown), list(STAGE_NAMES)))
+        raise ValueError(
+            "Unknown pipeline stage(s) in skip_stages: %s. Known stages: %s" % (sorted(unknown), list(STAGE_NAMES))
+        )
 
     stages = []
     skipped = {}
