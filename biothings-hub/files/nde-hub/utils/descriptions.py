@@ -5,12 +5,14 @@ conditions. Descriptions go to the EXTRACT tagger (tagger.jensenlab.org), whose
 response is cached in SQLite per record id, so only records seen for the first
 time cost a request. Request failures are cached briefly and repeated service
 failures open a worker-local circuit breaker. The tagged names are then
-standardized the same way the `terms` stage standardizes curated ones, and
-marked `fromEXTRACT`.
+validated against EXTRACT's candidate NCBI taxon ids and standardized with
+UniProt taxonomy. Successful taxa and deterministic rejections are cached, and
+accepted terms are marked `fromEXTRACT`.
 """
 
-import os
+import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
 from itertools import batched
 
@@ -29,9 +31,17 @@ from .term_matching import (
 )
 from .terms import DB_PATH as PUBTATOR_DB_PATH
 from .terms import SPECIES_CACHE_DB_PATH as DB_PATH
-from .terms import fetch_taxon, query_condition
+from .terms import fetch_taxon, normalize_taxon_id, query_condition
 
 _NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
+_NEGATIVE_SPECIES_TABLE = "description_species_negative"
+_TAXON_DETAILS_TABLE = "extract_taxon_details"
+_TAXON_FAILURE_TABLE = "extract_taxon_failures"
+
+# Include a version in rejection keys so a future matching-rule change can
+# invalidate old rejections without a data migration.
+_SPECIES_REJECTION_CACHE_VERSION = "v1"
+_UNIPROT_WORKERS = 10
 
 # EXTRACT entity type codes.
 _SPECIES_TYPE = "-2"
@@ -215,6 +225,21 @@ _EXTRACT_CACHE_DDL = (*_RESPONSE_CACHE_DDL, _FAILURE_CACHE_DDL)
 # Separate instances from the ones in `terms`, which reads the same two tables by
 # key -- the two stages cache independently on purpose.
 SPECIES_DETAILS = SqliteCache(DB_PATH, "species_details", preload=True)
+TAXON_DETAILS = SqliteCache(
+    DB_PATH,
+    _TAXON_DETAILS_TABLE,
+    key_column="identifier",
+    value_column="standard_dict",
+    normalize=False,
+)
+FAILED_TAXA = SqliteKeySet(DB_PATH, _TAXON_FAILURE_TABLE, key_column="identifier", preload=True, normalize=False)
+REJECTED_SPECIES = SqliteKeySet(
+    DB_PATH,
+    _NEGATIVE_SPECIES_TABLE,
+    key_column="lookup_key",
+    preload=True,
+    normalize=False,
+)
 HEALTH_CONDITIONS = SqliteCache(PUBTATOR_DB_PATH, "health_conditions", preload=True)
 NEGATIVE_DISEASES = SqliteKeySet(PUBTATOR_DB_PATH, _NEGATIVE_DISEASE_TABLE, preload=True)
 
@@ -222,6 +247,9 @@ NEGATIVE_DISEASES = SqliteKeySet(PUBTATOR_DB_PATH, _NEGATIVE_DISEASE_TABLE, prel
 def reset_caches():
     """Drop the process-wide caches so a new upload sees fresh lookup data."""
     SPECIES_DETAILS.reset()
+    TAXON_DETAILS.reset()
+    FAILED_TAXA.reset()
+    REJECTED_SPECIES.reset()
     HEALTH_CONDITIONS.reset()
     NEGATIVE_DISEASES.reset()
 
@@ -831,12 +859,16 @@ def _standardize_extracted_species(doc_list):
     formatted_species = []
     try:
         missing_terms = []
+        species_cache_hits = 0
+        incompatible_cache_hits = 0
         for original_name in term_names:
             standardized = SPECIES_DETAILS.get(original_name)
             if standardized and _species_candidate_matches_mention(standardized, original_name):
                 formatted_species.append(dict(standardized, fromEXTRACT=True, originalName=original_name))
+                species_cache_hits += 1
             else:
                 if standardized:
+                    incompatible_cache_hits += 1
                     logger.debug(
                         "Ignoring incompatible cached EXTRACT species mapping for %s: %s",
                         original_name,
@@ -844,6 +876,12 @@ def _standardize_extracted_species(doc_list):
                     )
                 missing_terms.append(original_name)
 
+        logger.info(
+            "Species standardization cache: hits=%s incompatible_hits=%s misses=%s",
+            species_cache_hits,
+            incompatible_cache_hits,
+            len(missing_terms) - incompatible_cache_hits,
+        )
         if missing_terms:
             formatted_species.extend(_resolve_missing_species(missing_terms, candidate_identifiers))
     except Exception as e:
@@ -857,78 +895,186 @@ def _standardize_extracted_species(doc_list):
     return doc_list
 
 
+def _candidate_taxon_ids(identifiers):
+    """Return unique, normalized NCBI taxon ids in their original order."""
+    normalized = []
+    seen = set()
+    for identifier in identifiers:
+        taxon_id = normalize_taxon_id(identifier)
+        if taxon_id and taxon_id not in seen:
+            normalized.append(taxon_id)
+            seen.add(taxon_id)
+    return normalized
+
+
+def _species_rejection_key(original_name, identifiers):
+    """Key a rejection by mention and candidate set, preserving meaningful case."""
+    mention = " ".join(str(original_name or "").split())
+    candidates = sorted(
+        {
+            normalize_taxon_id(identifier) or f"raw:{str(identifier).strip()}"
+            for identifier in identifiers
+            if str(identifier).strip()
+        }
+    )
+    return json.dumps(
+        [_SPECIES_REJECTION_CACHE_VERSION, mention, candidates],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _cacheable_taxon_details(details):
+    """Strip mention-specific provenance before caching a taxon by identifier."""
+    return {key: value for key, value in details.items() if key not in {"originalName", "fromEXTRACT"}}
+
+
+def _taxon_details_for_mention(details, original_name):
+    """Stamp cached identifier-level details for one EXTRACT mention."""
+    candidate = dict(details)
+    candidate["originalName"] = original_name
+    candidate["isCurated"] = False
+    candidate["fromEXTRACT"] = True
+    return candidate
+
+
+def _permanent_taxon_failure(error):
+    """True when retrying the same identifier cannot reasonably help."""
+    if isinstance(error, ValueError):
+        return True
+    if isinstance(error, requests.HTTPError) and error.response is not None:
+        return error.response.status_code in {400, 404, 410}
+    return False
+
+
+def _fetch_candidate_taxon(identifier):
+    """Fetch identifier-level taxonomy details for concurrent resolution."""
+    try:
+        details = get_species_details(identifier, identifier)
+    except Exception as error:
+        return identifier, None, _permanent_taxon_failure(error), error
+    if not details:
+        return identifier, None, True, ValueError("empty UniProt taxonomy response")
+    return identifier, _cacheable_taxon_details(details), False, None
+
+
+def _load_candidate_taxa(identifiers):
+    """Load candidate taxa by id, fetching uncached ids concurrently.
+
+    Returns ``(details_by_id, transient_failure_ids)``. Permanent failures are
+    cached separately, while transient failures deliberately remain retryable.
+    """
+    identifiers = list(dict.fromkeys(identifiers))
+    if not identifiers:
+        return {}, set()
+
+    started = time.monotonic()
+    failed_ids = FAILED_TAXA.known(identifiers)
+    details_by_id = TAXON_DETAILS.get_many(set(identifiers) - failed_ids)
+    missing = [
+        identifier for identifier in identifiers if identifier not in failed_ids and identifier not in details_by_id
+    ]
+    cache_hits = len(details_by_id)
+    negative_hits = len(failed_ids)
+
+    permanent_failures = []
+    transient_failures = set()
+    fetched_details = {}
+    if missing:
+        with ThreadPoolExecutor(max_workers=min(_UNIPROT_WORKERS, len(missing))) as executor:
+            futures = {executor.submit(_fetch_candidate_taxon, identifier): identifier for identifier in missing}
+            for future in as_completed(futures):
+                identifier, details, permanent, error = future.result()
+                if details:
+                    details_by_id[identifier] = details
+                    fetched_details[identifier] = details
+                elif permanent:
+                    permanent_failures.append(identifier)
+                    logger.debug("Permanent UniProt taxonomy failure for %s: %s", identifier, error)
+                else:
+                    transient_failures.add(identifier)
+                    logger.warning("Transient UniProt taxonomy failure for %s: %s", identifier, error)
+
+    TAXON_DETAILS.put_many(fetched_details)
+    FAILED_TAXA.add_many(permanent_failures)
+
+    logger.info(
+        "Species candidate taxonomy: ids=%s cache_hits=%s negative_hits=%s api_calls=%s "
+        "permanent_failures=%s transient_failures=%s total_seconds=%.1fs",
+        len(identifiers),
+        cache_hits,
+        negative_hits,
+        len(missing),
+        len(permanent_failures),
+        len(transient_failures),
+        time.monotonic() - started,
+    )
+    return details_by_id, transient_failures
+
+
 def _resolve_missing_species(missing_terms, candidate_identifiers=None):
-    """Map names to ncbitaxon with text2term, then fetch each taxon from UniProt."""
+    """Resolve EXTRACT mentions from its candidate taxon ids.
+
+    Description enrichment intentionally does not fall back to text2term. In a
+    six-hour production sample, rebuilding text2term's NCBITaxon TF-IDF index
+    took 10,311.7 seconds across 116 calls and yielded only three safe mappings
+    from 6,686 terms. EXTRACT already supplies candidate taxon ids, so resolve
+    those directly and remember candidate sets that cannot safely match.
+    """
     candidate_identifiers = candidate_identifiers or {}
     resolved = []
-    unresolved = []
+    pending = {}
+    rejection_cache_hits = 0
 
     # EXTRACT supplies taxonomy IDs and sometimes returns several candidates
-    # for an abbreviated name. Prefer a candidate whose authoritative UniProt
-    # label matches before asking text2term to infer a taxon from the name.
+    # for an abbreviated name. Resolve each id once, then select a candidate
+    # whose authoritative UniProt label actually supports the mention.
     for original_name in missing_terms:
+        raw_identifiers = candidate_identifiers.get(original_name, ())
+        rejection_key = _species_rejection_key(original_name, raw_identifiers)
+        if rejection_key in REJECTED_SPECIES:
+            rejection_cache_hits += 1
+            continue
+        pending[original_name] = (_candidate_taxon_ids(raw_identifiers), rejection_key)
+
+    candidate_ids = [identifier for identifiers, _ in pending.values() for identifier in identifiers]
+    details_by_id, transient_failures = _load_candidate_taxa(candidate_ids)
+
+    rejected_keys = []
+    resolved_cache = {}
+    for original_name, (identifiers, rejection_key) in pending.items():
         species_details = None
-        for identifier in candidate_identifiers.get(original_name, ()):
-            try:
-                candidate = get_species_details(original_name, identifier)
-            except Exception:
+        for identifier in identifiers:
+            details = details_by_id.get(identifier)
+            if not details:
                 continue
+            candidate = _taxon_details_for_mention(details, original_name)
             if _species_candidate_matches_mention(candidate, original_name):
                 species_details = candidate
                 break
 
         if species_details:
             resolved.append(species_details)
-            cacheable = {k: v for k, v in species_details.items() if k != "fromEXTRACT"}
-            SPECIES_DETAILS.put(original_name, cacheable)
-        else:
-            unresolved.append(original_name)
-
-    if not unresolved:
-        logger.info("Species standardization: resolved=%s failed=0", len(resolved))
-        return resolved
-
-    import text2term
-
-    logger.info("Species standardization: running text2term for %s missing terms", len(unresolved))
-    if not os.path.exists("cache/ncbitaxon"):
-        logger.info("Species standardization: building text2term ncbitaxon cache (cache/ncbitaxon)")
-        text2term.cache_ontology("https://purl.obolibrary.org/obo/ncbitaxon.owl", "ncbitaxon")
-
-    started = time.monotonic()
-    results = text2term.map_terms(unresolved, "ncbitaxon", use_cache=True)
-    results.sort_values(["Source Term", "Mapping Score"], ascending=[True, False], inplace=True)
-    logger.info(
-        "Species standardization: text2term produced %s rows in %.1fs", len(results), time.monotonic() - started
-    )
-
-    attempted = {}
-    resolved_names = set()
-    for _, row in results.iterrows():
-        original_name = row["Source Term"]
-        if original_name in resolved_names or attempted.get(original_name, 0) >= 5:
+            resolved_cache[original_name] = {
+                key: value for key, value in species_details.items() if key != "fromEXTRACT"
+            }
             continue
-        attempted[original_name] = attempted.get(original_name, 0) + 1
-        identifier = row["Mapped Term CURIE"].split(":")[1]  # e.g. 'NCBITAXON:ID'
-        try:
-            species_details = get_species_details(original_name, identifier)
-        except Exception:
-            continue
-        if not _species_candidate_matches_mention(species_details, original_name):
-            logger.debug(
-                "Ignoring incompatible EXTRACT species mapping for %s: %s",
-                original_name,
-                species_details.get("name"),
-            )
-            continue
-        resolved.append(species_details)
-        resolved_names.add(original_name)
-        # The cached copy is the curated shape, without the fromEXTRACT marker.
-        cacheable = {k: v for k, v in species_details.items() if k != "fromEXTRACT"}
-        SPECIES_DETAILS.put(original_name, cacheable)
+
+        # Do not turn a service outage into a permanent semantic rejection.
+        if not any(identifier in transient_failures for identifier in identifiers):
+            rejected_keys.append(rejection_key)
+
+    SPECIES_DETAILS.put_many(resolved_cache)
+    REJECTED_SPECIES.add_many(rejected_keys)
 
     failed = len(missing_terms) - len(resolved)
-    logger.info("Species standardization: resolved=%s failed=%s", len(resolved), failed)
+    logger.info(
+        "Species standardization: resolved=%s failed=%s rejection_cache_hits=%s new_rejections=%s",
+        len(resolved),
+        failed,
+        rejection_cache_hits,
+        len(rejected_keys),
+    )
     return resolved
 
 

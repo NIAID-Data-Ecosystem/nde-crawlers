@@ -160,15 +160,20 @@ class SqliteCache(_SqliteBacked):
 
     def put(self, key, value):
         """Store `value` under `key`, in the table and in memory."""
-        key = self._key(key)
-        serialized = json.dumps(value)
+        self.put_many({key: value})
+
+    def put_many(self, values):
+        """Store several values in one SQLite transaction."""
+        rows = [(self._key(key), json.dumps(value)) for key, value in values.items()]
+        if not rows:
+            return
         if self.memoize:
-            self._memo[key] = serialized
+            self._memo.update(rows)
         try:
             with self._connect() as conn:
-                conn.execute(
+                conn.executemany(
                     f"INSERT OR REPLACE INTO {self.table} ({self.key_column}, {self.value_column}) VALUES (?, ?)",
-                    (key, serialized),
+                    rows,
                 )
         except Exception as e:
             logger.error("Error writing to %s: %s", self.table, e)
@@ -226,12 +231,20 @@ class SqliteKeySet(_SqliteBacked):
 
     def add(self, key):
         """Record `key` as resolving to nothing."""
-        key = self._key(key)
-        if not key:
+        self.add_many([key])
+
+    def add_many(self, keys):
+        """Record several keys in one SQLite transaction."""
+        keys = {self._key(key) for key in keys if key is not None}
+        keys.discard("")
+        if not keys:
             return
-        self._keys.add(key)
+        self._keys.update(keys)
         try:
             with self._connect() as conn:
-                conn.execute(f"INSERT OR IGNORE INTO {self.table} ({self.key_column}) VALUES (?)", (key,))
+                conn.executemany(
+                    f"INSERT OR IGNORE INTO {self.table} ({self.key_column}) VALUES (?)",
+                    ((key,) for key in keys),
+                )
         except Exception as e:
             logger.error("Error writing to %s: %s", self.table, e)
