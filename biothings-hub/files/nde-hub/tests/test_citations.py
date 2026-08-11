@@ -191,6 +191,19 @@ class MentionMatchingTests(unittest.TestCase):
         self.assertFalse(citations._species_term_matches_mention({"name": "Phyllostachys vivax"}, "P. vivax"))
         self.assertFalse(citations._species_term_matches_mention({"name": "Phyllostachys falciparum"}, "P.falciparum"))
 
+    def test_matches_pubtator_patient_mentions_only_for_humans(self):
+        human = {"name": "Homo sapiens", "commonName": "Human", "identifier": "9606"}
+        for mention in ("patient", "patients", "Patients"):
+            with self.subTest(mention=mention):
+                self.assertTrue(citations._species_term_matches_mention(human, mention))
+
+        self.assertFalse(
+            citations._species_term_matches_mention(
+                {"name": "Mus musculus", "commonName": "Mouse", "identifier": "10090"},
+                "patients",
+            )
+        )
+
     def test_rejects_non_condition_ontology_concepts(self):
         for name in (
             "Death Domain",
@@ -276,6 +289,36 @@ class RecordAugmentationTests(unittest.TestCase):
             citations.update_record_species(record, {"9606": ["human"]})
         self.assertEqual(record["species"][0]["name"], "Homo sapiens")
         self.assertTrue(record["species"][0]["fromPMID"])
+
+    def test_species_augmentation_keeps_pubtator_patient_as_human(self):
+        human = {
+            "name": "Homo sapiens",
+            "commonName": "Human",
+            "identifier": "9606",
+            "classification": "host",
+        }
+        for cached in (True, False):
+            with self.subTest(cached=cached):
+                record = {
+                    "_id": "accessclinicaldata_nct04492475",
+                    "description": "The primary outcome is time to recovery for patients.",
+                }
+                with (
+                    patch.object(citations, "pubtator_lookup", return_value=dict(human) if cached else None),
+                    patch.object(citations, "get_species_details", return_value=dict(human)) as get_details,
+                    patch.object(citations, "pubtator_add") as add_mapping,
+                ):
+                    citations.update_record_species(record, {"9606": ["patients"]})
+
+                self.assertEqual(record["species"][0]["identifier"], "9606")
+                self.assertEqual(record["species"][0]["name"], "Homo sapiens")
+                self.assertTrue(record["species"][0]["fromPMID"])
+                if cached:
+                    get_details.assert_not_called()
+                    add_mapping.assert_not_called()
+                else:
+                    get_details.assert_called_once_with("patients", "9606")
+                    add_mapping.assert_called_once()
 
     def test_disease_augmentation_rejects_generic_non_conditions(self):
         for mention in (

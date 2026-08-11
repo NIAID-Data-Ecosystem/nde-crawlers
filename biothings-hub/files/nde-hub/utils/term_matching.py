@@ -34,6 +34,9 @@ _IRREGULAR_SPECIES_PLURALS = {
     "mice": "mouse",
 }
 
+_HUMAN_TAXON_ID = "9606"
+_HUMAN_SPECIES_MENTIONS = frozenset({"patient", "patients"})
+
 
 def normalize_term_text(value):
     """Normalize a mention or ontology label for conservative comparison."""
@@ -138,6 +141,13 @@ def species_term_matches_mention(term, mention):
     """Match a taxon label, allowing plurals and abbreviated genus names."""
     if term_matches_mention(term, mention):
         return True
+
+    # PubTator uses patient terminology as a semantic mention of Homo sapiens.
+    # Keep this taxon-specific so those words cannot validate a bad mapping to
+    # any other species.
+    if str(term.get("identifier", "")).strip() == _HUMAN_TAXON_ID:
+        if normalize_term_text(mention) in _HUMAN_SPECIES_MENTIONS:
+            return True
 
     labels = list(term_labels(term))
     singular_mention = _singularize_species_mention(mention)
