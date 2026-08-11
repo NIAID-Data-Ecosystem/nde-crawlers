@@ -69,6 +69,14 @@ def term_labels(term):
         yield from (part.strip() for part in str(display_name).split("|") if part.strip())
 
 
+def term_expansion_mentioned(term, mention, haystacks):
+    """True when context spells out a label beyond an ambiguous acronym."""
+    compact_mention = compact_term_text(mention)
+    return any(
+        compact_term_text(label) != compact_mention and mentioned_in(label, haystacks) for label in term_labels(term)
+    )
+
+
 def term_matches_mention(term, mention):
     """Require a standardized label or synonym to agree with its mention."""
     normalized_mention = normalize_term_text(mention)

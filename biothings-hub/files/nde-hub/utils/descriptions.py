@@ -23,9 +23,11 @@ from .cache import SqliteCache, SqliteKeySet
 from .common import as_list, sqlite, supports_description_enrichment
 from .taxonomy import classify_from_lineage
 from .term_matching import (
+    compact_term_text,
     is_ambiguous_short_mention,
     mentioned_in,
     species_term_matches_mention,
+    term_expansion_mentioned,
     term_labels,
     term_matches_mention,
 )
@@ -41,7 +43,28 @@ _TAXON_FAILURE_TABLE = "extract_taxon_failures"
 # Include a version in rejection keys so a future matching-rule change can
 # invalidate old rejections without a data migration.
 _SPECIES_REJECTION_CACHE_VERSION = "v1"
+_DISEASE_IDENTIFIER_CACHE_VERSION = "v1"
 _UNIPROT_WORKERS = 10
+
+# These acronym/candidate pairs were confirmed to be meaning collisions in
+# Figshare. Keep a match only when the resolved label is also written out in
+# the title or description. Pairing the acronym with its identifier avoids
+# suppressing the same acronym if EXTRACT selects a different, correct term.
+_CONTEXT_REQUIRED_TAXA = frozenset(
+    {
+        ("cb1", "45142"),  # cannabinoid receptor -> Cucurbitaria berberidis
+        ("cmv", "12305"),  # cytomegalovirus -> Cucumber mosaic virus
+        ("sag", "59303"),  # sagopilone -> Sagiyama virus
+        ("scv", "135656"),  # small colony variant -> Strawberry crinkle virus
+        ("tsv", "12317"),  # trichodysplasia polyomavirus -> Tobacco streak virus
+    }
+)
+_CONTEXT_REQUIRED_DISEASES = frozenset(
+    {
+        ("fdh", "DOID:2120"),  # FIDDLEHEAD/formate dehydrogenase -> focal dermal hypoplasia
+        ("hnpp", "DOID:0060843"),  # phosphoester notation -> hereditary neuropathy
+    }
+)
 
 # EXTRACT entity type codes.
 _SPECIES_TYPE = "-2"
@@ -638,13 +661,22 @@ def _extract_entities(doc_list):
                             species.append({"name": name, "identifier": onto_id, "fromEXTRACT": True})
 
                 if _DISEASE_TYPE in responses:
-                    for name, _ in _tagged_entities(responses[_DISEASE_TYPE], _DISEASE_TYPE):
+                    for name, onto_id in _tagged_entities(responses[_DISEASE_TYPE], _DISEASE_TYPE):
                         if not mentioned_in(name, (description,)):
                             logger.debug("Skipping EXTRACT disease substring %r in %s", name, doc.get("_id"))
                             continue
                         conditions = doc.setdefault("healthCondition", [])
-                        if not _already_named(conditions, name):
-                            conditions.append({"name": name})
+                        if not any(
+                            entry.get("name") == name and str(entry.get("identifier")) == str(onto_id)
+                            for entry in conditions
+                        ):
+                            conditions.append(
+                                {
+                                    "name": name,
+                                    "identifier": onto_id,
+                                    "fromEXTRACT": True,
+                                }
+                            )
             except Exception as e:
                 logger.error("Error processing EXTRACT response for document %s: %s", doc.get("_id"), e)
 
@@ -789,6 +821,21 @@ def _insert_species(doc_list, species_mapping):
 
             new_obj = species_mapping.get(lower_name)
             if not new_obj:
+                continue
+            needs_context = (
+                compact_term_text(name),
+                str(new_obj.get("identifier") or ""),
+            ) in _CONTEXT_REQUIRED_TAXA
+            if needs_context and not term_expansion_mentioned(
+                new_obj,
+                name,
+                (str(doc.get("name") or ""), str(doc.get("description") or "")),
+            ):
+                logger.debug(
+                    "Ignoring unexpanded EXTRACT species acronym %r in %s",
+                    name,
+                    doc.get("_id"),
+                )
                 continue
             # `lineage` is only used to filter; it never belongs in the record.
             new_obj = {key: value for key, value in new_obj.items() if key != "lineage"}
@@ -1132,6 +1179,53 @@ def _remove_redundant_species(doc_list):
 # ---------------------------------------------------------------------------
 # Standardizing extracted health conditions
 # ---------------------------------------------------------------------------
+def _normalize_disease_ontology_id(identifier):
+    """Normalize ontology ids supplied by EXTRACT, ignoring other identifiers."""
+    identifier = str(identifier or "").strip()
+    if ":" not in identifier:
+        return None
+    prefix, value = identifier.split(":", 1)
+    prefix = prefix.upper()
+    if prefix == "HPO":
+        prefix = "HP"
+    if prefix not in {"MONDO", "HP", "DOID", "NCIT"} or not value:
+        return None
+    return f"{prefix}:{value}"
+
+
+def _disease_term_ontology_id(term):
+    """Return a standardized term's prefixed ontology identifier."""
+    identifier = str(term.get("identifier") or "").strip()
+    if ":" in identifier:
+        return _normalize_disease_ontology_id(identifier)
+    term_set = str(term.get("inDefinedTermSet") or "").strip()
+    if not term_set or not identifier:
+        return None
+    return _normalize_disease_ontology_id(f"{term_set}:{identifier}")
+
+
+def _disease_lookup_key(name, identifier=None):
+    """Key text searches by mention and direct lookups by ontology identifier."""
+    name = str(name or "").lower().strip()
+    identifier = _normalize_disease_ontology_id(identifier)
+    if not identifier:
+        return name
+    return json.dumps(
+        [_DISEASE_IDENTIFIER_CACHE_VERSION, identifier],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _disease_mapping_key(disease):
+    """Return the mention/candidate pair used to map one extracted stub."""
+    name = str(disease.get("name") or "").lower().strip()
+    identifier = None
+    if disease.get("fromEXTRACT"):
+        identifier = _normalize_disease_ontology_id(disease.get("identifier"))
+    return name, identifier
+
+
 def _insert_disease(doc_list, disease_mapping):
     """Replace extracted health condition stubs with their standardized terms."""
     for doc in doc_list:
@@ -1149,34 +1243,71 @@ def _insert_disease(doc_list, disease_mapping):
             identifier = disease.get("identifier")
             if original_name in preserved_names or (identifier and identifier in preserved_identifiers):
                 continue
-            updated.append(disease_mapping.get(original_name) or disease)
+            standardized = disease_mapping.get(_disease_mapping_key(disease))
+            if not standardized:
+                updated.append(disease)
+                continue
+            needs_context = (
+                compact_term_text(disease.get("name")),
+                _disease_term_ontology_id(standardized),
+            ) in _CONTEXT_REQUIRED_DISEASES
+            if needs_context and not term_expansion_mentioned(
+                standardized,
+                disease.get("name"),
+                (str(doc.get("name") or ""), str(doc.get("description") or "")),
+            ):
+                logger.debug(
+                    "Ignoring unexpanded EXTRACT disease acronym %r in %s",
+                    disease.get("name"),
+                    doc.get("_id"),
+                )
+                continue
+            updated.append(standardized)
 
-        doc["healthCondition"] = preserved + updated
+        if conditions := preserved + updated:
+            doc["healthCondition"] = conditions
+        else:
+            doc.pop("healthCondition", None)
     return doc_list
 
 
 def _standardize_extracted_diseases(doc_list):
     """Standardize the health conditions of every record that has uncurated ones."""
 
-    disease_names = set()
+    disease_lookups = set()
     for doc in doc_list:
         if "healthCondition" not in doc:
             continue
         _normalize_term_entries(doc, "healthCondition")
-        disease_names.update(
-            term["name"] for term in doc["healthCondition"] if "isCurated" not in term and term.get("name")
-        )
+        for term in doc["healthCondition"]:
+            if "isCurated" in term or not term.get("name"):
+                continue
+            identifier = None
+            if term.get("fromEXTRACT"):
+                identifier = _normalize_disease_ontology_id(term.get("identifier"))
+            disease_lookups.add((term["name"], identifier))
 
-    formatted_diseases = []
-    incompatible_names = set()
-    for disease_name in disease_names:
+    disease_mapping = {}
+    incompatible_lookups = set()
+    for disease_name, candidate_id in disease_lookups:
         disease_key = disease_name.lower().strip()
-        if disease_key in NEGATIVE_DISEASES:
+        mapping_key = (disease_key, candidate_id)
+        cache_key = _disease_lookup_key(disease_name, candidate_id)
+        if cache_key in NEGATIVE_DISEASES:
+            incompatible_lookups.add(mapping_key)
             continue
 
-        if standardized := HEALTH_CONDITIONS.get(disease_key):
-            if term_matches_mention(standardized, disease_name):
-                formatted_diseases.append(dict(standardized, fromEXTRACT=True, originalName=disease_name))
+        if standardized := HEALTH_CONDITIONS.get(cache_key):
+            identifier_matches = not candidate_id or _disease_term_ontology_id(standardized) == candidate_id
+            mention_matches = term_matches_mention(standardized, disease_name) or bool(
+                candidate_id and is_ambiguous_short_mention(disease_name)
+            )
+            if identifier_matches and mention_matches:
+                disease_mapping[mapping_key] = dict(
+                    standardized,
+                    fromEXTRACT=True,
+                    originalName=disease_name,
+                )
                 continue
             logger.debug(
                 "Ignoring incompatible cached EXTRACT disease mapping for %s: %s",
@@ -1185,47 +1316,52 @@ def _standardize_extracted_diseases(doc_list):
             )
 
         try:
-            disease_details = query_condition(disease_name)
+            if candidate_id:
+                disease_details = query_condition(disease_name, ontology_id=candidate_id)
+            else:
+                disease_details = query_condition(disease_name)
         except Exception as e:
             logger.debug("An error occurred while processing %s: %s", disease_name, e)
             continue
 
         if not disease_details:
-            NEGATIVE_DISEASES.add(disease_name)
+            NEGATIVE_DISEASES.add(cache_key)
+            incompatible_lookups.add(mapping_key)
             continue
-        if not term_matches_mention(disease_details, disease_name):
+        identifier_matches = not candidate_id or _disease_term_ontology_id(disease_details) == candidate_id
+        mention_matches = term_matches_mention(disease_details, disease_name) or bool(
+            candidate_id and is_ambiguous_short_mention(disease_name)
+        )
+        if not identifier_matches or not mention_matches:
             logger.debug(
                 "Ignoring incompatible EXTRACT disease mapping for %s: %s",
                 disease_name,
                 disease_details.get("name"),
             )
-            incompatible_names.add(disease_key)
+            incompatible_lookups.add(mapping_key)
             continue
 
         disease_details.setdefault("originalName", disease_name)
         disease_details.pop("curatedBy", None)
-        formatted_diseases.append(dict(disease_details, fromEXTRACT=True))
-        HEALTH_CONDITIONS.put(disease_key, disease_details)
+        disease_mapping[mapping_key] = dict(disease_details, fromEXTRACT=True)
+        HEALTH_CONDITIONS.put(cache_key, disease_details)
 
-    if incompatible_names:
+    if incompatible_lookups:
         for doc in doc_list:
             if "healthCondition" not in doc:
                 continue
             kept = [
                 disease
                 for disease in doc["healthCondition"]
-                if disease.get("isCurated") is not None
-                or (disease.get("name") or "").lower().strip() not in incompatible_names
+                if disease.get("isCurated") is not None or _disease_mapping_key(disease) not in incompatible_lookups
             ]
             if kept:
                 doc["healthCondition"] = kept
             else:
                 doc.pop("healthCondition", None)
 
-    if not formatted_diseases:
+    if not disease_mapping:
         return doc_list
-
-    disease_mapping = {(sp.get("originalName") or sp["name"]).lower(): sp for sp in formatted_diseases}
     return _insert_disease(doc_list, disease_mapping)
 
 

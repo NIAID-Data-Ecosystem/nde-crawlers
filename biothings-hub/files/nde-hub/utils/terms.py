@@ -20,6 +20,7 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import quote
 
 import requests
 from config import logger
@@ -186,6 +187,13 @@ ONTOLOGY_URLS = [
     "https://biothings.transltr.io/doid",
     "https://biothings.transltr.io/ncit",
 ]
+_ONTOLOGY_URL_BY_PREFIX = {
+    "MONDO": "https://biothings.transltr.io/mondo",
+    "HP": "https://biothings.transltr.io/hpo",
+    "HPO": "https://biothings.transltr.io/hpo",
+    "DOID": "https://biothings.transltr.io/doid",
+    "NCIT": "https://biothings.transltr.io/ncit",
+}
 
 
 def _retry_request(url, retries=7):
@@ -226,14 +234,14 @@ def create_return_object(hit, alternate_names, original_name):
     return standard_dict
 
 
-def _handle_response(data, condition, base_url, match_condition=True):
+def _handle_response(data, condition, base_url, match_condition=True, match_source="xrefs.mesh"):
     for hit in (data or {}).get("hits", []):
         alternate_names = process_synonyms(hit.get("synonym", {}))
         term_name = hit.get("label") or hit.get("name")
         if not term_name:
             continue
         if not match_condition:
-            logger.debug("Found %s via xrefs.mesh in ontology: %s", condition, base_url.split("/")[-1])
+            logger.debug("Found %s via %s in ontology: %s", condition, match_source, base_url.split("/")[-1])
             return create_return_object(hit, alternate_names, condition)
         condition_lower = condition.lower().strip()
         if term_name.lower().strip() == condition_lower or any(
@@ -244,9 +252,45 @@ def _handle_response(data, condition, base_url, match_condition=True):
     return None
 
 
-def query_condition(health_condition, mesh_id=None):
-    """Look a health condition up in MONDO, HPO, DOID then NCIT."""
+def _query_condition_identifier(health_condition, ontology_id):
+    """Resolve an EXTRACT ontology identifier without an ambiguous text search."""
+    ontology_id = str(ontology_id or "").strip()
+    if ":" not in ontology_id:
+        return None
+    prefix, identifier = ontology_id.split(":", 1)
+    prefix = prefix.upper()
+    base_url = _ONTOLOGY_URL_BY_PREFIX.get(prefix)
+    if not base_url or not identifier:
+        return None
+
+    canonical_prefix = "HP" if prefix == "HPO" else prefix
+    canonical_id = f"{canonical_prefix}:{identifier}"
+    try:
+        id_query = quote(f'_id:"{canonical_id}"', safe="")
+        data = _retry_request(f"{base_url}/query?q={id_query}&limit=1")
+        return _handle_response(
+            data,
+            health_condition,
+            base_url,
+            match_condition=False,
+            match_source=f"ontology id {canonical_id}",
+        )
+    except Exception as e:
+        logger.debug("An error occurred while querying %s by id %s: %s", base_url, canonical_id, e)
+    return None
+
+
+def query_condition(health_condition, mesh_id=None, *, ontology_id=None):
+    """Look a health condition up by ontology id or MONDO/HPO/DOID/NCIT text."""
     logger.debug('Querying for "%s"...', health_condition)
+    if ontology_id:
+        result = _query_condition_identifier(health_condition, ontology_id)
+        if result:
+            logger.debug("Found %s using EXTRACT ontology id %s", health_condition, ontology_id)
+        else:
+            logger.debug("Unable to match %s using EXTRACT ontology id %s", health_condition, ontology_id)
+        return result
+
     for base_url in ONTOLOGY_URLS:
         try:
             if mesh_id:
