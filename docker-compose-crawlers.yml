@@ -268,6 +268,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  pathoplexus-crawler:
+    build:
+      context: pathoplexus
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   pdb-crawler:
     build:
       context: pdb

@@ -618,6 +618,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "journalName": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "pmid": {"type": "text", "copy_to": ["all"]},
+                    "sameAs": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
@@ -1034,6 +1035,15 @@ class NDESourceUploader(BaseSourceUploader):
                                     "url": {"type": "keyword"},
                                 }
                             },
+                            "collectionMethod": {
+                                "properties": {
+                                    "identifier": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "copy_to": ["all"]},
+                                    "url": {"type": "keyword"},
+                                }
+                            },
+                            "dateCollected": {"type": "date"},
+                            "dateProcessed": {"type": "date"},
                             "developmentalStage": {
                                 "properties": {
                                     "maxValue": {"type": "double"},
@@ -1045,6 +1055,14 @@ class NDESourceUploader(BaseSourceUploader):
                                 }
                             },
                             "experimentalPurpose": {"type": "text"},
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "instrument": {
+                                "properties": {
+                                    "identifier": {"type": "text", "copy_to": ["all"]},
+                                    "name": {"type": "keyword", "copy_to": ["all"]},
+                                    "url": {"type": "keyword"},
+                                }
+                            },
                             "sampleAvailability": {"type": "boolean"},
                             "sampleQuantity": {
                                 "properties": {
@@ -1127,6 +1145,15 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "keyword"},
                         }
                     },
+                    "collectionMethod": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "keyword"},
+                        }
+                    },
+                    "dateCollected": {"type": "date"},
+                    "dateProcessed": {"type": "date"},
                     "developmentalStage": {
                         "properties": {
                             "maxValue": {"type": "double"},
@@ -1138,6 +1165,14 @@ class NDESourceUploader(BaseSourceUploader):
                         }
                     },
                     "experimentalPurpose": {"type": "text"},
+                    "identifier": {"type": "text", "copy_to": ["all"]},
+                    "instrument": {
+                        "properties": {
+                            "identifier": {"type": "text", "copy_to": ["all"]},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "keyword"},
+                        }
+                    },
                     "sampleAvailability": {"type": "boolean"},
                     "sampleQuantity": {
                         "properties": {
@@ -1740,6 +1775,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "journalName": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "pmid": {"type": "text", "copy_to": ["all"]},
+                    "sameAs": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                 }
             },
