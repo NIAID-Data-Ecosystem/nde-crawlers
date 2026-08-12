@@ -30,10 +30,11 @@ from .common import as_list
 
 AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
 
-CONDITIONS_OF_ACCESS = ["Open", "Restricted", "Closed", "Embargoed"]
-# A ResourceCatalog covers many resources whose access terms differ, so it may
-# also be marked "Varied".
-RESOURCE_CATALOG_CONDITIONS_OF_ACCESS = CONDITIONS_OF_ACCESS + ["Varied"]
+# "Varied" marks a record whose constituent resources carry different access
+# terms. It was ResourceCatalog-only, but any aggregating type can need it --
+# a DataCollection covering both open and embargoed sequences, for instance --
+# so it is allowed for every @type.
+CONDITIONS_OF_ACCESS = ["Open", "Restricted", "Closed", "Embargoed", "Varied"]
 CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
 
 # Source data sometimes emits literal placeholders ("Not provided", "Unknown",
@@ -269,11 +270,8 @@ def check_schema(doc: Dict) -> Dict:
     assert doc.get("version", None) is None, failure("Remove version field")
 
     if coa := doc.get("conditionsOfAccess"):
-        allowed = (
-            RESOURCE_CATALOG_CONDITIONS_OF_ACCESS if doc.get("@type") == "ResourceCatalog" else CONDITIONS_OF_ACCESS
-        )
-        assert coa in allowed, failure(
-            "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, allowed)
+        assert coa in CONDITIONS_OF_ACCESS, failure(
+            "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, CONDITIONS_OF_ACCESS)
         )
 
     if doc.get("@type") == "Sample" and (cws := doc.get("creativeWorkStatus")) is not None:
