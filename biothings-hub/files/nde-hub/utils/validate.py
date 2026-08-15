@@ -30,18 +30,10 @@ from .common import as_list
 
 AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
 
-# "Varied" marks a record whose constituent resources carry different access
-# terms. It was ResourceCatalog-only, but any aggregating type can need it --
-# a DataCollection covering both open and embargoed sequences, for instance --
-# so it is allowed for every @type.
 CONDITIONS_OF_ACCESS = ["Open", "Restricted", "Closed", "Embargoed", "Varied"]
 CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
 
-# Source data sometimes emits literal placeholders ("Not provided", "Unknown",
-# "Disease", "Normal", "N/A", etc.) as species / infectiousAgent / healthCondition
-# values. These aren't real terms and would otherwise reach the index unchanged
-# because the standardizer's lookup misses them and they have no curatedBy flag
-# to mark them as already-processed.
+# Placeholders sources emit as terms; nothing upstream strips them.
 PLACEHOLDER_TERMS = frozenset(
     {
         "",

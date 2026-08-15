@@ -10,27 +10,15 @@ import os
 import time
 from itertools import batched, islice
 
-import orjson
 from config import logger
 
+from .common import iter_ndjson
 from .descriptions import augment_from_descriptions, reset_caches
 
 
 def _augment_for_prewarm(docs):
     """Run description enrichment without the uploader's record-type filter."""
     return augment_from_descriptions(docs, filter_supported_types=False)
-
-
-def iter_ndjson(path):
-    """Yield documents from the NDJSON file at `path`."""
-    with open(path, "rb") as stream:
-        for line_number, line in enumerate(stream, 1):
-            if not line.strip():
-                continue
-            try:
-                yield orjson.loads(line)
-            except orjson.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON on line {line_number} of {path}: {e}") from e
 
 
 def prewarm_descriptions(path, batch_size=1000, limit=None, augment=_augment_for_prewarm):
@@ -41,7 +29,7 @@ def prewarm_descriptions(path, batch_size=1000, limit=None, augment=_augment_for
     if limit is not None and limit < 1:
         raise ValueError("limit must be at least 1")
 
-    docs = iter_ndjson(path)
+    docs = iter_ndjson(os.path.dirname(path), os.path.basename(path))
     if limit is not None:
         docs = islice(docs, limit)
 

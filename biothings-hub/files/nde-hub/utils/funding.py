@@ -135,9 +135,6 @@ def standardize_funding(docs):
 
 # ---------------------------------------------------------------------------
 # Offline cache population (NIH RePORTER)
-#
-# Not called during upload: `standardize_funding` only reads the cache. Use
-# these to (re)populate `funding_lookup` from api.reporter.nih.gov.
 # ---------------------------------------------------------------------------
 def update_sqlite_db(funding_id, new_funding):
     """Store a curated grant in the funding cache."""

@@ -11,9 +11,7 @@ through every applicable stage. A stage is applicable when
 An inapplicable stage costs one dict lookup per record and does not open its
 lookup tables, a database connection or the network.
 
-Records flow through in batches, so the batch-oriented stages have enough
-records to make their bulk lookups worthwhile while memory stays bounded
-regardless of source size.
+Records are processed in batches of 1000 by default.
 
 Usage in an uploader::
 
@@ -50,8 +48,6 @@ MONGO_DOC_SIZE_LIMIT = 16 * 1024 * 1024
 # Stage definition
 # ---------------------------------------------------------------------------
 class Stage:
-    """One augmentation step: what it is called, how to run it, and when it applies."""
-
     __slots__ = ("name", "_run", "_applies", "_lookup_file", "_reset")
 
     def __init__(self, name, run, applies, lookup_file=None, reset=None):

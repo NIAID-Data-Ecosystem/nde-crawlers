@@ -79,10 +79,8 @@ def extract_trial_info(api_data):
 def trial_design(nctid):
     """The (study_type, intervention_model, allocation, design_method) of one trial.
 
-    This is what gets cached rather than `fetch_trial`'s response: a response runs
-    to about a megabyte and only these four fields are ever read, so caching the
-    response held ~1 MB per trial instead of ~200 bytes. The bound stays because
-    the keys come from the records, not from a curated file.
+    Caches the four fields, not fetch_trial's ~1 MB response. Bounded because the
+    keys come from records, not a curated file.
     """
     return extract_trial_info(fetch_trial(nctid))
 

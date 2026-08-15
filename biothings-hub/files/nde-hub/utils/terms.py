@@ -734,12 +734,8 @@ def standardize_doc_terms(doc, hc_dict, species_dict):
 # The pipeline stage
 # ---------------------------------------------------------------------------
 def standardize_terms(docs):
-    """Standardize the species, infectiousAgent and healthCondition of one batch.
+    """Standardize the species, infectiousAgent and healthCondition of one batch."""
 
-    Applying the lookup dictionaries costs a few microseconds per record, so
-    this runs in-process: a worker pool spent more time pickling records than
-    the work itself, and each fork held its own copy of the lookup tables.
-    """
     docs = list(docs)
     hc_dict, species_dict = _lookup_dicts()
 

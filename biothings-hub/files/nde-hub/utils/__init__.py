@@ -4,10 +4,8 @@ Uploaders need exactly one thing from here: `nde_upload_wrapper`, which runs an
 uploader's records through the whole standardization pipeline. See
 `utils/pipeline.py` for what the pipeline does and how a source can tune it.
 
-The individual stages live in their own modules (`terms`, `citations`,
-`funding`, `descriptions`, `measurement_technique`, `topic_category`, `nctid`,
-`disambiguating_description`, `lineage`, `corrections`) and are picked by the
-pipeline from the records themselves -- sources do not import them.
+The individual stages live in their own modules and are picked by the
+pipeline for each record.
 """
 
 from .common import as_list, iter_ndjson, retry
