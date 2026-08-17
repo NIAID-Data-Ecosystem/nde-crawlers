@@ -1,5 +1,6 @@
 # We can remove this line below after switched to biothings 0.11.x branch
 # and remove the config_hub.py file completely
+import logging
 import os
 import urllib.parse
 
@@ -49,7 +50,17 @@ ES_BACKUPS_FOLDER = f"{data_folder}/esbackup"
 SITEMAP_URLS = f"{data_folder}/sitemap_urls"
 
 LOG_FOLDER = f"{data_folder}/logs"
-logger = setup_default_log("hub", LOG_FOLDER)
+LOG_LEVEL = logging.INFO
+logger = setup_default_log("hub", LOG_FOLDER, level=LOG_LEVEL)
+
+# setup_default_log sets the level on the root logger and on "hub", but leaves the
+# root StreamHandler at NOTSET. A parent's level is not consulted when a child
+# propagates, so DEBUG records from the loggers biothings creates for itself
+# (upload_<source>, dumper_<source>, which default to DEBUG) still reach the
+# console and therefore journald. Gating the handler is what makes LOG_LEVEL
+# apply to those too. Per-source log files keep their own level and stay verbose.
+for _handler in logging.getLogger().handlers:
+    _handler.setLevel(LOG_LEVEL)
 
 RUN_DIR = f"{data_folder}/run"
 

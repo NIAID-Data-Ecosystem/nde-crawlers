@@ -1,16 +1,13 @@
 import csv
 import logging
-import os
 import re
 
-import orjson
 from hub.dataload.nde import NDESourceUploader
-from utils.extract import process_descriptions
-from utils.utils import nde_upload_wrapper
+from utils import iter_ndjson, nde_upload_wrapper
 
 logging.basicConfig(level=logging.INFO)
 
-_SPECIAL_CHARS_RE = re.compile(r"[!@#$%^&*()\[\]{};:,<>?/|\\~`]" )
+_SPECIAL_CHARS_RE = re.compile(r"[!@#$%^&*()\[\]{};:,<>?/|\\~`]")
 
 
 def load_mapping_sheet_from_csv(csv_file):
@@ -57,7 +54,11 @@ def process_documents(documents, mapping_index):
                         # logging.debug(f"Keyword '{keyword}' ignored due to mapping decision.")
                     else:
                         # Only add if not ignored and not duplicated
-                        if better_mapping and better_mapping.lower() != "ignored" and better_mapping not in unique_names:
+                        if (
+                            better_mapping
+                            and better_mapping.lower() != "ignored"
+                            and better_mapping not in unique_names
+                        ):
                             unique_names.add(better_mapping)
                             topic_terms.append((better_mapping, mapping["Mapped Term CURIE"]))
                             # logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")
@@ -101,20 +102,6 @@ class FigshareUploader(NDESourceUploader):
     def load_data(self, data_folder):
         mapping_file = "mappings.csv"
 
-        def _iter_docs(data):
-            if isinstance(data, str):
-                ndjson_file = os.path.join(data, "data.ndjson")
-                count = 0
-                with open(ndjson_file, "rb") as f:
-                    for line in f:
-                        doc = orjson.loads(line)
-                        count += 1
-                        if count % 1000 == 0:
-                            logging.info(f"Read {count} documents")
-                        yield doc
-            else:
-                yield from data
-
         mappings = load_mapping_sheet_from_csv(mapping_file)
         mapping_index = {}
         for m in mappings:
@@ -124,13 +111,9 @@ class FigshareUploader(NDESourceUploader):
 
         # logging.debug(f"Loaded mappings: {mappings[:5]}")
 
-        processed_documents = process_documents(_iter_docs(data_folder), mapping_index)
+        processed_documents = process_documents(iter_ndjson(data_folder), mapping_index)
 
         def _has_valid_topic_category(doc):
             return "topicCategory" in doc and any("name" in category for category in doc["topicCategory"])
 
-        filtered_documents = (doc for doc in processed_documents if _has_valid_topic_category(doc))
-        enriched_documents = process_descriptions(filtered_documents)
-
-        for i, doc in enumerate(enriched_documents, start=1):
-            yield doc
+        yield from (doc for doc in processed_documents if _has_valid_topic_category(doc))

@@ -3,6 +3,7 @@ from hub.dataload.nde import NDESourceUploader
 
 class GXAUploader(NDESourceUploader):
     name = "gxa"
+    skip_stages = ("descriptions",)
     __metadata__ = {
         "merger": "merge_struct",
         "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},

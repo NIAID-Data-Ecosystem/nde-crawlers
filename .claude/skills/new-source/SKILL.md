@@ -1,11 +1,11 @@
 ---
-name: new_source
+name: new-source
 description: Scaffold a new NDE crawler source end-to-end — the crawler container directory, the biothings-hub dumper/uploader package, and the docker-compose-crawlers.yml entry — driven by a mapping TSV/CSV (plus optional examples and heuristics).
 ---
 
-# /new_source — scaffold a new NDE crawler
+# /new-source — scaffold a new NDE crawler
 
-Invocation: `/new_source [--type Dataset|Sample]`
+Invocation: `/new-source [--type Dataset|Sample]`
 
 Default `--type` is `Dataset`. `Sample` switches the uploader base class to `NDESourceSampleUploader` and the cross-check target mapping to `NDESourceSampleUploader.get_mapping()` in [biothings-hub/files/nde-hub/hub/dataload/nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py).
 
@@ -20,10 +20,10 @@ Before writing any files, ask the user (with `AskUserQuestion` if not already su
    - the `_id` prefix (`<name>_<identifier>`) **only when the identifier needs it** — see §"Deciding the `_id`: prefix vs. bare identifier"
    - the docker-compose service key (`<name>-crawler`)
 2. **Input directory** — a directory containing at least:
-   - **Required:** one `*.tsv` or `*.csv` mapping file (each row maps a source field path → target schema.org field, with optional notes). Example format: see [references/bacdive_example/mapping.tsv](.claude/skills/new_source/references/bacdive_example/mapping.tsv).
+   - **Required:** one `*.tsv` or `*.csv` mapping file (each row maps a source field path → target schema.org field, with optional notes). Example format: see [references/bacdive_example/mapping.tsv](references/bacdive_example/mapping.tsv).
    - **Optional:** one or more example records (`.json`, `.ndjson`, `.csv`, `.tsv`) showing the raw input shape.
-   - **Optional:** a heuristics `.csv` or `.tsv` (extra rules layered on top of the mapping). See [references/bacdive_example/heuristics.tsv](.claude/skills/new_source/references/bacdive_example/heuristics.tsv) for a representative example. When heuristics conflict with the mapping or its notes column, the heuristics file wins.
-3. **How to iterate raw records** — confirm there is an existing iterator (e.g. `iter_<name>_records()`) or that the user has already provided one in a reference parser (like [references/bacdive_example/bacdive.py](.claude/skills/new_source/references/bacdive_example/bacdive.py)). The parser you generate should call it; do not invent a new fetch strategy.
+   - **Optional:** a heuristics `.csv` or `.tsv` (extra rules layered on top of the mapping). See [references/bacdive_example/heuristics.tsv](references/bacdive_example/heuristics.tsv) for a representative example. When heuristics conflict with the mapping or its notes column, the heuristics file wins.
+3. **How to iterate raw records** — confirm there is an existing iterator (e.g. `iter_<name>_records()`) or that the user has already provided one in a reference parser (like [references/bacdive_example/bacdive.py](references/bacdive_example/bacdive.py)). The parser you generate should call it; do not invent a new fetch strategy.
 4. **`--type`** — if not on the command line, default to `Dataset`. Confirm if ambiguous.
 
 If any required input is missing, ask before proceeding. Do not invent mapping rules.
@@ -58,7 +58,7 @@ Required structure, in this order:
 
 1. **Imports** — `logging`, `datetime`, `dateutil.parser`, plus whatever the source needs.
 2. **Logger** — `logger = logging.getLogger("nde-logger")`.
-3. **The two boilerplate helpers, copied verbatim** from [references/base_func.py](.claude/skills/new_source/references/base_func.py):
+3. **The two boilerplate helpers, copied verbatim** from [references/base_func.py](references/base_func.py):
    - `insert_value(d, key, value, extend=False)`
    - `_to_iso_date(val)`
    These must be in *every* parser. Do not modify the function bodies; do not rename them.
@@ -86,7 +86,7 @@ output = {
 }
 ```
 
-Use [references/bacdive_example/bacdive.py](.claude/skills/new_source/references/bacdive_example/bacdive.py) and [bacdive/files/bacdive_crawler.py](bacdive/files/bacdive_crawler.py) as the canonical shape.
+Use [references/bacdive_example/bacdive.py](references/bacdive_example/bacdive.py) as the compact worked example and [bacdive/files/bacdive_crawler.py](bacdive/files/bacdive_crawler.py) as the full-source example.
 
 #### Deciding the `_id`: prefix vs. bare identifier
 
@@ -96,7 +96,7 @@ The `_id` must be **globally unique** (records sharing an `_id` may be merged do
 - **All digits or all letters** → **prepend**: `"_id": f"<name>_{_id}"`, unless the scheme is well-established/well-adopted/registered with identifiers.org (then bare).
 - **Ambiguous** → default to prepending and review against existing `_id`s.
 
-Read [references/id_decision.md](.claude/skills/new_source/references/id_decision.md) for the full decision tree and the production-change tracking rule. `identifier` always stays the raw source value (`str(_id)`) regardless of the `_id` choice. **State the chosen form and its one-line reason in the end-of-run report** so the user can override.
+Read [references/id_decision.md](references/id_decision.md) for the full decision tree and the production-change tracking rule. `identifier` always stays the raw source value (`str(_id)`) regardless of the `_id` choice. **State the chosen form and its one-line reason in the end-of-run report** so the user can override.
 
 ### 3. Driving the parser from the mapping
 
@@ -112,9 +112,9 @@ For each row in the mapping file (skipping rows where the `Mapping` column is em
 
 ### 4. Enum fields — hard rules
 
-The upload-time validator in [biothings-hub/files/nde-hub/utils/utils.py](biothings-hub/files/nde-hub/utils/utils.py) (`check_schema`) **rejects records** with out-of-enum values for:
+The upload-time validator in [biothings-hub/files/nde-hub/utils/validate.py](biothings-hub/files/nde-hub/utils/validate.py) (`check_schema`) **rejects records** with out-of-enum values for:
 
-- `conditionsOfAccess` ∈ `{"Open", "Restricted", "Closed", "Embargoed"}`
+- `conditionsOfAccess` ∈ `{"Open", "Restricted", "Closed", "Embargoed", "Varied"}`
 - `creativeWorkStatus` (only when `@type == "Sample"`) ∈ `{"Bespoke", "Available", "Backordered", "Retired"}`
 
 If the mapping wants either of these fields, map source values to the allowed enum. If you cannot map confidently, omit the field rather than emit an invalid value.
@@ -123,7 +123,7 @@ Also: `version` must not be set (`check_schema` asserts `doc.get("version") is N
 
 ### 5. pmids / pmcs — exception
 
-`pmids` and `pmcs` are **not** in [nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py)'s mapping — the upload-time pmid helper handles them. If the source provides PubMed / PMC identifiers and the mapping requests `pmids` or `pmcs`:
+`pmids` and `pmcs` are **not** in [nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py)'s mapping — the pipeline's `citations` stage consumes them and removes them from the record. If the source provides PubMed / PMC identifiers and the mapping requests `pmids` or `pmcs`:
 
 - Emit a single **comma-separated string** (e.g. `"12345678, 23456789"`), not a list, not a list of dicts.
 - Do not validate these against `get_mapping()`.
@@ -140,45 +140,62 @@ Three files:
   from .uploader import <Name>Uploader  # noqa
   ```
 - `dumper.py` — model on [biothings-hub/files/nde-hub/hub/dataload/sources/bacdive/dumper.py](biothings-hub/files/nde-hub/hub/dataload/sources/bacdive/dumper.py). Must set `SRC_NAME = "<name>"` and a `SCHEDULE`. The `SRC_URLS` docker URI must reference `nde-crawlers-<name>-crawler`.
-- `uploader.py`:
+- `uploader.py` — normally just two lines of body:
+  ```python
+  from hub.dataload.nde import NDESourceUploader
+
+
+  class <Name>Uploader(NDESourceUploader):
+      name = "<name>"
+  ```
   - Subclass `NDESourceUploader` if `--type=Dataset`, `NDESourceSampleUploader` if `--type=Sample`. Import from `hub.dataload.nde`.
   - Set `name = "<name>"`.
-  - **Always** decorate `load_data` with `@nde_upload_wrapper` *if* you override it.
-  - **Only override `load_data`** if at least one helper from §7 is needed. If no helper applies, do not write a `load_data` method — let the base class default handle reading `data.ndjson`. The class body should then be just `name = "<name>"`.
+  - **Do not write a `load_data` method.** The base class already reads `data.ndjson` and runs every standardizer (see §7). Add `__metadata__` if the source needs `src_meta` / a merger.
+  - Only override `load_data` when the records need custom parsing that the crawler's `data.ndjson` doesn't already give you (see §7's "When to override `load_data`").
 
-### 7. Choosing helper functions for `load_data`
+### 7. Standardizers
 
-Read [references/helper_instructions.md](.claude/skills/new_source/references/helper_instructions.md) and choose helpers by these rules:
+`@nde_upload_wrapper` (in [biothings-hub/files/nde-hub/utils/pipeline.py](biothings-hub/files/nde-hub/utils/pipeline.py)) runs the same pipeline for every source. Each stage checks the records in front of it — and, for the curated-file stages, whether that source has a lookup file on disk — and skips itself if there is nothing to do. Uploaders do not import or call these.
 
-| Condition in the parser output | Helper to import & call | Notes |
+| Stage | Runs when a record has | What it does |
 |---|---|---|
-| Output has `species` or `healthCondition` | `from utils.pubtator import standardize_data` | Pass `data_folder` or upstream `docs`. |
-| Output has `pmids`, `pmcs`, *or* `citation.doi` | `from utils.pmid_helper import load_pmid_ctfd` | Call **before** `standardize_data`. When `load_pmid_ctfd` is used, **also include `standardize_funding` and `standardize_data`** in the chain (order per the chain block below), even if the parser output doesn't otherwise trigger those rules. |
-| Output has `funding` | `from utils.funding_helper import standardize_funding` | First call in the chain — consumes `data_folder`. |
-| Output has a `description` | `from utils.extract import process_descriptions` | Call **after** `standardize_data`. |
-| Output has `measurementTechnique` | `from utils.measurement_technique_helper import process_measurement_technique` | Pass `self.name`. |
-| Topic categories needed (Zubair's TSVs in `/data/nde_hub/topic_categories/`) | `from utils.topic_category_helper import add_topic_category` | Pass `self.name`. |
-| Output has `nctid` | `from utils.nctid_helper import nctid_helper` | Derives measurement techniques from NCT trial info. |
-| `disambiguating_description` field is in scope (immport / clinepidb) | `from utils.disambiguating_description import add_disambiguating_description` | Source-restricted — use only for those two. |
-| Source is `vivli` | `from utils.clinical_trails_helper import load_ct_wrapper` | Source-restricted. |
-| Source is `dde` | `standardize_fields` / `handle_dde_docs` | Source-restricted. |
+| `citations` | `pmids`, `pmcs` or `citation.doi` | Citation + funding from NCBI E-utilities, plus PubTator species / diseases |
+| `funding` | `funding` | Curated NIH grant from the funding cache; CrossRef funder names |
+| `terms` | `species`, `infectiousAgent` or `healthCondition` | Standardizes them, splits hosts from infectious agents |
+| `descriptions` | an eligible record type, a `description`, and missing taxonomy or `healthCondition` | Mines species + diseases out of the text via EXTRACT. Eligible types are `Dataset`, `DataCollection`, `ResourceCatalog`, or `Sample` with `additionalType: "BioSample"` |
+| `measurement_technique` | `measurementTechnique` **and** `/data/nde-hub/standardizers/measurement_technique_lookup/<source>.csv` | Maps repository techniques to ontology terms |
+| `nctid` | `nctid` **and** `/nvme/nde-hub/standardizers/nctid_lookup/nctid.csv` | measurementTechnique from the trial's study design |
+| `topic_category` | `/data/nde-hub/topic_categories/<source>.json` | Adds curated EDAM topics |
+| `disambiguating_description` | `/data/nde-hub/disambiguating_descriptions/<source>.csv` | Adds the curated summary |
+| `lineage` | always | `_meta.lineage` for the taxonomy browser |
 
-**Chain order** when multiple apply (matches existing sources):
+Then every record gets `sourceOrganization` corrections, `date`, `_meta.completeness`, a cleaned description, placeholder-term removal and `check_schema`.
 
+The pipeline collects repository-wide statistics for every active stage and logs stage-level record counts plus before/after counts for each field the stage manages. Statistics are emitted even when validation stops an upload early. `records_processed` counts all records in a batch where the stage ran; use `records_changed` for the records whose tracked fields actually changed. `post_process` has stage-level counts only and no field tracking. Do not add duplicate statistics logging to a new uploader.
+
+Two optional settings on the uploader change the pipeline:
+
+- `post_process(self, doc)` — the source's last word on a record, after every stage but before `lineage`. Return the document, or `None` to drop it. Use it for source-specific fixups or filtering (see [bei](biothings-hub/files/nde-hub/hub/dataload/sources/bei/uploader.py), [pdb](biothings-hub/files/nde-hub/hub/dataload/sources/pdb/uploader.py), [covid_radx](biothings-hub/files/nde-hub/hub/dataload/sources/covid_radx/uploader.py)).
+- `skip_stages = ("descriptions",)` — opt out of a stage. Use it when a source's volume makes a stage's per-record API calls impractical, not to express a metadata decision.
+
+**When to override `load_data`:** only when the records don't come straight out of `data.ndjson` — a custom parser ([ncbi_geo](biothings-hub/files/nde-hub/hub/dataload/sources/ncbi_geo/gse_uploader.py)), per-file jobs ([biostudies](biothings-hub/files/nde-hub/hub/dataload/sources/biostudies/uploader.py)), or source-restricted curation ([dde](biothings-hub/files/nde-hub/hub/dataload/sources/dde/uploader.py), [vivli](biothings-hub/files/nde-hub/hub/dataload/sources/vivli/uploader.py)). Then keep `@nde_upload_wrapper` on it and yield plain dicts:
+
+```python
+from hub.dataload.nde import NDESourceUploader
+from utils import nde_upload_wrapper
+
+from .parser import my_parser
+
+
+class <Name>Uploader(NDESourceUploader):
+    name = "<name>"
+
+    @nde_upload_wrapper
+    def load_data(self, data_folder):
+        yield from my_parser(data_folder)
 ```
-standardize_funding(data_folder)
-  → load_pmid_ctfd(...)
-  → standardize_data(...)
-  → process_descriptions(...)
-  → process_measurement_technique(..., self.name)
-  → nctid_helper(...)
-  → add_topic_category(..., self.name)
-  → add_disambiguating_description(..., self.name)
-```
 
-Only one of the entries in the chain takes `data_folder` (the first one); the rest take the previous generator. If none of the above apply, do not write `load_data`.
-
-Always include `from utils.utils import nde_upload_wrapper` and `@nde_upload_wrapper` on `load_data` when overridden.
+`utils.iter_ndjson(data_folder)` yields the crawler's records if you need them alongside custom logic. Never re-implement a pipeline stage inside `load_data`.
 
 ### 8. docker-compose-crawlers.yml
 
@@ -195,21 +212,13 @@ Append a new service block, alphabetically placed if reasonable, matching the ex
 
 Use [docker-compose-crawlers.yml](docker-compose-crawlers.yml) lines around the existing bacdive entry as the exact template.
 
-## Cross-check pass (mandatory, before reporting done)
+## Validate the generated source
 
-After writing the parser, do one verification pass:
-
-1. Open [biothings-hub/files/nde-hub/hub/dataload/nde.py](biothings-hub/files/nde-hub/hub/dataload/nde.py) and locate `NDESourceUploader.get_mapping` (line 130) if `--type=Dataset`, or `NDESourceSampleUploader.get_mapping` (line 1300) if `--type=Sample`.
-2. For every top-level field your `parse()` emits, confirm it exists in that mapping. Exceptions that are allowed even though absent: `_id`, `@context`, `@type`, `pmids`, `pmcs`, and `_meta` (added later by `add_metadata_score`).
-3. For every emitted field, confirm sub-keys you set match the mapping's sub-`properties`. If you've emitted `locationOfOrigin.administrativeType` but the mapping has no `administrativeType` property, either drop it or pick the correctly-named sub-key.
-4. Confirm enum constraints in §4 hold.
-5. Confirm `description` is a single string, not a list.
-6. Confirm `pmids` / `pmcs` (if present) are single comma-separated strings.
-7. If anything fails, fix the parser and re-check. Do not silently drop fields the user mapped — surface the mismatch to the user.
+Before reporting done, invoke and follow [`/validate-source`](../validate-source/SKILL.md) for the generated source and selected record type. Treat that validation-and-repair pass as mandatory; fix every issue it finds. Keep the verification and `@type` rules centralized there instead of duplicating them in this skill.
 
 ## Demonstration
 
-[references/bacdive_example/](.claude/skills/new_source/references/bacdive_example/) (bundled with this skill) contains a worked example:
+[references/bacdive_example/](references/bacdive_example/) (bundled with this skill) contains a worked example:
 - `mapping.tsv` — the mapping
 - `heuristics.tsv` — rules layered on top of the mapping (heuristics wins on conflict, per §"Inputs to collect")
 - `example1.json` — a trimmed raw input record (one strain, one entry per section the parser touches)
@@ -220,8 +229,8 @@ The corresponding skill outputs already exist in the repo for inspection:
 - [biothings-hub/files/nde-hub/hub/dataload/sources/bacdive/](biothings-hub/files/nde-hub/hub/dataload/sources/bacdive/) (hub source)
 - The `bacdive-crawler` entry in [docker-compose-crawlers.yml](docker-compose-crawlers.yml)
 
-When asked to demonstrate, run the skill against the bundled `references/bacdive_example/` inputs and produce output that matches the structure of those existing files.
+When asked to demonstrate, run the skill against the bundled `references/bacdive_example/` inputs and produce output that matches the structure of those existing files, then run `/validate-source bacdive --type Sample`.
 
 ## Report at end
 
-When done, post a short summary listing every file created or modified, and call out any mapping rows you could not confidently convert (so the user can review). Also state the `_id` decision (prefixed `<name>_...` vs. bare `identifier`) and the one-line reason from §"Deciding the `_id`", so the user can override if they know of a collision risk.
+When done, post a short summary listing every file created or modified, the validation commands run, and any mapping rows you could not confidently convert. Also state the `_id` decision (prefixed `<name>_...` vs. bare `identifier`) and the one-line reason from §"Deciding the `_id`", so the user can override if they know of a collision risk. Mention that per-utility repository statistics will be available in the upload logs after the first run.

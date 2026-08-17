@@ -1,18 +1,15 @@
 from hub.dataload.nde import NDESourceSampleUploader
-from utils.measurement_technique_helper import process_measurement_technique
-from utils.pubtator import standardize_data
-from utils.utils import nde_upload_wrapper
 
-from .parser import parse_sex_docs
+from .parser import apply_sex_mapping, load_sex_mapping
 
 
 class BiosampleUploader(NDESourceSampleUploader):
     name = "biosample"
 
-    @nde_upload_wrapper
-    def load_data(self, data_folder):
-        docs = standardize_data(data_folder)
-        docs = parse_sex_docs(docs)
-        docs = process_measurement_technique(docs, self.name)
-        for doc in docs:
-            yield doc
+    _sex_mapping = None
+
+    def post_process(self, doc):
+        """Map the sample's reported sex onto our controlled vocabulary."""
+        if self._sex_mapping is None:
+            self._sex_mapping = load_sex_mapping()
+        return apply_sex_mapping(doc, self._sex_mapping)

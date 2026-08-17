@@ -2,6 +2,8 @@ from typing import Dict, Iterable, Optional, Pattern
 
 import regex as re
 
+from .common import as_list
+
 
 def _parse_mf_list(value: str):
     """
@@ -78,22 +80,14 @@ def extract_sex(value: str, mapping=None):
 
 
 def add_sex(value, output, mapping=None):
+    """Merge the sex label(s) parsed from `value` into `output["sex"]`."""
     sex_value = extract_sex(value, mapping)
     if not sex_value:
         return
 
-    # normalize to list of labels
-    sex_values = sex_value if isinstance(sex_value, list) else [sex_value]
-
-    existing = output.get("sex")
-    if existing is None:
-        output["sex"] = sex_values.copy()
-        return
-
-    if not isinstance(existing, list):
-        existing = [existing]
-
-    output["sex"] = list(set(existing + sex_values))
+    # dict.fromkeys rather than set(): dedupes but keeps first-seen order, so the
+    # same input always produces the same list.
+    output["sex"] = list(dict.fromkeys(as_list(output.get("sex")) + as_list(sex_value)))
 
 
 def build_sex_number_regex(
