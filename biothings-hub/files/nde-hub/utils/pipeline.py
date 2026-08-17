@@ -13,6 +13,9 @@ lookup tables, a database connection or the network.
 
 Records are processed in batches of 1000 by default.
 
+At the end of an upload, each active stage logs repository-wide before/after
+counts for the fields it manages, along with the number of records it changed.
+
 Usage in an uploader::
 
     class MySourceUploader(NDESourceUploader):
@@ -28,6 +31,7 @@ settings on the uploader change the pipeline:
     skip_stages = ("...",)       stage names this source should not run
 """
 
+import copy
 import functools
 import os
 import time
@@ -48,10 +52,11 @@ MONGO_DOC_SIZE_LIMIT = 16 * 1024 * 1024
 # Stage definition
 # ---------------------------------------------------------------------------
 class Stage:
-    __slots__ = ("name", "_run", "_applies", "_lookup_file", "_reset")
+    __slots__ = ("name", "tracked_fields", "_run", "_applies", "_lookup_file", "_reset")
 
-    def __init__(self, name, run, applies, lookup_file=None, reset=None):
+    def __init__(self, name, run, applies, lookup_file=None, reset=None, tracked_fields=()):
         self.name = name
+        self.tracked_fields = tuple(tracked_fields)
         self._run = run
         self._applies = applies
         self._lookup_file = lookup_file
@@ -77,6 +82,144 @@ class Stage:
             return True
         logger.debug("Pipeline: no %s lookup file for %s (%s), skipping stage", self.name, source, path)
         return False
+
+
+# ---------------------------------------------------------------------------
+# Per-stage statistics
+# ---------------------------------------------------------------------------
+def _new_stage_stats(stage):
+    return {
+        "records_seen": 0,
+        "records_processed": 0,
+        "records_output": 0,
+        "records_changed": 0,
+        "records_added": 0,
+        "records_dropped": 0,
+        "fields": {
+            field: {
+                "records_before": 0,
+                "records_after": 0,
+                "values_before": 0,
+                "values_after": 0,
+                "changed": 0,
+                "added": 0,
+                "modified": 0,
+                "removed": 0,
+            }
+            for field in stage.tracked_fields
+        },
+    }
+
+
+def _record_key(doc, occurrences):
+    identifier = doc.get("_id") if isinstance(doc, dict) else None
+    try:
+        hash(identifier)
+    except TypeError:
+        identifier = repr(identifier)
+    base = ("_id", identifier) if identifier is not None else ("object", id(doc))
+    occurrence = occurrences.get(base, 0)
+    occurrences[base] = occurrence + 1
+    return base, occurrence
+
+
+def _field_state(doc, field, copy_value):
+    value = doc
+    for part in field.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return False, None
+        value = value[part]
+    return True, copy.deepcopy(value) if copy_value else value
+
+
+def _snapshot_docs(docs, fields, *, copy_values):
+    occurrences = {}
+    return {
+        _record_key(doc, occurrences): {field: _field_state(doc, field, copy_values) for field in fields}
+        for doc in docs
+    }
+
+
+def _value_count(state):
+    present, value = state
+    if not present or not value:
+        return 0
+    return len(value) if isinstance(value, (list, tuple, set)) else 1
+
+
+def _update_stage_stats(stats, before, after, *, applied):
+    stats["records_seen"] += len(before)
+    if applied:
+        stats["records_processed"] += len(before)
+        stats["records_output"] += len(after)
+
+    before_keys = set(before)
+    after_keys = set(after)
+    stats["records_added"] += len(after_keys - before_keys)
+    stats["records_dropped"] += len(before_keys - after_keys)
+
+    changed_records = before_keys ^ after_keys
+    for key in before_keys & after_keys:
+        if any(before[key][field] != after[key][field] for field in stats["fields"]):
+            changed_records.add(key)
+    stats["records_changed"] += len(changed_records)
+
+    absent = (False, None)
+    for field, field_stats in stats["fields"].items():
+        for key in before_keys | after_keys:
+            before_state = before.get(key, {}).get(field, absent)
+            after_state = after.get(key, {}).get(field, absent)
+            before_count = _value_count(before_state)
+            after_count = _value_count(after_state)
+
+            field_stats["records_before"] += bool(before_count)
+            field_stats["records_after"] += bool(after_count)
+            field_stats["values_before"] += before_count
+            field_stats["values_after"] += after_count
+
+            if before_state == after_state:
+                continue
+            field_stats["changed"] += 1
+            if not before_count and after_count:
+                field_stats["added"] += 1
+            elif before_count and not after_count:
+                field_stats["removed"] += 1
+            else:
+                field_stats["modified"] += 1
+
+
+def _log_stage_stats(source, stages, stage_stats):
+    repository = source or "unknown"
+    for stage in stages:
+        stats = stage_stats[stage.name]
+        logger.info(
+            "Pipeline util stats: repository=%s util=%s records_seen=%s records_processed=%s "
+            "records_output=%s records_changed=%s records_added=%s records_dropped=%s",
+            repository,
+            stage.name,
+            stats["records_seen"],
+            stats["records_processed"],
+            stats["records_output"],
+            stats["records_changed"],
+            stats["records_added"],
+            stats["records_dropped"],
+        )
+        for field, field_stats in stats["fields"].items():
+            logger.info(
+                "Pipeline util stats: repository=%s util=%s field=%s records=%s->%s values=%s->%s "
+                "changed=%s added=%s modified=%s removed=%s",
+                repository,
+                stage.name,
+                field,
+                field_stats["records_before"],
+                field_stats["records_after"],
+                field_stats["values_before"],
+                field_stats["values_after"],
+                field_stats["changed"],
+                field_stats["added"],
+                field_stats["modified"],
+                field_stats["removed"],
+            )
 
 
 def _any_doc(predicate):
@@ -219,20 +362,56 @@ def _disambiguating_description_file(source):
 # The pipeline, in order. Citations run first because they add funding, species
 # and health conditions the later stages then standardize.
 STAGES = (
-    Stage("citations", _run_citations, _any_doc(_needs_citations)),
-    Stage("funding", _run_funding, _any_doc(_needs_funding)),
-    Stage("terms", _run_terms, _any_doc(_needs_terms), reset=_reset_terms),
-    Stage("descriptions", _run_descriptions, _any_doc(_needs_descriptions), reset=_reset_descriptions),
+    Stage(
+        "citations",
+        _run_citations,
+        _any_doc(_needs_citations),
+        tracked_fields=("citation", "funding", "species", "infectiousAgent", "healthCondition"),
+    ),
+    Stage("funding", _run_funding, _any_doc(_needs_funding), tracked_fields=("funding",)),
+    Stage(
+        "terms",
+        _run_terms,
+        _any_doc(_needs_terms),
+        reset=_reset_terms,
+        tracked_fields=("species", "infectiousAgent", "healthCondition"),
+    ),
+    Stage(
+        "descriptions",
+        _run_descriptions,
+        _any_doc(_needs_descriptions),
+        reset=_reset_descriptions,
+        tracked_fields=("species", "infectiousAgent", "healthCondition"),
+    ),
     Stage(
         "measurement_technique",
         _run_measurement_technique,
         _any_doc(lambda doc: bool(doc.get("measurementTechnique"))),
         _measurement_technique_file,
+        tracked_fields=("measurementTechnique", "keywords"),
     ),
-    Stage("nctid", _run_nctid, _any_doc(lambda doc: bool(doc.get("nctid"))), _nctid_file),
-    Stage("topic_category", _run_topic_category, _always, _topic_category_file),
-    Stage("disambiguating_description", _run_disambiguating_description, _always, _disambiguating_description_file),
-    Stage("lineage", _run_lineage, _always),
+    Stage(
+        "nctid",
+        _run_nctid,
+        _any_doc(lambda doc: bool(doc.get("nctid"))),
+        _nctid_file,
+        tracked_fields=("measurementTechnique",),
+    ),
+    Stage(
+        "topic_category",
+        _run_topic_category,
+        _always,
+        _topic_category_file,
+        tracked_fields=("topicCategory",),
+    ),
+    Stage(
+        "disambiguating_description",
+        _run_disambiguating_description,
+        _always,
+        _disambiguating_description_file,
+        tracked_fields=("disambiguatingDescription",),
+    ),
+    Stage("lineage", _run_lineage, _always, tracked_fields=("_meta.lineage",)),
 )
 
 STAGE_NAMES = tuple(stage.name for stage in STAGES)
@@ -292,24 +471,35 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
     batch_size = batch_size or DEFAULT_BATCH_SIZE
     started = time.monotonic()
     ran = {}
+    stage_stats = {stage.name: _new_stage_stats(stage) for stage in stages}
     total = 0
     yielded = 0
 
-    for batch in batched(docs, batch_size):
-        total += len(batch)
-        for stage in stages:
-            if not stage.applies(batch):
-                continue
-            batch = list(stage.run(batch, source))
-            ran[stage.name] = ran.get(stage.name, 0) + 1
+    try:
+        for batch in batched(docs, batch_size):
+            total += len(batch)
+            for stage in stages:
+                applied = stage.applies(batch)
+                before = _snapshot_docs(batch, stage.tracked_fields, copy_values=applied)
+                if applied:
+                    batch = list(stage.run(batch, source))
+                    ran[stage.name] = ran.get(stage.name, 0) + 1
+                    after = _snapshot_docs(batch, stage.tracked_fields, copy_values=False)
+                else:
+                    after = before
+                _update_stage_stats(stage_stats[stage.name], before, after, applied=applied)
 
-        for doc in batch:
-            doc = finalize(doc)
-            if doc is not None:
-                yielded += 1
-                yield doc
+            for doc in batch:
+                doc = finalize(doc)
+                if doc is not None:
+                    yielded += 1
+                    yield doc
 
-        logger.info("Pipeline: %s documents processed (%s emitted)", total, yielded)
+            logger.info("Pipeline: %s documents processed (%s emitted)", total, yielded)
+    finally:
+        # Also report partial statistics when validation or upload consumption
+        # stops the generator before the repository has finished.
+        _log_stage_stats(source, stages, stage_stats)
 
     # A stage that was active but never applied had no record that needed it.
     skipped.update({stage.name: "no matching records" for stage in stages if stage.name not in ran})
