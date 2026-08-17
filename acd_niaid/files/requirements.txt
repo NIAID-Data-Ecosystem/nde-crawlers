@@ -2,3 +2,4 @@ requests
 validators
 orjson
 datetime
+python-dateutil

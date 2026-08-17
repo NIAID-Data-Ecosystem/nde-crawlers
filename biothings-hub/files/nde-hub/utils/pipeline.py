@@ -8,8 +8,8 @@ through every applicable stage. A stage is applicable when
   * for the stages driven by a curated file (`measurementTechnique`,
     `topicCategory`, ...), that file exists for this source.
 
-An inapplicable stage costs one dict lookup per record and does not open its
-lookup tables, a database connection or the network.
+An inapplicable stage does not open its lookup tables, a database connection
+or the network. Its tracked fields are still counted for repository statistics.
 
 Records are processed in batches of 1000 by default.
 

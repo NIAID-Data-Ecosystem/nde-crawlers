@@ -2,6 +2,7 @@ import logging
 import re
 from datetime import datetime
 
+import dateutil.parser
 import requests
 import validators
 
@@ -14,6 +15,32 @@ logger = logging.getLogger("nde-logger")
 # strip mixed-case parentheticals like "(SARS-CoV-2)" or full alt-name annotations.
 _TRAILING_UPPER_ABBR = re.compile(r"\s*\(([A-Z][A-Z0-9]{1,6})\)\s*$")
 
+# The pmid inside a PubMed article URL.
+_PUBMED_PMID = re.compile(r"pubmed\.ncbi\.nlm\.nih\.gov/(\d+)")
+# A full DOI, registrant prefix included. The citations stage looks the DOI up
+# verbatim, so the "10.xxxx/" prefix has to survive.
+_DOI = re.compile(r"10\.\d{4,9}/[^\s\"'<>]+")
+
+# Month-precision dates ("December 2025") carry no day. Default to the 1st rather
+# than to today, which is what dateutil would otherwise fill in.
+_DATE_DEFAULT = datetime(2000, 1, 1)
+
+_ACTT_STUDY = {
+    "name": "Adaptive COVID-19 Treatment Trial",
+    "identifier": "ACTT",
+    "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
+}
+# The four ACTT iterations are separate studies in the API that cross-reference
+# each other. Keyed by nct number; the value is the dataset name a sibling uses
+# when pointing at it.
+_ACTT_ITERATIONS = {
+    "NCT04280705": "Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021",
+    "NCT04401579": "Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021",
+    "NCT04492475": "Adaptive COVID-19 Treatment Trial 3 (ACTT-3) - New dataset released October 2021",
+    "NCT04640168": "Adaptive COVID-19 Treatment Trial 4 (ACTT-4) - New dataset released May 2022",
+}
+_ACTT_RELATIONSHIP = "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial"
+
 
 def _clean_health_condition_name(value):
     if not isinstance(value, str):
@@ -22,6 +49,43 @@ def _clean_health_condition_name(value):
     if m:
         return value[: m.start()].strip()
     return value
+
+
+def _to_iso_date(value):
+    """Normalize an API date to an ISO `YYYY-MM-DD` string, or None.
+
+    The API mixes full ISO timestamps with month-precision names ("December
+    2025") and the placeholder "Coming Soon". An unparseable value is logged and
+    dropped, so one odd date cannot take down the whole crawl.
+    """
+    if not value or value == "Coming Soon":
+        return None
+    try:
+        return dateutil.parser.parse(str(value), ignoretz=True, default=_DATE_DEFAULT).date().isoformat()
+    except (dateutil.parser.ParserError, OverflowError, TypeError, ValueError):
+        logger.warning("Could not parse date: %r", value)
+        return None
+
+
+def _actt_links(nct_number):
+    """The curated isPartOf / isRelatedTo links between the four ACTT iterations."""
+    if nct_number not in _ACTT_ITERATIONS:
+        return {}
+    return {
+        "isPartOf": [{"@type": "CreativeWork", **_ACTT_STUDY}],
+        "isRelatedTo": [
+            {
+                "@type": "Dataset",
+                "name": name,
+                "identifier": "accessclinicaldata_" + nct,
+                "hasPart": {"@type": "CreativeWork", "identifier": "ACTT"},
+                "includedInDataCatalog": {"@type": "DataCatalog", "name": "accessclinicaldata@NIAID"},
+                "relationship": _ACTT_RELATIONSHIP,
+            }
+            for nct, name in _ACTT_ITERATIONS.items()
+            if nct != nct_number
+        ],
+    }
 
 
 def parse():
@@ -34,142 +98,16 @@ def parse():
         result = {}
 
         nct_number = study.get("nct_number")
-
-        # Conditionally add relationship fields based on nct_number.
-        if nct_number == "NCT04280705":
-            result["isPartOf"] = [{
-                "name": "Adaptive COVID-19 Treatment Trial",
-                "identifier": "ACTT",
-                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-            }]
-            result["isRelatedTo"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021",
-                    "identifier": "accessclinicaldata_NCT04401579",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 3 (ACTT-3) - New dataset released October 2021",
-                    "identifier": "accessclinicaldata_NCT04492475",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 4 (ACTT-4) - New dataset released May 2022",
-                    "identifier": "accessclinicaldata_NCT04640168",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-            ]
-        elif nct_number == "NCT04401579":
-            result["isPartOf"] = [{
-                "name": "Adaptive COVID-19 Treatment Trial",
-                "identifier": "ACTT",
-                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-            }]
-            result["isRelatedTo"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021",
-                    "identifier": "accessclinicaldata_NCT04280705",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 3 (ACTT-3) - New dataset released October 2021",
-                    "identifier": "accessclinicaldata_NCT04492475",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 4 (ACTT-4) - New dataset released May 2022",
-                    "identifier": "accessclinicaldata_NCT04640168",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-            ]
-        elif nct_number == "NCT04492475":
-            result["isPartOf"] = [{
-                "name": "Adaptive COVID-19 Treatment Trial",
-                "identifier": "ACTT",
-                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-            }]
-            result["isRelatedTo"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021",
-                    "identifier": "accessclinicaldata_NCT04280705",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021",
-                    "identifier": "accessclinicaldata_NCT04401579",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 4 (ACTT-4) - New dataset released May 2022",
-                    "identifier": "accessclinicaldata_NCT04640168",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-            ]
-        elif nct_number == "NCT04640168":
-            result["isPartOf"] = [{
-                "name": "Adaptive COVID-19 Treatment Trial",
-                "identifier": "ACTT",
-                "url": "https://www.nih.gov/news-events/news-releases/fourth-iteration-covid-19-treatment-trial-underway",
-            }]
-            result["isRelatedTo"] = [
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial (ACTT-1) - Dataset update released August 2021",
-                    "identifier": "accessclinicaldata_NCT04280705",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 2 (ACTT-2) - Dataset update released October 2021",
-                    "identifier": "accessclinicaldata_NCT04401579",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-                {
-                    "name": "Adaptive COVID-19 Treatment Trial 3 (ACTT-3) - New dataset released October 2021",
-                    "identifier": "accessclinicaldata_NCT04492475",
-                    "hasPart": {"identifier": "ACTT"},
-                    "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "accessclinicaldata@NIAID"},
-                    "relationship": "Different iteration of the same study, the Adaptive COVID-19 Treatment Trial",
-                },
-            ]
+        result.update(_actt_links(nct_number))
 
         result["name"] = study.get("title")
         unique_id = study.get("cmc_unique_id")
         result["description"] = study.get("description")
         result["abstract"] = study.get("brief_study_description")
-        result["usageInfo"] = {"url":"https://accessclinicaldata.niaid.nih.gov/api/files/NIAIDDUAAccessclinicaldata@NIAID.pdf"}
+        result["usageInfo"] = {
+            "@type": "CreativeWork",
+            "url": "https://accessclinicaldata.niaid.nih.gov/api/files/NIAIDDUAAccessclinicaldata@NIAID.pdf",
+        }
 
         has_part_list = []
         for doc in study.get("study_documents", []):
@@ -182,8 +120,7 @@ def parse():
                 "name": doc.get("file_name"),
                 "url": "https://accessclinicaldata.niaid.nih.gov/api/files/" + s3_location
             }
-            data_format = doc.get("data_format")
-            if data_format is not None:
+            if data_format := doc.get("data_format"):
                 creative_work["encodingFormat"] = data_format
 
             has_part_list.append(creative_work)
@@ -191,77 +128,54 @@ def parse():
         if has_part_list:
             result["hasPart"] = has_part_list
 
-        date_published = study.get("data_availability_date")
-        if date_published == "Coming Soon":
-            result["datePublished"] = None
-        elif date_published:
-            if "T" in date_published:
-                result["datePublished"] = datetime.fromisoformat(date_published).strftime("%Y-%m-%d")
-            else:
-                try:
-                    iso_date = datetime.strptime(date_published, "%B %Y")
-                except ValueError:
-                    iso_date = datetime.strptime(date_published, "%B %d, %Y")
-                result["datePublished"] = iso_date.strftime("%Y-%m-%d")
-        else:
-            result["datePublished"] = None
-
-        date_modified = study.get("most_recent_update")
-        if date_modified:
-            if "T" in date_modified:
-                result["dateModified"] = datetime.fromisoformat(date_modified).strftime("%Y-%m-%d")
-            else:
-                iso_date = datetime.strptime(date_modified, "%B %Y")
-                result["dateModified"] = iso_date.strftime("%Y-%m-%d")
-        else:
-            result["dateModified"] = None
+        result["datePublished"] = _to_iso_date(study.get("data_availability_date"))
+        result["dateModified"] = _to_iso_date(study.get("most_recent_update"))
 
         result["additionalType"] = study.get("data_available")
-        result["funding"] = [{"funder": {"name": study.get("creator")}}]
+        if creator := study.get("creator"):
+            result["funding"] = [{"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": creator}}]
         if nct_number and nct_number != "N/A":
             result["nctid"] = nct_number
         if condition := study.get("condition"):
-            result["healthCondition"] = {"name": _clean_health_condition_name(condition)}
+            result["healthCondition"] = {"@type": "DefinedTerm", "name": _clean_health_condition_name(condition)}
         result["mainEntityOfPage"] = study.get("clinical_trial_website")
 
         citation_url = study.get("publications")
         if citation_url and validators.url(citation_url):
-            if "pubmed" in citation_url:
-                pmid = citation_url.split("/")[-2]
-                # check if valid pmid with regex
-                if pmid.isdigit():
-                    result["pmids"] = citation_url.split("/")[-2]
-            elif "doi" in citation_url:
-                doi_id = citation_url.split("/")[-1]
-                result["citation"] = [{"doi": doi_id}]
-                # r = requests.get("https://pubmed.ncbi.nlm.nih.gov/?term=" + doi_id)
-                # if "pubmed" in r.url:
-                #     pmid = r.url.split("/")[-2]
-                #     if pmid.isdigit():
-                #         result["pmids"] = r.url.split("/")[-2]
-                # else:
-                #     result["citation"] = None
+            if pmid_match := _PUBMED_PMID.search(citation_url):
+                result["pmids"] = pmid_match.group(1)
+            elif "doi" in citation_url and (doi_match := _DOI.search(citation_url)):
+                result["citation"] = [{"@type": "ScholarlyArticle", "doi": doi_match.group()}]
             else:
-                result["citation"] = [{"url": citation_url}]
-        else:
-            result["citation"] = None
+                result["citation"] = [{"@type": "ScholarlyArticle", "url": citation_url}]
 
         result["conditionsOfAccess"] = "Restricted" if study.get("data_available_for_request") else "Closed"
 
-        identifiers = [x for x in (unique_id, nct_number) if x is not None]
-        seen = set()
-        identifiers = [x for x in identifiers if x not in seen and not seen.add(x)]
+        # nct_number arrives as "", None or "N/A" when the study has no trial
+        # registration; none of those belong in identifier.
+        identifiers = []
+        for value in (unique_id, nct_number):
+            if value and value.strip().upper() != "N/A" and value not in identifiers:
+                identifiers.append(value)
+        if not identifiers:
+            logger.warning("Skipping study with no usable identifier: %r", study.get("title"))
+            continue
         result["identifier"] = identifiers
 
-        primary_id = result["identifier"][0]
+        primary_id = identifiers[0]
         result["_id"] = "accessclinicaldata_" + primary_id.lower()
         dataset_url = "https://accessclinicaldata.niaid.nih.gov/study-viewer/clinical_trials/" + primary_id
         result["url"] = dataset_url
-        result["includedInDataCatalog"] = {"name": "accessclinicaldata@NIAID", "archivedAt": dataset_url}
+        result["includedInDataCatalog"] = {
+            "@type": "DataCatalog",
+            "name": "accessclinicaldata@NIAID",
+            "archivedAt": dataset_url,
+        }
         result["@type"] = "Dataset"
 
-        # Remove any keys with None values.
-        clean_result = {k: v for k, v in result.items() if v is not None}
+        # Drop keys the API left empty. "" is as useless to Elasticsearch as None,
+        # and both show up here (clinical_trial_website, most notably).
+        clean_result = {k: v for k, v in result.items() if v not in (None, "", [], {})}
 
         yield clean_result
 
