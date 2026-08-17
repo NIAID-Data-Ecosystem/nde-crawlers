@@ -84,7 +84,8 @@ def get_record_ids(records_content):
 
 
 def sanitize_org(org):
-    """Replace a NaN `url` with an empty string."""
+    """Set the schema type and replace a NaN `url` with an empty string."""
+    org.setdefault("@type", "Organization")
     if "url" in org:
         url_val = org["url"]
         if isinstance(url_val, float) and math.isnan(url_val):

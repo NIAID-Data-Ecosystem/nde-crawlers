@@ -94,6 +94,22 @@ def _standardize_funders(entry):
                 funder[i] = standardize_funder(name)
 
 
+def _ensure_funding_types(entry):
+    """Backfill types on a grant and its utility-created nested objects."""
+    entry.setdefault("@type", "MonetaryGrant")
+    for funder in as_list(entry.get("funder")):
+        if not isinstance(funder, dict):
+            continue
+        funder.setdefault("@type", "Organization")
+        for employee in as_list(funder.get("employee")):
+            if isinstance(employee, dict):
+                employee.setdefault("@type", "Person")
+    for work in as_list(entry.get("isBasedOn")):
+        if isinstance(work, dict):
+            work.setdefault("@type", "CreativeWork")
+    return entry
+
+
 def standardize_funding(docs):
     """Standardize the funding of one batch of records."""
     docs = list(docs)
@@ -117,10 +133,11 @@ def standardize_funding(docs):
         for i, entry in enumerate(entries):
             if not isinstance(entry, dict):
                 continue
+            _ensure_funding_types(entry)
             if identifier := entry.get("identifier"):
                 # A curated grant replaces the whole entry; a miss leaves it untouched.
                 if cached := funding_cache.get(_funding_key(identifier)):
-                    entries[i] = cached
+                    entries[i] = _ensure_funding_types(cached)
                 else:
                     logger.debug("Not in cache: %s, skipping API lookup", _funding_key(identifier))
                 continue
@@ -284,7 +301,7 @@ def build_funding_dict(funding_info):
     if project_end_date := funding_info.get("project_end_date"):
         funding_dict["endDate"] = project_end_date.split("T")[0]
     if full_foa := funding_info.get("full_foa"):
-        funding_dict["isBasedOn"] = {"identifier": full_foa}
+        funding_dict["isBasedOn"] = {"@type": "CreativeWork", "identifier": full_foa}
     if funders:
         funding_dict["funder"] = funders
     return funding_dict
@@ -293,7 +310,7 @@ def build_funding_dict(funding_info):
 def _build_employees(program_officers):
     employees = []
     for officer in program_officers or []:
-        employee = {}
+        employee = {"@type": "Person"}
         first_name = officer.get("first_name")
         last_name = officer.get("last_name")
         if first_name:

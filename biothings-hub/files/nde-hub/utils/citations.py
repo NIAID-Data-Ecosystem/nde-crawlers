@@ -798,6 +798,7 @@ def _parse_citation(record):
         citation["author"].append({"@type": "Organization", "name": corp_author})
 
     if citation:
+        citation["@type"] = "ScholarlyArticle"
         citation["fromPMID"] = True
     return citation
 
@@ -834,7 +835,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     for record in records:
         funding = []
         for grant in record["MedlineCitation"]["Article"].get("GrantList") or []:
-            fund = {}
+            fund = {"@type": "MonetaryGrant"}
             if grant_id := grant.get("GrantID"):
                 fund["identifier"] = str(grant_id)
             if agency := grant.get("Agency"):
@@ -893,7 +894,19 @@ def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
             )
         conn.commit()
 
-    return {**cached_results, **fresh_results}
+    results = {**cached_results, **fresh_results}
+    for info in results.values():
+        citation = info.get("citation")
+        if isinstance(citation, dict) and citation:
+            citation.setdefault("@type", "ScholarlyArticle")
+        for grant in info.get("funding") or []:
+            if not isinstance(grant, dict):
+                continue
+            grant.setdefault("@type", "MonetaryGrant")
+            for funder in as_list(grant.get("funder")):
+                if isinstance(funder, dict):
+                    funder.setdefault("@type", "Organization")
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -1031,6 +1044,6 @@ def _standardize_fields_batch(docs):
             ]
             for pmid in field_pmids:
                 if citation := (eutils_info.get(pmid) or {}).get("citation"):
-                    citation["type"] = "ScholarlyArticle"
+                    citation["@type"] = "ScholarlyArticle"
                     doc[field].append(citation)
         yield doc

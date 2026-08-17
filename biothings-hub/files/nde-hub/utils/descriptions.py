@@ -651,7 +651,14 @@ def _extract_entities(doc_list):
                             entry.get("name") == name and str(entry.get("identifier")) == str(onto_id)
                             for entry in species
                         ):
-                            species.append({"name": name, "identifier": onto_id, "fromEXTRACT": True})
+                            species.append(
+                                {
+                                    "@type": "DefinedTerm",
+                                    "name": name,
+                                    "identifier": onto_id,
+                                    "fromEXTRACT": True,
+                                }
+                            )
 
                 if _DISEASE_TYPE in responses:
                     for name, onto_id in _tagged_entities(responses[_DISEASE_TYPE], _DISEASE_TYPE):
@@ -665,6 +672,7 @@ def _extract_entities(doc_list):
                         ):
                             conditions.append(
                                 {
+                                    "@type": "DefinedTerm",
                                     "name": name,
                                     "identifier": onto_id,
                                     "fromEXTRACT": True,
@@ -735,7 +743,7 @@ def _normalize_term_entries(doc, field):
     if field not in doc:
         return
     entries = as_list(doc[field])
-    doc[field] = [{"name": entry} if isinstance(entry, str) else entry for entry in entries]
+    doc[field] = [{"@type": "DefinedTerm", "name": entry} if isinstance(entry, str) else entry for entry in entries]
 
 
 def _build_species_lineage_info(species_list, species_mapping):

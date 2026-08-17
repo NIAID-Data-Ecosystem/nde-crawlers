@@ -242,40 +242,122 @@ def _ratio(score, total):
 
 
 def check_schema(doc: Dict) -> Dict:
-    """Assert the document is safe to insert into MongoDB and valid per the NDE schema."""
+    """Raise one error listing every NDE schema issue found in the document."""
     doc_id = doc.get("_id") if isinstance(doc, dict) else None
+    issues = []
 
-    def failure(message):
-        return f"{message} [record _id={doc_id!r}]"
+    def check(condition, message):
+        if not condition:
+            issues.append(message)
 
-    assert isinstance(doc, dict), failure("doc is not a dict")
-    assert doc.get("_id"), failure("_id is None")
-    assert doc.get("@type"), failure("@type is None")
-    assert doc.get("url"), failure("url is None")
+    if not isinstance(doc, dict):
+        raise AssertionError(f"Schema validation failed [record _id={doc_id!r}]:\n- doc is not a dict")
+
+    check(doc.get("_id"), "_id is None")
+    check(doc.get("@type"), "@type is None")
+    check(doc.get("url"), "url is None")
+
+    none = object()
+
+    def assert_types(field, expected_types, value=none):
+        entries = as_list(doc.get(field) if value is none else value)
+        check(
+            all(isinstance(item, dict) and item.get("@type") in expected_types for item in entries),
+            f"{field} needs to be of type {' or '.join(expected_types)}",
+        )
+
+    person_or_organization = ("Organization", "Person")
+    for field in ("author", "creator"):
+        assert_types(field, person_or_organization)
+
+    term_fields = (
+        "species",
+        "infectiousAgent",
+        "healthCondition",
+        "measurementTechnique",
+        "topicCategory",
+    )
+    for field in term_fields:
+        assert_types(field, ("DefinedTerm",))
+
+    citation_fields = ("citation", "citedBy", "isBasedOn", "isBasisFor", "isPartOf", "hasPart")
+    for field in citation_fields:
+        assert_types(field, ("ScholarlyArticle", "CreativeWork"))
+
+    assert_types("funding", ("MonetaryGrant",))
+    assert_types("sourceOrganization", ("Organization", "ResearchProject"))
+
+    # Validate the objects nested inside the objects created by the utility stages.
+    authors = as_list(doc.get("author")) + as_list(doc.get("creator"))
+    for field in citation_fields:
+        for citation in as_list(doc.get(field)):
+            if isinstance(citation, dict):
+                assert_types(f"{field}.author", person_or_organization, citation.get("author"))
+                authors.extend(as_list(citation.get("author")))
+
+    for author in authors:
+        if isinstance(author, dict) and author.get("affiliation") is not None:
+            assert_types("affiliation", ("Organization",), author.get("affiliation"))
+
+    curator_types = (
+        "Person",
+        "Organization",
+        "DataCatalog",
+        "ResourceCatalog",
+        "SoftwareApplication",
+        "ComputationalTool",
+        "ResearchProject",
+    )
+    for field in term_fields:
+        for term in as_list(doc.get(field)):
+            if isinstance(term, dict) and term.get("curatedBy") is not None:
+                assert_types(f"{field}.curatedBy", curator_types, term.get("curatedBy"))
+
+    for grant in as_list(doc.get("funding")):
+        if not isinstance(grant, dict):
+            continue
+        if grant.get("funder") is not None:
+            assert_types("funding.funder", ("Organization",), grant.get("funder"))
+        for funder in as_list(grant.get("funder")):
+            if isinstance(funder, dict) and funder.get("employee") is not None:
+                assert_types("funding.funder.employee", ("Person",), funder.get("employee"))
+        if grant.get("isBasedOn") is not None:
+            assert_types("funding.isBasedOn", ("ScholarlyArticle", "CreativeWork"), grant.get("isBasedOn"))
 
     catalogs = doc.get("includedInDataCatalog")
-    assert catalogs, failure("includedInDataCatalog is None")
-    assert all(isinstance(item, dict) and item.get("archivedAt") for item in as_list(catalogs)), failure(
-        "includedInDataCatalog.archivedAt is None in one or more items"
-    )
+    check(catalogs, "includedInDataCatalog is None")
+    if catalogs:
+        check(
+            all(isinstance(item, dict) and item.get("archivedAt") for item in as_list(catalogs)),
+            "includedInDataCatalog.archivedAt is None in one or more items",
+        )
 
-    assert doc.get("version", None) is None, failure("Remove version field")
+    check(doc.get("version", None) is None, "Remove version field")
 
     if coa := doc.get("conditionsOfAccess"):
-        assert coa in CONDITIONS_OF_ACCESS, failure(
-            "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, CONDITIONS_OF_ACCESS)
+        check(
+            coa in CONDITIONS_OF_ACCESS,
+            "%s is not a valid conditionsOfAccess. Allowed conditionsOfAccess: %s" % (coa, CONDITIONS_OF_ACCESS),
         )
 
     if doc.get("@type") == "Sample" and (cws := doc.get("creativeWorkStatus")) is not None:
         if isinstance(cws, (list, tuple, set)):
-            assert cws, failure("creativeWorkStatus cannot be empty")
+            check(cws, "creativeWorkStatus cannot be empty")
             invalid = [status for status in cws if status not in CREATIVE_WORK_STATUS]
-            assert not invalid, failure(
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS)
+            check(
+                not invalid,
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
+                % (cws, CREATIVE_WORK_STATUS),
             )
         else:
-            assert cws in CREATIVE_WORK_STATUS, failure(
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS)
+            check(
+                cws in CREATIVE_WORK_STATUS,
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
+                % (cws, CREATIVE_WORK_STATUS),
             )
+
+    if issues:
+        issue_list = "\n".join(f"- {issue}" for issue in issues)
+        raise AssertionError(f"Schema validation failed [record _id={doc_id!r}]:\n{issue_list}")
 
     return doc
