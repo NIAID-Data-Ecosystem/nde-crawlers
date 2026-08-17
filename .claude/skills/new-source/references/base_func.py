@@ -24,8 +24,8 @@ def _to_iso_date(val):
     if val is None:
         return None
     try:
-        dt = dateutil.parser.parse(val, ignoretz=True).date().isoformat()
-    except (dateutil.parser.ParserError, TypeError):
+        dt = dateutil.parser.parse(str(val), ignoretz=True).date().isoformat()
+    except (dateutil.parser.ParserError, TypeError, OverflowError):
         logger.warning(f"Could not parse date: {val}")
         return None
     return dt
