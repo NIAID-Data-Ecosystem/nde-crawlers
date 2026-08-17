@@ -35,8 +35,7 @@ def fetch_term_name_from_url(url):
     """Fetch an ontology term's label, preferring OLS then the raw RDF. None if unavailable.
 
     Unbounded: the URLs come from the curated technique CSVs, so the key space is
-    bounded by those files, and the values are short labels. Evicting one would
-    only mean fetching it again.
+    bounded by those files, and the values are short labels.
     """
     try:
         # Ontobee URLs carry the real IRI as a query parameter.

@@ -31,9 +31,7 @@ from .term_matching import (
     term_labels,
     term_matches_mention,
 )
-from .terms import DB_PATH as PUBTATOR_DB_PATH
-from .terms import SPECIES_CACHE_DB_PATH as DB_PATH
-from .terms import fetch_taxon, normalize_taxon_id, query_condition
+from .terms import DB_PATH as PUBTATOR_DB_PATH, SPECIES_CACHE_DB_PATH as DB_PATH, fetch_taxon, normalize_taxon_id, query_condition
 
 _NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
 _NEGATIVE_SPECIES_TABLE = "description_species_negative"
@@ -90,8 +88,7 @@ class ExtractCircuitOpen(RuntimeError):
 _extract_circuit_failures = 0
 _extract_circuit_open_until = 0.0
 
-# Reuse the connection to EXTRACT. Requests' module-level helpers create a new
-# session per call, which pays the TCP setup cost again for every document.
+# Reuse HTTP connections for EXTRACT.
 _EXTRACT_SESSION = requests.Session()
 
 # Place names and terms EXTRACT reliably gets wrong.
@@ -244,9 +241,7 @@ CREATE TABLE IF NOT EXISTS extract_failures (
 """
 _EXTRACT_CACHE_DDL = (*_RESPONSE_CACHE_DDL, _FAILURE_CACHE_DDL)
 
-# These three are read for nearly every extracted term, so they are held whole.
-# Separate instances from the ones in `terms`, which reads the same two tables by
-# key -- the two stages cache independently on purpose.
+# All but TAXON_DETAILS are preloaded whole; they're read for nearly every term.
 SPECIES_DETAILS = SqliteCache(DB_PATH, "species_details", preload=True)
 TAXON_DETAILS = SqliteCache(
     DB_PATH,
@@ -565,8 +560,6 @@ def _extract_entities(doc_list):
             if "healthCondition" not in doc:
                 disease_ids.append(doc["_id"].lower())
 
-        # Read and close SQLite before making any network requests. Previously
-        # the transaction stayed open for the entire (often multi-minute) loop.
         with sqlite(DB_PATH, *_EXTRACT_CACHE_DDL) as conn:
             c = conn.cursor()
             cached_species = _fetch_cached_responses(c, _SPECIES_TYPE, species_ids)
@@ -658,7 +651,14 @@ def _extract_entities(doc_list):
                             entry.get("name") == name and str(entry.get("identifier")) == str(onto_id)
                             for entry in species
                         ):
-                            species.append({"name": name, "identifier": onto_id, "fromEXTRACT": True})
+                            species.append(
+                                {
+                                    "@type": "DefinedTerm",
+                                    "name": name,
+                                    "identifier": onto_id,
+                                    "fromEXTRACT": True,
+                                }
+                            )
 
                 if _DISEASE_TYPE in responses:
                     for name, onto_id in _tagged_entities(responses[_DISEASE_TYPE], _DISEASE_TYPE):
@@ -672,6 +672,7 @@ def _extract_entities(doc_list):
                         ):
                             conditions.append(
                                 {
+                                    "@type": "DefinedTerm",
                                     "name": name,
                                     "identifier": onto_id,
                                     "fromEXTRACT": True,
@@ -742,7 +743,7 @@ def _normalize_term_entries(doc, field):
     if field not in doc:
         return
     entries = as_list(doc[field])
-    doc[field] = [{"name": entry} if isinstance(entry, str) else entry for entry in entries]
+    doc[field] = [{"@type": "DefinedTerm", "name": entry} if isinstance(entry, str) else entry for entry in entries]
 
 
 def _build_species_lineage_info(species_list, species_mapping):
@@ -936,8 +937,7 @@ def _standardize_extracted_species(doc_list):
         return doc_list
 
     species_mapping = {(sp.get("originalName") or sp["name"]).lower(): sp for sp in formatted_species}
-    # Run insertion even when every candidate was rejected. It intentionally
-    # removes uncurated EXTRACT stubs that could not be standardized safely.
+    # Runs even with no candidates: this is also what removes unstandardizable EXTRACT stubs
     _insert_species(docs_to_standardize, species_mapping)
     return doc_list
 
@@ -1064,18 +1064,15 @@ def _resolve_missing_species(missing_terms, candidate_identifiers=None):
 
     Description enrichment intentionally does not fall back to text2term. In a
     six-hour production sample, rebuilding text2term's NCBITaxon TF-IDF index
-    took 10,311.7 seconds across 116 calls and yielded only three safe mappings
-    from 6,686 terms. EXTRACT already supplies candidate taxon ids, so resolve
-    those directly and remember candidate sets that cannot safely match.
+    Deliberately no text2term fallback: in a production sample it cost ~2.9 hours
+    of index rebuilds for 3 safe mappings out of 6,686 terms. EXTRACT already
+    supplies candidate taxon ids.
     """
     candidate_identifiers = candidate_identifiers or {}
     resolved = []
     pending = {}
     rejection_cache_hits = 0
 
-    # EXTRACT supplies taxonomy IDs and sometimes returns several candidates
-    # for an abbreviated name. Resolve each id once, then select a candidate
-    # whose authoritative UniProt label actually supports the mention.
     for original_name in missing_terms:
         raw_identifiers = candidate_identifiers.get(original_name, ())
         rejection_key = _species_rejection_key(original_name, raw_identifiers)

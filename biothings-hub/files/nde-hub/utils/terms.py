@@ -131,6 +131,9 @@ def _build_lookup_dict(rows):
         if not standard_dict:
             continue
         item_data = json.loads(standard_dict)
+        item_data.setdefault("@type", "DefinedTerm")
+        if isinstance(item_data.get("curatedBy"), dict):
+            item_data["curatedBy"].setdefault("@type", "SoftwareApplication")
         _add_lookup_alias(lookup_dict, original_name, item_data)
         loaded_items.append(item_data)
 
@@ -224,6 +227,7 @@ def create_return_object(hit, alternate_names, original_name):
         "originalName": original_name,
         "url": f"http://purl.obolibrary.org/obo/{ontology}_{identifier}",
         "curatedBy": {
+            "@type": "SoftwareApplication",
             "name": "Biothings API",
             "url": "https://biothings.io/",
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -385,6 +389,7 @@ def get_species_details(original_name, identifier):
     term.pop("lineage", None)
     term["isCurated"] = True
     term["curatedBy"] = {
+        "@type": "SoftwareApplication",
         "name": "PubTator",
         "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
         "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -653,6 +658,9 @@ def _standardize_section(section, lookup_dict, is_species_section=False):
             logger.error("Invalid object: %s", original_obj)
             continue
         if any(key in original_obj for key in _STANDARDIZED_FLAGS):
+            original_obj.setdefault("@type", "DefinedTerm")
+            if isinstance(original_obj.get("curatedBy"), dict):
+                original_obj["curatedBy"].setdefault("@type", "SoftwareApplication")
             new_section.append(original_obj)
             continue
 
@@ -734,12 +742,8 @@ def standardize_doc_terms(doc, hc_dict, species_dict):
 # The pipeline stage
 # ---------------------------------------------------------------------------
 def standardize_terms(docs):
-    """Standardize the species, infectiousAgent and healthCondition of one batch.
+    """Standardize the species, infectiousAgent and healthCondition of one batch."""
 
-    Applying the lookup dictionaries costs a few microseconds per record, so
-    this runs in-process: a worker pool spent more time pickling records than
-    the work itself, and each fork held its own copy of the lookup tables.
-    """
     docs = list(docs)
     hc_dict, species_dict = _lookup_dicts()
 

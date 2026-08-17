@@ -4,6 +4,7 @@ import re
 
 import pandas as pd
 import requests
+from dateutil import parser
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
@@ -11,6 +12,22 @@ logger = logging.getLogger("nde-logger")
 
 def get_pkg_names(package_dict_list):
     return [pkg["Package"] for pkg in package_dict_list]
+
+
+def normalize_date(value):
+    """Return `value` as an ISO date string.
+
+    VIEWS dates are usually plain YYYY-MM-DD, but Date/Publication sometimes
+    carries a time and timezone ("2026-03-13 12:37:42 UTC"), which the hub's
+    datetime.fromisoformat() call cannot read.
+    """
+    if not value:
+        return None
+    try:
+        return parser.parse(value).date().isoformat()
+    except (ValueError, OverflowError):
+        logger.warning("Could not parse date: %s", value)
+        return None
 
 
 def get_cran_pkg_names():
@@ -184,9 +201,9 @@ def parse():
         if len(author_list):
             output["author"] = author_list
 
-        if date_modified := metadata.get("git_last_commit_date"):
+        if date_modified := normalize_date(metadata.get("git_last_commit_date")):
             output["dateModified"] = date_modified
-        if date_published := metadata.get("Date/Publication"):
+        if date_published := normalize_date(metadata.get("Date/Publication")):
             output["datePublished"] = date_published
 
         download_urls = []

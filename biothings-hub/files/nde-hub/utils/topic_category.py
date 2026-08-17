@@ -18,7 +18,11 @@ CACHE_DIR = f"{LOOKUP_DIR}/cache"
 EDAM_URL = "https://edamontology.org/EDAM_unstable.owl"
 EDAM_TOPIC_IRI = "http://edamontology.org/topic_"
 
-CURATED_BY = {"name": "GPT-4o-mini", "url": "https://openai.com/index/chatgpt"}
+CURATED_BY = {
+    "@type": "SoftwareApplication",
+    "name": "GPT-4o-mini",
+    "url": "https://openai.com/index/chatgpt",
+}
 
 # "Human biology" is only meaningful alongside one of these.
 EXCEPTION_TOPICS = frozenset({"Anatomy", "Transcriptomics", "Developmental biology", "Oncology", "Physiology"})

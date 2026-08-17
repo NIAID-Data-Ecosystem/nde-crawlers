@@ -41,10 +41,16 @@ def retry(retry_num, retry_sleep_sec):
 
 
 def iter_ndjson(data_folder, filename="data.ndjson"):
-    """Yield documents from `<data_folder>/<filename>`."""
-    with open(os.path.join(os.fspath(data_folder), filename), "rb") as f:
-        for line in f:
-            yield orjson.loads(line)
+    """Yield documents from `<data_folder>/<filename>`, skipping blank lines."""
+    path = os.path.join(os.fspath(data_folder), filename)
+    with open(path, "rb") as f:
+        for line_number, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                yield orjson.loads(line)
+            except orjson.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON on line {line_number} of {path}: {e}") from e
 
 
 @contextmanager

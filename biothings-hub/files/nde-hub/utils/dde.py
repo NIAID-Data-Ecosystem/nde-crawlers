@@ -32,6 +32,7 @@ _health_condition_cache = {}
 def _curated_by():
     return {
         "curatedBy": {
+            "@type": "SoftwareApplication",
             "name": "Data Discovery Engine",
             "url": "https://discovery.biothings.io/",
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -68,6 +69,7 @@ def load_properties():
 
 def species_func(species, term_set):
     """Curate a species term from its UniProt URL."""
+    species.setdefault("@type", "DefinedTerm")
     if term_set != "UniProt":
         return species
 
@@ -87,6 +89,7 @@ def species_func(species, term_set):
 
 def health_condition_func(health_condition, term_set):
     """Curate a health condition term against its ontology."""
+    health_condition.setdefault("@type", "DefinedTerm")
     key = (health_condition.get("name"), term_set)
     if key in _health_condition_cache:
         return _health_condition_cache[key]

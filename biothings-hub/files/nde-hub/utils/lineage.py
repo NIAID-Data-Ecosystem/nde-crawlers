@@ -59,12 +59,10 @@ def _load_cached(taxon_ids: Set[int], cache: dict, table: str, column: str, deco
 
 
 def _load_cached_lineages(taxon_ids: Set[int], lineage_cache: dict):
-    """Load SQLite-cached lineage rows into a batch-local cache."""
     _load_cached(taxon_ids, lineage_cache, "taxon_lineage", "lineage", json.loads)
 
 
 def _load_cached_parents(taxon_ids: Set[int], parent_cache: dict):
-    """Load SQLite-cached parent rows into a batch-local cache."""
     _load_cached(taxon_ids, parent_cache, "taxon_parent", "parent_taxid")
 
 
@@ -249,13 +247,8 @@ def _process_batch(batch: list):
 
 
 def process_lineage(docs):
-    """Add taxonomy lineage to documents using a persistent SQLite-backed cache.
-
-    Yields each document, with ``_meta.lineage`` populated only for
-    portal/API-visible record types that have numeric taxonomy IDs. Taxon
-    lookups are cached in SQLite at ``DB_PATH``.
-    In-memory lineage and parent dictionaries are scoped to one
-    internal batch and are discarded before the next batch is processed to avoid memory issues.
+    """
+        Add _meta.lineage (taxonoy lineage) to portal-visible records with numeric taxonomy IDs.
     """
     batch: list = []
     for doc in docs:

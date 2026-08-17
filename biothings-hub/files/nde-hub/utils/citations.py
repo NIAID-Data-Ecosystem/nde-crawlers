@@ -34,11 +34,13 @@ from config import GEO_API_KEY, GEO_EMAIL, logger
 
 from .common import as_list, dict_entries, retry
 from .funding import standardize_funder
-from .term_matching import is_ambiguous_short_mention as _is_ambiguous_short_mention
-from .term_matching import mentioned_in as _mentioned_in
-from .term_matching import normalize_term_text as _normalize_term_text
-from .term_matching import species_term_matches_mention as _species_term_matches_mention
-from .term_matching import term_matches_mention as _term_matches_mention
+from .term_matching import (
+    is_ambiguous_short_mention as _is_ambiguous_short_mention,
+    mentioned_in as _mentioned_in,
+    normalize_term_text as _normalize_term_text,
+    species_term_matches_mention as _species_term_matches_mention,
+    term_matches_mention as _term_matches_mention,
+)
 from .terms import DB_PATH as PUBTATOR_DB_PATH, get_species_details, query_condition
 
 PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
@@ -105,9 +107,7 @@ _COVID_MESH_REPLACEMENT = "MESH:D000086382"
 # Species names PubTator picks up that are never the study organism.
 _SPECIES_BLACKLIST = frozenset({"PERCH", "D-FISH"})
 
-# These are real words, but not useful health conditions on their own. They are
-# common in study prose and PubTator3 sometimes annotates them as diseases or
-# maps them to generic NCIT concepts.
+# Real words, but not health conditions. PubTator3 tags them anyway.
 _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
     {
         "acute",
@@ -150,10 +150,8 @@ _NON_SPECIFIC_DISEASE_MENTIONS = frozenset(
     }
 )
 
-# A matching synonym is normally enough to validate an ontology lookup, but a
-# few ontology entries are measurements, demographic groups or other concepts
-# that should never be emitted as `healthCondition`. Reject only unambiguous
-# cases here; symptoms and broad disease families remain eligible.
+# Resolved concepts that are measurements or demographics, never conditions
+# Unambiguous cases only: symptoms and broad disease families stay eligible.
 _NON_CONDITION_TERM_NAMES = frozenset(
     {
         "dead",
@@ -800,6 +798,7 @@ def _parse_citation(record):
         citation["author"].append({"@type": "Organization", "name": corp_author})
 
     if citation:
+        citation["@type"] = "ScholarlyArticle"
         citation["fromPMID"] = True
     return citation
 
@@ -836,7 +835,7 @@ def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[st
     for record in records:
         funding = []
         for grant in record["MedlineCitation"]["Article"].get("GrantList") or []:
-            fund = {}
+            fund = {"@type": "MonetaryGrant"}
             if grant_id := grant.get("GrantID"):
                 fund["identifier"] = str(grant_id)
             if agency := grant.get("Agency"):
@@ -895,7 +894,19 @@ def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
             )
         conn.commit()
 
-    return {**cached_results, **fresh_results}
+    results = {**cached_results, **fresh_results}
+    for info in results.values():
+        citation = info.get("citation")
+        if isinstance(citation, dict) and citation:
+            citation.setdefault("@type", "ScholarlyArticle")
+        for grant in info.get("funding") or []:
+            if not isinstance(grant, dict):
+                continue
+            grant.setdefault("@type", "MonetaryGrant")
+            for funder in as_list(grant.get("funder")):
+                if isinstance(funder, dict):
+                    funder.setdefault("@type", "Organization")
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -1033,6 +1044,6 @@ def _standardize_fields_batch(docs):
             ]
             for pmid in field_pmids:
                 if citation := (eutils_info.get(pmid) or {}).get("citation"):
-                    citation["type"] = "ScholarlyArticle"
+                    citation["@type"] = "ScholarlyArticle"
                     doc[field].append(citation)
         yield doc

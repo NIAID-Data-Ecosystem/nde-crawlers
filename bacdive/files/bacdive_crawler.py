@@ -104,7 +104,7 @@ def _parse_quantitative_length(val, name):
     m = _LENGTH_RE.match(str(val))
     if not m:
         return None
-    entry = {"name": name}
+    entry = {"@type": "QuantitativeValue", "name": name}
     mn = float(m.group("min"))
     if mx := m.group("max"):
         entry["minValue"] = mn
@@ -120,10 +120,8 @@ def _to_iso_date(val):
     if val is None:
         return None
     try:
-        if isinstance(val, int):
-            val = str(val)
-        dt = dateutil.parser.parse(val, ignoretz=True).date().isoformat()
-    except (dateutil.parser.ParserError, TypeError):
+        dt = dateutil.parser.parse(str(val), ignoretz=True).date().isoformat()
+    except (dateutil.parser.ParserError, TypeError, OverflowError):
         logger.warning(f"Could not parse date: {val}")
         return None
     return dt
@@ -255,7 +253,11 @@ def parse_dsm(ccn, output):
     if sample_storage:
         insert_value(output, "sampleStorageTemperature", sample_storage)
 
-    insert_value(output, "usageInfo", {"description": "Nagoya Protocol Restrictions"})
+    insert_value(
+        output,
+        "usageInfo",
+        {"@type": "CreativeWork", "description": "Nagoya Protocol Restrictions"},
+    )
 
     if date := _as_list(data.get("origin")):
         if date[0].get("sampleDate"):
@@ -296,7 +298,7 @@ def parse_kctc(ccn, output):
     output["sampleAvailability"] = True
 
     if mta := data.get("MTA Restrictions"):
-        insert_value(output, "usageInfo", {"description": mta})
+        insert_value(output, "usageInfo", {"@type": "CreativeWork", "description": mta})
     if data.get("Price"):
         insert_value(output, "creativeWorkStatus", ["Available"])
 
@@ -345,7 +347,7 @@ def parse_jcm(ccn, output):
         insert_value(output, "creativeWorkStatus", "Bespoke")
 
     if spatial_coverage := data.get("Source"):
-        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+        insert_value(output, "spatialCoverage", {"@type": "AdministrativeArea", "name": spatial_coverage})
 
 def parse_ccug(ccn, output):
     ccug_number = _extract_collection_number(ccn, "CCUG")
@@ -385,7 +387,7 @@ def parse_ccug(ccn, output):
     insert_value(output, "sampleAvailability", True)
     insert_value(output, "creativeWorkStatus", "Available")
     if spatial_coverage := data.get("Sample Origin"):
-        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+        insert_value(output, "spatialCoverage", {"@type": "AdministrativeArea", "name": spatial_coverage})
 
 
 def parse_atcc(ccn, output):
@@ -427,12 +429,12 @@ def parse_atcc(ccn, output):
         ": ".join(part for part in (p.get("title"), p.get("text")) if part)
         for p in permits
     ):
-        insert_value(output, "usageInfo", {"description": usage})
+        insert_value(output, "usageInfo", {"@type": "CreativeWork", "description": usage})
 
     insert_value(output, "creativeWorkStatus", "Available")
 
     if spatial_coverage := data.get("Geographical isolation"):
-        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+        insert_value(output, "spatialCoverage", {"@type": "AdministrativeArea", "name": spatial_coverage})
 
 def parse_ucccb(ccn, output):
     data = get_ucccb_data(ccn)
@@ -467,7 +469,7 @@ def parse_ucccb(ccn, output):
     insert_value(output, "sampleAvailability", True)
     insert_value(output, "creativeWorkStatus", "Available")
     if spatial_coverage := data.get("Country"):
-        insert_value(output, "spatialCoverage", {"name": spatial_coverage})
+        insert_value(output, "spatialCoverage", {"@type": "AdministrativeArea", "name": spatial_coverage})
     if date := data.get("Date of isolation"):
         insert_value(output, "dateCollected", _to_iso_date(date))
 
@@ -520,9 +522,7 @@ def parse():
                 None,
             )
             if match and (tax_id := match.get("NCBI tax id")) is not None:
-                ia = {"identifier": str(tax_id)}
-                if level == "strain":
-                    ia["@type"] = "DefinedTerm"
+                ia = {"@type": "DefinedTerm", "identifier": str(tax_id)}
                 insert_value(output, "infectiousAgent", ia)
                 break
 
@@ -531,7 +531,7 @@ def parse():
 
         for syn in _as_list((natc.get("LPSN") or {}).get("synonyms")):
             if name := syn.get("synonym"):
-                insert_value(output, "infectiousAgent", {"name": name})
+                insert_value(output, "infectiousAgent", {"@type": "DefinedTerm", "name": name})
 
         # Culture-collection numbers → alternateIdentifier; DSM rows → sameAs URL
         ccns = []
@@ -572,14 +572,15 @@ def parse():
         # Isolation entries (single dict or list)
         for iso in _as_list(isolation_root.get("isolation")):
             if st := iso.get("sample type"):
-                insert_value(output, "sampleType", {"name": st})
+                insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": st})
 
-            loc = {}
+            loc = {"@type": "AdministrativeArea"}
             if country := iso.get("country"):
                 loc["name"] = country
+                loc["administrativeType"] = "country"
             if cc := iso.get("origin.country"):
                 loc["identifier"] = cc
-            geo = {}
+            geo = {"@type": "GeoCoordinates"}
             for key in ("latitude", "longitude"):
                 raw = iso.get(key)
                 if raw is None:
@@ -588,15 +589,15 @@ def parse():
                     geo[key] = float(raw)
                 except (TypeError, ValueError):
                     pass
-            if geo:
+            if len(geo) > 1:
                 loc["geo"] = geo
-            if loc:
+            if len(loc) > 1:
                 insert_value(output, "locationOfOrigin", loc)
 
             if continent := iso.get("continent"):
-                insert_value(output, "spatialCoverage", {"name": continent})
+                insert_value(output, "spatialCoverage", {"@type": "AdministrativeArea", "name": continent})
             if host := iso.get("host species"):
-                insert_value(output, "species", {"name": host})
+                insert_value(output, "species", {"@type": "DefinedTerm", "name": host})
             if d := _to_iso_date(iso.get("isolation date")):
                 output.setdefault("dateProcessed", d)
             if d := _to_iso_date(iso.get("sampling date")):
@@ -609,7 +610,7 @@ def parse():
         for cat in _as_list(isolation_root.get("isolation source categories")):
             for _, v in cat.items():
                 if v:
-                    insert_value(output, "environmentalSystem", {"name": v})
+                    insert_value(output, "environmentalSystem", {"@type": "DefinedTerm", "name": v})
 
         # Sequence information → isBasisFor (Genome + 16S accessions)
         for key in ("Genome sequences", "16S sequences"):
@@ -621,6 +622,7 @@ def parse():
                 if ident:
                     entry["identifier"] = str(ident)
                 if entry:
+                    entry["@type"] = "CreativeWork"
                     insert_value(output, "isBasisFor", entry)
 
         # Literature.literature → citedBy
@@ -630,7 +632,7 @@ def parse():
                 insert_value(output, "pmids", str(pmid))
                 entry["pmid"] = str(pmid)
             if d := lit.get("DOI"):
-                insert_value(output, "citation", {"doi": d})
+                insert_value(output, "citation", {"@type": "ScholarlyArticle", "doi": d})
                 entry["doi"] = d
             if title := lit.get("title"):
                 entry["name"] = title
@@ -641,8 +643,9 @@ def parse():
             if authors := lit.get("authors"):
                 authors = [a.strip() for a in str(authors).split(",") if a.strip()]
                 if authors:
-                    entry["author"] = [{"name": a} for a in authors]
+                    entry["author"] = [{"@type": "Person", "name": a} for a in authors]
             if entry:
+                entry["@type"] = "ScholarlyArticle"
                 insert_value(output, "citedBy", entry)
 
         if output.get("pmids"):
@@ -653,12 +656,14 @@ def parse():
         for ref in _as_list(references):
             entry = {}
             if authors := ref.get("authors"):
-                entry["author"] = [{"name": authors}]
+                author_type = "Organization" if str(authors).startswith("Curators of ") else "Person"
+                entry["author"] = [{"@type": author_type, "name": authors}]
             if name := ref.get("title") or ref.get("catalogue"):
                 entry["name"] = name
             if u := ref.get("doi/url"):
                 entry["url"] = f"https://doi.org/{u}" if str(u).startswith("10.") else u
             if entry:
+                entry["@type"] = "CreativeWork"
                 insert_value(output, "isBasedOn", entry)
 
         # Morphology → associatedPhenotype (DefinedTerm-style labels only)
@@ -674,7 +679,6 @@ def parse():
             elif mot == "no":
                 insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": "non-motile"})
             if length := _parse_quantitative_length(cell.get("cell length"), "cell length"):
-                length["@type"] = "QuantitativeValue"
                 insert_value(output, "associatedPhenotype", length)
         for mc in _as_list(morphology.get("multicellular morphology")):
             if name := mc.get("complex name"):

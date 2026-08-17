@@ -240,6 +240,9 @@ class NDESourceUploader(BaseSourceUploader):
                 }
             },
             "abstract": {"type": "text", "analyzer": "nde_analyzer", "copy_to": ["all"]},
+            # acd_niaid records the kind of data a study released here ("Patient-Level
+            # Data"), matching the Sample mapping's additionalType.
+            "additionalType": {"type": "keyword", "copy_to": ["all"]},
             "all": {
                 "type": "text",
                 "analyzer": "nde_analyzer",
@@ -1684,6 +1687,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "doi": {"type": "text", "copy_to": ["all"], "fields": {"keyword": {"type": "keyword"}}},
             "environmentalSystem": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "text", "copy_to": ["all"]},
                 }
@@ -2025,6 +2029,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "locationOfOrigin": {
                 "properties": {
                     "@type": {"type": "text"},
+                    "administrativeType": {"type": "keyword"},
                     "name": {"type": "text", "copy_to": ["all"]},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "geo": {
@@ -2103,6 +2108,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "sampleType": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text", "copy_to": ["all"]},
                 }

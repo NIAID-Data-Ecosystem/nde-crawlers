@@ -39,10 +39,7 @@ _corrections_cache = None
 # GitHub helpers
 # ---------------------------------------------------------------------------
 def get_auth_headers(accept_header):
-    """
-    Return headers for GitHub API requests, including the Authorization header
-    if a token is available in the environment variable GITHUB_TOKEN.
-    """
+    """Headers for a GitHub API request, authorized when GITHUB_TOKEN is set."""
     headers = {"Accept": accept_header}
     if token:
         headers["Authorization"] = f"token {token}"
@@ -50,9 +47,7 @@ def get_auth_headers(accept_header):
 
 
 def list_github_files(owner, repo, directory):
-    """
-    List files in a GitHub repository directory using the GitHub contents API.
-    """
+    """List the file names in a GitHub repository directory."""
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{directory}"
     headers = get_auth_headers("application/vnd.github.v3+json")
     response = requests.get(url, headers=headers, timeout=30)
@@ -64,9 +59,7 @@ def list_github_files(owner, repo, directory):
 
 
 def get_github_file_content(owner, repo, path):
-    """
-    Fetch raw file content from GitHub.
-    """
+    """Fetch raw file content from GitHub."""
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     headers = get_auth_headers("application/vnd.github.v3.raw")
     response = requests.get(url, headers=headers, timeout=30)
@@ -80,10 +73,7 @@ def get_github_file_content(owner, repo, path):
 # Parsing helpers
 # ---------------------------------------------------------------------------
 def get_record_ids(records_content):
-    """
-    Extract record ids from the records.txt file content.
-    Assumes each non-empty line contains a URL with an "id=" query parameter.
-    """
+    """Extract record ids from a records.txt: one URL per line, id in the `id=` parameter."""
     ids = []
     for line in records_content.strip().splitlines():
         line = line.strip()
@@ -94,9 +84,8 @@ def get_record_ids(records_content):
 
 
 def sanitize_org(org):
-    """
-    Replace NaN values in the 'url' field with an empty string.
-    """
+    """Set the schema type and replace a NaN `url` with an empty string."""
+    org.setdefault("@type", "Organization")
     if "url" in org:
         url_val = org["url"]
         if isinstance(url_val, float) and math.isnan(url_val):
@@ -108,22 +97,16 @@ def sanitize_org(org):
 # Source-organization merging
 # ---------------------------------------------------------------------------
 def update_source_organization(record_metadata, correction_organizations, approved=True):
-    """
-    Merge correction organizations into the document's sourceOrganization,
-    sanitizing any NaN values in the 'url' fields.
+    """Merge correction organizations into the document's sourceOrganization.
 
-    Deduplication is based on the lowercase name (or url) of each organization,
-    so calling this multiple times with the same correction is safe/idempotent.
+    Deduplicated on lowercased name (or url), so applying the same correction
+    twice is a no-op.
     """
-    # Sanitize existing organizations.
     existing_orgs = [sanitize_org(org) for org in as_list(record_metadata.get("sourceOrganization"))]
-
-    # Gather identifiers already present (name or url, lowercased).
     existing_org_identifiers = {
         (org.get("name") or org.get("url")).lower() for org in existing_orgs if (org.get("name") or org.get("url"))
     }
 
-    # Sanitize and merge new correction organizations.
     for new_org in correction_organizations:
         new_org = sanitize_org(new_org)
         identifier = new_org.get("name") or new_org.get("url")
@@ -140,14 +123,10 @@ def update_source_organization(record_metadata, correction_organizations, approv
 # Correction file fetching
 # ---------------------------------------------------------------------------
 def fetch_correction_files(correction_name):
-    """
-    Try to fetch the correction JSON and records file from production first.
-    If not found, then try staging.
+    """Fetch a correction's JSON and records path, trying production then staging.
 
-    Returns:
-      - correction_json:   Parsed correction JSON dict.
-      - approved:          Boolean flag (True for production, False for staging by default).
-      - records_file_path: The full GitHub path to the records file.
+    Returns (correction_json, approved, records_file_path). `approved` comes from
+    the correction itself, defaulting to True in production and False in staging.
     """
     prod_correction_file = f"{PROD_DIR}/{correction_name}_correction.json"
     prod_records_file = f"{PROD_DIR}/{correction_name}{RECORDS_SUFFIX}"
@@ -162,7 +141,7 @@ def fetch_correction_files(correction_name):
         approved = correction_json.get("approved", True)
         records_file_path = prod_records_file
     except Exception as prod_error:
-        logger.debug(f"Production file for '{correction_name}' not found ({prod_error}). " "Trying staging folder.")
+        logger.debug("Production file for '%s' not found (%s). Trying staging folder.", correction_name, prod_error)
         correction_content = get_github_file_content(OWNER, REPO, staging_correction_file)
         correction_json = json.loads(correction_content)
         approved = correction_json.get("approved", False)
@@ -175,10 +154,7 @@ def fetch_correction_files(correction_name):
 # Corrections index — built once per uploader process
 # ---------------------------------------------------------------------------
 def _build_corrections_index():
-    """
-    Fetch all correction data from GitHub and build an efficient lookup index.
-
-    Returns dict::
+    """Fetch every correction from GitHub and build the lookup index::
 
         {
             "by_id": {
@@ -211,7 +187,7 @@ def _build_corrections_index():
         except Exception as e:
             logger.error("Error listing %s corrections: %s", folder, e)
 
-    logger.info(f"Discovered {len(correction_names)} correction(s) to load")
+    logger.info("Discovered %s correction(s) to load", len(correction_names))
 
     # --- Load each correction ---
     for correction_name in list(correction_names.keys()):
@@ -220,7 +196,7 @@ def _build_corrections_index():
             correction_orgs = correction_json.get("sourceOrganization", [])
 
             if not correction_orgs:
-                logger.warning(f"Correction '{correction_name}' has no sourceOrganization - skipping")
+                logger.warning("Correction '%s' has no sourceOrganization - skipping", correction_name)
                 continue
 
             # -- ID-based index --
@@ -228,7 +204,7 @@ def _build_corrections_index():
                 records_content = get_github_file_content(OWNER, REPO, records_file_path)
                 record_ids = get_record_ids(records_content)
             except Exception as rec_err:
-                logger.warning(f"Could not load records for '{correction_name}': {rec_err}")
+                logger.warning("Could not load records for '%s': %s", correction_name, rec_err)
                 record_ids = []
 
             for rid in record_ids:
@@ -254,18 +230,17 @@ def _build_corrections_index():
                 )
 
             logger.debug(
-                f"Loaded correction '{correction_name}': "
-                f"{len(record_ids)} record IDs, "
-                f"{len(funding_ids)} funding patterns "
-                f"(approved={approved})"
+                "Loaded correction '%s': %s record IDs, %s funding patterns (approved=%s)",
+                correction_name,
+                len(record_ids),
+                len(funding_ids),
+                approved,
             )
         except Exception as e:
-            logger.error(f"Error loading correction '{correction_name}': {e}")
+            logger.error("Error loading correction '%s': %s", correction_name, e)
 
     id_count = sum(len(v) for v in index["by_id"].values())
-    logger.info(
-        f"Corrections index built: {id_count} ID mappings, " f"{len(index['by_funding'])} funding-based entries"
-    )
+    logger.info("Corrections index built: %s ID mappings, %s funding-based entries", id_count, len(index["by_funding"]))
     return index
 
 
@@ -395,14 +370,7 @@ def get_corrections_index():
 # Funding-based matching
 # ---------------------------------------------------------------------------
 def _match_funding(doc_funding, funding_patterns):
-    """
-    Return True if any of the document's funding identifiers contain
-    any of the correction's funding patterns as a substring.
-
-    Args:
-        doc_funding:      The document's ``funding`` field (dict, list, or None).
-        funding_patterns: List of **uppercased** grant patterns to match against.
-    """
+    """True when one of the document's funding identifiers contains an uppercased pattern."""
     if not doc_funding or not funding_patterns:
         return False
 
@@ -423,31 +391,17 @@ def _match_funding(doc_funding, funding_patterns):
 # Per-document correction — the main public API
 # ---------------------------------------------------------------------------
 def apply_corrections(doc):
-    """
-    Apply all matching corrections to a single document.
+    """Merge every matching correction into the document's sourceOrganization.
 
-    Matching strategies (applied in order):
-      1. **ID-based** - doc ``_id`` appears in a correction's ``_records.txt``.
-         This is the backward-compatible path that uses the pre-curated lists.
-      2. **Funding-based** - doc ``funding.identifier`` contains a grant pattern
-         from a correction's ``fundingIdentifiers`` list.
-         This catches newly-added records immediately, without waiting for the
-         external workflow to regenerate records lists.
-
-    Deduplication ensures that the same correction is never applied twice
-    (even if both strategies match), and ``update_source_organization``
-    prevents duplicate organizations from being added.
-
-    Args:
-        doc: A document dict.
-
-    Returns:
-        The same document dict, potentially with sourceOrganization updated.
+    A correction matches by record id (its `_records.txt` lists the document's
+    `_id`) or by funding: one of its `fundingIdentifiers` patterns appears in a
+    `funding.identifier`, which catches records added since that records list was
+    last regenerated. A correction matching both ways is applied once.
     """
     try:
         index = get_corrections_index()
     except Exception as e:
-        logger.error(f"Failed to get corrections index - skipping corrections: {e}")
+        logger.error("Failed to get corrections index - skipping corrections: %s", e)
         return doc
 
     doc_id = doc.get("_id", "").lower()
@@ -461,7 +415,10 @@ def apply_corrections(doc):
                 doc = update_source_organization(doc, correction["organizations"], correction["approved"])
                 applied_corrections.add(cname)
                 logger.debug(
-                    f"Applied correction '{cname}' to '{doc_id}' " f"(matched by ID, approved={correction['approved']})"
+                    "Applied correction '%s' to '%s' (matched by ID, approved=%s)",
+                    cname,
+                    doc_id,
+                    correction["approved"],
                 )
 
     # --- Strategy 2: Funding-based matching ---
@@ -474,8 +431,10 @@ def apply_corrections(doc):
                     doc = update_source_organization(doc, correction["organizations"], correction["approved"])
                     applied_corrections.add(cname)
                     logger.debug(
-                        f"Applied correction '{cname}' to '{doc_id}' "
-                        f"(matched by funding, approved={correction['approved']})"
+                        "Applied correction '%s' to '%s' (matched by funding, approved=%s)",
+                        cname,
+                        doc_id,
+                        correction["approved"],
                     )
 
     return doc

@@ -2,8 +2,9 @@
 """
 NCBI Virus DataCollection crawler for the NIAID Data Ecosystem.
 
-The crawler reads NCBI Datasets Virus data reports and aggregates nucleotide
-sequence records into one DataCollection per exact viral NCBI Taxonomy ID.
+The crawler reads NCBI Datasets Virus data reports and emits tab-specific
+DataCollections per exact viral NCBI Taxonomy ID for the Nucleotide, Protein,
+and NCBI Virus Assembly result tabs.
 
 Data source
 -----------
@@ -44,6 +45,7 @@ logger = logging.getLogger("nde-logger")
 # ---------------------------------------------------------------------------
 
 API_BASE = "https://api.ncbi.nlm.nih.gov/datasets/v2"
+VIRUS_VARIATION_SEARCH_URL = "https://www.ncbi.nlm.nih.gov/genomes/VirusVariation/vvsearch2/"
 ROOT_VIRUS_TAXON = "10239"
 USER_AGENT = "nde-ncbi-virus-crawler/0.1"
 MAX_RETRIES = int(os.environ.get("NCBI_VIRUS_MAX_RETRIES", "4"))
@@ -82,10 +84,12 @@ MAX_RECORDS_PER_SEED = int(os.environ.get("NCBI_VIRUS_MAX_RECORDS_PER_SEED", "0"
 MAX_SEED_TAXA = int(os.environ.get("NCBI_VIRUS_MAX_SEED_TAXA", "0"))
 MAX_EXAMPLES = int(os.environ.get("NCBI_VIRUS_MAX_EXAMPLES", "5"))
 MAX_AGGREGATE_VALUES = int(os.environ.get("NCBI_VIRUS_MAX_AGGREGATE_VALUES", "50"))
+TAB_COUNT_FACET_LIMIT = int(os.environ.get("NCBI_VIRUS_TAB_COUNT_FACET_LIMIT", "100000"))
 REQUEST_DELAY = float(os.environ.get("NCBI_VIRUS_REQUEST_DELAY", "0.34"))
 NCBI_API_KEY = os.environ.get("NCBI_API_KEY")
 DEDUP_ACCESSIONS = os.environ.get("NCBI_VIRUS_DEDUP_ACCESSIONS", "").lower() in {"1", "true", "yes"}
 USE_SQL_CACHE = os.environ.get("NCBI_VIRUS_USE_SQL_CACHE", "true").lower() in {"1", "true", "yes"}
+FETCH_TAB_COUNTS = os.environ.get("NCBI_VIRUS_FETCH_TAB_COUNTS", "true").lower() in {"1", "true", "yes"}
 RESUME_INCOMPLETE_CACHE = os.environ.get("NCBI_VIRUS_RESUME_INCOMPLETE_CACHE", "true").lower() in {
     "1",
     "true",
@@ -94,7 +98,7 @@ RESUME_INCOMPLETE_CACHE = os.environ.get("NCBI_VIRUS_RESUME_INCOMPLETE_CACHE", "
 CACHE_EXPIRE_DAYS = int(os.environ.get("NCBI_VIRUS_CACHE_EXPIRE_DAYS", "30"))
 CACHE_DIR = os.environ.get("NCBI_VIRUS_CACHE_DIR", "/cache/ncbi_virus")
 CACHE_DB = os.environ.get("NCBI_VIRUS_CACHE_DB", "ncbi_virus.db")
-CACHE_SCHEMA_VERSION = "1"
+CACHE_SCHEMA_VERSION = "2"
 CACHE_TAXONOMY_HINT_VERSION = "1"
 
 # ---------------------------------------------------------------------------
@@ -113,11 +117,118 @@ SOURCE_CATALOG_RECORD = (
 LICENSE = "http://opendefinition.org/licenses/odc-odbl/"
 USAGE_INFO = {"@type": "CreativeWork", "url": "https://www.ncbi.nlm.nih.gov/labs/virus/vssi/docs/help/"}
 
-ABOUT = [
-    {"@type": "DefinedTerm", "name": "Nucleotide sequence"},
-    {"@type": "DefinedTerm", "name": "Genome sequence"},
-    {"@type": "DefinedTerm", "name": "Protein sequence metadata"},
-]
+NCBI_VIRUS_COLLECTIONS = (
+    {
+        "key": "nucleotide",
+        "id_suffix": "nucleotide",
+        "seq_type": "Nucleotide",
+        "tab_label": "Nucleotide tab",
+        "name_template": "{organism_name} nucleotide sequence records at NCBI Virus",
+        "description_template": "Viral nucleotide sequence records for {organism_name} available through NCBI Virus.",
+        "unit_text": "Viral nucleotide sequences",
+        "about": [
+            {
+                "@type": "DefinedTerm",
+                "name": "MolecularSequence",
+                "displayName": "Molecular Sequence",
+                "url": "http://purl.obolibrary.org/obo/NCIT_C164396",
+                "description": (
+                    "Nucleotide sequence in this case. For schema, consider "
+                    "SequenceAnnotation https://bioschemas.org/types/SequenceAnnotation/"
+                ),
+                "identifier": "NCIT_C164396",
+                "inDefinedTermSet": "NCIT",
+            }
+        ],
+        "example_about": [
+            {
+                "@type": "DefinedTerm",
+                "name": "Nucleotide Sequence",
+                "displayName": "Nucleotide Sequence",
+                "url": "http://purl.obolibrary.org/obo/NCIT_C45374",
+                "description": "The sequence of nucleotide residues along an RNA or DNA chain.",
+                "identifier": "NCIT_C45374",
+                "inDefinedTermSet": "NCIT",
+            }
+        ],
+        "variable_measured": [{"@type": "DefinedTerm", "name": "Viral nucleotide sequence"}],
+        "include_nucleotide_examples": True,
+        "include_nucleotide_parts": True,
+    },
+    {
+        "key": "protein",
+        "id_suffix": "protein",
+        "seq_type": "Protein",
+        "tab_label": "Protein tab",
+        "name_template": "{organism_name} protein sequence records at NCBI Virus",
+        "description_template": "Viral protein sequence records for {organism_name} available through NCBI Virus.",
+        "unit_text": "Viral protein sequences",
+        "about": [
+            {
+                "@type": "DefinedTerm",
+                "name": "Protein",
+                "displayName": "Protein",
+                "url": "http://purl.obolibrary.org/obo/NCIT_C17021",
+                "description": "For schema, consider https://schema.org/Protein",
+                "identifier": "NCIT_C17021",
+                "inDefinedTermSet": "NCIT",
+            }
+        ],
+        "example_about": [
+            {
+                "@type": "DefinedTerm",
+                "name": "Amino Acid Sequence",
+                "displayName": "Protein Sequence",
+                "url": "http://purl.obolibrary.org/obo/NCIT_C13187",
+                "identifier": "NCIT_C13187",
+                "inDefinedTermSet": "NCIT",
+            }
+        ],
+        "variable_measured": [{"@type": "DefinedTerm", "name": "Protein annotation"}],
+        "include_nucleotide_examples": False,
+        "include_nucleotide_parts": False,
+    },
+    {
+        "key": "assembly",
+        "id_suffix": "assembly",
+        "seq_type": "Genome",
+        "tab_label": "NCBI Virus Assembly tab",
+        "name_template": "{organism_name} genome assembly records at NCBI Virus",
+        "description_template": "Viral genome assembly records for {organism_name} available through NCBI Virus.",
+        "unit_text": "Viral genome assemblies",
+        "about": [
+            {
+                "@type": "DefinedTerm",
+                "name": "Genome",
+                "displayName": "Genome",
+                "url": "http://purl.obolibrary.org/obo/NCIT_C16629",
+                "description": "Subclass of BioChemEntity",
+                "identifier": "NCIT_C16629",
+                "inDefinedTermSet": "NCIT",
+            }
+        ],
+        "example_about": [
+            {
+                "@type": "DefinedTerm",
+                "name": "Genome Assembly Sequence",
+                "displayName": "Genome Assembly Sequence",
+                "url": "http://purl.obolibrary.org/obo/NCIT_C73517",
+                "description": (
+                    "An annotated assembly of genome sequences created by the "
+                    "assimilation of data pieces from numerous sources."
+                ),
+                "identifier": "NCIT_C73517",
+                "inDefinedTermSet": "NCIT",
+            }
+        ],
+        "variable_measured": [{"@type": "DefinedTerm", "name": "Viral genome sequence"}],
+        "include_nucleotide_examples": False,
+        "include_nucleotide_parts": False,
+    },
+)
+
+NCBI_VIRUS_COLLECTIONS_BY_KEY = {collection["key"]: collection for collection in NCBI_VIRUS_COLLECTIONS}
+NUCLEOTIDE_COLLECTION = NCBI_VIRUS_COLLECTIONS_BY_KEY["nucleotide"]
 
 TOPIC_CATEGORY = [
     {
@@ -154,12 +265,6 @@ MEASUREMENT_TECHNIQUE = [
     },
 ]
 
-VARIABLE_MEASURED = [
-    {"@type": "DefinedTerm", "name": "Viral genome sequence"},
-    {"@type": "DefinedTerm", "name": "Viral nucleotide sequence"},
-    {"@type": "DefinedTerm", "name": "Protein annotation"},
-]
-
 ENCODING_FORMAT = [
     {"@type": "DefinedTerm", "name": "FASTA"},
     {"@type": "DefinedTerm", "name": "GenBank"},
@@ -178,9 +283,9 @@ HOWTO_STEPS = [
     ),
     (
         "Step 3. Group each source record by its exact virus.tax_id and "
-        "aggregate counts, release/update dates, hosts, locations, samples, "
-        "submitters, linked BioProjects/SRA accessions, and representative "
-        "sequence records."
+        "aggregate tab-specific counts, release/update dates, hosts, "
+        "locations, samples, submitters, linked BioProjects/SRA accessions, "
+        "and representative sequence records."
     ),
     (
         "Step 4. Fill in static source-level fields from the NCBI Virus "
@@ -225,6 +330,16 @@ def _clean_string(value: Any) -> Optional[str]:
     if not text or text.lower() in INVALID_VALUES:
         return None
     return re.sub(r"\s+", " ", text)
+
+
+def _positive_int(value: Any) -> int:
+    if value is None:
+        return 0
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(number, 0)
 
 
 def _clean_enum(value: Any, prefix: str = "") -> Optional[str]:
@@ -368,11 +483,12 @@ def _report_api_url(taxon: str, page_size: int = 1) -> str:
     return f"{API_BASE}/virus/taxon/{urllib.parse.quote(str(taxon))}/dataset_report?{params}"
 
 
-def _virus_search_url(taxon: str, name: str) -> str:
+def _virus_search_url(taxon: str, name: str, seq_type: str = "Nucleotide") -> str:
     query_value = f"{name}, taxid:{taxon}"
     return (
         "https://www.ncbi.nlm.nih.gov/labs/virus/vssi/#/virus?"
-        f"VirusLineage_ss={urllib.parse.quote(query_value)}"
+        f"VirusLineage_ss={urllib.parse.quote(query_value)}&"
+        f"SeqType_s={urllib.parse.quote(seq_type)}"
     )
 
 
@@ -629,6 +745,57 @@ def _fetch_reports_for_seed(taxon: str) -> Iterator[dict[str, Any]]:
         _sleep_between_requests()
 
 
+def _facet_pairs_to_counts(values: Any) -> dict[str, int]:
+    if not isinstance(values, list):
+        return {}
+
+    counts: dict[str, int] = {}
+    for index in range(0, len(values) - 1, 2):
+        tax_id = _clean_string(values[index])
+        count = _positive_int(values[index + 1])
+        if tax_id and count:
+            counts[tax_id] = count
+    return counts
+
+
+def _fetch_tab_counts_for_seed(taxon: str, seq_type: str) -> dict[str, int]:
+    if not FETCH_TAB_COUNTS:
+        return {}
+
+    params = {
+        "wt": "json",
+        "q": f"SeqType_s:{seq_type}",
+        "rows": 0,
+        "facet": "true",
+        "facet.field": "OrgId_i",
+        "facet.limit": TAB_COUNT_FACET_LIMIT,
+        "facet.mincount": 1,
+        "fq": f"VirusLineageId_ss:{taxon}",
+    }
+
+    try:
+        data = _fetch_json(VIRUS_VARIATION_SEARCH_URL, params)
+    except Exception as exc:
+        logger.warning("Failed to fetch NCBI Virus %s tab counts for taxon %s: %s", seq_type, taxon, exc)
+        return {}
+
+    error = data.get("error") if isinstance(data, dict) else None
+    if error:
+        logger.warning("Failed to fetch NCBI Virus %s tab counts for taxon %s: %s", seq_type, taxon, error)
+        return {}
+
+    facet_values = ((data.get("facet_counts") or {}).get("facet_fields") or {}).get("OrgId_i")
+    counts = _facet_pairs_to_counts(facet_values)
+    if len(counts) >= TAB_COUNT_FACET_LIMIT:
+        logger.warning(
+            "NCBI Virus %s tab count facets reached NCBI_VIRUS_TAB_COUNT_FACET_LIMIT=%s for taxon %s",
+            seq_type,
+            TAB_COUNT_FACET_LIMIT,
+            taxon,
+        )
+    return counts
+
+
 # ---------------------------------------------------------------------------
 # Report-to-schema helpers
 # ---------------------------------------------------------------------------
@@ -761,7 +928,10 @@ def _sample_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]]:
     return sample if len(sample) > 1 else None
 
 
-def _example_work_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]]:
+def _example_work_from_report(
+    report: dict[str, Any],
+    collection: dict[str, Any] = NUCLEOTIDE_COLLECTION,
+) -> Optional[dict[str, Any]]:
     accession = _report_accession(report)
     if not accession:
         return None
@@ -784,6 +954,7 @@ def _example_work_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]
         "identifier": identifiers[0] if len(identifiers) == 1 else identifiers,
         "name": _clean_string(isolate.get("name")) or _clean_string(nucleotide.get("title")) or accession,
         "url": _ncbi_url("nuccore", accession),
+        "about": copy.deepcopy(collection["example_about"]),
         "encodingFormat": copy.deepcopy(ENCODING_FORMAT),
     }
 
@@ -871,6 +1042,8 @@ class TaxonAccumulator:
     SCALAR_FIELDS = (
         "tax_id",
         "record_count",
+        "protein_record_count",
+        "assembly_record_count",
         "virus_name",
         "earliest_release",
         "latest_update",
@@ -881,6 +1054,8 @@ class TaxonAccumulator:
     def __init__(self, tax_id: str) -> None:
         self.tax_id = tax_id
         self.record_count = 0
+        self.protein_record_count = 0
+        self.assembly_record_count = 0
         self.virus_name: Optional[str] = None
         self.virus_common_names: Counter[str] = Counter()
         self.virus_strains: Counter[str] = Counter()
@@ -924,6 +1099,8 @@ class TaxonAccumulator:
     def from_cache_dict(cls, data: dict[str, Any]) -> "TaxonAccumulator":
         accumulator = cls(str(data["tax_id"]))
         accumulator.record_count = int(data.get("record_count") or 0)
+        accumulator.protein_record_count = int(data.get("protein_record_count") or 0)
+        accumulator.assembly_record_count = int(data.get("assembly_record_count") or 0)
         accumulator.virus_name = data.get("virus_name")
         accumulator.earliest_release = data.get("earliest_release")
         accumulator.latest_update = data.get("latest_update")
@@ -940,6 +1117,7 @@ class TaxonAccumulator:
 
     def add(self, report: dict[str, Any]) -> None:
         self.record_count += 1
+        self.protein_record_count += _positive_int(report.get("protein_count"))
 
         virus = report.get("virus") or {}
         if not self.virus_name:
@@ -1160,26 +1338,41 @@ class TaxonAccumulator:
                 properties.append(prop)
         return properties
 
-    def to_record(self) -> dict[str, Any]:
+    def _collection_record_count(self, collection: dict[str, Any]) -> int:
+        key = collection["key"]
+        if key == "nucleotide":
+            return self.record_count
+        if key == "protein":
+            return self.protein_record_count
+        if key == "assembly":
+            return self.assembly_record_count
+        return 0
+
+    def to_records(self) -> Iterator[dict[str, Any]]:
+        for collection in NCBI_VIRUS_COLLECTIONS:
+            if self._collection_record_count(collection):
+                yield self.to_record(collection)
+
+    def to_record(self, collection: dict[str, Any] = NUCLEOTIDE_COLLECTION) -> dict[str, Any]:
         name = self.virus_name or f"NCBI Taxonomy {self.tax_id}"
-        url = _virus_search_url(self.tax_id, name)
-        count_text = f"{self.record_count:,}"
-        source_dbs = _counter_values(self.source_databases, 5)
-        source_db_text = "/".join(source_dbs) if source_dbs else "NCBI"
+        url = _virus_search_url(self.tax_id, name, collection["seq_type"])
+        record_count = self._collection_record_count(collection)
+        count_text = f"{record_count:,}"
+        record_name = collection["name_template"].format(organism_name=name)
+        record_description = collection["description_template"].format(organism_name=name)
 
         record: dict[str, Any] = {
-            "_id": f"ncbi_virus_{self.tax_id}",
+            "_id": f"ncbi_virus_{self.tax_id}_{collection['id_suffix']}",
             "@type": "DataCollection",
-            "identifier": f"taxonomy:{self.tax_id}",
-            "name": f"{name} virus sequence records at NCBI Virus",
+            "identifier": f"ncbi-virus:{collection['seq_type'].lower()}:taxonomy:{self.tax_id}",
+            "name": record_name,
             "description": (
-                f"Viral nucleotide sequence records for {name} available "
-                f"through NCBI Virus. This DataCollection aggregates "
-                f"{count_text} {source_db_text} sequence records for "
+                f"{record_description} This DataCollection describes "
+                f"{count_text} records from the NCBI Virus {collection['tab_label']} for "
                 f"NCBI Taxonomy ID {self.tax_id}. For more details, visit: {url}"
             ),
             "url": url,
-            "about": copy.deepcopy(ABOUT),
+            "about": copy.deepcopy(collection["about"]),
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": SOURCE_NAME,
@@ -1194,13 +1387,13 @@ class TaxonAccumulator:
             "usageInfo": copy.deepcopy(USAGE_INFO),
             "topicCategory": copy.deepcopy(TOPIC_CATEGORY),
             "measurementTechnique": copy.deepcopy(MEASUREMENT_TECHNIQUE),
-            "variableMeasured": copy.deepcopy(VARIABLE_MEASURED),
+            "variableMeasured": copy.deepcopy(collection["variable_measured"]),
             "collectionSize": {
-                "minValue": self.record_count,
-                "unitText": "Viral nucleotide sequences",
+                "minValue": record_count,
+                "unitText": collection["unit_text"],
             },
             "infectiousAgent": self._infectious_agent(),
-            "isBasedOn": self._is_based_on(name),
+            "isBasedOn": self._is_based_on(record_name, collection),
         }
 
         if self.latest_update:
@@ -1220,7 +1413,7 @@ class TaxonAccumulator:
             record["species"] = list(self.hosts.values())
         if self.spatial_coverage:
             record["spatialCoverage"] = list(self.spatial_coverage.values())
-        if self.example_works:
+        if collection.get("include_nucleotide_examples") and self.example_works:
             record["exampleOfWork"] = _dedupe(self.example_works)
 
         sample = self._sample_collection()
@@ -1231,9 +1424,10 @@ class TaxonAccumulator:
         if is_part_of:
             record["isPartOf"] = is_part_of
 
-        has_part = self._has_part()
-        if has_part:
-            record["hasPart"] = has_part
+        if collection.get("include_nucleotide_parts"):
+            has_part = self._has_part()
+            if has_part:
+                record["hasPart"] = has_part
 
         if self.authors:
             record["author"] = list(self.authors.values())
@@ -1258,19 +1452,26 @@ class TaxonAccumulator:
 
         return record
 
-    def _is_based_on(self, name: str) -> list[dict[str, Any]]:
+    def _is_based_on(self, record_name: str, collection: dict[str, Any]) -> list[dict[str, Any]]:
+        targets: list[str] = [
+            _report_api_url(self.tax_id),
+            _virus_search_url(self.tax_id, self.virus_name or self.tax_id, collection["seq_type"]),
+        ]
+        if collection["key"] == "assembly":
+            targets.append(VIRUS_VARIATION_SEARCH_URL)
+
         action_obj = {
             "@type": "Action",
             "name": "DataCollection Generation Process in the NIAID Data Ecosystem",
             "description": (
-                f"How this NCBI Virus {name} DataCollection Record was "
+                f"How this NCBI Virus {record_name} DataCollection Record was "
                 "generated for the NIAID Data Ecosystem."
             ),
             "actionProcess": {
                 "@type": "HowTo",
                 "step": copy.deepcopy(HOWTO_STEPS),
             },
-            "target": _report_api_url(self.tax_id),
+            "target": _dedupe(targets),
         }
 
         source_obj = {
@@ -1629,6 +1830,36 @@ def _add_report_to_accumulators(
     return tax_id
 
 
+def _apply_assembly_tab_counts_for_seed(
+    seed_taxon: str,
+    accumulators: dict[str, TaxonAccumulator],
+    cache: Optional[VirusSQLiteCache] = None,
+) -> set[str]:
+    counts = _fetch_tab_counts_for_seed(seed_taxon, "Genome")
+    touched_taxa: set[str] = set()
+    if not counts:
+        return touched_taxa
+
+    for tax_id, count in counts.items():
+        accumulator = accumulators.get(tax_id)
+        if accumulator is None and cache is not None:
+            accumulator = cache.load_accumulator(tax_id)
+        if accumulator is None:
+            continue
+
+        accumulator.assembly_record_count = count
+        accumulators[tax_id] = accumulator
+        touched_taxa.add(tax_id)
+
+    logger.info(
+        "Applied NCBI Virus Assembly tab counts for seed %s to %d of %d taxa",
+        seed_taxon,
+        len(touched_taxa),
+        len(counts),
+    )
+    return touched_taxa
+
+
 def _parse_without_cache(seed_taxa: list[str]) -> Iterator[dict[str, Any]]:
     accumulators: dict[str, TaxonAccumulator] = {}
     seen_accessions: set[str] = set()
@@ -1646,18 +1877,19 @@ def _parse_without_cache(seed_taxa: list[str]) -> Iterator[dict[str, Any]]:
             if _add_report_to_accumulators(report, accumulators):
                 seed_records += 1
 
+        _apply_assembly_tab_counts_for_seed(seed_taxon, accumulators)
         logger.info("Seed taxon %s contributed %d source records", seed_taxon, seed_records)
 
     logger.info("Built %d NCBI Virus DataCollection groups", len(accumulators))
     for tax_id in sorted(accumulators, key=_tax_id_sort_key):
-        yield accumulators[tax_id].to_record()
+        yield from accumulators[tax_id].to_records()
 
 
 def _parse_with_cache(seed_taxa: list[str], cache: VirusSQLiteCache) -> Iterator[dict[str, Any]]:
     cache.prepare()
     if cache.complete_and_fresh:
         for accumulator in cache.iter_accumulators():
-            yield accumulator.to_record()
+            yield from accumulator.to_records()
         return
 
     logger.info("Starting cached NCBI Virus parse with %d seed taxa", len(seed_taxa))
@@ -1722,6 +1954,19 @@ def _parse_with_cache(seed_taxa: list[str], cache: VirusSQLiteCache) -> Iterator
                     total_count=total_count,
                     status="complete",
                 )
+                count_touched_taxa = _apply_assembly_tab_counts_for_seed(seed_taxon, accumulators, cache=cache)
+                if count_touched_taxa:
+                    cache.save_page(
+                        seed_taxon=seed_taxon,
+                        accumulators=accumulators,
+                        touched_taxa=count_touched_taxa,
+                        seen_accessions=[],
+                        next_page_token=None,
+                        pages_fetched=pages_fetched,
+                        records_seen=records_seen,
+                        total_count=total_count,
+                        status="complete",
+                    )
                 break
 
             touched_taxa: set[str] = set()
@@ -1775,6 +2020,19 @@ def _parse_with_cache(seed_taxa: list[str], cache: VirusSQLiteCache) -> Iterator
             )
 
             if status in {"complete", "limited"}:
+                count_touched_taxa = _apply_assembly_tab_counts_for_seed(seed_taxon, accumulators, cache=cache)
+                if count_touched_taxa:
+                    cache.save_page(
+                        seed_taxon=seed_taxon,
+                        accumulators=accumulators,
+                        touched_taxa=count_touched_taxa,
+                        seen_accessions=[],
+                        next_page_token=None,
+                        pages_fetched=pages_fetched,
+                        records_seen=records_seen,
+                        total_count=total_count,
+                        status=status,
+                    )
                 break
 
             page_token = next_page_token
@@ -1782,11 +2040,11 @@ def _parse_with_cache(seed_taxa: list[str], cache: VirusSQLiteCache) -> Iterator
 
     cache.mark_complete()
     for accumulator in cache.iter_accumulators():
-        yield accumulator.to_record()
+        yield from accumulator.to_records()
 
 
 def parse() -> Iterator[dict[str, Any]]:
-    """Yield NCBI Virus DataCollection records grouped by virus.tax_id."""
+    """Yield NCBI Virus DataCollection records grouped by virus.tax_id and result tab."""
     seed_taxa = _discover_seed_taxa()
     if USE_SQL_CACHE:
         yield from _parse_with_cache(seed_taxa, VirusSQLiteCache(seed_taxa))
