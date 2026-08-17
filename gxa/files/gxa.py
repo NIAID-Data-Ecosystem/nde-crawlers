@@ -35,6 +35,8 @@ DESIGN_VALUE_COLUMN_RE = re.compile(r"^(?P<kind>Sample Characteristic|Factor Val
 DESIGN_TERM_COLUMN_RE = re.compile(
     r"^(?P<kind>Sample Characteristic Ontology Term|Factor Value Ontology Term)\[(?P<property>.+)]$"
 )
+GXA_GEO_SERIES_ACCESSION_RE = re.compile(r"^E-GEOD-(?P<number>\d+)$", re.IGNORECASE)
+GEO_SERIES_ACCESSION_RE = re.compile(r"^GSE(?P<number>\d+)(?=$|[^A-Za-z0-9])", re.IGNORECASE)
 RESULT_FILE_EXTENSIONS = (".tsv",)
 
 INVALID_VALUES = {
@@ -655,9 +657,26 @@ def _assay_accessions(contrast):
     return _unique(accessions)
 
 
+def _nde_geo_dataset_identifier(accession, assay_accessions):
+    """Return the NDE document identifier for a GEO Series related to a GXA experiment."""
+    # Expression Atlas uses E-GEOD-N for an imported GEO Series GSE-N. This
+    # experiment-level relationship is more reliable than its assay labels,
+    # which may contain GSM accessions, SRA run accessions, or local names.
+    if match := GXA_GEO_SERIES_ACCESSION_RE.fullmatch(accession or ""):
+        return f"gse{match.group('number')}"
+
+    # Use an explicit GSE accession supplied among the assay accessions as
+    # a fallback for experiments that do not use an E-GEOD accession.
+    for assay_accession in assay_accessions:
+        if match := GEO_SERIES_ACCESSION_RE.match(assay_accession or ""):
+            return f"gse{match.group('number')}"
+    return None
+
+
 def _dataset_subject(accession, description, contrast):
     url = EXPERIMENT_RESULTS_URL_TEMPLATE.format(accession=accession)
-    identifiers = _unique([accession, *_assay_accessions(contrast)])
+    assay_accessions = _assay_accessions(contrast)
+    identifiers = _unique([accession, *assay_accessions])
     dataset = {
         "@type": "Dataset",
         "identifier": _single_or_list(identifiers),
@@ -665,6 +684,8 @@ def _dataset_subject(accession, description, contrast):
         "name": description or accession,
         "url": url,
     }
+    if nde_identifier := _nde_geo_dataset_identifier(accession, assay_accessions):
+        dataset["_id"] = nde_identifier
     return dataset
 
 
