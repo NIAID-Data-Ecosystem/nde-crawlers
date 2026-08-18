@@ -90,7 +90,7 @@ def parse():
             },
             "@type": "ComputationalTool",
             "programmingLanguage": "R",
-            "sdPublisher": {"name": "Bioconductor"},
+            "sdPublisher": {"@type": "DataCatalog", "name": "Bioconductor"},
             "applicationSuite": "Bioconductor",
         }
 
@@ -106,6 +106,7 @@ def parse():
             if downloads_list:
                 downloads = downloads_list[0]
                 output["interactionStatistic"] = {
+                    "@type": "InteractionCounter",
                     "userInteractionCount": downloads,
                     "interactionType": "Downloads in the last 12 months",
                 }
@@ -141,27 +142,27 @@ def parse():
                         email = one[one.find("<") + 1 : one.find(">")]
                         one = re.sub("[<].*?[>]", "", one)
                         if email:
-                            author_list.append({"name": one, "email": email})
+                            author_list.append({"@type": "Person", "name": one, "email": email})
                         else:
-                            author_list.append({"name": one})
+                            author_list.append({"@type": "Person", "name": one})
                     email = None
                     two = author.split(" and ")[1]
                     if two.find("<") != -1:
                         email = two[two.find("<") + 1 : two.find(">")]
                         two = re.sub("[<].*?[>]", "", two)
                     if email:
-                        author_list.append({"name": two, "email": email})
+                        author_list.append({"@type": "Person", "name": two, "email": email})
                     else:
-                        author_list.append({"name": two})
+                        author_list.append({"@type": "Person", "name": two})
                     email = None
                 else:
                     email = None
                     if author.find("<") != -1:
                         email = author[author.find("<") + 1 : author.find(">")]
                     if email:
-                        author_list.append({"name": author, "email": email})
+                        author_list.append({"@type": "Person", "name": author, "email": email})
                     else:
-                        author_list.append({"name": author})
+                        author_list.append({"@type": "Person", "name": author})
 
         if maintainers := metadata.get("Maintainer"):
             maintainers = re.sub(r"[\(\[].*?[\)\]]", "", maintainers)
@@ -174,27 +175,27 @@ def parse():
                         url = one[one.find("<") + 1 : one.find(">")]
                         one = re.sub("[<].*?[>]", "", one)
                     if url and "hpages.on.github" not in url:
-                        author_list.append({"name": one, "url": url})
+                        author_list.append({"@type": "Person", "name": one, "url": url})
                     else:
-                        author_list.append({"name": one})
+                        author_list.append({"@type": "Person", "name": one})
                     url = None
                     two = author.split(" and ")[1]
                     if two.find("<") != -1:
                         url = two[two.find("<") + 1 : two.find(">")]
                         two = re.sub("[<].*?[>]", "", two)
                     if url and "hpages.on.github" not in url:
-                        author_list.append({"name": two, "url": url})
+                        author_list.append({"@type": "Person", "name": two, "url": url})
                     else:
-                        author_list.append({"name": two})
+                        author_list.append({"@type": "Person", "name": two})
                     url = None
                 else:
                     if author.find("<") != -1:
                         url = author[author.find("<") + 1 : author.find(">")]
                         author = re.sub("[<].*?[>]", "", author)
                     if url and "hpages.on.github" not in url:
-                        author_list.append({"name": author, "url": url})
+                        author_list.append({"@type": "Person", "name": author, "url": url})
                     else:
-                        author_list.append({"name": author})
+                        author_list.append({"@type": "Person", "name": author})
         for author_dict in author_list:
             if author_dict["name"] in [a["name"] for a in author_list]:
                 author_list.remove(author_dict)
@@ -226,6 +227,7 @@ def parse():
                 for vignette, vignette_title in zip(vignettes, vignette_titles):
                     software_help.append(
                         {
+                            "@type": "CreativeWork",
                             "name": vignette_title,
                             "url": "https://www.bioconductor.org/packages/release/bioc/" + vignette,
                         }
@@ -242,6 +244,7 @@ def parse():
                 if pkg_import in package_names:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "_id": f"Bioconductor_{pkg_import}",
                             "identifier": pkg_import,
                             "name": pkg_import,
@@ -251,6 +254,7 @@ def parse():
                 elif pkg_import in cran_package_names:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_import,
                             "name": pkg_import,
                             "url": f"https://cran.r-project.org/web/packages/{pkg_import}/index.html",
@@ -259,6 +263,7 @@ def parse():
                 else:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_import,
                             "name": pkg_import,
                         }
@@ -272,7 +277,7 @@ def parse():
             for pkg_enhance in enhances:
                 pkg_enhance = re.sub("[()].*?[)]", "", pkg_enhance)
                 pkg_enhance = pkg_enhance.strip()
-                is_enhanced_by.append({"identifier": pkg_enhance})
+                is_enhanced_by.append({"@type": "CreativeWork", "identifier": pkg_enhance})
         if len(is_enhanced_by):
             output["softwareAddOn"] = is_enhanced_by
 
@@ -286,6 +291,7 @@ def parse():
                 if pkg_dependency in package_names:
                     is_related_to.append(
                         {
+                            "@type": "CreativeWork",
                             "_id": f"Bioconductor_{pkg_dependency}",
                             "identifier": pkg_dependency,
                             "name": pkg_dependency,
@@ -295,6 +301,7 @@ def parse():
                 elif pkg_dependency in cran_package_names:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_dependency,
                             "name": pkg_dependency,
                             "url": f"https://cran.r-project.org/web/packages/{pkg_dependency}/index.html",
@@ -303,6 +310,7 @@ def parse():
                 else:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_dependency,
                             "name": pkg_dependency,
                         }
@@ -319,6 +327,7 @@ def parse():
                 if pkg_suggest in package_names:
                     is_related_to.append(
                         {
+                            "@type": "CreativeWork",
                             "_id": f"Bioconductor_{pkg_suggest}",
                             "identifier": pkg_suggest,
                             "name": pkg_suggest,
@@ -328,6 +337,7 @@ def parse():
                 elif pkg_suggest in cran_package_names:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_suggest,
                             "name": pkg_suggest,
                             "url": f"https://cran.r-project.org/web/packages/{pkg_suggest}/index.html",
@@ -336,6 +346,7 @@ def parse():
                 else:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_suggest,
                             "name": pkg_suggest,
                         }
@@ -348,6 +359,7 @@ def parse():
                 if pkg_dependency in package_names:
                     is_related_to.append(
                         {
+                            "@type": "CreativeWork",
                             "_id": f"Bioconductor_{pkg_dependency}",
                             "identifier": pkg_dependency,
                             "name": pkg_dependency,
@@ -357,6 +369,7 @@ def parse():
                 elif pkg_dependency in cran_package_names:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_dependency,
                             "name": pkg_dependency,
                             "url": f"https://cran.r-project.org/web/packages/{pkg_dependency}/index.html",
@@ -365,6 +378,7 @@ def parse():
                 else:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_dependency,
                             "name": pkg_dependency,
                         }
@@ -377,6 +391,7 @@ def parse():
                 if pkg_suggest in package_names:
                     is_related_to.append(
                         {
+                            "@type": "CreativeWork",
                             "_id": f"Bioconductor_{pkg_suggest}",
                             "identifier": pkg_suggest,
                             "name": pkg_suggest,
@@ -386,6 +401,7 @@ def parse():
                 elif pkg_suggest in cran_package_names:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_suggest,
                             "name": pkg_suggest,
                             "url": f"https://cran.r-project.org/web/packages/{pkg_suggest}/index.html",
@@ -394,6 +410,7 @@ def parse():
                 else:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_suggest,
                             "name": pkg_suggest,
                         }
@@ -406,6 +423,7 @@ def parse():
                 if pkg_link in package_names:
                     is_related_to.append(
                         {
+                            "@type": "CreativeWork",
                             "_id": f"Bioconductor_{pkg_link}",
                             "identifier": pkg_link,
                             "name": pkg_link,
@@ -415,6 +433,7 @@ def parse():
                 elif pkg_link in cran_package_names:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_link,
                             "name": pkg_link,
                             "url": f"https://cran.r-project.org/web/packages/{pkg_link}/index.html",
@@ -423,6 +442,7 @@ def parse():
                 else:
                     based_on.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": pkg_link,
                             "name": pkg_link,
                         }

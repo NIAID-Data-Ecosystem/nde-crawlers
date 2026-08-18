@@ -261,6 +261,7 @@ ABOUT = {
 # {@type, identifier, inDefinedTermSet, name, url} -- no displayName or
 # description, which is the mirror image of top-level `about`.
 EXAMPLE_OF_WORK = {
+    "@type": "CreativeWork",
     "about": {
         "@type": "DefinedTerm",
         "name": "Nucleotide Sequence",
@@ -610,7 +611,7 @@ def build_has_part(organism):
 
     parts = []
     for accession in collect_values(organism, HAS_PART_IDENTIFIER_FIELDS):
-        part = {"identifier": accession}
+        part = {"@type": "CreativeWork", "identifier": accession}
         if accession in with_url:
             part["url"] = (
                 f"https://pathoplexus.org/{organism}/search?selectedSeq={accession}"
@@ -678,12 +679,12 @@ def build_named_pair(organism, pair):
         if name in seen:
             continue
         seen.add(name)
-        entries.append({"name": name, "identifier": identifier})
+        entries.append({"@type": "DefinedTerm", "name": name, "identifier": identifier})
 
     for name in collect_values(organism, (name_field, *fallback_fields)):
         if name not in seen:
             seen.add(name)
-            entries.append({"name": name})
+            entries.append({"@type": "DefinedTerm", "name": name})
     return entries
 
 
@@ -708,7 +709,7 @@ def build_mapped_lists(organism, output):
         insert_value(
             output,
             "isPartOf",
-            [{"@type": "ResearchProject", "identifier": p} for p in projects],
+            [{"@type": "CreativeWork", "identifier": p} for p in projects],
         )
 
 
@@ -802,7 +803,7 @@ def build_record(organism, info=None):
         "hasPart": build_has_part(organism),
         "species": build_named_pair(organism, SPECIES_PAIR),
         "infectiousAgent": build_named_pair(organism, INFECTIOUS_AGENT_PAIR)
-        or [{"name": name}],
+        or [{"@type": "DefinedTerm", "name": name}],
         "spatialCoverage": build_spatial_coverage(organism),
     }
 

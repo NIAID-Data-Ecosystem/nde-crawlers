@@ -279,7 +279,7 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
             if v:
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":
-                    d = {nde_mapping[k][1]: v}
+                    d = {"@type": "PropertyValue", nde_mapping[k][1]: v}
                     if k == "sampleQuantity":
                         d["name"] = subproperty
                     if k == "variableMeasured" or k == "anatomicalStructure":

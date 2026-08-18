@@ -236,7 +236,7 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
     # subproperty, field_value is the normalized key, value pair from XML attributes
     # sample_mapping[subproperty] is the mapping info for the output
     # value is either the subproperty itself or the field_value depending on the mapping
-    geo = {}
+    geo = {"@type": "GeoCoordinates"}
     for subproperty, field_value in attributes.items():
         if subproperty in sample_mapping:
             if len(sample_mapping[subproperty].keys()) > 1 and "locationOfOrigin.geo.latitude" in sample_mapping[subproperty]:
@@ -245,8 +245,8 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                     if lat is not None and lon is not None:
                         geo["latitude"] = lat
                         geo["longitude"] = lon
-                        insert_value(output, "locationOfOrigin", {"geo": geo})
-                        geo = {}  # reset geo after inserting
+                        insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
+                        geo = {"@type": "GeoCoordinates"}  # reset geo after inserting
                     continue
                 except Exception as e:
                     logger.warning(f"Failed to parse latitude and longitude from value '{field_value}' for subproperty '{subproperty}': {e}")
@@ -308,7 +308,7 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
             insert_value(output, "additionalProperty", {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value})
 
     if geo:
-        insert_value(output, "locationOfOrigin", {"geo": geo})
+        insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
 
 def parse():
 
@@ -364,14 +364,15 @@ def parse():
                 output["dateModified"] = dateutil.parser.parse(date_modified, ignoretz=True).date().isoformat()
 
             if name := sample.get("organization"):
-                output["author"] = {"affiliation": {"@type": "Organization", "name": name}}
+                output["author"] = {"@type": "Person", "affiliation": {"@type": "Organization", "name": name}}
 
             if sample.get("taxonomy") or sample.get("organism"):
-                species = {}
+                species = {"@type": "DefinedTerm"}
                 if sample.get("taxonomy"):
                     species["identifier"] = sample.get("taxonomy")
                 if sample.get("organism"):
                     species["name"] = sample.get("organism")
+                output["species"] = species
 
             if ids := sample.get("identifiers"):
                 alternate_identifiers = []

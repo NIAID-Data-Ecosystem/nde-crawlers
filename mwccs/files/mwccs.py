@@ -612,10 +612,11 @@ def _build_sample(data: dict[str, Any]) -> dict[str, Any]:
 
     median_age = data.get("median_age")
     if median_age:
-        sample["age"] = {
+        sample["developmentalStage"] = {
+            "@type": "QuantitativeValue",
+            "name": "median age",
             "minValue": median_age,
             "unitText": "years",
-            "valueType": "median",
         }
 
     count = data.get("participant_count")

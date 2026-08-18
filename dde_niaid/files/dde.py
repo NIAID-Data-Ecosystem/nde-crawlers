@@ -16,11 +16,11 @@ def process_affiliations(author):
     if isinstance(affiliations, list):
         for affiliation in affiliations:
             if isinstance(affiliation, str):
-                aff_list.append({"name": affiliation})
+                aff_list.append({"@type": "Organization", "name": affiliation})
         if aff_list:
             author["affiliation"] = aff_list
     elif isinstance(affiliations, str):
-        author["affiliation"] = {"name": affiliations}
+        author["affiliation"] = {"@type": "Organization", "name": affiliations}
 
 
 def process_authors(authors):
@@ -78,6 +78,7 @@ def query_bioportal(iri):
         "name": pref_label,
         "url": iri,
         "curatedBy": {
+            "@type": "SoftwareApplication",
             "name": "Data Discovery Engine",
             "url": "https://discovery.biothings.io/",
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -131,6 +132,7 @@ def query_ols(iri):
             "url": iri,
             "inDefinedTermSet": request["_embedded"]["terms"][0]["ontology_prefix"],
             "curatedBy": {
+                "@type": "SoftwareApplication",
                 "name": "Data Discovery Engine",
                 "url": "https://discovery.biothings.io/",
                 "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -159,10 +161,10 @@ def format_query_ols(iri):
         if is_url:
             return info
         else:
-            return {"name": info}
+            return {"@type": "DefinedTerm", "name": info}
     except Exception as e:
         logger.error("Unexpected error in format_query_ols for %s: %s. Returning simple name format.", iri, e)
-        return {"name": str(iri)}
+        return {"@type": "DefinedTerm", "name": str(iri)}
 
 
 def format_query_ky(iri):
@@ -457,7 +459,7 @@ def parse():
             # fix topicCategory
             if topicCategory := hit.pop("topicCategory", None):
                 if isinstance(topicCategory, str):
-                    hit["topicCategory"] = {"url": topicCategory}
+                    hit["topicCategory"] = {"@type": "DefinedTerm", "url": topicCategory}
                 elif isinstance(topicCategory, dict):
                     hit["topicCategory"] = topicCategory
 

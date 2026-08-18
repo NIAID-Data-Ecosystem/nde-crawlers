@@ -164,7 +164,7 @@ def parse():
             if family_name := author_info.get("lastName"):
                 insert_value(author, "familyName", family_name)
             if name := author_info.get("orgName"):
-                insert_value(author, "affiliation", {"name": name})
+                insert_value(author, "affiliation", {"@type": "Organization", "name": name})
             if author:
                 insert_value(output, "author", author)
 
@@ -173,13 +173,13 @@ def parse():
                 "@type": "SampleCollection",
                 "itemListElement": [],
                 "aggregateElement": {},
-                "numberOfItems": {"value": 0, "unitText": "sample"},
+                "numberOfItems": {"@type": "QuantitativeValue", "value": 0, "unitText": "sample"},
             }
             for sample in get_samples(session, table_info, project_id):
                 parsed_sample = parse_sample(sample)
                 if parsed_sample:
                     parsed_sample["isBasisFor"] = {
-                        "@type": "Dataset",
+                        "@type": "CreativeWork",
                         "identifier": output.get("identifier"),
                         "url": output.get("url"),
                     }
@@ -258,17 +258,17 @@ def parse():
                                 if family_name := submitter.get("lastName"):
                                     insert_value(author, "familyName", family_name)
                                 if name := submitter.get("orgName"):
-                                    insert_value(author, "affiliation", {"name": name})
+                                    insert_value(author, "affiliation", {"@type": "Organization", "name": name})
                                 if author:
                                     insert_value(output, "author", author)
 
                             if attributes := exp.get("attributes"):
                                 if name := attributes.get("library_selection"):
-                                    insert_value(output, "measurementTechnique", {"name": name})
+                                    insert_value(output, "measurementTechnique", {"@type": "DefinedTerm", "name": name})
                                 if name := attributes.get("library_strategy"):
-                                    insert_value(output, "measurementTechnique", {"name": name})
+                                    insert_value(output, "measurementTechnique", {"@type": "DefinedTerm", "name": name})
                                 if name := attributes.get("platform"):
-                                    insert_value(output, "measurementTechnique", {"name": name})
+                                    insert_value(output, "measurementTechnique", {"@type": "DefinedTerm", "name": name})
 
             if date_created := output.get("dateCreated"):
                 if not isinstance(date_created, list):

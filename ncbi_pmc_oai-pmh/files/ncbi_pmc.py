@@ -210,7 +210,7 @@ class NCBI_PMC(NDEDatabase):
                     except ValueError:
                         logger.info(f"Unable to parse date: {date_published_string}")
 
-            citation_dict = {}
+            citation_dict = {"@type": "ScholarlyArticle"}
             if identifiers := metadata.get("article-id"):
                 for identifier in identifiers:
                     if identifier.startswith("PMC"):
@@ -236,7 +236,7 @@ class NCBI_PMC(NDEDatabase):
             supplemental_data_arr = root.findall(".//supplementary-material")
             distribuiton_list = []
             for supplemental_data in supplemental_data_arr:
-                distribution_obj = {}
+                distribution_obj = {"@type": "DataDownload"}
                 caption = supplemental_data.find("caption")
                 if caption is not None:
                     file_name = caption.find("title")
@@ -307,13 +307,17 @@ class NCBI_PMC(NDEDatabase):
                 if funder.text is not None:
                     if funder.text.strip() == "":
                         continue
-                    funder_list.append({"funder": {"name": funder.text}})
+                    funder_list.append(
+                        {"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": funder.text}}
+                    )
                 else:
                     name = funder.find(".//institution")
                     if name is not None and name.text is not None:
                         if name.text.strip() == "":
                             continue
-                        funder_list.append({"funder": {"name": name.text}})
+                        funder_list.append(
+                            {"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": name.text}}
+                        )
             if len(funder_list):
                 output["funding"] = funder_list
 
@@ -322,7 +326,7 @@ class NCBI_PMC(NDEDatabase):
                 publisher_list = publisher_sec.getchildren()
                 for publisher in publisher_list:
                     if publisher.tag == "publisher-name":
-                        output["sdPublisher"] = {"name": publisher.text}
+                        output["sdPublisher"] = {"@type": "DataCatalog", "name": publisher.text}
 
             # if title := metadata.get('article-title'):
             #     if title[0] is not None:

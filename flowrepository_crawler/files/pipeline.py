@@ -26,7 +26,7 @@ class FlowRepositoryItemProcessorPipeline:
             if name["name"] == author_name:
                 match = True
         if not match:
-            author = {"name": author_name}
+            author = {"@type": "Person", "name": author_name}
             authors.append(author)
 
         return authors
@@ -58,10 +58,11 @@ class FlowRepositoryItemProcessorPipeline:
                 "archivedAt": url,
             },
             "measurementTechnique": {
+                "@type": "DefinedTerm",
                 "name": "flow cytometry method",
                 "url": "http://purl.obolibrary.org/obo/MMO_0000617",
                 "inDefinedTermSet": "MMO",
-                "curatedBy": {"name": "Flow Repository", "url": "http://flowrepository.org/", "dateModified": datetime.date.today().isoformat()},
+                "curatedBy": {"@type": "SoftwareApplication", "name": "Flow Repository", "url": "http://flowrepository.org/", "dateModified": datetime.date.today().isoformat()},
                 "isCurated": True
             },
             "conditionsOfAccess": "Open",
@@ -83,12 +84,12 @@ class FlowRepositoryItemProcessorPipeline:
         authors = []
 
         if author_name := item.pop("Primary researcher:", None):
-            author = {"name": author_name}
+            author = {"@type": "Person", "name": author_name}
             # if there is a Primary research then attach aff names
             if aff_names := item.pop("Organizations:", None):
                 affiliations = []
                 for aff_name in aff_names:
-                    affiliation = {"name": aff_name}
+                    affiliation = {"@type": "Organization", "name": aff_name}
                     affiliations.append(affiliation)
                 author["affiliation"] = affiliations
             authors.append(author)
@@ -96,7 +97,7 @@ class FlowRepositoryItemProcessorPipeline:
             # No primary researcher so we use author.name
             if author_names := item.pop("Organizations", None):
                 for author_name in author_names:
-                    author = {"name": author_name}
+                    author = {"@type": "Person", "name": author_name}
                     authors.append(author)
 
         if author_name := item.pop("PI/manager:", None):
@@ -217,7 +218,7 @@ class FlowRepositoryItemProcessorPipeline:
         # TODO Funding is under one string and there's no clear delimiter. We will keep it as if its only one funder for now.
         if funding := item.pop("Funding:", None):
             if funding.casefold() not in none_list:
-                output["funding"] = {"description": funding}
+                output["funding"] = {"@type": "MonetaryGrant", "description": funding}
 
         # pop unneeded values
         item.pop("MIFlowCyt score:", None)

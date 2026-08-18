@@ -52,7 +52,9 @@ def map_schema_json(schema_json):
     if author := schema_json.pop("creator", None):
         for data in author:
             if isinstance(data.get("affiliation"), str):
-                data["affiliation"] = {"name": data["affiliation"]}
+                data["affiliation"] = {"@type": "Organization", "name": data["affiliation"]}
+            # The upstream JSON-LD does not always type its creators.
+            data.setdefault("@type", "Person")
         schema_json["author"] = author
 
     # citation → citedBy
@@ -66,7 +68,7 @@ def map_schema_json(schema_json):
             if species_list:
                 schema_json["species"] = species_list
         else:
-            schema_json["species"] = {"name": species}
+            schema_json["species"] = {"@type": "DefinedTerm", "name": species}
 
     # measurementTechnique: list of strings → list of {"name": ...}
     if measurement_techniques := schema_json.pop("measurementTechnique", None):
@@ -95,7 +97,7 @@ def map_protocol_json(protocol_json, immport_id):
     if protocols := protocol_json.get("protocols"):
         is_based_on_list = []
         for protocol in protocols:
-            is_based_on_dict = {}
+            is_based_on_dict = {"@type": "CreativeWork"}
             if description := protocol.get("description"):
                 is_based_on_dict["description"] = description
             if file_name := protocol.get("fileName"):

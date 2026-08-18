@@ -48,8 +48,8 @@ def record_generator():
 
         # attributes
         _record_dict["description"] = _record_dict["attributes"].pop("summary")
-        _record_dict["measurementTechnique"] = {"name": _record_dict["attributes"].pop("type")}
-        _record_dict["sdPublisher"] = {"name": _record_dict["attributes"].pop("project_id")}
+        _record_dict["measurementTechnique"] = {"@type": "DefinedTerm", "name": _record_dict["attributes"].pop("type")}
+        _record_dict["sdPublisher"] = {"@type": "DataCatalog", "name": _record_dict["attributes"].pop("project_id")}
         _record_dict["creditText"] = _record_dict["attributes"].pop("short_attribution")
 
         if _record_dict["attributes"]["release_policy"]:
@@ -57,7 +57,11 @@ def record_generator():
 
         # tablexs.Contacts
         _record_dict["author"] = [
-            {"name": _dict.pop("contact_name"), "affiliation": {"name": str(_dict.pop("affiliation"))}}
+            {
+                "@type": "Person",
+                "name": _dict.pop("contact_name"),
+                "affiliation": {"@type": "Organization", "name": str(_dict.pop("affiliation"))},
+            }
             for _dict in _record_dict["tables"]["Contacts"]
         ]
 
@@ -101,12 +105,15 @@ def record_generator():
                 logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s" % published_dates)
 
         if _record_dict["tables"]["Version"]:
-            _record_dict["species"] = [{"name": hit["organism"]} for hit in _record_dict["tables"]["Version"]]
+            _record_dict["species"] = [
+                {"@type": "DefinedTerm", "name": hit["organism"]} for hit in _record_dict["tables"]["Version"]
+            ]
 
         # tables.HyperLinks
         if _record_dict["tables"]["HyperLinks"]:
             _record_dict["distribution"] = [
-                {"name": hit["text"], "url": hit["url"]} for hit in _record_dict["tables"]["HyperLinks"]
+                {"@type": "DataDownload", "name": hit["text"], "url": hit["url"]}
+                for hit in _record_dict["tables"]["HyperLinks"]
             ]
 
         # table.GeneTypeCounts
@@ -114,7 +121,7 @@ def record_generator():
         # gene_counts = [hit["gene_count"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         gene_refs = [hit["gene_type"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         if gene_refs:
-            _record_dict["variableMeasured"] = {"name": gene_refs[0]}
+            _record_dict["variableMeasured"] = {"@type": "DefinedTerm", "name": gene_refs[0]}
 
         # set conditionsOfAccess and isAccessibleForFree
         _record_dict["conditionsOfAccess"] = "Closed"

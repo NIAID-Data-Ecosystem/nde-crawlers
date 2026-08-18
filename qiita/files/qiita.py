@@ -116,7 +116,7 @@ def parse():
 
         if pi := study.get("pi"):
             name = re.findall(r">(.*?)<", pi)
-            output["author"] = {"name": name[0]}
+            output["author"] = {"@type": "Person", "name": name[0]}
 
         if pubs := study.get("pubs"):
             publications = re.findall(r">(.*?)<", pubs)

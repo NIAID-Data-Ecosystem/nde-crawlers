@@ -40,8 +40,8 @@ def parse_ontology_term(text):
         return None
     m = re.match(r"^(.+?)\s*\[([^\]]+)\]\s*$", text.strip())
     if m:
-        return {"name": m.group(1).strip(), "identifier": m.group(2).strip()}
-    return {"name": text.strip()}
+        return {"@type": "DefinedTerm", "name": m.group(1).strip(), "identifier": m.group(2).strip()}
+    return {"@type": "DefinedTerm", "name": text.strip()}
 
 
 # Source occasionally emits "Homo sapiens [Taxonomy ID: 9606]" as the organism
@@ -138,9 +138,9 @@ def parse_weight(text):
         return None
     m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)\s*$", str(text).strip())
     if m:
-        return {"name": "weight", "value": float(m.group(1)), "unitText": m.group(2)}
+        return {"@type": "QuantitativeValue", "name": "weight", "value": float(m.group(1)), "unitText": m.group(2)}
     else:
-        return {"name": text.strip()}
+        return {"@type": "DefinedTerm", "name": text.strip()}
 
 
 def parse_height(text):
@@ -153,8 +153,8 @@ def parse_height(text):
         return None
     m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)\s*$", str(text).strip())
     if m:
-        return {"name": "height", "value": float(m.group(1)), "unitText": m.group(2)}
-    return {"name": text.strip()}
+        return {"@type": "QuantitativeValue", "name": "height", "value": float(m.group(1)), "unitText": m.group(2)}
+    return {"@type": "DefinedTerm", "name": text.strip()}
 
 
 def parse_value_unit(text):
@@ -167,8 +167,8 @@ def parse_value_unit(text):
         return None
     m = re.match(r"^\s*(-?\d+(?:\.\d+)?)\s*([a-zA-Z]+)\s*$", str(text).strip())
     if m:
-        return {"value": float(m.group(1)), "unitText": m.group(2)}
-    return {"name": text.strip()}
+        return {"@type": "QuantitativeValue", "value": float(m.group(1)), "unitText": m.group(2)}
+    return {"@type": "QuantitativeValue", "name": text.strip()}
 
 
 def find_age(text):
@@ -307,19 +307,19 @@ def parse_sample(sample):
             insert_value(output.setdefault("author", {}).setdefault("affiliation", {}), "name", name)
 
     if name := sample.get("subjectType"):
-        insert_value(output, "sampleType", {"name": name})
+        insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": name})
 
     if description := sample.get("description"):
         insert_value(output, "description", description)
 
     if name := sample.get("tissue"):
-        insert_value(output, "anatomicalStructure", {"name": name})
+        insert_value(output, "anatomicalStructure", {"@type": "DefinedTerm", "name": name})
 
     if identifier := sample.get("usedIds"):
         if not isinstance(identifier, list):
             identifier = [identifier]
         for id in identifier:
-            insert_value(output, "isRelatedTo", {"identifier": id})
+            insert_value(output, "isRelatedTo", {"@type": "CreativeWork", "identifier": id})
 
     if date_published := sample.get("publicDate"):
         try:
@@ -331,7 +331,7 @@ def parse_sample(sample):
     if sample_process := sample.get("protocol"):
         insert_value(output, "sampleProcess", sample_process)
 
-    geo = {}
+    geo = {"@type": "GeoCoordinates"}
     if attributes := sample.get("attributes"):
         for key, value in attributes.items():
             if not value:
@@ -341,19 +341,23 @@ def parse_sample(sample):
                 insert_value(output.setdefault("author", {}), "name", value)
             elif key == "host":
                 clean_value, host_taxid = _split_taxonomy_id_bracket(value)
-                host_entry = {"name": clean_value}
+                host_entry = {"@type": "DefinedTerm", "name": clean_value}
                 if host_taxid:
                     host_entry["identifier"] = host_taxid
                 insert_value(output, "species", host_entry)
             elif key == "environmental_package":
-                insert_value(output, "environmentalSystem", {"name": value})
+                insert_value(output, "environmentalSystem", {"@type": "DefinedTerm", "name": value})
             elif key == "host_sex":
                 insert_value(output, "sex", value)
             elif key == "host_age":
                 if age := find_age(attributes.get("host_age")):
-                    insert_value(output, "developmentalStage", {"value": age, "unitText": "year"})
+                    insert_value(
+                        output,
+                        "developmentalStage",
+                        {"@type": "QuantitativeValue", "value": age, "unitText": "year"},
+                    )
                 else:
-                    insert_value(output, "developmentalStage", {"name": value})
+                    insert_value(output, "developmentalStage", {"@type": "DefinedTerm", "name": value})
             elif key == "env_biome":
                 insert_value(output, "environmentalSystem", parse_ontology_term(value))
             elif key == "env_feature":
@@ -380,31 +384,35 @@ def parse_sample(sample):
             elif key == "oxygenation_status_of_sample":
                 insert_value(output, "sampleState", value)
             elif key == "developmental_stage":
-                insert_value(output, "developmentalStage", {"name": value})
+                insert_value(output, "developmentalStage", {"@type": "DefinedTerm", "name": value})
             elif key == "sex":
                 insert_value(output, "sex", value)
             elif key == "age":
                 if age := find_age(value):
-                    insert_value(output, "developmentalStage", {"value": age, "unitText": "year"})
+                    insert_value(
+                        output,
+                        "developmentalStage",
+                        {"@type": "QuantitativeValue", "value": age, "unitText": "year"},
+                    )
                 else:
-                    insert_value(output, "developmentalStage", {"name": value})
+                    insert_value(output, "developmentalStage", {"@type": "DefinedTerm", "name": value})
             elif key == "disease_name":
-                insert_value(output, "healthCondition", {"name": value})
+                insert_value(output, "healthCondition", {"@type": "DefinedTerm", "name": value})
             elif key == "cell_line_name":
-                insert_value(output, "cellType", {"name": value})
+                insert_value(output, "cellType", {"@type": "DefinedTerm", "name": value})
             elif key == "cell_type":
-                insert_value(output, "cellType", {"name": value})
+                insert_value(output, "cellType", {"@type": "DefinedTerm", "name": value})
             elif key == "breed":
                 insert_value(output, "associatedGenotype", value)
             elif key == "molecular_types_extracted_from_samples":
-                insert_value(output, "sampleType", {"name": value})
+                insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": value})
             elif key == "strain_name":
                 insert_value(output, "associatedGenotype", value)
             elif key == "sample_storage_temperature":
                 if temp := parse_temperature(value):
                     insert_value(output, "sampleStorageTemperature", temp)
                 else:
-                    insert_value(output, "sampleStorageTemperature", {"name": value})
+                    insert_value(output, "sampleStorageTemperature", {"@type": "QuantitativeValue", "name": value})
             elif key == "elevation":
                 geo["elevation"] = value
                 # insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "elevation", value)
@@ -417,25 +425,25 @@ def parse_sample(sample):
             elif key == "genotype":
                 insert_value(output, "associatedGenotype", value)
             elif key == "bioproject_accession":
-                insert_value(output, "isBasisFor", {"identifier": value})
+                insert_value(output, "isBasisFor", {"@type": "CreativeWork", "identifier": value})
             elif key == "sample_collection_device":
-                insert_value(output, "instrument", {"name": value})
+                insert_value(output, "instrument", {"@type": "DefinedTerm", "name": value})
             elif key == "isolation_source":
                 insert_value(output, "keywords", value)
             elif key == "disease_pathological_type":
-                insert_value(output, "healthCondition", {"name": value})
+                insert_value(output, "healthCondition", {"@type": "DefinedTerm", "name": value})
             elif key == "mutation_type":
                 insert_value(output, "associatedGenotype", value)
             elif key == "cultivar":
                 insert_value(output, "associatedGenotype", value)
             elif key == "lat_lon":
-                geo = {}
+                geo = {"@type": "GeoCoordinates"}
                 try:
                     lat, lon = parse_lat_lon(value)
                     if lat is not None and lon is not None:
                         geo["latitude"] = lat
                         geo["longitude"] = lon
-                        insert_value(output, "locationOfOrigin", {"geo": geo})
+                        insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
                     continue
                 except Exception as e:
                     logger.warning(f"Failed to parse latitude and longitude from value '{value}': {e}")
@@ -443,26 +451,26 @@ def parse_sample(sample):
             elif key == "latitude_start" or key == "longitude_start":
                 if key == "latitude_start":
                     try:
-                        geo = {}
+                        geo = {"@type": "GeoCoordinates"}
                         latitude = float(value)
                         geo["latitude"] = latitude
                         if attributes.get("longitude_start"):
                             longitude = float(attributes.get("longitude_start"))
                             geo["longitude"] = longitude
-                        insert_value(output, "locationOfOrigin", {"geo": geo})
+                        insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
                     except Exception as e:
                         logger.warning(f"Failed to parse latitude_start or longitude_start from value '{value}': {e}")
                         continue
             elif key == "latitude_end" or key == "longitude_end":
                 if key == "latitude_end":
                     try:
-                        geo = {}
+                        geo = {"@type": "GeoCoordinates"}
                         latitude = float(value)
                         geo["latitude"] = latitude
                         if attributes.get("longitude_end"):
                             longitude = float(attributes.get("longitude_end"))
                             geo["longitude"] = longitude
-                        insert_value(output, "locationOfOrigin", {"geo": geo})
+                        insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
                     except Exception as e:
                         logger.warning(f"Failed to parse latitude_end or longitude_end from value '{value}': {e}")
                         continue
@@ -470,7 +478,7 @@ def parse_sample(sample):
                 geo["altitude"] = value
                 # insert_value(output.setdefault("locationOfOrigin", {}).setdefault("geo", {}), "altitude", value)
             elif key == "sample_storage_location":
-                insert_value(output, "itemLocation", {"name": value})
+                insert_value(output, "itemLocation", {"@type": "AdministrativeArea", "name": value})
             elif key == "sample_volume_or_weight_for_dna_extraction":
                 insert_value(output, "sampleQuantity", parse_value_unit(value))
             elif key == "natural_host":
@@ -480,21 +488,25 @@ def parse_sample(sample):
             elif key == "height":
                 insert_value(output, "associatedPhenotype", parse_height(value))
             elif key == "phenotype":
-                insert_value(output, "associatedPhenotype", {"name": value})
+                insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": value})
             elif key == "age_at_surgery":
                 if age := find_age(value):
-                    insert_value(output, "developmentalStage", {"value": age, "unitText": "year"})
+                    insert_value(
+                        output,
+                        "developmentalStage",
+                        {"@type": "QuantitativeValue", "value": age, "unitText": "year"},
+                    )
                 else:
-                    insert_value(output, "developmentalStage", {"name": value})
+                    insert_value(output, "developmentalStage", {"@type": "DefinedTerm", "name": value})
             elif key == "pathogen_type":
-                insert_value(output, "infectiousAgent", {"name": value})
+                insert_value(output, "infectiousAgent", {"@type": "DefinedTerm", "name": value})
             elif key == "pathogen_subtype":
-                insert_value(output, "infectiousAgent", {"name": value})
+                insert_value(output, "infectiousAgent", {"@type": "DefinedTerm", "name": value})
             else:
                 insert_value(output, "additionalProperty", {"@type": "PropertyValue", "propertyID": key, "value": value})
 
     if geo:
-        insert_value(output, "locationOfOrigin", {"geo": geo})
+        insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
 
     if cinf := sample.get("calc_info"):
         for key, value in cinf.items():
@@ -516,13 +528,13 @@ def parse_sample(sample):
             if not value:
                 continue
             if key == "phenotype":
-                insert_value(output, "associatedPhenotype", {"name": value})
+                insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": value})
             elif key == "host_species":
-                insert_value(output, "species", {"name": value})
+                insert_value(output, "species", {"@type": "DefinedTerm", "name": value})
             elif key == "breed":
                 insert_value(output, "associatedGenotype", value)
             elif key == "natural_host":
-                insert_value(output, "species", {"name": value})
+                insert_value(output, "species", {"@type": "DefinedTerm", "name": value})
             elif key == "sourceProject":
                 insert_value(output, "keywords", value)
             else:

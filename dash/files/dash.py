@@ -72,7 +72,7 @@ def get_dataset_info(dataset_id):
 
 def parse_study_info(study_info):
     study_dict = {}
-    citation_dict = {}
+    citation_dict = {"@type": "ScholarlyArticle"}
     if citation := study_info.get("citation"):
         citation_dict["name"] = citation.strip()
 
@@ -87,21 +87,24 @@ def parse_study_info(study_info):
         if obj["propertyName"] == "DOI":
             citation_dict["doi"] = obj["storedValue"].strip()
         if obj["propertyName"] == "NICHD Division/Branch/Center":
-            study_dict["funding"] = {"funder": {"name": obj["storedValue"]}}
+            study_dict["funding"] = {
+                "@type": "MonetaryGrant",
+                "funder": {"@type": "Organization", "name": obj["storedValue"]},
+            }
         if obj["propertyName"] == "Study Description":
             study_dict["description"] = obj["storedValue"]
         if obj["propertyName"] == "Clinical Research Network Name":
             if obj["storedValue"]:
-                author_list.append({"name": obj["storedValue"]})
+                author_list.append({"@type": "Person", "name": obj["storedValue"]})
             if len(obj["storedArray"]) > 0:
                 for name in obj["storedArray"]:
-                    author_list.append({"name": name})
+                    author_list.append({"@type": "Person", "name": name})
         if obj["propertyName"] == "Principal Investigator(s)":
             if obj["storedValue"]:
-                author_list.append({"name": obj["storedValue"]})
+                author_list.append({"@type": "Person", "name": obj["storedValue"]})
             elif len(obj["storedArray"]) > 0:
                 for name in obj["storedArray"]:
-                    author_list.append({"name": name})
+                    author_list.append({"@type": "Person", "name": name})
     if author_list:
         study_dict["author"] = author_list
 
@@ -129,7 +132,7 @@ def parse_study_info(study_info):
             if obj["storedValue"] == "Yes":
                 study_dict["conditionsOfAccess"] = "Restricted"
         if obj["propertyName"] == "Study Type":
-            study_dict["measurementTechnique"] = {"name": obj["storedValue"]}
+            study_dict["measurementTechnique"] = {"@type": "DefinedTerm", "name": obj["storedValue"]}
         if obj["propertyName"] == "ClinicalTrials.gov URL":
             study_dict["mainEntityOfPage"] = obj["storedValue"]
             base_url = obj["storedValue"].split("?")[0]
@@ -206,12 +209,14 @@ def parse_study_info(study_info):
         for obj in descriptive_documents:
             if obj["documentType"] == "Codebook/Variable Dictionary":
                 study_dict["hasPart"] = {
+                    "@type": "CreativeWork",
                     "additionalType": {"name": obj["documentType"]},
                     "name": obj["filename"],
                     "url": f'https://dash.nichd.nih.gov/download-api/descriptive/file?id={obj["id"]}',
                 }
             else:
                 study_dict["isBasedOn"] = {
+                    "@type": "CreativeWork",
                     "additionalType": {"name": obj["documentType"]},
                     "name": obj["filename"],
                     "url": f'https://dash.nichd.nih.gov/download-api/descriptive/file?id={obj["id"]}',
@@ -270,6 +275,7 @@ def parse():
                 output = parsed_study.copy()
                 output["isPartOf"] = [
                     {
+                        "@type": "CreativeWork",
                         "name": output["name"],
                         "identifier": "NICHD_DASH_Study_" + study_id,
                         "url": f"https://dash.nichd.nih.gov/study/{study_id}",
@@ -293,6 +299,7 @@ def parse():
                     cited_by_list = []
                     for publication in publication_info:
                         publication_dict = {
+                            "@type": "CreativeWork",
                             "name": publication["title"],
                             "url": publication["publicationUrl"],
                             "datePublished": publication["date"],
@@ -301,7 +308,7 @@ def parse():
                     if cited_by_list:
                         output["citedBy"] = cited_by_list
 
-                distribution_dict = {"contentUrl": output["url"]}
+                distribution_dict = {"@type": "DataDownload", "contentUrl": output["url"]}
                 if dataset_title := dataset_info.get("datasetTitle"):
                     output["name"] = f'{dataset_title} in {output["name"]}'
                 if dataset_description := dataset_info.get("datasetDescription"):
@@ -322,9 +329,9 @@ def parse():
                 {
                     "name": x["name"],
                     "identifier": x["_id"],
-                    "hasPart": {"identifier": x["isPartOf"][0]["identifier"]},
+                    "hasPart": {"@type": "CreativeWork", "identifier": x["isPartOf"][0]["identifier"]},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"name": "NICHD DASH"},
+                    "includedInDataCatalog": {"@type": "DataCatalog", "name": "NICHD DASH"},
                     "relationship": "Datasets in the same study",
                 }
                 for x in related_datasets

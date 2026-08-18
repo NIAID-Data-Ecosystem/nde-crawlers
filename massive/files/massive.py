@@ -285,15 +285,18 @@ def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS,
     if repo_path := item.get("repo_path"):
         path = repo_path.split("-")[-1]
         if path != "/data/massive":
-            output["distribution"] = {"contentUrl": f"ftp://massive.ucsd.edu/{path}/{identifier}"}
+            output["distribution"] = {
+                "@type": "DataDownload",
+                "contentUrl": f"ftp://massive.ucsd.edu/{path}/{identifier}",
+            }
         else:
-            output["distribution"] = {"contentUrl": f"ftp://massive.ucsd.edu/v08/{identifier}"}
+            output["distribution"] = {"@type": "DataDownload", "contentUrl": f"ftp://massive.ucsd.edu/v08/{identifier}"}
 
     if title := item.get("title"):
         output["name"] = title
 
     if sdPublisher := item.get("site"):
-        output["sdPublisher"] = {"name": sdPublisher}
+        output["sdPublisher"] = {"@type": "DataCatalog", "name": sdPublisher}
 
     if description := item.get("description"):
         if description != "null":
@@ -315,22 +318,22 @@ def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS,
 
     if measurement_techniques := item.get("instrument_resolved"):
         mt_list = [mt for mt in measurement_techniques.split("###") if mt and mt != "null"]
-        output["measurementTechnique"] = [{"name": mt} for mt in mt_list]
+        output["measurementTechnique"] = [{"@type": "DefinedTerm", "name": mt} for mt in mt_list]
 
     if species := item.get("species_resolved"):
         species_list = [sp for sp in species.split("###") if sp and sp != "null"]
-        output["species"] = [{"name": sp.split(" (NCBITaxon:")[0]} for sp in species_list]
+        output["species"] = [{"@type": "DefinedTerm", "name": sp.split(" (NCBITaxon:")[0]} for sp in species_list]
 
     if author_name := item.get("pis"):
         pis_list = []
         for pi in author_name:
-            pi_data = {}
+            pi_data = {"@type": "Person"}
             if name := pi.get("name"):
                 pi_data["name"] = name
             if email := pi.get("email"):
                 pi_data["email"] = email
             if institution := pi.get("institution"):
-                pi_data["affiliation"] = {"name": institution}
+                pi_data["affiliation"] = {"@type": "Organization", "name": institution}
             if pi_data:
                 pis_list.append(pi_data)
         if pis_list:
@@ -339,11 +342,11 @@ def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS,
     if publications := item.get("publications"):
         pub_list = []
         for pub in publications:
-            pub_data = {}
+            pub_data = {"@type": "ScholarlyArticle"}
             if citation_id := pub.get("id"):
                 pub_data["identifier"] = citation_id
             if authors := pub.get("authors"):
-                pub_data["author"] = {"name": authors}
+                pub_data["author"] = {"@type": "Person", "name": authors}
             if title := pub.get("title"):
                 pub_data["name"] = title
             if doi := pub.get("citation"):
@@ -362,6 +365,7 @@ def parse_dataset_row(item, session=None, fetch_html_details=FETCH_HTML_DETAILS,
             output["conditionsOfAccess"] = "Closed"
 
     default_measurement_technique = {
+        "@type": "DefinedTerm",
         "name": "Mass Spectrometry",
         "url": "https://ontobee.org/ontology/MMO?iri=http://purl.obolibrary.org/obo/MMO_0000534",
         "identifier": "MMO_0000534",

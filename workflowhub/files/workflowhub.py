@@ -81,9 +81,14 @@ def parse_metadata(metadata):
             output["keywords"] = tags
             if "covid-19" in tags:
                 output["topicCategory"] = {
+                    "@type": "DefinedTerm",
                     "name": "COVID-19",
                     "url": "https://workflowhub.eu/workflows?filter%5Btag%5D=covid-19",
-                    "curatedBy": {"name": "WorkflowHub", "url": "https://workflowhub.eu/"},
+                    "curatedBy": {
+                        "@type": "SoftwareApplication",
+                        "name": "WorkflowHub",
+                        "url": "https://workflowhub.eu/",
+                    },
                 }
 
         if versions := attributes.get("versions"):
@@ -106,7 +111,7 @@ def parse_metadata(metadata):
             author_list = []
             if isinstance(creators, list):
                 for creator in creators:
-                    author_dict = {}
+                    author_dict = {"@type": "Person"}
                     if profile := creator.get("profile"):
                         author_dict["url"] = f"https://workflowhub.eu/{profile}"
                     if family_name := creator.get("family_name"):
@@ -116,7 +121,7 @@ def parse_metadata(metadata):
                     if family_name and given_name:
                         author_dict["name"] = f"{given_name} {family_name}"
                     if affiliation := creator.get("affiliation"):
-                        author_dict["affiliation"] = {"name": affiliation}
+                        author_dict["affiliation"] = {"@type": "Organization", "name": affiliation}
                     if orcid := creator.get("orcid"):
                         author_dict["identifier"] = orcid
                     author_list.append(author_dict)
@@ -148,7 +153,7 @@ def parse_metadata(metadata):
             topic_list = []
             if isinstance(edam_topics, list):
                 for topic in edam_topics:
-                    topic_dict = {}
+                    topic_dict = {"@type": "DefinedTerm"}
                     if identifier := topic.get("identifier"):
                         topic_dict["url"] = identifier
                         topic_dict["identifier"] = identifier.split("/")[-1]
@@ -163,7 +168,7 @@ def parse_metadata(metadata):
                 if isinstance(inputs, list):
                     input_list = []
                     for input in inputs:
-                        input_dict = {}
+                        input_dict = {"@type": "DefinedTerm"}
                         if id := input.get("id"):
                             input_dict["identifier"] = id
                         if name := input.get("name"):
@@ -178,7 +183,7 @@ def parse_metadata(metadata):
                 output_list = []
                 if isinstance(outputs, list):
                     for single_output in outputs:
-                        output_dict = {}
+                        output_dict = {"@type": "DefinedTerm"}
                         if id := single_output.get("id"):
                             output_dict["identifier"] = id
                         if name := single_output.get("name"):

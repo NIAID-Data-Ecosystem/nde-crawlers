@@ -96,7 +96,7 @@ def parse():
             result_input_list = []
             for input_object in input_object_list:
                 # transform to a new object we create here
-                formal_parameter_object = {}
+                formal_parameter_object = {"@type": "FormalParameter"}
                 if name := input_object.get("label"):
                     formal_parameter_object["name"] = name
 
@@ -107,7 +107,10 @@ def parse():
                     # using dictionary mime_type defined above, find correct value transformations by iterating through keys
                     for file_type in file_types:
                         if file_type in mime_type.keys():
-                            formal_parameter_object["encodingFormat"] = {"name": mime_type[file_type]}
+                            formal_parameter_object["encodingFormat"] = {
+                                "@type": "DefinedTerm",
+                                "name": mime_type[file_type],
+                            }
                 # no empty objects
                 if len(formal_parameter_object):
                     result_input_list.append(formal_parameter_object)
@@ -120,7 +123,7 @@ def parse():
         if output_object_list := data.get("outputs"):
             result_output_list = []
             for output_object in output_object_list:
-                result_output_object = {}
+                result_output_object = {"@type": "FormalParameter"}
                 if name := output_object.get("label"):
                     result_output_object["name"] = name
                 if file_types := output_object.get("sbg:fileTypes"):
@@ -129,7 +132,10 @@ def parse():
                         file_types = file_types[0].split(", ")
                     for file_type in file_types:
                         if file_type in mime_type.keys():
-                            result_output_object["encodingFormat"] = {"name": mime_type[file_type]}
+                            result_output_object["encodingFormat"] = {
+                                "@type": "DefinedTerm",
+                                "name": mime_type[file_type],
+                            }
 
                 if len(result_output_object):
                     result_output_list.append(result_output_object)
@@ -170,7 +176,7 @@ def parse():
         if categories := data.get("sbg:categories"):
             category_list = []
             for category in categories:
-                category_list.append({"name": category})
+                category_list.append({"@type": "DefinedTerm", "name": category})
             if len(category_list):
                 output["applicationSubCategory"] = category_list
         if project_name := data.get("sbg:projectName"):
@@ -179,7 +185,7 @@ def parse():
             authors = authors.split(", ")
             author_list = []
             for author in authors:
-                author_list.append({"name": author})
+                author_list.append({"@type": "Person", "name": author})
             output["author"] = author_list
         if app_version := data.get("sbg:appVersion"):
             output["softwareVersion"] = app_version
@@ -190,11 +196,11 @@ def parse():
         if contributors := data.get("sbg:contributors"):
             contributor_list = []
             for contributor in contributors:
-                contributor_list.append({"name": contributor})
+                contributor_list.append({"@type": "Person", "name": contributor})
             output["contributor"] = contributor_list
 
         if publisher := data.get("sbg:publisher"):
-            output["sdPublisher"] = {"name": publisher}
+            output["sdPublisher"] = {"@type": "DataCatalog", "name": publisher}
         if workflow_language := data.get("sbg:workflowLanguage"):
             output["programmingLanguage"] = workflow_language
         if toolkit := data.get("sbg:toolkit"):

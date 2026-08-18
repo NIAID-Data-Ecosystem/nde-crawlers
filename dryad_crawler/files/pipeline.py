@@ -64,7 +64,7 @@ class DryadItemProcessorPipeline:
 
         if has_part := item.pop("usageNotes", None):
             clean_text = remove_tags(has_part).strip()
-            output["hasPart"] = {"name": clean_text}
+            output["hasPart"] = {"@type": "CreativeWork", "name": clean_text}
 
         if identifier := item.pop("identifier", None):
             output["identifier"] = identifier
@@ -84,6 +84,9 @@ class DryadItemProcessorPipeline:
                         authors["identifier"] = same_as
                     else:
                         authors["url"] = same_as
+                # Dryad's JSON-LD does not always type its creators, and
+                # check_schema rejects an untyped author.
+                authors.setdefault("@type", "Person")
                 output["author"] = authors
             else:
                 for author in authors:
@@ -92,6 +95,7 @@ class DryadItemProcessorPipeline:
                             author["identifier"] = same_as
                         else:
                             author["url"] = same_as
+                    author.setdefault("@type", "Person")
                     author_list.append(author)
                 output["author"] = author_list
 
@@ -103,6 +107,7 @@ class DryadItemProcessorPipeline:
                 distribution["hasPart"] = content_url
             else:
                 pass
+            distribution.setdefault("@type", "DataDownload")
             output["distribution"] = distribution
 
         # There are 2 different cases and 4 different time format
@@ -137,14 +142,14 @@ class DryadItemProcessorPipeline:
                 sc = []
                 for spatial_cov in spatial_covs:
                     if isinstance(spatial_cov, str):
-                        sc.append({"name": spatial_cov})
+                        sc.append({"@type": "AdministrativeArea", "name": spatial_cov})
                 output["spatialCoverage"] = sc
             else:
                 if isinstance(spatial_covs, str):
-                    output["spatialCoverage"] = {"name": spatial_covs}
+                    output["spatialCoverage"] = {"@type": "AdministrativeArea", "name": spatial_covs}
 
         if citation := item.pop("citation", None):
-            output["citation"] = {"url": citation}
+            output["citation"] = {"@type": "CreativeWork", "url": citation}
 
         if license_obj := item.pop("license", None):
             output["license"] = license_obj
@@ -165,9 +170,9 @@ class DryadItemProcessorPipeline:
         if funding := item.pop("funders", None):
             fds = []
             for funder in funding:
-                fd = {}
+                fd = {"@type": "MonetaryGrant"}
                 if name := funder.get("organization"):
-                    fd["funder"] = {"name": name}
+                    fd["funder"] = {"@type": "Organization", "name": name}
                 if add_type := funder.get("identifierType"):
                     fd["additionalType"] = add_type
                 if url := funder.get("identifier"):

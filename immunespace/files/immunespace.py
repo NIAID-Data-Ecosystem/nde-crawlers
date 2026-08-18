@@ -44,6 +44,7 @@ CATALOG = {
 
 RESPONSE_COMPONENTS = {
     "gene": {
+        "@type": "DefinedTerm",
         "additional_type": "Gene",
         "measured_property": {
             "@type": "Property",
@@ -63,24 +64,28 @@ RESPONSE_COMPONENTS = {
         },
     },
     "protein": {
+        "@type": "DefinedTerm",
         "additional_type": "Protein",
         "measured_property": {"@type": "Property", "name": "Protein Abundance"},
         "observation_about_type": "Protein",
         "observation_type": {"@type": "DefinedTerm", "name": "Differential Protein Abundance"},
     },
     "metabolite": {
+        "@type": "DefinedTerm",
         "additional_type": "Metabolite",
         "measured_property": {"@type": "Property", "name": "Metabolite Abundance"},
         "observation_about_type": "ChemicalSubstance",
         "observation_type": {"@type": "DefinedTerm", "name": "Differential Metabolite Abundance"},
     },
     "cell": {
+        "@type": "DefinedTerm",
         "additional_type": "Cell",
         "measured_property": {"@type": "Property", "name": "Cell Abundance"},
         "observation_about_type": "DefinedTerm",
         "observation_type": {"@type": "DefinedTerm", "name": "Differential Cell Abundance"},
     },
     "weight": {
+        "@type": "DefinedTerm",
         "additional_type": "Weight",
         "measured_property": {"@type": "Property", "name": "Body Weight"},
         "observation_about_type": "DefinedTerm",
@@ -90,18 +95,21 @@ RESPONSE_COMPONENTS = {
 
 DIRECTIONS = {
     "Up": {
+        "@type": "SemanticTriple",
         "gene_label": "Upregulated",
         "other_label": "Increased",
         "qualifier": "increase",
         "gene_identifier": "https://w3id.org/biolink/vocab/DirectionQualifierEnum#upregulated",
     },
     "Down": {
+        "@type": "SemanticTriple",
         "gene_label": "Downregulated",
         "other_label": "Decreased",
         "qualifier": "decrease",
         "gene_identifier": "https://w3id.org/biolink/vocab/DirectionQualifierEnum#downregulated",
     },
     "Changed": {
+        "@type": "SemanticTriple",
         "gene_label": "Differentially expressed",
         "other_label": "Changed",
         "qualifier": "changed",
@@ -359,7 +367,7 @@ def _build_signature_doc(signature_id, group, direction, component, source_organ
             *group["diseases"],
             *group["disease_stages"],
         ],
-        "species": {"@type": "Taxon", "name": "Homo sapiens"},
+        "species": {"@type": "DefinedTerm", "name": "Homo sapiens"},
     }
     if source_organization:
         doc["sourceOrganization"] = source_organization
@@ -408,7 +416,7 @@ def parse_datasets(source_organization=None, requester=requests):
             "_id": record["value"],
             "url": f"https://immunespace.org/query/study/{record['value']}",
             "sourceOrganization": source_organization,
-            "species": {"name": "Homo sapiens"},
+            "species": {"@type": "DefinedTerm", "name": "Homo sapiens"},
         }
         yield output
 

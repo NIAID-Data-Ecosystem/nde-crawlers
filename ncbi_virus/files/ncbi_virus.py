@@ -366,8 +366,8 @@ def _affiliation_from_value(value: Any) -> Optional[dict[str, Any]]:
     parts = [_clean_string(part) for part in text.split(",")]
     names = [part for part in parts if part]
     if len(names) > 1:
-        return {"name": names}
-    return {"name": text}
+        return {"@type": "Organization", "name": names}
+    return {"@type": "Organization", "name": text}
 
 
 def _add_counter(counter: Counter[str], value: Any, limit: int = MAX_AGGREGATE_VALUES) -> None:
@@ -960,7 +960,7 @@ def _example_work_from_report(
 
     source_db = _source_database(report)
     if source_db:
-        example["isPartOf"] = {"@type": "DataCatalog", "name": source_db}
+        example["isPartOf"] = {"@type": "CreativeWork", "name": source_db}
 
     additional = []
     for name, value in (
@@ -1222,12 +1222,13 @@ class TaxonAccumulator:
                 self.sample_examples.append(sample)
 
     def _infectious_agent(self) -> dict[str, Any]:
-        return _taxonomy_hint(self.tax_id, self.virus_name) or {"identifier": self.tax_id}
+        return _taxonomy_hint(self.tax_id, self.virus_name) or {"@type": "DefinedTerm", "identifier": self.tax_id}
 
     def _sample_collection(self) -> Optional[dict[str, Any]]:
         sample: dict[str, Any] = {
             "@type": "SampleCollection",
             "numberOfItems": {
+                "@type": "QuantitativeValue",
                 "value": self.record_count,
                 "unitText": "samples",
             },
@@ -1312,7 +1313,7 @@ class TaxonAccumulator:
         for accession in _counter_values(self.sra_accessions, 25):
             items.append(
                 {
-                    "@type": "Dataset",
+                    "@type": "CreativeWork",
                     "identifier": accession,
                     "url": _ncbi_url("sra", accession),
                 }
@@ -1389,6 +1390,7 @@ class TaxonAccumulator:
             "measurementTechnique": copy.deepcopy(MEASUREMENT_TECHNIQUE),
             "variableMeasured": copy.deepcopy(collection["variable_measured"]),
             "collectionSize": {
+                "@type": "QuantitativeValue",
                 "minValue": record_count,
                 "unitText": collection["unit_text"],
             },
@@ -1475,7 +1477,7 @@ class TaxonAccumulator:
         }
 
         source_obj = {
-            "@type": "nde:ResourceCatalog",
+            "@type": "ResourceCatalog",
             "name": SOURCE_NAME,
             "url": SOURCE_CATALOG_RECORD,
         }

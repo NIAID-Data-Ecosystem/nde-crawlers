@@ -544,6 +544,7 @@ def _base_record(
         "url": url,
         "description": description,
         "collectionSize": {
+            "@type": "QuantitativeValue",
             "minValue": collection_size,
             "unitText": unit_text,
         }

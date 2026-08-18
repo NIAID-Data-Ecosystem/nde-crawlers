@@ -142,6 +142,7 @@ def build_doc(content, record_id, types, missing_types):
         "url": url,
         "distribution": [
             {
+                "@type": "DataDownload",
                 "contentUrl": "https://zenodo.org/api/records/" + record_id + "/files-archive",
                 "dateModified": date_modified,
             }
@@ -186,7 +187,7 @@ def build_doc(content, record_id, types, missing_types):
     sdps = []
     for rel in root.findall(f".//{NS}relatedIdentifier"):
         if rel.text and "https://zenodo.org/communities/" in rel.text:
-            sdps.append({"name": rel.text.rsplit("/", 1)[-1], "url": rel.text})
+            sdps.append({"@type": "DataCatalog", "name": rel.text.rsplit("/", 1)[-1], "url": rel.text})
     if sdps:
         output["sdPublisher"] = sdps
 
@@ -207,7 +208,7 @@ def build_doc(content, record_id, types, missing_types):
 
     # authors
     for creator in root.findall(f".//{NS}creator"):
-        author = {}
+        author = {"@type": "Person"}
         name = creator.find(f"./{NS}creatorName")
         affiliation = creator.find(f"./{NS}affiliation")
         orcid = creator.find(f"./{NS}nameIdentifier[@nameIdentifierScheme='ORCID']")
@@ -215,7 +216,7 @@ def build_doc(content, record_id, types, missing_types):
             author["name"] = name.text
         # elasticsearch cannot index strings longer than 32766 chars
         if affiliation is not None and affiliation.text and len(affiliation.text) < 30000:
-            author["affiliation"] = {"name": affiliation.text}
+            author["affiliation"] = {"@type": "Organization", "name": affiliation.text}
         if orcid is not None:
             author["identifier"] = orcid.text
         if author:
@@ -250,16 +251,16 @@ def build_doc(content, record_id, types, missing_types):
     for contributor in root.findall(f".//{NS}contributor[@contributorType='Funder']"):
         name = contributor.find(f"./{NS}contributorName")
         if name is not None:
-            fundings.append({"funder": {"name": name.text}})
+            fundings.append({"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": name.text}})
 
     for funder in root.findall(f".//{NS}fundingReference"):
-        funding = {}
+        funding = {"@type": "MonetaryGrant"}
         funder_identifier = funder.find(f".//{NS}funderIdentifier")
         funder_name = funder.find(f".//{NS}funderName")
         award_title = funder.find(f".//{NS}awardTitle")
         award_number = funder.find(f".//{NS}awardNumber")
         if funder_identifier is not None or funder_name is not None:
-            funding = {"funder": {}}
+            funding = {"@type": "MonetaryGrant", "funder": {}}
             if funder_identifier is not None:
                 funding["funder"]["identifier"] = funder_identifier.text
             if funder_name is not None:

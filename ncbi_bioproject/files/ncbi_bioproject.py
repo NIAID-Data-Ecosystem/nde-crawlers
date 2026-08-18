@@ -65,21 +65,25 @@ def enrich_with_summary_data(output: Dict[str, Any], accession: str, summary_dat
 
     # Fill in missing organism/species data
     if "species" not in output and summary.get("organism_name") and summary.get("taxid"):
-        output["species"] = {"name": summary["organism_name"], "identifier": f"NCBITaxon:{summary['taxid']}"}
+        output["species"] = {
+            "@type": "DefinedTerm",
+            "name": summary["organism_name"],
+            "identifier": f"NCBITaxon:{summary['taxid']}",
+        }
         enriched_fields.append("species")
 
     # Fill in missing measurement technique from project type
     if "measurementTechnique" not in output and summary.get("project_type"):
         project_type = summary["project_type"].lstrip("e").strip()
         if project_type and project_type != "Primary submission":
-            output["measurementTechnique"] = {"name": project_type}
+            output["measurementTechnique"] = {"@type": "DefinedTerm", "name": project_type}
             enriched_fields.append("measurementTechnique")
 
     # Fill in missing variable measured from data type
     if "variableMeasured" not in output and summary.get("data_type"):
         data_type = summary["data_type"].strip()
         if data_type:
-            output["variableMeasured"] = {"name": data_type}
+            output["variableMeasured"] = {"@type": "DefinedTerm", "name": data_type}
             enriched_fields.append("variableMeasured")
 
     # Fill in missing creation date
@@ -309,12 +313,12 @@ def parse() -> Generator[Dict[str, Any], None, None]:
         method = project_elem.find(".//ProjectTypeSubmission/Method")
         if method is not None:
             if method_type := method.get("method_type"):
-                output["measurementTechnique"] = {"name": method_type.lstrip("e")}
+                output["measurementTechnique"] = {"@type": "DefinedTerm", "name": method_type.lstrip("e")}
 
         # Extract species/organism information
         organism = project_elem.find(".//ProjectTypeSubmission/Target/Organism")
         if organism is not None:
-            species = {}
+            species = {"@type": "DefinedTerm"}
             if taxid := organism.get("taxID"):
                 species["identifier"] = f"NCBITaxon:{taxid}"
             elif species_id := organism.get("species"):
@@ -331,7 +335,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
         if grants:
             funding_list = []
             for grant in grants:
-                funding = {}
+                funding = {"@type": "MonetaryGrant"}
                 if grant_id := grant.get("GrantId"):
                     funding["identifier"] = grant_id
                     logger.debug(f"Found grant ID: {grant_id}")
@@ -341,7 +345,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
 
                 agency = grant.find("Agency")
                 if agency is not None:
-                    funder = {}
+                    funder = {"@type": "Organization"}
                     if abbr := agency.get("abbr"):
                         funder["alternateName"] = abbr
                         logger.debug(f"Found agency abbr: {abbr}")
@@ -378,7 +382,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
                     if last := pi.findtext("Last"):
                         pi_author["familyName"] = last
                     if affil := pi.get("affil"):
-                        pi_author["affiliation"] = {"name": affil}
+                        pi_author["affiliation"] = {"@type": "Organization", "name": affil}
                     if len(pi_author) > 1:  # More than just @type
                         author_list.append(pi_author)
 
@@ -422,7 +426,7 @@ def parse() -> Generator[Dict[str, Any], None, None]:
         # Extract publications
         publications = []
         for pub in project_elem.findall(".//ProjectDescr/Publication"):
-            pub_entry = {}
+            pub_entry = {"@type": "ScholarlyArticle"}
             if pub_id := pub.get("id"):
                 if db := pub.get("DbType"):
                     if db == "ePubmed":
@@ -453,10 +457,10 @@ def parse() -> Generator[Dict[str, Any], None, None]:
                         member_id = member.get("id")
                         if member_id == numeric_id:
                             # This project is the parent of the referenced project
-                            has_parts.append({"identifier": ref_acc})
+                            has_parts.append({"@type": "CreativeWork", "identifier": ref_acc})
                         else:
                             # This project is a child of the referenced project
-                            part_of.append({"identifier": ref_acc})
+                            part_of.append({"@type": "CreativeWork", "identifier": ref_acc})
 
         # Add related SRA projects to hasPart (Option 3 implementation)
         # if accession:

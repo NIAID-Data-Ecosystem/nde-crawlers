@@ -63,6 +63,7 @@ INCLUDED_IN_DATA_CATALOG = {
 
 # Curated from DDE record dde_cc13744ba5c15cca.
 DDE_CURATED_BY = {
+    "@type": "SoftwareApplication",
     "name": "Data Discovery Engine",
     "url": "https://discovery.biothings.io/",
     "dateModified": "2026-02-28",
@@ -661,6 +662,7 @@ def _build_record(
         "url": url,
         "description": description,
         "collectionSize": {
+            "@type": "QuantitativeValue",
             "minValue": peptide_count,
             "unitText": "Peptides",
         },

@@ -30,6 +30,7 @@ SOURCE_METADATA = {
 }
 
 _DDE_CURATED_BY = {
+    "@type": "SoftwareApplication",
     "name": "Data Discovery Engine",
     "url": "https://discovery.biothings.io/",
     "dateModified": "2026-01-03",
@@ -487,9 +488,9 @@ def _org(name: str) -> dict[str, str]:
 
 def _funding_list() -> dict[str, list[dict[str, str]]]:
     return [
-        {"identifier": "U24HG009649"},
-        {"identifier": "U24HG009650"},
-        {"identifier": "U24HG006834"},
+        {"@type": "MonetaryGrant", "identifier": "U24HG009649"},
+        {"@type": "MonetaryGrant", "identifier": "U24HG009650"},
+        {"@type": "MonetaryGrant", "identifier": "U24HG006834"},
     ]
 
 
@@ -614,12 +615,13 @@ def _build_is_based_on(
     }
 
     source_obj = {
-        "@type": "nde:ResourceCatalog",
+        "@type": "ResourceCatalog",
         "name": "Clinical Genomics Resource",
         "url": "https://data.niaid.nih.gov/resources?id=dde_b880e7dc2c2437e0",
     }
 
     replacements = {
+        "@type": "CreativeWork",
         "{about.name}": about_name,
         "{healthCondition.name}": condition_name,
         "{healthCondition.identifier}": mondo_id,
@@ -680,6 +682,7 @@ def _build_gene_validity_record(
         "name": f"{disease_for_name} {settings['name_suffix']}".strip(),
         "url": url,
         "collectionSize": {
+            "@type": "QuantitativeValue",
             "minValue": len(group["genes"]),
             "unitText": "Gene-Disease Annotations",
         },
@@ -704,9 +707,11 @@ def _build_gene_validity_record(
         "measurementTechnique": copy.deepcopy(
             MEASUREMENT_TECHNIQUE_DEFINED_TERMS
         ),
-        "species": {"name": "Homo Sapiens"},
+        "species": {"@type": "DefinedTerm", "name": "Homo Sapiens"},
         "topicCategory": copy.deepcopy(settings["topic_category"]),
-        "usageInfo": {"url": "https://www.clinicalgenome.org/docs/?doc-type=policies-position-statements"
+        "usageInfo": {
+            "@type": "CreativeWork",
+            "url": "https://www.clinicalgenome.org/docs/?doc-type=policies-position-statements",
         },
         "variableMeasured": copy.deepcopy(settings["variable_measured"]),
         "isAccessibleForFree": True,
@@ -772,6 +777,7 @@ def _build_variant_pathogenicity_record(
         "name": f"{disease_for_name} {settings['name_suffix']}".strip(),
         "url": url,
         "collectionSize": {
+            "@type": "QuantitativeValue",
             "minValue": len(group["uuids"]),
             "unitText": "Variant Pathogenicity Annotations",
         },
@@ -796,8 +802,10 @@ def _build_variant_pathogenicity_record(
         "measurementTechnique": copy.deepcopy(
             MEASUREMENT_TECHNIQUE_DEFINED_TERMS
         ),
-        "species": {"name": "Homo Sapiens"},
-        "usageInfo": {"url": "https://www.clinicalgenome.org/docs/?doc-type=policies-position-statements"
+        "species": {"@type": "DefinedTerm", "name": "Homo Sapiens"},
+        "usageInfo": {
+            "@type": "CreativeWork",
+            "url": "https://www.clinicalgenome.org/docs/?doc-type=policies-position-statements",
         },
         "variableMeasured": copy.deepcopy(settings["variable_measured"]),
         "isAccessibleForFree": True,

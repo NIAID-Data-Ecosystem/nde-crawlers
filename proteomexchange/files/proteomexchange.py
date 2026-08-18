@@ -80,10 +80,10 @@ def _parse_authors_from_contacts(contacts):
         if not name or name in seen_names:
             continue
         seen_names.add(name)
-        author = {"name": name}
+        author = {"@type": "Person", "name": name}
         affiliation = _get_term(terms, "contact affiliation")
         if affiliation:
-            author["affiliation"] = {"name": affiliation}
+            author["affiliation"] = {"@type": "Organization", "name": affiliation}
         authors.append(author)
     return authors
 
@@ -113,7 +113,7 @@ def _parse_citations_from_html(publication_html, dataset_doi=None):
         return citations
 
     urls = re.findall(r'href="([^"]+)"', publication_html)
-    citation = {}
+    citation = {"@type": "ScholarlyArticle"}
     for url in urls:
         if "pubmed" in url:
             pmid_match = re.search(r"/pubmed/(\d+)", url)
@@ -166,7 +166,7 @@ def _parse_dataset(dataset):
         sci_name = _get_term(terms, "taxonomy: scientific name")
         tax_id = _get_term(terms, "taxonomy: NCBI TaxID")
         if sci_name:
-            species_obj = {"name": sci_name}
+            species_obj = {"@type": "DefinedTerm", "name": sci_name}
             if tax_id:
                 species_obj["identifier"] = f"taxonomy:{tax_id}"
             species_list.append(species_obj)
@@ -192,7 +192,7 @@ def _parse_dataset(dataset):
         # Skip "no manuscript" marker entries
         if _has_term(terms, "Dataset with no associated published manuscript"):
             continue
-        citation = {}
+        citation = {"@type": "ScholarlyArticle"}
         pmid = _get_term(terms, "PubMed identifier")
         if pmid:
             citation["pmid"] = pmid
@@ -212,14 +212,14 @@ def _parse_dataset(dataset):
             continue
         # "Data derived from previous dataset" marks the dataset as a reanalysis
         if _has_term(terms, "Data derived from previous dataset"):
-            is_based_on.append({"identifier": pxd_id})
+            is_based_on.append({"@type": "CreativeWork", "identifier": pxd_id})
         # Sibling terms carry the parent dataset identifier
         parent_pxd = _get_term(terms, "ProteomeXchange accession number")
         if parent_pxd:
-            is_related_to.append({"identifier": parent_pxd})
+            is_related_to.append({"@type": "CreativeWork", "identifier": parent_pxd})
         parent_jpost = _get_term(terms, "jPOST dataset identifier")
         if parent_jpost:
-            is_related_to.append({"identifier": parent_jpost})
+            is_related_to.append({"@type": "CreativeWork", "identifier": parent_jpost})
 
     # ── sdPublisher (hosting repository + PRIDE URI) ─────────────────
     summary = dataset.get("datasetSummary") or {}
@@ -247,7 +247,7 @@ def _parse_dataset(dataset):
     # ── Distribution (from datasetFiles) ─────────────────────────────
     distributions = []
     for df in dataset.get("datasetFiles", []):
-        dist = {}
+        dist = {"@type": "DataDownload"}
         df_name = df.get("name")
         df_value = df.get("value")
         if df_name:
@@ -264,12 +264,12 @@ def _parse_dataset(dataset):
     if not authors:
         primary_submitter = history.get("primarySubmitter")
         if primary_submitter:
-            authors = [{"name": primary_submitter}]
+            authors = [{"@type": "Person", "name": primary_submitter}]
 
     if not species_list:
         hist_species = history.get("species")
         if hist_species:
-            species_list = [{"name": hist_species}]
+            species_list = [{"@type": "DefinedTerm", "name": hist_species}]
 
     if not instrument_names:
         hist_instrument = history.get("instrument")
@@ -299,7 +299,10 @@ def _parse_dataset(dataset):
     if species_list:
         result["species"] = species_list
     if instrument_names:
-        result["sample"] = {"instrument": [{"name": n} for n in instrument_names]}
+        result["sample"] = {
+            "@type": "Sample",
+            "instrument": [{"@type": "DefinedTerm", "name": n} for n in instrument_names],
+        }
     if keywords:
         result["keywords"] = keywords
     if citations:
@@ -321,7 +324,7 @@ def _parse_dataset(dataset):
 
     # sdPublisher
     if hosting_repo:
-        sd_publisher = {"name": hosting_repo}
+        sd_publisher = {"@type": "DataCatalog", "name": hosting_repo}
         if pride_url:
             sd_publisher["url"] = pride_url
         result["sdPublisher"] = sd_publisher
@@ -342,7 +345,10 @@ def _parse_dataset(dataset):
     # Static fields applied to every record
     result["conditionsOfAccess"] = "Open"
     result["license"] = "https://www.proteomexchange.org/pxcollaborativeagreement_2024.pdf"
-    result["usageInfo"] = {"url": "https://www.proteomexchange.org/docs/reprocessed_guidelines_px.pdf"}
+    result["usageInfo"] = {
+        "@type": "CreativeWork",
+        "url": "https://www.proteomexchange.org/docs/reprocessed_guidelines_px.pdf",
+    }
     result["topicCategory"] = [
         {
             "@type": "DefinedTerm",

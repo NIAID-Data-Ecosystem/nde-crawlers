@@ -119,9 +119,9 @@ def parse():
                 if contributors := project.get("contributors"):
                     authors = []
                     for contributor in contributors:
-                        author_dict = {}
+                        author_dict = {"@type": "Person"}
                         if institution := contributor.get("institution"):
-                            author_dict["affiliation"] = {"name": institution}
+                            author_dict["affiliation"] = {"@type": "Organization", "name": institution}
                         if name := contributor.get("contactName"):
                             given_name = name.split(",")[0]
                             family_name = name.split(",")[-1]
@@ -134,7 +134,7 @@ def parse():
                             if "affiliation" in author_dict:
                                 author_dict["affiliation"]["name"] += ", " + laboratory
                             else:
-                                author_dict["affiliation"] = {"name": laboratory}
+                                author_dict["affiliation"] = {"@type": "Organization", "name": laboratory}
                         if email := contributor.get("email"):
                             author_dict["email"] = email
                         if author_dict:
@@ -145,7 +145,7 @@ def parse():
                 if publications := project.get("publications"):
                     citations = []
                     for publication in publications:
-                        citation_dict = {}
+                        citation_dict = {"@type": "ScholarlyArticle"}
                         if title := publication.get("publicationTitle"):
                             citation_dict["name"] = title
                         if url := publication.get("publicationUrl"):
@@ -171,7 +171,7 @@ def parse():
                     if len(github_links):
                         is_based_on = []
                         for link in github_links:
-                            is_based_on.append({"@type": "ComputationalTool", "codeRepository": link})
+                            is_based_on.append({"@type": "CreativeWork", "codeRepository": link})
                         output["isBasedOn"] = is_based_on
 
                 if accessions := project.get("accessions"):
@@ -203,9 +203,9 @@ def parse():
                         health_conditions = []
                         for disease in diseases:
                             if disease == "normal":
-                                health_conditions.append({"name": "healthy"})
+                                health_conditions.append({"@type": "DefinedTerm", "name": "healthy"})
                             elif disease is not None:
-                                health_conditions.append({"name": disease})
+                                health_conditions.append({"@type": "DefinedTerm", "name": disease})
                         if len(health_conditions):
                             output["healthCondition"] = health_conditions
                 if len(keywords):
@@ -217,7 +217,7 @@ def parse():
                         species_list = []
                         for single_species in species:
                             if species is not None:
-                                species_list.append({"name": single_species})
+                                species_list.append({"@type": "DefinedTerm", "name": single_species})
                         if len(species_list):
                             output["species"] = species_list
 
@@ -233,8 +233,8 @@ def parse():
                         ).strftime("%Y-%m-%d")
 
             if output.get("species"):
-                output["species"].append({"name": "homo sapiens"})
+                output["species"].append({"@type": "DefinedTerm", "name": "homo sapiens"})
             else:
-                output["species"] = {"name": "homo sapiens"}
+                output["species"] = {"@type": "DefinedTerm", "name": "homo sapiens"}
 
         yield output

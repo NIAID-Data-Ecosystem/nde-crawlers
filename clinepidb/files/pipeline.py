@@ -148,7 +148,7 @@ def get_variableMeasured(entity):
     for variable in variables:
         displayName = variable.get("displayName")
         if displayName:
-            variableMeasured.append({"name": displayName})
+            variableMeasured.append({"@type": "DefinedTerm", "name": displayName})
 
     # Recursively traverse child entities
     children = entity.get("children", [])
@@ -230,7 +230,7 @@ def record_generator():
             # attributes
             measurement_technique = record["attributes"].pop("Study_Design")
             if measurement_technique:
-                record["measurementTechnique"] = {"name": measurement_technique}
+                record["measurementTechnique"] = {"@type": "DefinedTerm", "name": measurement_technique}
             record["description"] = record["attributes"].pop("description")
             record["description"] += record["attributes"].pop("summary")
             keywords = []
@@ -243,7 +243,7 @@ def record_generator():
                 keywords += record["attributes"].pop("Study_Type").split(",")
             if keywords:
                 record["keywords"] = keywords
-            record["spatialCoverage"] = {"name": record["attributes"].pop("Country")}
+            record["spatialCoverage"] = {"@type": "AdministrativeArea", "name": record["attributes"].pop("Country")}
 
             ##version_date =  record['attributes'].pop('eupath_release').split(",")[0]
             # iso_version_date = datetime.datetime.strptime(version_date, "%Y-%m-%d").date().isoformat()
@@ -270,7 +270,7 @@ def record_generator():
                 "disease"
             )
             if health_cond:
-                record["healthCondition"] = {"name": health_cond}
+                record["healthCondition"] = {"@type": "DefinedTerm", "name": health_cond}
 
             # # Sample metadata (minimal Sample object inside Dataset)
             # base_sample_type = {
@@ -406,11 +406,19 @@ def record_generator():
             recent_date = sorted(
                 [datetime.datetime.strptime(date, "%Y-%m-%d").date().isoformat() for date in distr_dic]
             )[-1]
-            record["distribution"] = {"dateModified": recent_date, "name": distr_dic[recent_date].pop("dataset_name")}
+            record["distribution"] = {
+                "@type": "DataDownload",
+                "dateModified": recent_date,
+                "name": distr_dic[recent_date].pop("dataset_name"),
+            }
 
             # tables.Contacts -- multiple
             record["author"] = [
-                {"name": hit["contact_name"], "affiliation": {"name": hit["affiliation"]}}
+                {
+                    "@type": "Person",
+                    "name": hit["contact_name"],
+                    "affiliation": {"@type": "Organization", "name": hit["affiliation"]},
+                }
                 for hit in record["tables"]["Contacts"]
             ]
 
@@ -422,9 +430,9 @@ def record_generator():
                 dict_.pop("url")
                 hl_url = dict_["hyper_link"].pop("url")
                 if "NCT" in hl_url:
-                    hl_list.append({"identifier": hl_url.split("/")[-1], "url": hl_url})
+                    hl_list.append({"@type": "CreativeWork", "identifier": hl_url.split("/")[-1], "url": hl_url})
                 else:
-                    hl_list.append({"url": hl_url})
+                    hl_list.append({"@type": "CreativeWork", "url": hl_url})
 
             record["isBasedOn"] = hl_list
 

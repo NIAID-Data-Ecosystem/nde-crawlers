@@ -104,7 +104,7 @@ def _parse_quantitative_length(val, name):
     m = _LENGTH_RE.match(str(val))
     if not m:
         return None
-    entry = {"@type": "QuantitativeValue", "name": name}
+    entry = {"@type": "CreativeWork", "name": name}
     mn = float(m.group("min"))
     if mx := m.group("max"):
         entry["minValue"] = mn
@@ -615,7 +615,7 @@ def parse():
         # Sequence information → isBasisFor (Genome + 16S accessions)
         for key in ("Genome sequences", "16S sequences"):
             for s in _as_list(sequence_info.get(key)):
-                entry = {}
+                entry = {"@type": "ScholarlyArticle"}
                 if name := s.get("description"):
                     entry["name"] = name
                 ident = s.get("INSDC accession") or s.get("accession")
@@ -627,7 +627,7 @@ def parse():
 
         # Literature.literature → citedBy
         for lit in _as_list(literature.get("literature")):
-            entry = {}
+            entry = {"@type": "ScholarlyArticle"}
             if pmid := lit.get("Pubmed-ID"):
                 insert_value(output, "pmids", str(pmid))
                 entry["pmid"] = str(pmid)
@@ -654,7 +654,7 @@ def parse():
 
         # Reference → isBasedOn
         for ref in _as_list(references):
-            entry = {}
+            entry = {"@type": "ScholarlyArticle"}
             if authors := ref.get("authors"):
                 author_type = "Organization" if str(authors).startswith("Curators of ") else "Person"
                 entry["author"] = [{"@type": author_type, "name": authors}]

@@ -281,8 +281,14 @@ def check_schema(doc: Dict) -> Dict:
         assert_types(field, ("DefinedTerm",))
 
     citation_fields = ("citation", "citedBy", "isBasedOn", "isBasisFor", "isPartOf", "hasPart")
+    # `Sample` is allowed because NDE_schema.jsonld lets a Sample link to another
+    # Sample through any of these fields.
+    work_types = ("ScholarlyArticle", "CreativeWork", "Sample")
+    # A DataCollection additionally records how it was generated (an `Action`) and
+    # which catalog it was drawn from (a `ResourceCatalog`) in `isBasedOn`.
+    is_based_on_types = work_types + ("Action", "ResourceCatalog")
     for field in citation_fields:
-        assert_types(field, ("ScholarlyArticle", "CreativeWork"))
+        assert_types(field, is_based_on_types if field == "isBasedOn" else work_types)
 
     assert_types("funding", ("MonetaryGrant",))
     assert_types("sourceOrganization", ("Organization", "ResearchProject"))

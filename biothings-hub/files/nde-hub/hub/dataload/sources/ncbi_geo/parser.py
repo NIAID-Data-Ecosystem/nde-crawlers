@@ -140,25 +140,25 @@ def parse_gsm(data_folder):
 
         if instrument := item.get("!Sample_instrument_model"):
             if isinstance(instrument, list):
-                output["instrument"] = [{"name": i} for i in instrument]
+                output["instrument"] = [{"@type": "DefinedTerm", "name": i} for i in instrument]
             else:
-                output["instrument"] = {"name": instrument}
+                output["instrument"] = {"@type": "DefinedTerm", "name": instrument}
 
         mts = []
 
         if mt := item.get("!Sample_library_selection"):
             if isinstance(mt, list):
                 for m in mt:
-                    mts.append({"name": m})
+                    mts.append({"@type": "DefinedTerm", "name": m})
             else:
-                mts.append({"name": mt})
+                mts.append({"@type": "DefinedTerm", "name": mt})
 
         if mt := item.get("!Sample_library_strategy"):
             if isinstance(mt, list):
                 for m in mt:
-                    mts.append({"name": m})
+                    mts.append({"@type": "DefinedTerm", "name": m})
             else:
-                mts.append({"name": mt})
+                mts.append({"@type": "DefinedTerm", "name": mt})
 
         if mts:
             output["measurementTechnique"] = mts
@@ -178,7 +178,7 @@ def parse_gsm(data_folder):
             if isinstance(is_basis_for, list):
                 output["isBasisFor"] = [
                     {
-                        "@type": "Dataset",
+                        "@type": "CreativeWork",
                         "identifier": sid,
                         "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + sid,
                     }
@@ -186,7 +186,7 @@ def parse_gsm(data_folder):
                 ]
             else:
                 output["isBasisFor"] = {
-                    "@type": "Dataset",
+                    "@type": "CreativeWork",
                     "identifier": is_basis_for,
                     "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + is_basis_for,
                 }
@@ -320,7 +320,7 @@ def parse_gse(data_folder):
                 "@type": "SampleCollection",
                 "itemListElement": [],
                 "aggregateElement": {},
-                "numberOfItems": {"value": 0, "unitText": "sample"},
+                "numberOfItems": {"@type": "QuantitativeValue", "value": 0, "unitText": "sample"},
             }
             gsm_dir = os.path.join(data_folder, "gsm")
             if not isinstance(gsm_ids, list):
@@ -394,9 +394,9 @@ def parse_gse(data_folder):
 
         if mt := item.get("!Series_type"):
             if isinstance(mt, list):
-                output["measurementTechnique"] = [{"name": m} for m in mt]
+                output["measurementTechnique"] = [{"@type": "DefinedTerm", "name": m} for m in mt]
             else:
-                output["measurementTechnique"] = {"name": mt}
+                output["measurementTechnique"] = {"@type": "DefinedTerm", "name": mt}
 
         if authors := item.get("!Series_contributor"):
             if isinstance(authors, list):
@@ -412,8 +412,8 @@ def parse_gse(data_folder):
 
         if species := item.get("!Series_platform_organism"):
             if isinstance(species, list):
-                output["species"] = [{"name": s} for s in species]
+                output["species"] = [{"@type": "DefinedTerm", "name": s} for s in species]
             else:
-                output["species"] = [{"name": species}]
+                output["species"] = [{"@type": "DefinedTerm", "name": species}]
 
         yield output

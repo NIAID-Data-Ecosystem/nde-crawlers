@@ -65,6 +65,7 @@ DIAGNOSIS_TERMS = {
     #     "alternateName": ["Control Group"],
     # },
     "sle": {
+        "@type": "DefinedTerm",
         "identifier": "0007915",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -73,6 +74,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["SLE", "lupus erythematosus, systemic"],
     },
     "ra": {
+        "@type": "DefinedTerm",
         "identifier": "0008383",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -81,6 +83,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["RA", "rheumatoid arthritis (disease)"],
     },
     "vitiligo": {
+        "@type": "DefinedTerm",
         "identifier": "0008661",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -89,6 +92,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["vitiligo (disease)"],
     },
     "dermatomyositis": {
+        "@type": "DefinedTerm",
         "identifier": "0016367",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -97,6 +101,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["dermatomyositis (disease)"],
     },
     "pso": {
+        "@type": "DefinedTerm",
         "identifier": "0005083",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -105,6 +110,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["PSO", "psoriasis (disease)"],
     },
     "psa": {
+        "@type": "DefinedTerm",
         "identifier": "0011849",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -113,6 +119,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["PSA", "arthritis, psoriatic", "psoriatic arthropathy"],
     },
     "scleroderma": {
+        "@type": "DefinedTerm",
         "identifier": "0019340",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -121,6 +128,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["systemic sclerosis", "systemic scleroderma"],
     },
     "sjd": {
+        "@type": "DefinedTerm",
         "identifier": "0010030",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -129,6 +137,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["SJD", "Sjögren's syndrome", "Sjogren's syndrome"],
     },
     "ln": {
+        "@type": "DefinedTerm",
         "identifier": "0005556",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -137,6 +146,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["LN", "nephritis, lupus"],
     },
     "cle": {
+        "@type": "DefinedTerm",
         "identifier": "0005282",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -145,6 +155,7 @@ DIAGNOSIS_TERMS = {
         "alternateName": ["CLE", "lupus erythematosus, cutaneous"],
     },
     "oa": {
+        "@type": "DefinedTerm",
         "identifier": "0005178",
         "inDefinedTermSet": "MONDO",
         "isCurated": False,
@@ -245,7 +256,7 @@ def extract_grant_ids(credit_text: str) -> List[Dict[str, str]]:
     unique_grants = list(dict.fromkeys(matches))
 
     # Return as list of funding objects
-    return [{"identifier": grant_id} for grant_id in unique_grants]
+    return [{"@type": "MonetaryGrant", "identifier": grant_id} for grant_id in unique_grants]
 
 
 def get_synapse_client(auth_token: Optional[str] = None) -> Synapse:
@@ -270,7 +281,7 @@ def fetch_publication_details(syn: Synapse, pub_syn_id: str) -> Optional[Dict]:
             pmid = pmid[7:].strip()
         if pmid and not pd.isna(pmid):
             # If PMID exists, return only the PMID (util handles the rest)
-            return {"pmids": pmid}
+            return {"@type": "CreativeWork", "pmids": pmid}
 
         # If no PMID, parse publication details as normal
         pub: Dict[str, Any] = {"synapseId": pub_syn_id}
@@ -367,7 +378,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
         "url": ARK_PORTAL_DATASET_URL.format(syn_id=digits_only_id),
         # Assigned fields from mapping
     "license": "https://arkportal.synapse.org/Data%20Access",
-    "usageInfo": {"url": "https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement"},
+    "usageInfo": {"@type": "CreativeWork", "url": "https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement"},
         "includedInDataCatalog": {
             "@type": "DataCatalog",
             "name": "SAGE ARK Portal",
@@ -446,7 +457,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     # Remove duplicates while preserving order
     measurement = list(dict.fromkeys(measurement_values))
     if len(measurement) > 0:
-        doc["measurementTechnique"] = [{"name": value} for value in measurement]
+        doc["measurementTechnique"] = [{"@type": "DefinedTerm", "name": value} for value in measurement]
 
     # Topic categories based on measurement techniques
     topic_categories: List[Dict] = []

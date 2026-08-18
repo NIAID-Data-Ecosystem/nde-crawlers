@@ -57,7 +57,7 @@ def _build_sample_record(
         "name": display_name,
         "url": dataset_url,
         "isBasisFor": {
-            "@type": "Dataset",
+            "@type": "CreativeWork",
             "identifier": dataset_identifier,
             "url": dataset_url,
         },
@@ -258,7 +258,7 @@ def _build_sample_record(
                     text_blob = description.strip()
 
                 if text_blob:
-                    normalized.append({"@type": "CreativeWork", "name": "library preparation", "description": text_blob})
+                    normalized.append({"@type": "DefinedTerm", "name": "library preparation", "description": text_blob})
                     continue
 
                 # Default: treat as a DefinedTerm-like entry with optional description.
@@ -353,7 +353,7 @@ def _build_sample_record(
             _add_unique_dict(sample_types, sample_types_seen, {"name": value})
 
     def add_measurement(name=None, description=None):
-        entry = {"name": name, "description": description}
+        entry = {"@type": "DefinedTerm", "name": name, "description": description}
         _add_unique_dict(measurement_techniques, measurement_techniques_seen, entry)
 
     def add_phenotype(value):
@@ -372,7 +372,7 @@ def _build_sample_record(
     def add_health_condition(name, identifier=None):
         if isinstance(name, str) and _SEROLOGY_SUFFIX.search(name):
             return
-        entry = {"name": name, "identifier": identifier}
+        entry = {"@type": "DefinedTerm", "name": name, "identifier": identifier}
         _add_unique_dict(health_conditions, health_conditions_seen, entry)
 
     def add_distribution(entry):
@@ -385,7 +385,7 @@ def _build_sample_record(
             value = value.strip()
             if not value:
                 return
-        entry = {"name": value}
+        entry = {"@type": "DefinedTerm", "name": value}
         _add_unique_dict(instruments, instruments_seen, entry)
 
     def normalize_date(value):
@@ -521,7 +521,7 @@ def _build_sample_record(
                 )
             return
 
-        entry = {"value": numeric_value}
+        entry = {"@type": "QuantitativeValue", "value": numeric_value}
         if derived_unit:
             entry["unitText"] = derived_unit
         if derived_label:
@@ -529,7 +529,7 @@ def _build_sample_record(
         _add_unique_dict(sample_quantities, quantity_seen, entry)
 
     def add_variable_measured(name=None, description=None):
-        entry = {"name": name, "description": description}
+        entry = {"@type": "DefinedTerm", "name": name, "description": description}
         _add_unique_dict(extra_variables, extra_variables_seen, entry)
 
     def add_variable_measured_value(name, raw_value):
@@ -542,6 +542,7 @@ def _build_sample_record(
 
     def add_developmental_stage(name=None, min_value=None, max_value=None, unit_code=None, unit_text=None):
         entry = {
+            "@type": "QuantitativeValue",
             "name": name,
             "minValue": min_value,
             "maxValue": max_value,
@@ -573,7 +574,7 @@ def _build_sample_record(
             text = value.strip() if isinstance(value, str) else str(value).strip()
             if not text:
                 return
-            entry = {"name": text}
+            entry = {"@type": "AdministrativeArea", "name": text}
 
         key = json.dumps(entry, sort_keys=True, default=str)
         if key in locations_seen:

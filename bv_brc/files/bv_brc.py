@@ -696,7 +696,7 @@ def _build_species_list(hosts: set[tuple[str, str]]) -> list[dict[str, str]]:
 
         for name in candidates:
             if name and name not in seen:
-                result.append({"name": name})
+                result.append({"@type": "DefinedTerm", "name": name})
                 seen.add(name)
                 break
     return result
@@ -861,6 +861,7 @@ def _build_data_collection(
             "data_management_sharing.html"
         ),
         "usageInfo": {
+            "@type": "CreativeWork",
             "url": (
                 "https://www.bv-brc.org/docs/system_documentation/"
                 "data_management_sharing.html"

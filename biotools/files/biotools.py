@@ -93,6 +93,7 @@ def parse():
         if topics := tool.get("topic"):
             output["topicCategory"] = [
                 {
+                    "@type": "DefinedTerm",
                     "url": topic.get("uri"),
                     "identifier": topic.get("uri").split("/")[-1],
                     "name": topic.get("term"),
@@ -112,6 +113,7 @@ def parse():
                     if uri and term and uri not in seen_uris:
                         seen_uris.add(uri)
                         feature = {
+                            "@type": "DefinedTerm",
                             "url": uri,
                             "name": term,
                         }
@@ -203,7 +205,7 @@ def parse():
             if contributors:
                 output["contributor"] = contributors
             if funders:
-                output["funding"] = [{"funder": funder} for funder in funders]
+                output["funding"] = [{"@type": "MonetaryGrant", "funder": funder} for funder in funders]
 
         # Publication handling based on type
         if publications := tool.get("publication"):
@@ -228,7 +230,7 @@ def parse():
                     if metadata.get("authors"):
                         for author in metadata.get("authors", []):
                             if author_name := author.get("name"):
-                                authors.append({"name": author_name})
+                                authors.append({"@type": "Person", "name": author_name})
                         if authors:
                             pub_entry["author"] = authors
 
@@ -276,7 +278,7 @@ def parse():
                 if relation_type in ["isNewVersionOf", "hasNewVersion"]:
                     output.setdefault("sameAs", []).append(relation_entry)
                 elif relation_type == "uses":
-                    relation_dict = {"identifier": relation_entry}
+                    relation_dict = {"@type": "CreativeWork", "identifier": relation_entry}
                     relation_dict["url"] = f"https://bio.tools/{relation_entry}"
                     relation_dict["@type"] = "ComputationalTool"
                     output.setdefault("isBasedOn", []).append(relation_dict)
@@ -285,7 +287,7 @@ def parse():
                         {
                             "identifier": relation_entry,
                             "url": f"https://bio.tools/{relation_entry}",
-                            "@type": "ComputationalTool",
+                            "@type": "CreativeWork",
                         }
                     )
                 elif relation_type == "includes":
@@ -293,11 +295,11 @@ def parse():
                         {
                             "identifier": relation_entry,
                             "url": f"https://bio.tools/{relation_entry}",
-                            "@type": "ComputationalTool",
+                            "@type": "CreativeWork",
                         }
                     )
                 elif relation_type == "includedIn":
-                    output.setdefault("isPartOf", []).append({"identifier": relation_entry})
+                    output.setdefault("isPartOf", []).append({"@type": "CreativeWork", "identifier": relation_entry})
                 else:
                     output.setdefault("isRelatedTo", []).append({"identifier": relation_entry, "@type": "CreativeWork"})
                     logger.warning("Unknown relation type: %s", relation_type)
@@ -322,11 +324,11 @@ def parse():
                 if not link_url:
                     continue
                 if link_type == "Software catalogue":
-                    output.setdefault("sdPublisher", []).append({"url": link_url})
+                    output.setdefault("sdPublisher", []).append({"@type": "DataCatalog", "url": link_url})
                 elif link_type == "Repository":
                     output.setdefault("codeRepository", []).append({"url": link_url})
                 else:
-                    output.setdefault("isRelatedTo", []).append({"url": link_url})
+                    output.setdefault("isRelatedTo", []).append({"@type": "CreativeWork", "url": link_url})
                     logger.warning("Unknown link type: %s", link_type)
 
         # Download URLs
@@ -339,13 +341,13 @@ def parse():
                     continue  # Skip if either URL or type is missing
 
                 if download_type == "API specification":
-                    output.setdefault("softwareHelp", []).append({"url": download_url})
+                    output.setdefault("softwareHelp", []).append({"@type": "CreativeWork", "url": download_url})
                 elif download_type == "Biological data":
-                    output.setdefault("softwareAddOn", []).append({"url": download_url})
+                    output.setdefault("softwareAddOn", []).append({"@type": "CreativeWork", "url": download_url})
                 elif download_type == "Binaries":
                     output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Command-line specificaiton":
-                    output.setdefault("softwareHelp", []).append({"url": download_url})
+                    output.setdefault("softwareHelp", []).append({"@type": "CreativeWork", "url": download_url})
                 elif download_type == "Container file":
                     output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Icon":
@@ -357,9 +359,9 @@ def parse():
                 elif download_type == "Software package":
                     output.setdefault("downloadUrl", []).append({"name": download_url})
                 elif download_type == "Test data":
-                    output.setdefault("softwareAddOn", []).append({"url": download_url})
+                    output.setdefault("softwareAddOn", []).append({"@type": "CreativeWork", "url": download_url})
                 elif download_type == "Test script":
-                    output.setdefault("softwareAddOn", []).append({"url": download_url})
+                    output.setdefault("softwareAddOn", []).append({"@type": "CreativeWork", "url": download_url})
                 elif download_type == "Tool wrapper (CWL)":
                     output["programmingLanguage"] = "CWL"
                 elif download_type == "Tool wrapper (galaxy)":
@@ -400,7 +402,7 @@ def parse():
         if documentation := tool.get("documentation"):
             software_help = []
             for doc in documentation:
-                software_help_entry = {}
+                software_help_entry = {"@type": "CreativeWork"}
                 if url := doc.get("url"):
                     software_help_entry["url"] = url
                 if doc_type := doc.get("type"):
@@ -436,7 +438,7 @@ def parse():
                 # Process inputs for each function
                 if inputs := func.get("input"):
                     for i in inputs:
-                        input_entry = {}
+                        input_entry = {"@type": "FormalParameter"}
 
                         if url := i.get("data", {}).get("uri"):
                             input_entry["url"] = url
@@ -449,7 +451,7 @@ def parse():
                         if formats := i.get("format"):
                             encoding_formats = []
                             for f in formats:
-                                encoding_format = {}
+                                encoding_format = {"@type": "DefinedTerm"}
                                 if encoding_format_url := f.get("uri"):
                                     encoding_format["url"] = encoding_format_url
                                 if encoding_format_name := f.get("term"):
@@ -465,7 +467,7 @@ def parse():
                 # Process outputs for each function
                 if outputs := func.get("output"):
                     for o in outputs:
-                        output_entry = {}
+                        output_entry = {"@type": "FormalParameter"}
 
                         if url := o.get("data", {}).get("uri"):
                             output_entry["url"] = url
@@ -478,7 +480,7 @@ def parse():
                         if formats := o.get("format"):
                             encoding_formats = []
                             for f in formats:
-                                encoding_format = {}
+                                encoding_format = {"@type": "DefinedTerm"}
                                 if encoding_format_url := f.get("uri"):
                                     encoding_format["url"] = encoding_format_url
                                 if encoding_format_name := f.get("term"):

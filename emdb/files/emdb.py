@@ -87,6 +87,7 @@ ABOUT_DEFINED_TERM = {
 }
 
 _DDE_CURATED_BY = {
+    "@type": "SoftwareApplication",
     "name": "Data Discovery Engine",
     "url": "https://discovery.biothings.io/",
     "dateModified": "2026-01-03",
@@ -617,7 +618,7 @@ def _build_is_based_on(about_name: str) -> list[dict[str, Any]]:
     }
 
     source_obj = {
-        "@type": "nde:ResourceCatalog",
+        "@type": "ResourceCatalog",
         "name": "Electron Microscopy Data Bank",
         "url": "https://data.niaid.nih.gov/resources?id=dde_f6161fcb840b7162",
     }
@@ -669,6 +670,7 @@ def _build_data_collection(
         "url": url,
         "description": description,
         "collectionSize": {
+            "@type": "QuantitativeValue",
             "minValue": facet_count,
             "unitText": "Processed Electron Microscopy Images",
         },
@@ -680,7 +682,7 @@ def _build_data_collection(
         "measurementTechnique": copy.deepcopy(MEASUREMENT_TECHNIQUE),
         "variableMeasured": copy.deepcopy(VARIABLE_MEASURED),
         "topicCategory": copy.deepcopy(TOPIC_CATEGORY),
-        "usageInfo":{"url": "https://www.ebi.ac.uk/emdb/faq#:~:text=Data%20files%20contained%20in%20the,and%20the%20EMDB%20accession%20id."},
+        "usageInfo":{"@type": "CreativeWork", "url": "https://www.ebi.ac.uk/emdb/faq#:~:text=Data%20files%20contained%20in%20the,and%20the%20EMDB%20accession%20id."},
         "creditText": (
             "To cite a record from EMDB, please visit "
             "https://www.ebi.ac.uk/emdb/about."

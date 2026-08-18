@@ -1,4 +1,4 @@
-from hub.dataload.nde import NDESourceUploader
+from hub.dataload.nde import NDECombinedUploader
 from utils.csv_helper import get_source_data
 
 # Example __metadata__ dictionary:
@@ -14,7 +14,8 @@ from utils.csv_helper import get_source_data
 # }
 
 
-class VDJ_Uploader(NDESourceUploader):
+# parse() yields both Dataset and Sample documents, so the mapping has to cover both.
+class VDJ_Uploader(NDECombinedUploader):
     name = "vdj"
     __metadata__ = {
         "src_meta": {

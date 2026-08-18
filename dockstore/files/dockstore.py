@@ -99,7 +99,7 @@ def parse():
             # else:
             authors = author.split(", ")
             for author in authors:
-                author_list.append({"name": author})
+                author_list.append({"@type": "Person", "name": author})
         if len(author_list):
             output["author"] = author_list
 
@@ -114,9 +114,11 @@ def parse():
                 for key in topic_dict:
                     if url[10:] in topic_dict[key]:
                         output["topicCategory"] = {
+                            "@type": "DefinedTerm",
                             "name": key,
                             "url": "https://dockstore.org/search?categories.name.keyword=" + key,
                             "curatedBy": {
+                                "@type": "SoftwareApplication",
                                 "name": "Dockstore",
                                 "url": "https://dockstore.org/search?entryType=workflows&searchMode=files",
                             },

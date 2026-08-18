@@ -92,7 +92,7 @@ def parse():
             if sdPublishers := request["registryInfo"]:
                 output["sdPublisher"] = []
                 for sdPublisher in sdPublishers:
-                    sd = {}
+                    sd = {"@type": "DataCatalog"}
                     if name := sdPublisher["registryName"]:
                         sd["name"] = name
                     if identifier := sdPublisher["registryId"]:
@@ -112,7 +112,7 @@ def parse():
             #         output["author"] = au
 
             if author := request.get("orgName"):
-                output["author"] = {"name": author}
+                output["author"] = {"@type": "Person", "name": author}
 
             if name := request.get("studyTitle"):
                 output["name"] = "Dataset from " + name
@@ -120,13 +120,13 @@ def parse():
             funding = []
             if funder := request.get("leadSponsor"):
                 if name := funder.get("agency"):
-                    funder_name = {"funder": {"name": name}}
+                    funder_name = {"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": name}}
                     funding.append(funder_name)
 
             if funders := request.get("collaborators"):
                 for funder in funders:
                     if name := funder.get("agency"):
-                        funder_name = {"funder": {"name": name}}
+                        funder_name = {"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": name}}
                         funding.append(funder_name)
             if funding:
                 output["funding"] = funding
@@ -148,7 +148,7 @@ def parse():
             if locations := request.get("locationsOfStudySites"):
                 output["spatialCoverage"] = []
                 for location in locations:
-                    sc = {}
+                    sc = {"@type": "AdministrativeArea"}
                     if name := location.get("name"):
                         sc["name"] = name
                     if identifier := location.get("code"):
@@ -189,7 +189,7 @@ def parse():
             if conditions := request.get("conditions"):
                 output["healthCondition"] = []
                 for condition in conditions:
-                    output["healthCondition"].append({"name": condition})
+                    output["healthCondition"].append({"@type": "DefinedTerm", "name": condition})
 
             sample = {
                 "@type": "Sample",
@@ -238,12 +238,12 @@ def parse():
 
             vm = []
             if variable_measured := request.get("outcomeNames"):
-                vm.append({"name": variable_measured})
+                vm.append({"@type": "DefinedTerm", "name": variable_measured})
 
             if outcomes := request.get("outcomes"):
                 for outcome in outcomes:
                     if variable_measured := outcome.get("specificMeasurement"):
-                        vm.append({"name": variable_measured})
+                        vm.append({"@type": "DefinedTerm", "name": variable_measured})
 
             if vm:
                 output["variableMeasured"] = vm

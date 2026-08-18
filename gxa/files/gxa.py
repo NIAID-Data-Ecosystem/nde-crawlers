@@ -151,11 +151,13 @@ FOLD_CHANGE_VALUE_REFERENCE = {
 
 DIRECTION_TERMS = {
     "up": {
+        "@type": "SemanticTriple",
         "label": "Upregulated",
         "qualifier": "increase",
         "identifier": "https://w3id.org/biolink/vocab/DirectionQualifierEnum#upregulated",
     },
     "down": {
+        "@type": "SemanticTriple",
         "label": "Downregulated",
         "qualifier": "decrease",
         "identifier": "https://w3id.org/biolink/vocab/DirectionQualifierEnum#downregulated",
@@ -629,7 +631,7 @@ def _statistical_variable(gene_name, gene_id, condition, species):
 
 def _gene_term(gene_id, gene_name):
     term = {
-        "@type": "Gene",
+        "@type": "DefinedTerm",
         "identifier": gene_id,
         "name": gene_name or gene_id,
         "url": f"{API_ROOT}/genes/{quote(gene_id)}",
@@ -701,6 +703,7 @@ def _direction(fold_change):
     if fold_change < 0:
         return DIRECTION_TERMS["down"]
     return {
+        "@type": "SemanticTriple",
         "label": "Differentially expressed",
         "qualifier": "changed",
         "identifier": "https://semanticscience.org/resource/SIO_001078",
