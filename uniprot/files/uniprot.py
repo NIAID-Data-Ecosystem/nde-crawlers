@@ -479,6 +479,7 @@ def _example_of_work(about: dict[str, Any], api_url: str) -> dict[str, Any]:
 def _is_based_on(
     *,
     collection_kind: str,
+    about_name: str,
     query_url: str,
     release: dict[str, Optional[str]],
 ) -> list[dict[str, Any]]:
@@ -489,9 +490,17 @@ def _is_based_on(
                 "DataCollection Generation Process in the NIAID Data "
                 "Ecosystem"
             ),
-            "description": (
+            "disambiguatingDescription": (
                 f"How this UniProt {collection_kind} DataCollection record "
                 "was generated for the NIAID Data Ecosystem."
+            ),
+            "description": (
+                f"This record aggregated UniProt {about_name} data into "
+                "a single collection, grouped by NCBI Taxon IDs. Collection "
+                "size, version, and dates are derived from the underlying "
+                "records; descriptive fields such as measurement technique "
+                "and conditions of access are manually curated. Full "
+                "generation methods are described in the \"How To\" section."
             ),
             "actionProcess": {
                 "@type": "HowTo",
@@ -568,6 +577,7 @@ def _base_record(
         "exampleOfWork": _example_of_work(about, query_url),
         "isBasedOn": _is_based_on(
             collection_kind=collection_kind,
+            about_name=about.get("name") or collection_kind,
             query_url=query_url,
             release=release,
         ),

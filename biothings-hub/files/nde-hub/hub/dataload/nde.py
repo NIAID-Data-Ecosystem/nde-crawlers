@@ -796,6 +796,11 @@ class NDESourceUploader(BaseSourceUploader):
                     "citation": {"type": "text"},
                     "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
+                    "disambiguatingDescription": {
+                        "type": "text",
+                        "analyzer": "nde_analyzer",
+                        "copy_to": ["all"],
+                    },
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
@@ -1913,6 +1918,11 @@ class NDESourceSampleUploader(BaseSourceUploader):
                     "citation": {"type": "text"},
                     "datePublished": {"type": "date"},
                     "description": {"type": "text", "analyzer": "nde_analyzer"},
+                    "disambiguatingDescription": {
+                        "type": "text",
+                        "analyzer": "nde_analyzer",
+                        "copy_to": ["all"],
+                    },
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "text", "copy_to": ["all"]},

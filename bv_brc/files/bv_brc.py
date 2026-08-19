@@ -753,9 +753,18 @@ def _build_is_based_on(about_name: str) -> list[dict[str, Any]]:
         "name": (
             "DataCollection Generation Process in the NIAID Data Ecosystem"
         ),
-        "description": (
+        "disambiguatingDescription": (
             f"How this BV-BRC {about_name} DataCollection Record was "
             "generated for the NIAID Data Ecosystem."
+        ),
+        "description": (
+            "This record aggregated BV-BRC genome data into a single "
+            "collection, grouped by species-level NCBI Taxonomy ID. "
+            "Collection size, temporal coverage, and dates are derived from "
+            "the underlying genome records; descriptive fields such as "
+            "measurement technique and conditions of access are manually "
+            "curated. Full generation methods are described in the \"How To\" "
+            "section."
         ),
         "actionProcess": {
             "@type": "HowTo",

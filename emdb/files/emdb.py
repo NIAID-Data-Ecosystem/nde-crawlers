@@ -606,9 +606,17 @@ def _build_is_based_on(about_name: str) -> list[dict[str, Any]]:
         "name": (
             "DataCollection Generation Process in the NIAID Data Ecosystem"
         ),
-        "description": (
+        "disambiguatingDescription": (
             f"How this EMDB {about_name} DataCollection Record was "
             "generated for the NIAID Data Ecosystem."
+        ),
+        "description": (
+            f"This record aggregated EMDB {about_name} data into a single "
+            "collection, grouped by NCBI Taxonomy IDs. Collection size, "
+            "temporal coverage, and dates are derived from the underlying "
+            "records; descriptive fields such as measurement technique and "
+            "conditions of access are manually curated. Full generation "
+            "methods are described in the \"How To\" section."
         ),
         "actionProcess": {
             "@type": "HowTo",

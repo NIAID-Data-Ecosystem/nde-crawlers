@@ -201,7 +201,18 @@ INFECTIOUS_AGENT_PAIR = ("ncbiVirusName", "ncbiVirusTaxId", ("previousInfectionO
 IS_BASED_ON = {
     "@type": "Action",
     "name": "DataCollection Generation Process in the NIAID Data Ecosystem",
-    "description": "How this Pathoplexus DataCollection record was generated for the NIAID Data Ecosystem.",
+    "disambiguatingDescription": (
+        "How this Pathoplexus MolecularSequence DataCollection record was "
+        "generated for the NIAID Data Ecosystem."
+    ),
+    "description": (
+        "This record aggregated Pathoplexus MolecularSequence data into a "
+        "single collection, grouped by NCBI Taxon IDs. Collection size, "
+        "version, and dates are derived from the underlying records; "
+        "descriptive fields such as measurement technique and conditions of "
+        "access are manually curated. Full generation methods are described "
+        "in the \"How To\" section."
+    ),
     "actionProcess": {
         "@type": "HowTo",
         "step": [
@@ -832,4 +843,3 @@ def parse(organisms=None):
     for organism in organisms:
         logger.info(f"Building record for {organism}...")
         yield build_record(organism)
-
