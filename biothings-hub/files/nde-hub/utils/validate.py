@@ -27,6 +27,7 @@ from scores import (
 )
 
 from .common import as_list
+from .schema_types import is_type_or_descendant
 
 AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
 
@@ -261,9 +262,14 @@ def check_schema(doc: Dict) -> Dict:
 
     def assert_types(field, expected_types, value=none):
         entries = as_list(doc.get(field) if value is none else value)
+        invalid_types = [
+            item.get("@type") if isinstance(item, dict) else f"non-object {type(item).__name__}"
+            for item in entries
+            if not isinstance(item, dict) or not is_type_or_descendant(item.get("@type"), expected_types)
+        ]
         check(
-            all(isinstance(item, dict) and item.get("@type") in expected_types for item in entries),
-            f"{field} needs to be of type {' or '.join(expected_types)}",
+            not invalid_types,
+            f"{field} needs to be of type {' or '.join(expected_types)}, or a descendant; got {invalid_types}",
         )
 
     person_or_organization = ("Organization", "Person")

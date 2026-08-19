@@ -57,7 +57,7 @@ def _build_sample_record(
         "name": display_name,
         "url": dataset_url,
         "isBasisFor": {
-            "@type": "CreativeWork",
+            "@type": "Dataset",
             "identifier": dataset_identifier,
             "url": dataset_url,
         },

@@ -399,7 +399,7 @@ def parse_samples():
             elif desc.get("entity_type") == "Dataset":
                 did = desc["uuid"]
                 entry = {
-                    "@type": "CreativeWork",
+                    "@type": "Dataset",
                     "identifier": did,
                     "url": f"https://portal.hubmapconsortium.org/browse/dataset/{did}",
                 }

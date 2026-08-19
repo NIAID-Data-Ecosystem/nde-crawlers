@@ -171,7 +171,7 @@ def parse():
                     if len(github_links):
                         is_based_on = []
                         for link in github_links:
-                            is_based_on.append({"@type": "CreativeWork", "codeRepository": link})
+                            is_based_on.append({"@type": "ComputationalTool", "codeRepository": link})
                         output["isBasedOn"] = is_based_on
 
                 if accessions := project.get("accessions"):

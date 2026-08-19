@@ -178,7 +178,7 @@ def parse_gsm(data_folder):
             if isinstance(is_basis_for, list):
                 output["isBasisFor"] = [
                     {
-                        "@type": "CreativeWork",
+                        "@type": "Dataset",
                         "identifier": sid,
                         "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + sid,
                     }
@@ -186,7 +186,7 @@ def parse_gsm(data_folder):
                 ]
             else:
                 output["isBasisFor"] = {
-                    "@type": "CreativeWork",
+                    "@type": "Dataset",
                     "identifier": is_basis_for,
                     "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + is_basis_for,
                 }

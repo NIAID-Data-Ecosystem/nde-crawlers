@@ -960,7 +960,7 @@ def _example_work_from_report(
 
     source_db = _source_database(report)
     if source_db:
-        example["isPartOf"] = {"@type": "CreativeWork", "name": source_db}
+        example["isPartOf"] = {"@type": "DataCatalog", "name": source_db}
 
     additional = []
     for name, value in (
@@ -1313,7 +1313,7 @@ class TaxonAccumulator:
         for accession in _counter_values(self.sra_accessions, 25):
             items.append(
                 {
-                    "@type": "CreativeWork",
+                    "@type": "Dataset",
                     "identifier": accession,
                     "url": _ncbi_url("sra", accession),
                 }

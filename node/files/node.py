@@ -179,7 +179,7 @@ def parse():
                 parsed_sample = parse_sample(sample)
                 if parsed_sample:
                     parsed_sample["isBasisFor"] = {
-                        "@type": "CreativeWork",
+                        "@type": "Dataset",
                         "identifier": output.get("identifier"),
                         "url": output.get("url"),
                     }

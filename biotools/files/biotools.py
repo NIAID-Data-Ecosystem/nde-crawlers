@@ -287,7 +287,7 @@ def parse():
                         {
                             "identifier": relation_entry,
                             "url": f"https://bio.tools/{relation_entry}",
-                            "@type": "CreativeWork",
+                            "@type": "ComputationalTool",
                         }
                     )
                 elif relation_type == "includes":
@@ -295,7 +295,7 @@ def parse():
                         {
                             "identifier": relation_entry,
                             "url": f"https://bio.tools/{relation_entry}",
-                            "@type": "CreativeWork",
+                            "@type": "ComputationalTool",
                         }
                     )
                 elif relation_type == "includedIn":
