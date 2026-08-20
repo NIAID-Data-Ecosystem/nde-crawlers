@@ -90,7 +90,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
         lab["name"] = core["study"]["lab_name"]
     addr = core.get("study", {}).get("lab_address")
     if addr:
-        lab.setdefault("affiliation", {})["name"] = addr
+        lab.setdefault("affiliation", {"@type": "Organization"})["name"] = addr
     if lab:
         authors.append(lab)
     sub = core.get("study", {}).get("submitted_by")
@@ -99,7 +99,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
         if split:
             sb = {"@type": "Person", "name": split[0]}
             if len(split) > 1:
-                sb.setdefault("affiliation", {})["name"] = split[1]
+                sb.setdefault("affiliation", {"@type": "Organization"})["name"] = split[1]
             authors.append(sb)
     coll = core.get("study", {}).get("collected_by", [])
     if isinstance(coll, str):

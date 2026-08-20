@@ -70,6 +70,7 @@ class LINCS:
                     for author in authors:
                         author_list.append(
                             {
+                                "@type": "Person",
                                 "name": author,
                                 "affiliation": {"@type": "Organization", "name": document["centerfullname"]},
                                 "url": document["centerurl"],
@@ -93,7 +94,7 @@ class LINCS:
             if "screeninglabinvestigator" in document:
                 authors = self.parse_authors(document["screeninglabinvestigator"])
                 for author in authors:
-                    author_list.append({"name": author})
+                    author_list.append({"@type": "Person", "name": author})
                 document.pop("screeninglabinvestigator")
 
             # Remove duplicate authors

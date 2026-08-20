@@ -166,6 +166,7 @@ def parse():
             if name := author_info.get("orgName"):
                 insert_value(author, "affiliation", {"@type": "Organization", "name": name})
             if author:
+                author["@type"] = "Person"
                 insert_value(output, "author", author)
 
             table_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleTable/{project_id}").json()
@@ -260,6 +261,7 @@ def parse():
                                 if name := submitter.get("orgName"):
                                     insert_value(author, "affiliation", {"@type": "Organization", "name": name})
                                 if author:
+                                    author["@type"] = "Person"
                                     insert_value(output, "author", author)
 
                             if attributes := exp.get("attributes"):

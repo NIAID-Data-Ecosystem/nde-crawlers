@@ -80,18 +80,23 @@ STRING_LIST_FIELDS = {
     "sameAs": ("gcaAccession",),
 }
 
-# Output key -> source fields. nde.py types these as objects with a name, so
-# each value becomes {"name": value} rather than a bare string.
+# Output key -> (@type, source fields). nde.py types these as objects with a
+# name, so each value becomes {"@type": ..., "name": value} rather than a bare
+# string. `ncbiSourceDb` names the repository the record came from, which makes
+# it a DataCatalog; the rest are ontology terms.
 NAMED_OBJECT_FIELDS = {
-    "healthCondition": ("hostDisease",),
+    "healthCondition": ("DefinedTerm", ("hostDisease",)),
     "measurementTechnique": (
-        "diagnosticMeasurementMethod",
-        "sequencingAssayType",
-        "sequencingInstrument",
-        "sequencingProtocol",
+        "DefinedTerm",
+        (
+            "diagnosticMeasurementMethod",
+            "sequencingAssayType",
+            "sequencingInstrument",
+            "sequencingProtocol",
+        ),
     ),
-    "sdPublisher": ("ncbiSourceDb",),
-    "variableMeasured": ("diagnosticMeasurementUnit", "diagnosticTargetGeneName"),
+    "sdPublisher": ("DataCatalog", ("ncbiSourceDb",)),
+    "variableMeasured": ("DefinedTerm", ("diagnosticMeasurementUnit", "diagnosticTargetGeneName")),
 }
 
 # nde.py types spatialCoverage as {@type, geo, name, identifier}. The sheet also
@@ -699,10 +704,10 @@ def build_mapped_lists(organism, output):
         if values:
             insert_value(output, key, values)
 
-    for key, fields in NAMED_OBJECT_FIELDS.items():
+    for key, (type_name, fields) in NAMED_OBJECT_FIELDS.items():
         values = collect_values(organism, fields)
         if values:
-            insert_value(output, key, [{"name": value} for value in values])
+            insert_value(output, key, [{"@type": type_name, "name": value} for value in values])
 
     projects = collect_values(organism, IS_PART_OF_FIELDS)
     if projects:
@@ -814,7 +819,7 @@ def build_record(organism, info=None):
         output["sample"] = sample
 
     for identifier in collect_values(organism, IS_BASED_ON_IDENTIFIER_FIELDS):
-        insert_value_list(output["isBasedOn"], {"identifier": identifier})
+        insert_value_list(output["isBasedOn"], {"@type": "CreativeWork", "identifier": identifier})
 
     pruned: dict = drop_empty(output)
 

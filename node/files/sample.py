@@ -300,11 +300,15 @@ def parse_sample(sample):
 
     if author := sample.get("submitter"):
         if given_name := author.get("firstName"):
-            insert_value(output.setdefault("author", {}), "givenName", given_name)
+            insert_value(output.setdefault("author", {"@type": "Person"}), "givenName", given_name)
         if family_name := author.get("lastName"):
-            insert_value(output.setdefault("author", {}), "familyName", family_name)
+            insert_value(output.setdefault("author", {"@type": "Person"}), "familyName", family_name)
         if name := author.get("orgName"):
-            insert_value(output.setdefault("author", {}).setdefault("affiliation", {}), "name", name)
+            insert_value(
+                output.setdefault("author", {"@type": "Person"}).setdefault("affiliation", {"@type": "Organization"}),
+                "name",
+                name,
+            )
 
     if name := sample.get("subjectType"):
         insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": name})
@@ -338,7 +342,9 @@ def parse_sample(sample):
                 continue
 
             if key == "biomaterial_provider":
-                insert_value(output.setdefault("author", {}), "name", value)
+                # Shares the author object the submitter block above builds, so
+                # it has to carry the same type rather than a second one.
+                insert_value(output.setdefault("author", {"@type": "Person"}), "name", value)
             elif key == "host":
                 clean_value, host_taxid = _split_taxonomy_id_bracket(value)
                 host_entry = {"@type": "DefinedTerm", "name": clean_value}
