@@ -90,7 +90,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
         lab["name"] = core["study"]["lab_name"]
     addr = core.get("study", {}).get("lab_address")
     if addr:
-        lab.setdefault("affiliation", {})["name"] = addr
+        lab.setdefault("affiliation", {"@type": "Organization"})["name"] = addr
     if lab:
         authors.append(lab)
     sub = core.get("study", {}).get("submitted_by")
@@ -99,7 +99,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
         if split:
             sb = {"@type": "Person", "name": split[0]}
             if len(split) > 1:
-                sb.setdefault("affiliation", {})["name"] = split[1]
+                sb.setdefault("affiliation", {"@type": "Organization"})["name"] = split[1]
             authors.append(sb)
     coll = core.get("study", {}).get("collected_by", [])
     if isinstance(coll, str):
@@ -131,7 +131,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
     if pmids:
         out["pmids"] = ", ".join(pmids)
     if dois:
-        out.setdefault("citation", {})["doi"] = dois if len(dois) > 1 else dois[0]
+        out.setdefault("citation", {"@type": "ScholarlyArticle"})["doi"] = dois if len(dois) > 1 else dois[0]
     if core.get("study", {}).get("adc_publish_date"):
         out["datePublished"] = core["study"]["adc_publish_date"].split("T")[0]
     if core.get("study", {}).get("adc_update_date"):

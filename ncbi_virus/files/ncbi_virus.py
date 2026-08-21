@@ -359,6 +359,19 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
+def _type_person(person: dict[str, Any]) -> dict[str, Any]:
+    """Type a submitter and the affiliation hanging off it."""
+    person.setdefault("@type", "Person")
+    affiliation = person.get("affiliation")
+    if isinstance(affiliation, dict):
+        affiliation.setdefault("@type", "Organization")
+    elif isinstance(affiliation, list):
+        for org in affiliation:
+            if isinstance(org, dict):
+                org.setdefault("@type", "Organization")
+    return person
+
+
 def _affiliation_from_value(value: Any) -> Optional[dict[str, Any]]:
     text = _clean_string(value)
     if not text:
@@ -449,7 +462,8 @@ def _taxonomy_hint(tax_id: Any = None, name: Any = None) -> Optional[dict[str, A
     if not clean_name and not clean_id:
         return None
 
-    term: dict[str, Any] = {}
+    # Feeds species / infectiousAgent, both validated as DefinedTerm.
+    term: dict[str, Any] = {"@type": "DefinedTerm"}
     if clean_name:
         term["name"] = clean_name
     if clean_id:
@@ -1113,6 +1127,11 @@ class TaxonAccumulator:
             setattr(accumulator, field, data.get(field) or {})
         for field in cls.LIST_FIELDS:
             setattr(accumulator, field, data.get(field) or [])
+        # Accumulators cached before `_affiliation_from_value` typed its result
+        # replay untyped affiliations, which fail schema validation on upload.
+        for person in accumulator.authors.values():
+            if isinstance(person, dict):
+                _type_person(person)
         return accumulator
 
     def add(self, report: dict[str, Any]) -> None:

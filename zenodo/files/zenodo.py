@@ -27,6 +27,10 @@ logger = logging.getLogger("nde-logger")
 
 TARBALL_URL = "https://zenodo.org/api/exporter/records-xml.tar.gz"
 
+# The export holds roughly six million records, so a handful of malformed ones
+# is upstream noise; more than this means the transform itself is broken.
+MAX_FAILED_RECORDS = 1000
+
 # DataCite kernel-4 namespace, used as an ElementTree tag prefix.
 NS = "{http://datacite.org/schema/kernel-4}"
 
@@ -98,6 +102,14 @@ def _apply_version(output, root, url):
             and rel.text
             and "zenodo" in rel.text
         ):
+            # Everything below reads the trailing segment as the concept id, to
+            # order the versions and to build `_id` and `url`. Records staged
+            # for archiving carry a placeholder there instead of a number
+            # ("10.5281/zenodo.TO_BE_FILLED_AFTER_ZENODO_ARCHIVE"), which yields
+            # no usable id, so they are left on the record's own version.
+            if not rel.text.rsplit(".", 1)[-1].isdigit():
+                logger.warning("Ignoring version DOI without a numeric concept id: %s (%s)", rel.text, url)
+                continue
             version_ids.append(rel.text)
 
     if not version_ids:
@@ -236,7 +248,7 @@ def build_doc(content, record_id, types, missing_types):
 
     # citedBy
     cited_by = [
-        {"url": rel.text}
+        {"@type": "ScholarlyArticle", "url": rel.text}
         for rel in root.findall(f".//{NS}relatedIdentifier")
         if rel.get("relationType") == "IsCitedBy" and rel.get("relatedIdentifierType") == "URL"
     ]
@@ -260,7 +272,7 @@ def build_doc(content, record_id, types, missing_types):
         award_title = funder.find(f".//{NS}awardTitle")
         award_number = funder.find(f".//{NS}awardNumber")
         if funder_identifier is not None or funder_name is not None:
-            funding = {"@type": "MonetaryGrant", "funder": {}}
+            funding = {"@type": "MonetaryGrant", "funder": {"@type": "Organization"}}
             if funder_identifier is not None:
                 funding["funder"]["identifier"] = funder_identifier.text
             if funder_name is not None:
@@ -287,6 +299,7 @@ def parse(url=TARBALL_URL, limit=None):
     resp.raise_for_status()
     resp.raw.decode_content = True
 
+    failed = []
     with tarfile.open(fileobj=resp.raw, mode="r|gz") as tar:
         members = itertools.islice(tar, limit) if limit else tar
         for count, member in enumerate(members, start=1):
@@ -299,12 +312,23 @@ def parse(url=TARBALL_URL, limit=None):
             try:
                 doc = build_doc(content, record_id, types, missing_types)
             except Exception as e:
+                # A single malformed record out of millions must not discard a
+                # multi-hour crawl, but a broken transform must still fail loudly
+                # rather than quietly publishing a fraction of Zenodo.
                 logger.exception("Error processing record %s: %s", record_id, e)
-                raise
+                failed.append(record_id)
+                if len(failed) > MAX_FAILED_RECORDS:
+                    raise RuntimeError(
+                        f"Stopping after {len(failed)} failed records (limit {MAX_FAILED_RECORDS}); "
+                        f"most recent: {failed[-10:]}"
+                    ) from e
+                continue
             if doc is not None:
                 yield doc
 
     logger.info("Finished processing %s records", count)
+    if failed:
+        logger.warning("Skipped %s malformed records: %s", len(failed), failed[:20])
     if missing_types:
         logger.warning("Missing type transformation: %s", list(missing_types.keys()))
 

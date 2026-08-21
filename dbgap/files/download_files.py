@@ -136,13 +136,28 @@ def download():
         # List all directories
         directories = ftp.nlst()
 
-        # Filter directories that start with "phs"
-        phs_directories = [d for d in directories if d.startswith("phs")]
+        # Filter directories that start with "phs". A study directory is a bare
+        # accession; NCBI also leaves versioned stray files such as the empty
+        # "phs004608.v1.p1" sitting next to the real "phs004608" directory, and
+        # those are not listings we can descend into.
+        phs_directories = [d for d in directories if d.startswith("phs") and "." not in d]
+        if skipped := sorted(d for d in directories if d.startswith("phs") and "." in d):
+            logger.info("Ignoring %d non-study phs entries: %s", len(skipped), skipped[:10])
 
+        failures = []
         for phs in phs_directories:
-            ftp.cwd(f"{root_directory}/{phs}")
-            highest_version = get_highest_version(ftp)
-            highest_version_dir = f"{root_directory}/{phs}/{highest_version}"
-            if highest_version_dir:
-                logger.info(f"Highest version directory in {phs}: {highest_version_dir}")
-                write_json(ftp, download_dir, json_dir, phs, highest_version_dir)
+            # One unreadable study must not discard the thousands already
+            # downloaded, so failures are collected and reported at the end.
+            try:
+                ftp.cwd(f"{root_directory}/{phs}")
+                highest_version = get_highest_version(ftp)
+                highest_version_dir = f"{root_directory}/{phs}/{highest_version}"
+                if highest_version_dir:
+                    logger.info(f"Highest version directory in {phs}: {highest_version_dir}")
+                    write_json(ftp, download_dir, json_dir, phs, highest_version_dir)
+            except ftplib.error_perm as e:
+                logger.warning("Skipping %s, FTP refused it: %s", phs, e)
+                failures.append(phs)
+
+        if failures:
+            logger.warning("Skipped %d of %d studies: %s", len(failures), len(phs_directories), failures[:20])

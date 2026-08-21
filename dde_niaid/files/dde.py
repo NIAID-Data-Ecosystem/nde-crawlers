@@ -75,6 +75,7 @@ def query_bioportal(iri):
         return iri, False
 
     lookup = {
+        "@type": "DefinedTerm",
         "name": pref_label,
         "url": iri,
         "curatedBy": {
@@ -128,6 +129,7 @@ def query_ols(iri):
             return query_bioportal(iri)
 
         lookup = {
+            "@type": "DefinedTerm",
             "name": request["_embedded"]["terms"][0]["label"],
             "url": iri,
             "inDefinedTermSet": request["_embedded"]["terms"][0]["ontology_prefix"],

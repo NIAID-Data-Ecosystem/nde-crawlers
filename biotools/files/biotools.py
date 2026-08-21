@@ -36,6 +36,34 @@ def download_jsondocs():
     return jsondoclist
 
 
+# bio.tools types a credit as one of Person, Project, Division, Consortium or
+# Institute; everything that is not a Person maps onto schema.org Organization.
+CREDIT_ENTITY_TYPES = {
+    "Person": "Person",
+    "Project": "Organization",
+    "Division": "Organization",
+    "Consortium": "Organization",
+    "Institute": "Organization",
+    "Organization": "Organization",
+}
+
+
+def _credit_type(credit):
+    """Return Person or Organization for a bio.tools credit entry.
+
+    `typeEntity` is optional and bio.tools has entries that omit it, so fall
+    back to the identifier that was supplied: an ORCID belongs to a person,
+    while GRID, ROR and FundRef only ever identify an organization.
+    """
+    if entity_type := CREDIT_ENTITY_TYPES.get(credit.get("typeEntity")):
+        return entity_type
+    if credit.get("orcidid"):
+        return "Person"
+    if credit.get("gridid") or credit.get("rorid") or credit.get("fundrefid"):
+        return "Organization"
+    return "Person"
+
+
 def parse():
     count = 0
     logger.info("Parsing biotools metadata")
@@ -147,10 +175,7 @@ def parse():
 
                 identifier = credit.get("name") or credit.get("url")
 
-                if credit.get("typeEntity") == "Person":
-                    credit_entry["@type"] = "Person"
-                elif credit.get("typeEntity") == "Organization":
-                    credit_entry["@type"] = "Organization"
+                credit_entry["@type"] = _credit_type(credit)
 
                 type_roles = credit.get("typeRole") or ["Developer"]
                 is_author = False
@@ -210,7 +235,10 @@ def parse():
         # Publication handling based on type
         if publications := tool.get("publication"):
             for pub in publications:
-                pub_entry = {}
+                # A bio.tools publication is an article whether or not the
+                # metadata lookup returns a journal, and it ends up in citation,
+                # isBasedOn, citedBy or isBasisFor -- all of which are validated.
+                pub_entry = {"@type": "ScholarlyArticle"}
 
                 if doi := pub.get("doi"):
                     pub_entry["doi"] = doi
@@ -224,7 +252,6 @@ def parse():
 
                     if journal := metadata.get("journal"):
                         pub_entry["journalName"] = journal
-                        pub_entry["@type"] = "ScholarlyArticle"
 
                     authors = []
                     if metadata.get("authors"):
@@ -256,7 +283,6 @@ def parse():
                 elif pub_type == "Usage":
                     output.setdefault("citedBy", []).append(pub_entry)
                 elif pub_type == "Benchmarking study":
-                    pub_entry["@type"] = "ScholarlyArticle"
                     output.setdefault("isBasisFor", []).append(pub_entry)
                 elif pub_type in ["Review", "Other"]:
                     output.setdefault("citedBy", []).append(pub_entry)

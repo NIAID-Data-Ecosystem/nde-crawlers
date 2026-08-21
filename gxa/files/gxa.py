@@ -521,11 +521,11 @@ def _ontology_parts(url):
     return identifier, None
 
 
-def _defined_term(name, url=None, term_type="DefinedTerm"):
+def _defined_term(name, url=None):
     name = clean_value(name)
     if not name:
         return None
-    term = {"@type": term_type, "name": name}
+    term = {"@type": "DefinedTerm", "name": name}
     if url := clean_value(url):
         term["url"] = url
         identifier, term_set = _ontology_parts(url)
@@ -536,7 +536,7 @@ def _defined_term(name, url=None, term_type="DefinedTerm"):
     return term
 
 
-def _term_from_design(property_name, value, design_terms, term_type="DefinedTerm"):
+def _term_from_design(property_name, value, design_terms):
     value = clean_value(value)
     if not value:
         return None
@@ -545,7 +545,7 @@ def _term_from_design(property_name, value, design_terms, term_type="DefinedTerm
         url = design_terms.get((name.casefold(), value.casefold()))
         if url:
             break
-    return _defined_term(value, url=url, term_type=term_type)
+    return _defined_term(value, url=url)
 
 
 def _contrast_properties(contrast):
@@ -764,7 +764,7 @@ def _species_terms(properties, design_terms, experiment_species):
     species_values = _contrast_property_values(properties, "organism") or [experiment_species]
     species = []
     for value in species_values:
-        term = _term_from_design("organism", value, design_terms, term_type="Taxon")
+        term = _term_from_design("organism", value, design_terms)
         if term:
             species.append(term)
     return _single_or_list(species)
@@ -776,7 +776,7 @@ def _infectious_agents(properties, design_terms, health_conditions):
         for value in _contrast_property_values(properties, property_name):
             if value.casefold() in INFECTIOUS_AGENT_SKIP_VALUES:
                 continue
-            term = _term_from_design(property_name, value, design_terms, term_type="Taxon")
+            term = _term_from_design(property_name, value, design_terms)
             if term:
                 agents.append(term)
 
