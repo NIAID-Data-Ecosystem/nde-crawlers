@@ -248,7 +248,7 @@ def build_doc(content, record_id, types, missing_types):
 
     # citedBy
     cited_by = [
-        {"url": rel.text}
+        {"@type": "ScholarlyArticle", "url": rel.text}
         for rel in root.findall(f".//{NS}relatedIdentifier")
         if rel.get("relationType") == "IsCitedBy" and rel.get("relatedIdentifierType") == "URL"
     ]
@@ -272,7 +272,7 @@ def build_doc(content, record_id, types, missing_types):
         award_title = funder.find(f".//{NS}awardTitle")
         award_number = funder.find(f".//{NS}awardNumber")
         if funder_identifier is not None or funder_name is not None:
-            funding = {"@type": "MonetaryGrant", "funder": {}}
+            funding = {"@type": "MonetaryGrant", "funder": {"@type": "Organization"}}
             if funder_identifier is not None:
                 funding["funder"]["identifier"] = funder_identifier.text
             if funder_name is not None:

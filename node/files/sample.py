@@ -273,16 +273,16 @@ def parse_sample(sample):
         insert_value(output, "name", name)
 
     if identifier := sample.get("taxId"):
-        insert_value(output.setdefault("species", {}), "identifier", identifier)
-        insert_value(output.setdefault("infectiousAgent", {}), "identifier", identifier)
+        insert_value(output.setdefault("species", {"@type": "DefinedTerm"}), "identifier", identifier)
+        insert_value(output.setdefault("infectiousAgent", {"@type": "DefinedTerm"}), "identifier", identifier)
 
     if name := sample.get("organism"):
         clean_name, bracket_taxid = _split_taxonomy_id_bracket(name)
-        insert_value(output.setdefault("species", {}), "name", clean_name)
-        insert_value(output.setdefault("infectiousAgent", {}), "name", clean_name)
+        insert_value(output.setdefault("species", {"@type": "DefinedTerm"}), "name", clean_name)
+        insert_value(output.setdefault("infectiousAgent", {"@type": "DefinedTerm"}), "name", clean_name)
         if bracket_taxid and not sample.get("taxId"):
-            insert_value(output.setdefault("species", {}), "identifier", bracket_taxid)
-            insert_value(output.setdefault("infectiousAgent", {}), "identifier", bracket_taxid)
+            insert_value(output.setdefault("species", {"@type": "DefinedTerm"}), "identifier", bracket_taxid)
+            insert_value(output.setdefault("infectiousAgent", {"@type": "DefinedTerm"}), "identifier", bracket_taxid)
 
     if date_created := sample.get("createDate"):
         try:

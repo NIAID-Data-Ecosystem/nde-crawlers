@@ -131,7 +131,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
     if pmids:
         out["pmids"] = ", ".join(pmids)
     if dois:
-        out.setdefault("citation", {})["doi"] = dois if len(dois) > 1 else dois[0]
+        out.setdefault("citation", {"@type": "ScholarlyArticle"})["doi"] = dois if len(dois) > 1 else dois[0]
     if core.get("study", {}).get("adc_publish_date"):
         out["datePublished"] = core["study"]["adc_publish_date"].split("T")[0]
     if core.get("study", {}).get("adc_update_date"):

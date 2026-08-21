@@ -235,7 +235,10 @@ def parse():
         # Publication handling based on type
         if publications := tool.get("publication"):
             for pub in publications:
-                pub_entry = {}
+                # A bio.tools publication is an article whether or not the
+                # metadata lookup returns a journal, and it ends up in citation,
+                # isBasedOn, citedBy or isBasisFor -- all of which are validated.
+                pub_entry = {"@type": "ScholarlyArticle"}
 
                 if doi := pub.get("doi"):
                     pub_entry["doi"] = doi
@@ -249,7 +252,6 @@ def parse():
 
                     if journal := metadata.get("journal"):
                         pub_entry["journalName"] = journal
-                        pub_entry["@type"] = "ScholarlyArticle"
 
                     authors = []
                     if metadata.get("authors"):
@@ -281,7 +283,6 @@ def parse():
                 elif pub_type == "Usage":
                     output.setdefault("citedBy", []).append(pub_entry)
                 elif pub_type == "Benchmarking study":
-                    pub_entry["@type"] = "ScholarlyArticle"
                     output.setdefault("isBasisFor", []).append(pub_entry)
                 elif pub_type in ["Review", "Other"]:
                     output.setdefault("citedBy", []).append(pub_entry)

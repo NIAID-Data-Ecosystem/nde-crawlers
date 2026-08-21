@@ -462,7 +462,8 @@ def _taxonomy_hint(tax_id: Any = None, name: Any = None) -> Optional[dict[str, A
     if not clean_name and not clean_id:
         return None
 
-    term: dict[str, Any] = {}
+    # Feeds species / infectiousAgent, both validated as DefinedTerm.
+    term: dict[str, Any] = {"@type": "DefinedTerm"}
     if clean_name:
         term["name"] = clean_name
     if clean_id:
