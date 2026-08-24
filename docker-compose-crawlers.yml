@@ -280,6 +280,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  pgs_catalog-crawler:
+    build:
+      context: pgs_catalog
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   proteomexchange-crawler:
     build:
       context: proteomexchange

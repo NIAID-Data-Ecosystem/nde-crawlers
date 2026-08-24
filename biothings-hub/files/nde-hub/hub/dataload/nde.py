@@ -466,6 +466,8 @@ class NDESourceUploader(BaseSourceUploader):
                     "about": {
                         "properties": {
                             "@type": {"type": "keyword"},
+                            "description": {"type": "text", "copy_to": ["all"]},
+                            "displayName": {"type": "text", "copy_to": ["all"]},
                             "identifier": {"type": "text", "copy_to": ["all"]},
                             "inDefinedTermSet": {"type": "text", "copy_to": ["all"]},
                             "name": {
@@ -602,6 +604,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "additionalType": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "text"},
                         }
@@ -1002,6 +1005,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "@type": {"type": "keyword"},
                     "aggregateElement": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "additionalType": {"type": "keyword", "copy_to": ["all"]},
                             "additionalProperty": defined_term_mapping,
                             "associatedGenotype": {"type": "keyword", "copy_to": ["all"]},
@@ -1049,6 +1053,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "dateProcessed": {"type": "date"},
                             "developmentalStage": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "maxValue": {"type": "double"},
                                     "minValue": {"type": "double"},
                                     "name": {"type": "text"},
@@ -1069,6 +1074,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "sampleAvailability": {"type": "boolean"},
                             "sampleQuantity": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "maxValue": {"type": "double"},
                                     "minValue": {"type": "double"},
                                     "name": {"type": "text"},
@@ -1159,6 +1165,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "dateProcessed": {"type": "date"},
                     "developmentalStage": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "maxValue": {"type": "double"},
                             "minValue": {"type": "double"},
                             "name": {"type": "text"},
@@ -1179,6 +1186,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "sampleAvailability": {"type": "boolean"},
                     "sampleQuantity": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "maxValue": {"type": "double"},
                             "minValue": {"type": "double"},
                             "name": {"type": "text"},
