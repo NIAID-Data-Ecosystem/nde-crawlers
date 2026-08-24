@@ -1127,11 +1127,16 @@ class TaxonAccumulator:
             setattr(accumulator, field, data.get(field) or {})
         for field in cls.LIST_FIELDS:
             setattr(accumulator, field, data.get(field) or [])
-        # Accumulators cached before `_affiliation_from_value` typed its result
-        # replay untyped affiliations, which fail schema validation on upload.
+        # The accumulator cache outlives the code that wrote it, so rows stored
+        # before `_affiliation_from_value` and `_taxonomy_hint` typed their
+        # output replay untyped and fail schema validation on upload. `hosts`
+        # becomes `species`, `authors` becomes `author`.
         for person in accumulator.authors.values():
             if isinstance(person, dict):
                 _type_person(person)
+        for host in accumulator.hosts.values():
+            if isinstance(host, dict):
+                host.setdefault("@type", "DefinedTerm")
         return accumulator
 
     def add(self, report: dict[str, Any]) -> None:

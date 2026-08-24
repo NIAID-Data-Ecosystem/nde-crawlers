@@ -839,6 +839,10 @@ class Dataverse(NDEDatabase):
                         if dataset.get("creator"):
                             dataset["author"] = dataset.pop("creator")
                             for data_dict in dataset["author"]:
+                                # Harvested JSON-LD does not always type its
+                                # creators; the string-list path below settles on
+                                # Person, so match it rather than leave it bare.
+                                data_dict.setdefault("@type", "Person")
                                 if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
                                     data_dict["affiliation"] = {
                                         "@type": "Organization",
@@ -848,6 +852,7 @@ class Dataverse(NDEDatabase):
                             dataset.pop("creator", None)
                     else:
                         for data_dict in dataset["author"]:
+                            data_dict.setdefault("@type", "Person")
                             if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
                                 data_dict["affiliation"] = {
                                     "@type": "Organization",

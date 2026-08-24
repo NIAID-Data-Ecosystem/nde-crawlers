@@ -4,11 +4,16 @@ import copy
 import csv
 import datetime as dt
 import io
+import logging
 import re
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Iterator, Optional
+
+logger = logging.getLogger("nde-logger")
 
 GENE_VALIDITY_DEFAULT_URL = (
     "https://search.clinicalgenome.org/kb/gene-validity/download"
@@ -494,6 +499,36 @@ def _funding_list() -> dict[str, list[dict[str, str]]]:
     ]
 
 
+# These downloads are a single large request each, so one dropped connection
+# loses the whole crawl. urlopen has no timeout by default, which turns a stalled
+# connection into an indefinite hang rather than a retryable error.
+REQUEST_TIMEOUT = 300
+MAX_RETRIES = 4
+RETRY_BACKOFF = 30
+
+
+def _urlopen_with_retries(req, timeout: int = REQUEST_TIMEOUT, retries: int = MAX_RETRIES):
+    """Open `req`, retrying on the transport errors this source keeps hitting."""
+    last_error: Optional[Exception] = None
+    for attempt in range(1, retries + 1):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            last_error = error
+            if attempt < retries:
+                wait = RETRY_BACKOFF * attempt
+                logger.warning(
+                    "Attempt %d/%d failed for %s: %s - retrying in %ds",
+                    attempt,
+                    retries,
+                    req.full_url,
+                    error,
+                    wait,
+                )
+                time.sleep(wait)
+    raise last_error
+
+
 def _open_text_stream(
     input_path: Optional[Path],
     input_url: Optional[str],
@@ -508,7 +543,7 @@ def _open_text_stream(
         input_url,
         headers={"User-Agent": "nde-clingen-parser/0.1"},
     )
-    response = urllib.request.urlopen(req)
+    response = _urlopen_with_retries(req)
     return io.TextIOWrapper(response, encoding="utf-8", newline="")
 
 
