@@ -21,6 +21,8 @@ SIGNATURE_RESULTS_URL = "https://immunespace.org/query/results/?ordering_tab=sig
 STUDY_URL_TEMPLATE = "https://immunespace.org/query/study/{study_id}"
 REQUEST_TIMEOUT = 120
 
+# Columns a signature record cannot be built without. Losing one of these is a
+# real schema break and should stop the crawl.
 SIGNATURE_FIELDS = {
     "Signature ID",
     "Response Component Type",
@@ -31,8 +33,12 @@ SIGNATURE_FIELDS = {
     "Arm ID",
     "Study ID",
     "Disease",
-    "Disease Stage",
 }
+
+# Columns that only enrich a record. Everything downstream already guards for
+# their absence, so ImmuneSpace dropping one should be logged, not fatal --
+# "Disease Stage" disappeared in August 2026 and took the whole crawl with it.
+OPTIONAL_SIGNATURE_FIELDS = {"Disease Stage"}
 
 CATALOG = {
     "@type": "DataCatalog",
@@ -200,9 +206,14 @@ def _fetch_signature_rows(requester=requests):
     response.raise_for_status()
     text = response.content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
-    missing_fields = SIGNATURE_FIELDS - set(reader.fieldnames or [])
+    fieldnames = set(reader.fieldnames or [])
+    missing_fields = SIGNATURE_FIELDS - fieldnames
     if missing_fields:
         raise ValueError(f"ImmuneSpace signatures CSV is missing fields: {sorted(missing_fields)}")
+    if missing_optional := OPTIONAL_SIGNATURE_FIELDS - fieldnames:
+        logger.warning("ImmuneSpace signatures CSV no longer provides: %s", sorted(missing_optional))
+    if new_fields := fieldnames - SIGNATURE_FIELDS - OPTIONAL_SIGNATURE_FIELDS:
+        logger.info("ImmuneSpace signatures CSV has new unmapped fields: %s", sorted(new_fields))
     return reader
 
 
