@@ -38,7 +38,53 @@ SIGNATURE_FIELDS = {
 # Columns that only enrich a record. Everything downstream already guards for
 # their absence, so ImmuneSpace dropping one should be logged, not fatal --
 # "Disease Stage" disappeared in August 2026 and took the whole crawl with it.
-OPTIONAL_SIGNATURE_FIELDS = {"Disease Stage"}
+OPTIONAL_SIGNATURE_FIELDS = {"Disease Stage", "Material"}
+
+# "Material" arrived in the same August 2026 change that removed "Disease Stage",
+# and mixes three different kinds of value in one column: what the sample was
+# taken from, what the subjects were given, and what infected them. Each belongs
+# somewhere different, so they are sorted rather than dumped into one field.
+# Anything unrecognized falls through to keywords, where it is at least
+# searchable, and is logged so a new value gets noticed.
+MATERIAL_CELL_TYPES = {
+    "macrophage",
+    "peripheral blood mononuclear cell",
+    "t cell",
+}
+
+MATERIAL_ANATOMICAL_STRUCTURES = {
+    "bone marrow",
+    "colon",
+    "ileum",
+    "inguinal lymph node",
+    "jejunum",
+    "lung",
+    "lymph node",
+    "mesenteric lymph node",
+    "pulmonary lymph node",
+    "spleen",
+    "thymus",
+    "tonsil",
+}
+
+MATERIAL_SAMPLE_TYPES = {
+    "blood",
+    "blood plasma",
+    "blood serum",
+}
+
+MATERIAL_INFECTIOUS_AGENTS = {
+    "chikungunya virus",
+    "dengue virus",
+    "mycobacterium tuberculosis variant bovis bcg",
+    "sars-cov-2",
+}
+
+# Carries no information about the specimen, so it is dropped rather than indexed.
+MATERIAL_PLACEHOLDERS = {
+    "pool of specimens",
+    "specimen type: other",
+}
 
 CATALOG = {
     "@type": "DataCatalog",
@@ -153,6 +199,31 @@ def _single_or_list(values):
     return values[0] if len(values) == 1 else values
 
 
+def _classify_material(value):
+    """Sort a `Material` value into the group it belongs to, or None to drop it.
+
+    A vaccine is recognized by name rather than by list, since ImmuneSpace keeps
+    adding them; the rest are small, stable vocabularies.
+    """
+    key = (_clean(value) or "").casefold()
+    if not key or key in MATERIAL_PLACEHOLDERS:
+        return None
+    if key in MATERIAL_CELL_TYPES:
+        return "cell_types"
+    if key in MATERIAL_ANATOMICAL_STRUCTURES:
+        return "anatomical_structures"
+    if key in MATERIAL_SAMPLE_TYPES:
+        return "sample_types"
+    if key in MATERIAL_INFECTIOUS_AGENTS:
+        return "infectious_agents"
+    # A vaccine has no dedicated NDE field, so it stays a keyword rather than
+    # being forced into one that does not mean it.
+    if "vaccine" in key or "vax" in key:
+        return "material_keywords"
+    logger.info("Unrecognized ImmuneSpace Material %r, keeping it as a keyword", value)
+    return "material_keywords"
+
+
 def _normalize_response_type(value):
     value = (_clean(value) or "").casefold()
     if value == "genes":
@@ -229,12 +300,17 @@ def _group_signature_rows(rows):
         group = groups.setdefault(
             signature_id,
             {
+                "anatomical_structures": [],
                 "arms": [],
+                "cell_types": [],
                 "components": {direction: [] for direction in DIRECTIONS},
                 "description": description,
                 "disease_stages": [],
                 "diseases": [],
+                "infectious_agents": [],
+                "material_keywords": [],
                 "response_type": response_type,
+                "sample_types": [],
                 "studies": [],
             },
         )
@@ -245,6 +321,8 @@ def _group_signature_rows(rows):
         _append_unique(group["studies"], _study_id(signature_id, row.get("Study ID")))
         _append_unique(group["diseases"], row.get("Disease"))
         _append_unique(group["disease_stages"], row.get("Disease Stage"))
+        if bucket := _classify_material(row.get("Material")):
+            _append_unique(group[bucket], row.get("Material"))
         for direction in DIRECTIONS:
             for component in _split_components(row.get(direction)):
                 _append_unique(group["components"][direction], component)
@@ -377,6 +455,7 @@ def _build_signature_doc(signature_id, group, direction, component, source_organ
             direction_label,
             *group["diseases"],
             *group["disease_stages"],
+            *group["material_keywords"],
         ],
         "species": {"@type": "DefinedTerm", "name": "Homo sapiens"},
     }
@@ -385,6 +464,13 @@ def _build_signature_doc(signature_id, group, direction, component, source_organ
     if group["diseases"]:
         conditions = [{"@type": "DefinedTerm", "name": disease} for disease in group["diseases"]]
         doc["healthCondition"] = _single_or_list(conditions)
+    if group["infectious_agents"]:
+        agents = [{"@type": "DefinedTerm", "name": agent} for agent in group["infectious_agents"]]
+        doc["infectiousAgent"] = _single_or_list(agents)
+
+    # The sample block is assembled from whatever the signature described about
+    # the specimen: the disease stage it was taken at, and the material it was.
+    sample = {"@type": "Sample"}
     if group["disease_stages"]:
         properties = [
             {
@@ -395,7 +481,16 @@ def _build_signature_doc(signature_id, group, direction, component, source_organ
             }
             for stage in group["disease_stages"]
         ]
-        doc["sample"] = {"@type": "Sample", "additionalProperty": _single_or_list(properties)}
+        sample["additionalProperty"] = _single_or_list(properties)
+    for bucket, field in (
+        ("sample_types", "sampleType"),
+        ("cell_types", "cellType"),
+        ("anatomical_structures", "anatomicalStructure"),
+    ):
+        if group[bucket]:
+            sample[field] = _single_or_list([{"@type": "DefinedTerm", "name": name} for name in group[bucket]])
+    if len(sample) > 1:
+        doc["sample"] = sample
     return doc
 
 
