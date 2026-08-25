@@ -27,6 +27,23 @@ def get_full_name(name):
     return full_name
 
 
+def build_species(names, taxids):
+    """DefinedTerms for GEO organism names, carrying the NCBI taxid listed alongside them."""
+    if not names:
+        return []
+    names = names if isinstance(names, list) else [names]
+    taxids = taxids if isinstance(taxids, list) else ([] if taxids is None else [taxids])
+
+    species = []
+    for i, name in enumerate(names):
+        term = {"@type": "DefinedTerm", "name": name}
+        if i < len(taxids) and str(taxids[i]).strip().isdigit():
+            term["identifier"] = str(taxids[i]).strip()
+        if term not in species:
+            species.append(term)
+    return species
+
+
 def parse_soft_series(filepath):
     """
     Parse a GEO SOFT series file into a dictionary.
@@ -88,6 +105,7 @@ def parse_gsm(data_folder):
                 "archivedAt": url,
             },
             "additionalType": "ExperimentalRunSample",
+            "conditionsOfAccess": "Open",
         }
 
         if name := item.get("!Sample_title"):
@@ -136,7 +154,16 @@ def parse_gsm(data_folder):
         if author := item.get("!Sample_contact_name"):
             output["author"] = {"@type": "Person", "name": get_full_name(author)}
             if affiliation := item.get("!Sample_contact_institute"):
-                output["author"]["affilliation"] = {"name": affiliation}
+                output["author"]["affiliation"] = {"@type": "Organization", "name": affiliation}
+
+        species = []
+        for key in sorted(k for k in item if k.startswith("!Sample_organism_ch")):
+            channel = key[len("!Sample_organism_ch") :]
+            for term in build_species(item[key], item.get(f"!Sample_taxid_ch{channel}")):
+                if term not in species:
+                    species.append(term)
+        if species:
+            output["species"] = species
 
         if instrument := item.get("!Sample_instrument_model"):
             if isinstance(instrument, list):
@@ -305,7 +332,7 @@ def parse_gse(data_folder):
             "_id": _id.casefold(),
             "identifier": _id,
             "url": url,
-            "distribution": {"@type": "dataDownload", "contentUrl": url},
+            "distribution": {"@type": "DataDownload", "contentUrl": url},
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "NCBI GEO",
@@ -313,6 +340,7 @@ def parse_gse(data_folder):
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
             },
+            "conditionsOfAccess": "Open",
         }
 
         if gsm_ids := item.get("!Series_sample_id"):
@@ -404,16 +432,13 @@ def parse_gse(data_folder):
             else:
                 output["author"] = [{"@type": "Person", "name": get_full_name(authors)}]
 
-        if publishers := item.get("!Series_contact_institute"):
-            if isinstance(publishers, list):
-                output["sdPublisher"] = [{"@type": "Organization", "name": p} for p in publishers]
+        if institutes := item.get("!Series_contact_institute"):
+            if isinstance(institutes, list):
+                output["sourceOrganization"] = [{"@type": "Organization", "name": i} for i in institutes]
             else:
-                output["sdPublisher"] = [{"@type": "Organization", "name": publishers}]
+                output["sourceOrganization"] = [{"@type": "Organization", "name": institutes}]
 
-        if species := item.get("!Series_platform_organism"):
-            if isinstance(species, list):
-                output["species"] = [{"@type": "DefinedTerm", "name": s} for s in species]
-            else:
-                output["species"] = [{"@type": "DefinedTerm", "name": species}]
+        if species := build_species(item.get("!Series_platform_organism"), item.get("!Series_platform_taxid")):
+            output["species"] = species
 
         yield output

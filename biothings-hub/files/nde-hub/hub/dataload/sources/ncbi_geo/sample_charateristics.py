@@ -10,6 +10,75 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
+# JSON-LD @type for each object-valued field in gsm_nde_mapping.json /
+# gse_nde_mapping.json, per NDE_schema.jsonld.
+NDE_OBJECT_TYPES = {
+    "anatomicalStructure": "DefinedTerm",
+    "anatomicalSystem": "DefinedTerm",
+    "associatedPhenotype": "DefinedTerm",
+    "cellType": "DefinedTerm",
+    "collector": "Organization",
+    "developmentalStage": "DefinedTerm",
+    "healthCondition": "DefinedTerm",
+    "infectiousAgent": "DefinedTerm",
+    "locationOfOrigin": "AdministrativeArea",
+    "measurementTechnique": "DefinedTerm",
+    "sampleQuantity": "QuantitativeValue",
+    "sampleType": "DefinedTerm",
+    "species": "DefinedTerm",
+    "temporalCoverage": "TemporalInterval",
+    "variableMeasured": "DefinedTerm",
+}
+
+# Units for the quantity-valued subproperties in mapping_dict.json, used when the
+# value itself carries no unit. QuantitativeValue requires unitText.
+SAMPLE_QUANTITY_UNITS = {
+    "number_of_genes": "genes",
+    "number_of_mapped_reads": "reads",
+    "number_of_unique_reads_(umi)": "reads",
+    "total_number_of_reads": "reads",
+}
+
+DEVELOPMENTAL_STAGE_UNITS = {
+    "age(years)": "years",
+    "age_(days)": "days",
+    "age_(weeks)": "weeks",
+    "age_(yrs)": "years",
+}
+
+# Magnitude suffixes GEO submitters write into read counts, e.g. "5.5 M reads".
+SAMPLE_QUANTITY_MULTIPLIERS = {
+    "K": 1e3,
+    "thousand": 1e3,
+    "M": 1e6,
+    "million": 1e6,
+    "G": 1e9,
+    "B": 1e9,
+    "billion": 1e9,
+}
+
+
+def build_quantity(subproperty, field_value, units):
+    """QuantitativeValue for a numeric characteristic, or None if the value is not numeric."""
+    match = re.match(r"\s*([+-]?[\d,]*\.?\d+(?:[eE][+-]?\d+)?)\s*(.*)$", str(field_value))
+    if not match:
+        return None
+    try:
+        number = float(match.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+    unit = match.group(2).strip()
+    if multiplier := SAMPLE_QUANTITY_MULTIPLIERS.get(unit.split()[0] if unit else ""):
+        number *= multiplier
+        unit = unit.split(maxsplit=1)[1].strip() if " " in unit else ""
+
+    d = {"@type": "QuantitativeValue", "value": int(number) if number.is_integer() else number}
+    if unit := (unit or units.get(subproperty)):
+        d["unitText"] = unit
+    return d
+
+
 def insert_value(d, key, value):
     if key in d:
         if isinstance(d[key], list) and value not in d[key]:
@@ -279,11 +348,25 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
             if v:
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":
-                    d = {"@type": "PropertyValue", nde_mapping[k][1]: v}
                     if k == "sampleQuantity":
+                        d = build_quantity(subproperty, v, SAMPLE_QUANTITY_UNITS)
+                        if d is None:
+                            logger.warning(f"Non-numeric sampleQuantity '{subproperty}': {v}")
+                            insert_value(
+                                output,
+                                "additionalProperty",
+                                {"@type": "PropertyValue", "propertyID": subproperty, "value": v},
+                            )
+                            continue
                         d["name"] = subproperty
-                    if k == "variableMeasured" or k == "anatomicalStructure":
-                        d["@type"] = "DefinedTerm"
+                    elif k == "developmentalStage":
+                        # A numeric age is a quantity; a named stage stays a term.
+                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS) or {
+                            "@type": "DefinedTerm",
+                            nde_mapping[k][1]: v,
+                        }
+                    else:
+                        d = {"@type": NDE_OBJECT_TYPES.get(k, "PropertyValue"), nde_mapping[k][1]: v}
                     insert_value(output, k, d)
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     if k == "date":
@@ -343,11 +426,20 @@ def parse_series_sample_characteristics(output, value, sample_mapping, nde_mappi
             if v:
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":
-                    d = {nde_mapping[k][1]: v}
                     if k == "sampleQuantity":
+                        d = build_quantity(subproperty, v, SAMPLE_QUANTITY_UNITS)
+                        if d is None:
+                            logger.warning(f"Non-numeric sampleQuantity '{subproperty}': {v}")
+                            continue
                         d["name"] = subproperty
-                    if k == "anatomicalStructure":
-                        d["@type"] = "DefinedTerm"
+                    elif k == "developmentalStage":
+                        # A numeric age is a quantity; a named stage stays a term.
+                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS) or {
+                            "@type": "DefinedTerm",
+                            nde_mapping[k][1]: v,
+                        }
+                    else:
+                        d = {"@type": NDE_OBJECT_TYPES.get(k, "PropertyValue"), nde_mapping[k][1]: v}
                     insert_value(output, k, d)
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     insert_value(output, k, v)
