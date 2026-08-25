@@ -31,7 +31,7 @@ from .schema_types import is_type_or_descendant
 
 AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
 
-CONDITIONS_OF_ACCESS = ["Open", "Restricted", "Closed", "Embargoed", "Varied"]
+CONDITIONS_OF_ACCESS = ["Closed", "Open", "Restricted", "Embargoed", "Varied", "Unknown"]
 CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
 
 # Placeholders sources emit as terms; nothing upstream strips them.
@@ -358,14 +358,12 @@ def check_schema(doc: Dict) -> Dict:
             invalid = [status for status in cws if status not in CREATIVE_WORK_STATUS]
             check(
                 not invalid,
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
-                % (cws, CREATIVE_WORK_STATUS),
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS),
             )
         else:
             check(
                 cws in CREATIVE_WORK_STATUS,
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
-                % (cws, CREATIVE_WORK_STATUS),
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS),
             )
 
     if issues:
