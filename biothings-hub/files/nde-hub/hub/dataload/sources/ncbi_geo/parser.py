@@ -44,6 +44,29 @@ def build_species(names, taxids):
     return species
 
 
+# The only GSM fields a parent GSE document reads. Keep in sync with
+# parse_series_sample: a field missing here is silently absent from every GSE.
+_GSM_SUMMARY_FIELDS = frozenset(
+    {
+        "!Sample_geo_accession",
+        "!Sample_type",
+        "!Sample_library_source",
+    }
+)
+_GSM_CHARACTERISTICS_PREFIX = "!Sample_characteristics"
+
+
+def _store_soft_value(result, key, value):
+    """Store a SOFT field, promoting to a list when the key repeats."""
+    if key in result:
+        if isinstance(result[key], list):
+            result[key].append(value)
+        else:
+            result[key] = [result[key], value]
+    else:
+        result[key] = value
+
+
 def parse_soft_series(filepath):
     """
     Parse a GEO SOFT series file into a dictionary.
@@ -57,16 +80,27 @@ def parse_soft_series(filepath):
                 continue
             if "=" in line:
                 key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip()
-                # Store as list if key repeats
-                if key in result:
-                    if isinstance(result[key], list):
-                        result[key].append(value)
-                    else:
-                        result[key] = [result[key], value]
-                else:
-                    result[key] = value
+                _store_soft_value(result, key.strip(), value.strip())
+    return result
+
+
+def parse_gsm_summary(filepath):
+    """
+    Parse only the GSM fields a parent GSE document consumes.
+    Equivalent to parse_soft_series restricted to _GSM_SUMMARY_FIELDS and
+    !Sample_characteristics*, without materializing protocols and the rest.
+    """
+    result = {}
+    with open(filepath, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line.startswith("!Sample_") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in _GSM_SUMMARY_FIELDS and not key.startswith(_GSM_CHARACTERISTICS_PREFIX):
+                continue
+            _store_soft_value(result, key, value.strip())
     return result
 
 
@@ -365,7 +399,7 @@ def parse_gse(data_folder):
                 sample["numberOfItems"]["value"] += 1
                 gsm_file = find_gsm_file(gsm_dir, gsm_id)
                 try:
-                    sample_item = parse_soft_series(gsm_file)
+                    sample_item = parse_gsm_summary(gsm_file)
                     parse_series_sample(sample_item, sample, sample_mapping, nde_mapping, sex_mapping)
                 except Exception as e:
                     logger.error(f"Error parsing GSM file {gsm_file}: {e}")

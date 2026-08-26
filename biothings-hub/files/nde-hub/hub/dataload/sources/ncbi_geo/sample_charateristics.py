@@ -148,7 +148,8 @@ def find_age(text):
 
 
 def apply_heuristics(subproperty, value):
-    if value is None:
+    # Every branch below is a string operation.
+    if not isinstance(value, str):
         return None
     if subproperty == "sex":
         if value.startswith("m") and not _parse_mf_list(value):
@@ -221,19 +222,13 @@ def apply_heuristics(subproperty, value):
     return None
 
 
-def parse_sex(subproperty, value, mapping):
-    """Parses the sex from the given subproperty and value.
-    Returns either:
-      - Tuple of (sex, developmentalStage dict)
-      - sex string e.g. "Female"
-      - List of sex strings e.g. ["Male", "Female"]
-      - None if unable to parse
-    """
-    subproperty = subproperty.strip().lower()
-    if isinstance(value, str):
-        value = value.strip().lower()
+_SEX_CACHE = {}
+_SEX_CACHE_MAPPING = None
 
-    valid_subproperties = [
+# Subproperty names parse_sex recognizes. Module-level frozenset: this is tested
+# once per sample characteristic, and rebuilding a list here dominated the call.
+_SEX_SUBPROPERTIES = frozenset(
+    {
         "sex   male=1;female=2",
         "sex  (f /m)",
         "sex (0 = female, 1 = male)",
@@ -315,9 +310,58 @@ def parse_sex(subproperty, value, mapping):
         "sexe",
         "sexo",
         "sexual phenotype",
-    ]
+    }
+)
 
-    if subproperty not in valid_subproperties:
+
+def _copy_sex_result(result):
+    """Copy the mutable parts of a parse_sex result so callers cannot edit the cache."""
+    if isinstance(result, tuple):
+        return tuple(_copy_sex_result(part) for part in result)
+    if isinstance(result, list):
+        return list(result)
+    if isinstance(result, dict):
+        return dict(result)
+    return result
+
+
+def parse_sex(subproperty, value, mapping):
+    """Memoizing wrapper around _parse_sex.
+
+    Characteristic strings repeat across the samples of a series, and _parse_sex
+    costs ~48us for a "sex" subproperty. The cache is keyed on the arguments that
+    vary; a change of `mapping` identity resets it.
+    """
+    global _SEX_CACHE_MAPPING
+
+    if mapping is not _SEX_CACHE_MAPPING:
+        _SEX_CACHE.clear()
+        _SEX_CACHE_MAPPING = mapping
+
+    try:
+        key = (subproperty, value)
+        hash(key)
+    except TypeError:
+        return _parse_sex(subproperty, value, mapping)
+
+    if key not in _SEX_CACHE:
+        _SEX_CACHE[key] = _parse_sex(subproperty, value, mapping)
+    return _copy_sex_result(_SEX_CACHE[key])
+
+
+def _parse_sex(subproperty, value, mapping):
+    """Parses the sex from the given subproperty and value.
+    Returns either:
+      - Tuple of (sex, developmentalStage dict)
+      - sex string e.g. "Female"
+      - List of sex strings e.g. ["Male", "Female"]
+      - None if unable to parse
+    """
+    subproperty = subproperty.strip().lower()
+    if isinstance(value, str):
+        value = value.strip().lower()
+
+    if subproperty not in _SEX_SUBPROPERTIES:
         return None
 
     if subproperty in ["sex", "sex/age", "sex-age", "sex/mating type"]:
