@@ -1,3 +1,5 @@
+import math
+
 import dateutil.parser
 import regex as re
 from utils.sex import _parse_mf_list, extract_sex, find_sex_number_map
@@ -46,6 +48,13 @@ DEVELOPMENTAL_STAGE_UNITS = {
     "age_(yrs)": "years",
 }
 
+# Above this a GEO characteristic is a typo or an identifier, not a measurement.
+# It also keeps every emitted value inside the 8 bytes BSON allows for an int.
+MAX_PLAUSIBLE_QUANTITY = 1e12
+
+# Sentinel for a numeric value outside MAX_PLAUSIBLE_QUANTITY.
+OUT_OF_RANGE = object()
+
 # Magnitude suffixes GEO submitters write into read counts, e.g. "5.5 M reads".
 SAMPLE_QUANTITY_MULTIPLIERS = {
     "K": 1e3,
@@ -59,24 +68,39 @@ SAMPLE_QUANTITY_MULTIPLIERS = {
 
 
 def build_quantity(subproperty, field_value, units):
-    """QuantitativeValue for a numeric characteristic, or None if the value is not numeric."""
+    """QuantitativeValue for a numeric characteristic.
+
+    Returns None when the value is not numeric, and OUT_OF_RANGE when it is
+    numeric but too large to be a real measurement.
+    """
     match = re.match(r"\s*([+-]?[\d,]*\.?\d+(?:[eE][+-]?\d+)?)\s*(.*)$", str(field_value))
     if not match:
         return None
     try:
         number = float(match.group(1).replace(",", ""))
-    except ValueError:
-        return None
+    except (ValueError, OverflowError):
+        return OUT_OF_RANGE
 
     unit = match.group(2).strip()
     if multiplier := SAMPLE_QUANTITY_MULTIPLIERS.get(unit.split()[0] if unit else ""):
         number *= multiplier
         unit = unit.split(maxsplit=1)[1].strip() if " " in unit else ""
 
+    if not math.isfinite(number) or abs(number) > MAX_PLAUSIBLE_QUANTITY:
+        return OUT_OF_RANGE
+
     d = {"@type": "QuantitativeValue", "value": int(number) if number.is_integer() else number}
     if unit := (unit or units.get(subproperty)):
         d["unitText"] = unit
     return d
+
+
+def as_additional_property(output, subproperty, field_value):
+    insert_value(
+        output,
+        "additionalProperty",
+        {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value},
+    )
 
 
 def insert_value(d, key, value):
@@ -350,21 +374,20 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                 if k in nde_mapping and nde_mapping[k][0] == "object":
                     if k == "sampleQuantity":
                         d = build_quantity(subproperty, v, SAMPLE_QUANTITY_UNITS)
-                        if d is None:
-                            logger.warning(f"Non-numeric sampleQuantity '{subproperty}': {v}")
-                            insert_value(
-                                output,
-                                "additionalProperty",
-                                {"@type": "PropertyValue", "propertyID": subproperty, "value": v},
-                            )
+                        if d is None or d is OUT_OF_RANGE:
+                            logger.warning(f"Unusable sampleQuantity '{subproperty}': {v}")
+                            as_additional_property(output, subproperty, v)
                             continue
                         d["name"] = subproperty
                     elif k == "developmentalStage":
                         # A numeric age is a quantity; a named stage stays a term.
-                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS) or {
-                            "@type": "DefinedTerm",
-                            nde_mapping[k][1]: v,
-                        }
+                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS)
+                        if d is OUT_OF_RANGE:
+                            logger.warning(f"Implausible developmentalStage '{subproperty}': {v}")
+                            as_additional_property(output, subproperty, v)
+                            continue
+                        if d is None:
+                            d = {"@type": "DefinedTerm", nde_mapping[k][1]: v}
                     else:
                         d = {"@type": NDE_OBJECT_TYPES.get(k, "PropertyValue"), nde_mapping[k][1]: v}
                     insert_value(output, k, d)
@@ -381,8 +404,7 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                 else:
                     logger.warning(f"Unmapped nde_mapping property: {k}")
             else:
-                d = {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value}
-                insert_value(output, "additionalProperty", d)
+                as_additional_property(output, subproperty, field_value)
 
         else:
             logger.warning(f"Unmapped sample characteristic subproperty: {subproperty}")
@@ -428,16 +450,18 @@ def parse_series_sample_characteristics(output, value, sample_mapping, nde_mappi
                 if k in nde_mapping and nde_mapping[k][0] == "object":
                     if k == "sampleQuantity":
                         d = build_quantity(subproperty, v, SAMPLE_QUANTITY_UNITS)
-                        if d is None:
-                            logger.warning(f"Non-numeric sampleQuantity '{subproperty}': {v}")
+                        if d is None or d is OUT_OF_RANGE:
+                            logger.warning(f"Unusable sampleQuantity '{subproperty}': {v}")
                             continue
                         d["name"] = subproperty
                     elif k == "developmentalStage":
                         # A numeric age is a quantity; a named stage stays a term.
-                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS) or {
-                            "@type": "DefinedTerm",
-                            nde_mapping[k][1]: v,
-                        }
+                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS)
+                        if d is OUT_OF_RANGE:
+                            logger.warning(f"Implausible developmentalStage '{subproperty}': {v}")
+                            continue
+                        if d is None:
+                            d = {"@type": "DefinedTerm", nde_mapping[k][1]: v}
                     else:
                         d = {"@type": NDE_OBJECT_TYPES.get(k, "PropertyValue"), nde_mapping[k][1]: v}
                     insert_value(output, k, d)
