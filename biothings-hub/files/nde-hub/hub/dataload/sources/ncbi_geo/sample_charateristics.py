@@ -413,7 +413,23 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
             output["description"] = " ".join(map(str, description))
 
 
-def parse_series_sample_characteristics(output, value, sample_mapping, nde_mapping, sex_mapping):
+def parse_series_sample_characteristics(
+    output,
+    value,
+    sample_mapping,
+    nde_mapping,
+    sex_mapping,
+    *,
+    add_value=insert_value,
+    unmapped_subproperties=None,
+):
+    """Aggregate one GSM's characteristics into its parent series.
+
+    ``add_value`` lets the GSE parser supply an O(1) uniqueness accumulator.
+    The default preserves the standalone behavior for existing callers.
+    ``unmapped_subproperties`` is an optional Counter-like mapping used to
+    suppress millions of duplicate warnings while retaining their totals.
+    """
     values = value if isinstance(value, list) else [value]
     for v in values:
         # Split by ":", strip whitespace, and only split on the first ":"
@@ -428,16 +444,16 @@ def parse_series_sample_characteristics(output, value, sample_mapping, nde_mappi
         if isinstance(sex, tuple):
             if sex[0] and isinstance(sex[0], list):
                 for s in sex[0]:
-                    insert_value(output, "sex", s)
+                    add_value(output, "sex", s)
             else:
-                insert_value(output, "sex", sex[0])
+                add_value(output, "sex", sex[0])
             if sex[1]:
-                insert_value(output, "developmentalStage", sex[1])
+                add_value(output, "developmentalStage", sex[1])
         elif sex and isinstance(sex, list):
             for s in sex:
-                insert_value(output, "sex", s)
+                add_value(output, "sex", s)
         elif sex:
-            insert_value(output, "sex", sex)
+            add_value(output, "sex", sex)
 
         if sex:
             continue  # Skip further
@@ -464,8 +480,17 @@ def parse_series_sample_characteristics(output, value, sample_mapping, nde_mappi
                             d = {"@type": "DefinedTerm", nde_mapping[k][1]: v}
                     else:
                         d = {"@type": NDE_OBJECT_TYPES.get(k, "PropertyValue"), nde_mapping[k][1]: v}
-                    insert_value(output, k, d)
+                    add_value(output, k, d)
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
-                    insert_value(output, k, v)
+                    add_value(output, k, v)
         else:
-            logger.warning(f"Unmapped sample characteristic subproperty: {subproperty}")
+            if unmapped_subproperties is None:
+                logger.warning(f"Unmapped sample characteristic subproperty: {subproperty}")
+            else:
+                if not unmapped_subproperties[subproperty]:
+                    logger.warning(
+                        "Unmapped sample characteristic subproperty: %s "
+                        "(further occurrences will be summarized)",
+                        subproperty,
+                    )
+                unmapped_subproperties[subproperty] += 1

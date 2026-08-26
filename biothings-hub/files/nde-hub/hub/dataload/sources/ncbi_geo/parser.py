@@ -1,7 +1,10 @@
 import datetime
 import json
 import os
+import sqlite3
+import time
 import traceback
+from collections import Counter
 from pathlib import Path
 
 import dateutil.parser
@@ -14,6 +17,193 @@ except ImportError:
     import logging
 
     logger = logging.getLogger(__name__)
+
+
+GSM_SUMMARY_CACHE_VERSION = 1
+GSM_SUMMARY_CACHE_FILENAME = ".gsm_summary_cache.sqlite3"
+GSM_SUMMARY_CACHE_COMMIT_INTERVAL = 500
+GSE_PARSE_LOG_INTERVAL = 1000
+
+_GSM_SUMMARY_FIELDS = frozenset(
+    {
+        "!Sample_geo_accession",
+        "!Sample_type",
+        "!Sample_library_source",
+    }
+)
+_GSM_CHARACTERISTICS_PREFIX = "!Sample_characteristics"
+
+
+def _store_soft_value(result, key, value):
+    """Store a SOFT field while preserving the parser's scalar/list behavior."""
+    if key in result:
+        if isinstance(result[key], list):
+            result[key].append(value)
+        else:
+            result[key] = [result[key], value]
+    else:
+        result[key] = value
+
+
+def parse_gsm_summary(filepath):
+    """Read only the GSM fields that contribute to a parent GSE document."""
+    result = {}
+    with open(filepath, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line.startswith("!Sample_") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in _GSM_SUMMARY_FIELDS and not key.startswith(_GSM_CHARACTERISTICS_PREFIX):
+                continue
+            _store_soft_value(result, key, value.strip())
+    return result
+
+
+def _freeze_value(value):
+    """Return a hashable equality key for a parsed aggregate value."""
+    if isinstance(value, dict):
+        return "dict", tuple(sorted((key, _freeze_value(item)) for key, item in value.items()))
+    if isinstance(value, list):
+        return "list", tuple(_freeze_value(item) for item in value)
+    if isinstance(value, tuple):
+        return "tuple", tuple(_freeze_value(item) for item in value)
+    try:
+        hash(value)
+    except TypeError:
+        return type(value).__name__, repr(value)
+    return type(value).__name__, value
+
+
+class UniqueValueAccumulator:
+    """Preserve first-seen order and scalar/list output with O(1) deduplication."""
+
+    def __init__(self, output):
+        self.output = output
+        self._seen = {}
+
+    def add(self, output, key, value):
+        if output is not self.output:
+            raise ValueError("Accumulator used with a different output dictionary")
+
+        marker = _freeze_value(value)
+        seen = self._seen.setdefault(key, set())
+        if marker in seen:
+            return
+        seen.add(marker)
+
+        if key not in output:
+            output[key] = value
+        elif isinstance(output[key], list):
+            output[key].append(value)
+        else:
+            output[key] = [output[key], value]
+
+
+class GSMSummaryCache:
+    """Persistent summaries of the small GSM subset needed by the GSE parser."""
+
+    _DDL = """
+        CREATE TABLE IF NOT EXISTS gsm_summary (
+            gsm_id TEXT PRIMARY KEY,
+            source_size INTEGER NOT NULL,
+            source_mtime_ns INTEGER NOT NULL,
+            cache_version INTEGER NOT NULL,
+            summary TEXT NOT NULL
+        )
+    """
+
+    def __init__(self, data_folder):
+        self.path = os.path.join(data_folder, GSM_SUMMARY_CACHE_FILENAME)
+        self.conn = None
+        self.hits = 0
+        self.misses = 0
+        self.stale = 0
+        self.writes = 0
+        self.parse_seconds = 0.0
+        self._pending_writes = 0
+        try:
+            self.conn = sqlite3.connect(self.path, timeout=60)
+            self.conn.execute("PRAGMA busy_timeout = 60000")
+            self.conn.execute(self._DDL)
+            self.conn.commit()
+            logger.info(
+                "GSM summary cache: path=%s version=%s",
+                self.path,
+                GSM_SUMMARY_CACHE_VERSION,
+            )
+        except (OSError, sqlite3.Error) as e:
+            logger.warning("GSM summary cache disabled at %s: %s", self.path, e)
+            if self.conn is not None:
+                self.conn.close()
+                self.conn = None
+
+    def get(self, gsm_id, filepath):
+        stat = os.stat(filepath)
+        if self.conn is not None:
+            row = self.conn.execute(
+                "SELECT source_size, source_mtime_ns, cache_version, summary "
+                "FROM gsm_summary WHERE gsm_id = ?",
+                (gsm_id,),
+            ).fetchone()
+            if row is not None:
+                source_size, source_mtime_ns, cache_version, summary = row
+                if (
+                    source_size == stat.st_size
+                    and source_mtime_ns == stat.st_mtime_ns
+                    and cache_version == GSM_SUMMARY_CACHE_VERSION
+                ):
+                    try:
+                        value = json.loads(summary)
+                    except json.JSONDecodeError:
+                        self.stale += 1
+                    else:
+                        self.hits += 1
+                        return value
+                else:
+                    self.stale += 1
+
+        self.misses += 1
+        started = time.monotonic()
+        value = parse_gsm_summary(filepath)
+        self.parse_seconds += time.monotonic() - started
+        self._put(gsm_id, stat, value)
+        return value
+
+    def _put(self, gsm_id, stat, summary):
+        if self.conn is None:
+            return
+        try:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO gsm_summary "
+                "(gsm_id, source_size, source_mtime_ns, cache_version, summary) VALUES (?, ?, ?, ?, ?)",
+                (
+                    gsm_id,
+                    stat.st_size,
+                    stat.st_mtime_ns,
+                    GSM_SUMMARY_CACHE_VERSION,
+                    json.dumps(summary, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+            self.writes += 1
+            self._pending_writes += 1
+            if self._pending_writes >= GSM_SUMMARY_CACHE_COMMIT_INTERVAL:
+                self.conn.commit()
+                self._pending_writes = 0
+        except sqlite3.Error as e:
+            logger.warning("Could not update GSM summary cache for %s: %s", gsm_id, e)
+            self.conn.rollback()
+            self._pending_writes = 0
+
+    def close(self):
+        if self.conn is None:
+            return
+        try:
+            self.conn.commit()
+        finally:
+            self.conn.close()
+            self.conn = None
 
 
 def get_full_name(name):
@@ -59,14 +249,7 @@ def parse_soft_series(filepath):
                 key, value = line.split("=", 1)
                 key = key.strip()
                 value = value.strip()
-                # Store as list if key repeats
-                if key in result:
-                    if isinstance(result[key], list):
-                        result[key].append(value)
-                    else:
-                        result[key] = [result[key], value]
-                else:
-                    result[key] = value
+                _store_soft_value(result, key, value)
     return result
 
 
@@ -276,14 +459,22 @@ def find_gsm_file(data_folder, acc):
         return None
 
 
-def parse_series_sample(item, sample, sample_mapping, nde_mapping, sex_mapping):
+def parse_series_sample(
+    item,
+    sample,
+    sample_mapping,
+    nde_mapping,
+    sex_mapping,
+    accumulator,
+    unmapped_subproperties,
+):
     """
     Given a GEO Series item and an output dictionary, parse for the sample field in the dataset
     """
     if not item.get("!Sample_geo_accession"):
         return
     sample_elements = sample["aggregateElement"]
-    insert_value(
+    accumulator.add(
         sample_elements,
         "url",
         "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" + item.get("!Sample_geo_accession"),
@@ -291,23 +482,73 @@ def parse_series_sample(item, sample, sample_mapping, nde_mapping, sex_mapping):
     if sample_type := item.get("!Sample_type"):
         if isinstance(sample_type, list):
             for s in sample_type:
-                insert_value(sample_elements, "sampleType", {"name": s, "@type": "DefinedTerm"})
+                accumulator.add(sample_elements, "sampleType", {"name": s, "@type": "DefinedTerm"})
         else:
-            insert_value(sample_elements, "sampleType", {"name": sample_type, "@type": "DefinedTerm"})
+            accumulator.add(sample_elements, "sampleType", {"name": sample_type, "@type": "DefinedTerm"})
 
     if sample_type := item.get("!Sample_library_source"):
         if isinstance(sample_type, list):
             for s in sample_type:
-                insert_value(sample_elements, "sampleType", {"name": s, "@type": "DefinedTerm"})
+                accumulator.add(sample_elements, "sampleType", {"name": s, "@type": "DefinedTerm"})
         else:
-            insert_value(sample_elements, "sampleType", {"name": sample_type, "@type": "DefinedTerm"})
+            accumulator.add(sample_elements, "sampleType", {"name": sample_type, "@type": "DefinedTerm"})
 
     for key, value in item.items():
         if key.startswith("!Sample_characteristics"):
-            parse_series_sample_characteristics(sample_elements, value, sample_mapping, nde_mapping, sex_mapping)
+            parse_series_sample_characteristics(
+                sample_elements,
+                value,
+                sample_mapping,
+                nde_mapping,
+                sex_mapping,
+                add_value=accumulator.add,
+                unmapped_subproperties=unmapped_subproperties,
+            )
+
+
+def _log_gse_parser_stats(metrics, gsm_cache, *, finished=False):
+    cache_requests = gsm_cache.hits + gsm_cache.misses
+    hit_rate = 100.0 * gsm_cache.hits / cache_requests if cache_requests else 0.0
+    top_unmapped = ", ".join(
+        f"{name}={count}" for name, count in metrics["unmapped_subproperties"].most_common(10)
+    )
+    logger.info(
+        "GSE parser%s: gse=%s gsm_references=%s gsm_cache_hits=%s gsm_cache_misses=%s "
+        "gsm_cache_stale=%s gsm_cache_hit_rate=%.1f%% gsm_cache_writes=%s "
+        "gsm_uncached_parse_seconds=%.1fs gse_transform_seconds=%.1fs "
+        "unmapped_characteristics=%s top_unmapped=[%s]",
+        " finished" if finished else "",
+        metrics["gse"],
+        metrics["gsm_references"],
+        gsm_cache.hits,
+        gsm_cache.misses,
+        gsm_cache.stale,
+        hit_rate,
+        gsm_cache.writes,
+        gsm_cache.parse_seconds,
+        metrics["transform_seconds"],
+        sum(metrics["unmapped_subproperties"].values()),
+        top_unmapped,
+    )
 
 
 def parse_gse(data_folder):
+    """Yield GSE documents while reusing persistent, source-validated GSM summaries."""
+    gsm_cache = GSMSummaryCache(data_folder)
+    metrics = {
+        "gse": 0,
+        "gsm_references": 0,
+        "transform_seconds": 0.0,
+        "unmapped_subproperties": Counter(),
+    }
+    try:
+        yield from _parse_gse(data_folder, gsm_cache, metrics)
+    finally:
+        gsm_cache.close()
+        _log_gse_parser_stats(metrics, gsm_cache, finished=True)
+
+
+def _parse_gse(data_folder, gsm_cache, metrics):
     """
     Parse a GEO SOFT platform file into a dictionary.
     Each key is the SOFT field (e.g., '!Platform_title'), value is a list if repeated, or a string.
@@ -322,6 +563,7 @@ def parse_gse(data_folder):
     gse_dir = os.path.join(data_folder, "gse")
     records = get_records(gse_dir)
     for item in records:
+        record_started = time.monotonic()
         if not item.get("!Series_geo_accession"):
             continue
         _id = item.get("!Series_geo_accession")
@@ -353,6 +595,8 @@ def parse_gse(data_folder):
             gsm_dir = os.path.join(data_folder, "gsm")
             if not isinstance(gsm_ids, list):
                 gsm_ids = [gsm_ids]
+            accumulator = UniqueValueAccumulator(sample["aggregateElement"])
+            metrics["gsm_references"] += len(gsm_ids)
             for gsm_id in gsm_ids:
                 sample["itemListElement"].append(
                     {
@@ -365,8 +609,16 @@ def parse_gse(data_folder):
                 sample["numberOfItems"]["value"] += 1
                 gsm_file = find_gsm_file(gsm_dir, gsm_id)
                 try:
-                    sample_item = parse_soft_series(gsm_file)
-                    parse_series_sample(sample_item, sample, sample_mapping, nde_mapping, sex_mapping)
+                    sample_item = gsm_cache.get(gsm_id, gsm_file)
+                    parse_series_sample(
+                        sample_item,
+                        sample,
+                        sample_mapping,
+                        nde_mapping,
+                        sex_mapping,
+                        accumulator,
+                        metrics["unmapped_subproperties"],
+                    )
                 except Exception as e:
                     logger.error(f"Error parsing GSM file {gsm_file}: {e}")
                     logger.error(traceback.format_exc())
@@ -441,4 +693,8 @@ def parse_gse(data_folder):
         if species := build_species(item.get("!Series_platform_organism"), item.get("!Series_platform_taxid")):
             output["species"] = species
 
+        metrics["gse"] += 1
+        metrics["transform_seconds"] += time.monotonic() - record_started
+        if metrics["gse"] % GSE_PARSE_LOG_INTERVAL == 0:
+            _log_gse_parser_stats(metrics, gsm_cache)
         yield output
