@@ -163,7 +163,7 @@ class Figshare(NDEDatabase):
                     output["doi"] = reference[0]
 
             if language := metadata.get("language"):
-                output["inLanguage"] = language[0]
+                output["inLanguage"] = {"name": language[0]}
             if relation := metadata.get("relation"):
                 url = relation[0]
                 output["url"] = url
