@@ -1041,13 +1041,7 @@ class NDESourceUploader(BaseSourceUploader):
                                     "url": {"type": "keyword"},
                                 }
                             },
-                            "collectionMethod": {
-                                "properties": {
-                                    "identifier": {"type": "text", "copy_to": ["all"]},
-                                    "name": {"type": "keyword", "copy_to": ["all"]},
-                                    "url": {"type": "keyword"},
-                                }
-                            },
+                            "collectionMethod": {"type": "text"},
                             "dateCollected": {"type": "date"},
                             "dateProcessed": {"type": "date"},
                             "developmentalStage": {
@@ -1157,13 +1151,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "url": {"type": "keyword"},
                         }
                     },
-                    "collectionMethod": {
-                        "properties": {
-                            "identifier": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "keyword"},
-                        }
-                    },
+                    "collectionMethod": {"type": "text"},
                     "dateCollected": {"type": "date"},
                     "dateProcessed": {"type": "date"},
                     "developmentalStage": {

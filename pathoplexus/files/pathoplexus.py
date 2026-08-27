@@ -123,7 +123,6 @@ SAMPLE_OBJECT_FIELDS = {
         "signsAndSymptoms",
     ),
     "cellType": ("cellLine",),
-    "collectionMethod": ("collectionMethod",),
     "developmentalStage": ("hostAgeBin",),
     "instrument": ("collectionDevice", "sequencingInstrument"),
     "sampleType": ("bodyProduct", "hostRole", "sampleType"),
@@ -146,6 +145,7 @@ SAMPLE_KEYWORD_FIELDS = {
 
 # sample.aggregateElement keys nde.py types as bare text.
 SAMPLE_TEXT_FIELDS = {
+    "collectionMethod": ("collectionMethod",),
     "identifier": ("cultureId", "specimenCollectorSampleId"),
 }
 
