@@ -468,9 +468,9 @@ def parse_gse(data_folder):
 
         if institutes := item.get("!Series_contact_institute"):
             if isinstance(institutes, list):
-                output["sourceOrganization"] = [{"@type": "Organization", "name": i} for i in institutes]
+                output["sdPublisher"] = [{"@type": "Organization", "name": i} for i in institutes]
             else:
-                output["sourceOrganization"] = [{"@type": "Organization", "name": institutes}]
+                output["sdPublisher"] = [{"@type": "Organization", "name": institutes}]
 
         if species := build_species(item.get("!Series_platform_organism"), item.get("!Series_platform_taxid")):
             output["species"] = species
