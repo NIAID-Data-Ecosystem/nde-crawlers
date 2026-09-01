@@ -498,33 +498,45 @@ def _scan_doc(doc, species_dict, unstandardized):
 # Resolving species the lookup DB doesn't know
 # ---------------------------------------------------------------------------
 def _resolve_one(original_name, taxon_id):
-    """Resolve one species via UniProt. Returns (key, details) with details None on failure."""
+    """Resolve one species via UniProt and classify whether a failure is permanent."""
     key = original_name.lower().strip()
     try:
-        return key, _get_uniprot_details(original_name, taxon_id)
+        return key, _get_uniprot_details(original_name, taxon_id), False
     except ValueError as e:
         logger.debug("Skipping UniProt lookup for %s (ID %s): %s", original_name, taxon_id, e)
-        return key, None
+        return key, None, True
     except Exception as e:
         logger.warning("UniProt lookup failed for %s (ID %s): %s", original_name, taxon_id, e)
-        return key, None
+        response = getattr(e, "response", None)
+        status_code = response.status_code if response is not None else None
+        return key, None, status_code in {400, 404, 410}
 
 
-def _resolve_via_uniprot(lookups, resolved):
-    """Resolve (name, taxon_id) pairs concurrently, caching results. Returns the failures."""
+def _resolve_via_uniprot(lookups, resolved, *, cache_failures=True):
+    """Resolve (name, taxon_id) pairs concurrently and persist cache changes in batches."""
     failed = []
     if not lookups:
         return failed
+
+    successful = {}
+    permanent_failures = []
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(_resolve_one, name, taxon_id): name for name, taxon_id in lookups}
         for future in as_completed(futures):
-            key, details = future.result()
+            key, details, permanent_failure = future.result()
             if details:
                 resolved[key] = details
-                SPECIES_DETAILS.put(details["originalName"], details)
+                successful[key] = details
             else:
-                NEGATIVE_SPECIES.add(key)
                 failed.append(futures[future])
+                if cache_failures and permanent_failure:
+                    permanent_failures.append(key)
+
+    if successful:
+        SPECIES_DETAILS.put_many(successful)
+        NEGATIVE_SPECIES.discard_many(successful)
+    if permanent_failures:
+        NEGATIVE_SPECIES.add_many(permanent_failures)
     return failed
 
 
@@ -566,8 +578,15 @@ def _resolve_species(unstandardized):
     if not unstandardized:
         return {}
 
+    # A previous implementation could leave the same name in both caches when
+    # direct UniProt resolution failed but text2term fallback succeeded. Let a
+    # successful resolution win and clean up those stale negative rows.
+    resolved = SPECIES_DETAILS.get_many(unstandardized)
     negative_cache = NEGATIVE_SPECIES.known(unstandardized)
-    resolved = SPECIES_DETAILS.get_many(set(unstandardized) - negative_cache)
+    stale_negatives = negative_cache & resolved.keys()
+    if stale_negatives:
+        NEGATIVE_SPECIES.discard_many(stale_negatives)
+        negative_cache.difference_update(stale_negatives)
 
     need_uniprot = []
     need_text2term = []
@@ -587,7 +606,10 @@ def _resolve_species(unstandardized):
         len(need_text2term),
     )
 
-    need_text2term.extend(_resolve_via_uniprot(need_uniprot, resolved))
+    # A failed supplied identifier is not proof that the name cannot resolve:
+    # text2term may map it to a current taxonomy identifier. Cache a negative
+    # only if that final fallback also fails definitively.
+    need_text2term.extend(_resolve_via_uniprot(need_uniprot, resolved, cache_failures=False))
     if need_text2term:
         try:
             _resolve_via_text2term(need_text2term, resolved)

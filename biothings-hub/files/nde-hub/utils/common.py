@@ -90,15 +90,30 @@ def _iter_string_values(value):
             yield from _iter_string_values(item)
 
 
+def _record_types(doc):
+    return {value.strip() for value in _iter_string_values(doc.get("@type"))}
+
+
+def is_biosample_record(doc):
+    """True when a Sample record declares the BioSample additional type."""
+    return "Sample" in _record_types(doc) and any(
+        value.strip() == "BioSample" for value in _iter_string_values(doc.get("additionalType"))
+    )
+
+
 def supports_description_enrichment(doc):
     """True for resource records and BioSample-flavoured Sample records."""
-    record_types = {value.strip() for value in _iter_string_values(doc.get("@type"))}
+    record_types = _record_types(doc)
     if record_types & DESCRIPTION_ENRICHMENT_TYPES:
         return True
 
-    return "Sample" in record_types and any(
-        value.strip() == "BioSample" for value in _iter_string_values(doc.get("additionalType"))
-    )
+    return is_biosample_record(doc)
+
+
+def supports_term_standardization(doc):
+    """True unless the record is a non-BioSample Sample."""
+    record_types = _record_types(doc)
+    return "Sample" not in record_types or is_biosample_record(doc)
 
 
 def dict_entries(doc, field):
