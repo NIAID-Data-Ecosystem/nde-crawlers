@@ -79,14 +79,26 @@ def as_list(value):
     return [value]
 
 
+def _iter_string_values(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_string_values(item)
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            yield from _iter_string_values(item)
+
+
 def supports_description_enrichment(doc):
     """True for resource records and BioSample-flavoured Sample records."""
-    record_types = {value for value in as_list(doc.get("@type")) if isinstance(value, str)}
+    record_types = {value.strip() for value in _iter_string_values(doc.get("@type"))}
     if record_types & DESCRIPTION_ENRICHMENT_TYPES:
         return True
 
-    additional_types = {value for value in as_list(doc.get("additionalType")) if isinstance(value, str)}
-    return "Sample" in record_types and "BioSample" in additional_types
+    return "Sample" in record_types and any(
+        value.strip() == "BioSample" for value in _iter_string_values(doc.get("additionalType"))
+    )
 
 
 def dict_entries(doc, field):

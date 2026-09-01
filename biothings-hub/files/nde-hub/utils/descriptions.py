@@ -1,13 +1,14 @@
 """Species and health conditions mined from a record's description.
 
-Runs for any record that has a description but is missing taxonomy or health
-conditions. Descriptions go to the EXTRACT tagger (tagger.jensenlab.org), whose
-response is cached in SQLite per record id, so only records seen for the first
-time cost a request. Request failures are cached briefly and repeated service
-failures open a worker-local circuit breaker. The tagged names are then
-validated against EXTRACT's candidate NCBI taxon ids and standardized with
-UniProt taxonomy. Successful taxa and deterministic rejections are cached, and
-accepted terms are marked `fromEXTRACT`.
+Runs for resource records and Samples whose `additionalType` is `BioSample`
+when they have a description but are missing taxonomy or health conditions.
+Descriptions go to the EXTRACT tagger (tagger.jensenlab.org), whose response is
+cached in SQLite per record id, so only records seen for the first time cost a
+request. Request failures are cached briefly and repeated service failures open
+a worker-local circuit breaker. The tagged names are then validated against
+EXTRACT's candidate NCBI taxon ids and standardized with UniProt taxonomy.
+Successful taxa and deterministic rejections are cached, and accepted terms
+are marked `fromEXTRACT`.
 """
 
 import json
