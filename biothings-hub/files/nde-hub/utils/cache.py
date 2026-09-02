@@ -250,3 +250,21 @@ class SqliteKeySet(_SqliteBacked):
                 )
         except Exception as e:
             logger.error("Error writing to %s: %s", self.table, e)
+
+    def discard_many(self, keys):
+        """Remove keys that now have a successful resolution."""
+        keys = {self._key(key) for key in keys if key is not None}
+        keys.discard("")
+        if not keys:
+            return
+        self._keys.difference_update(keys)
+        try:
+            with self._connect() as conn:
+                for chunk in batched(sorted(keys), _SQL_CHUNK_SIZE):
+                    placeholders = ",".join("?" for _ in chunk)
+                    conn.execute(
+                        f"DELETE FROM {self.table} WHERE {self.key_column} IN ({placeholders})",
+                        chunk,
+                    )
+        except Exception as e:
+            logger.error("Error deleting from %s: %s", self.table, e)

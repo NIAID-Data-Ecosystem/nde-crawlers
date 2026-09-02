@@ -176,6 +176,7 @@ def parse(record, dataset_name, _id, url):
                 author["name"] = author_name
                 if affiliation:
                     author["affiliation"] = {
+                        "@type": "Organization",
                         "name": (affiliation[i] if len(affiliation) == len(author_names) else affiliation[0])
                     }
                 if orcid:
@@ -225,7 +226,7 @@ def parse(record, dataset_name, _id, url):
         for key in mt_keys:
             if mt_names := additional.get(key):
                 for mt_name in mt_names:
-                    mt.append({"name": mt_name})
+                    mt.append({"@type": "DefinedTerm", "name": mt_name})
 
         protocols = {
             "capillary_electrophoresis_protocol": {
@@ -320,7 +321,7 @@ def parse(record, dataset_name, _id, url):
                     name, identifier = _clean_species_name(species_name)
                     if not name:
                         continue
-                    entry = {"name": name}
+                    entry = {"@type": "DefinedTerm", "name": name}
                     if identifier:
                         entry["identifier"] = identifier
                     species.append(entry)
@@ -330,7 +331,7 @@ def parse(record, dataset_name, _id, url):
                 name, identifier = _clean_species_name(infectious_agent)
                 if not name:
                     continue
-                entry = {"name": name}
+                entry = {"@type": "DefinedTerm", "name": name}
                 if identifier:
                     entry["identifier"] = identifier
                 ia.append(entry)
@@ -339,7 +340,7 @@ def parse(record, dataset_name, _id, url):
                 name, identifier = _clean_species_name(species_name)
                 if not name:
                     continue
-                entry = {"name": name}
+                entry = {"@type": "DefinedTerm", "name": name}
                 if identifier:
                     entry["identifier"] = identifier
                 species.append(entry)
@@ -353,7 +354,7 @@ def parse(record, dataset_name, _id, url):
                 name, identifier = _clean_species_name(infectious_agent)
                 if not name:
                     continue
-                entry = {"name": name}
+                entry = {"@type": "DefinedTerm", "name": name}
                 if identifier:
                     entry["identifier"] = identifier
                 ia.append(entry)
@@ -362,7 +363,7 @@ def parse(record, dataset_name, _id, url):
                 name, identifier = _clean_species_name(species_name)
                 if not name:
                     continue
-                entry = {"name": name}
+                entry = {"@type": "DefinedTerm", "name": name}
                 if identifier:
                     entry["identifier"] = identifier
                 species.append(entry)
@@ -371,7 +372,7 @@ def parse(record, dataset_name, _id, url):
             if hc_names := additional.get(key):
                 for hc_name in hc_names:
                     if hc_name:
-                        hc.append({"name": hc_name})
+                        hc.append({"@type": "DefinedTerm", "name": hc_name})
 
         if description := additional.get("description"):
             if output.get("description"):
@@ -396,27 +397,27 @@ def parse(record, dataset_name, _id, url):
                 identifiers = None
 
             for i, funder_name in enumerate(funder_names):
-                funding = {"funder": {"name": funder_name}}
+                funding = {"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": funder_name}}
                 if identifiers:
                     funding["identifier"] = identifiers[i]
                 funding_list.append(funding)
 
         if locations := additional.get("location"):
             for location in locations:
-                spatial_coverage.append({"name": location})
+                spatial_coverage.append({"@type": "AdministrativeArea", "name": location})
 
         if dois := additional.get("publication_doi"):
             for doi in dois:
-                citation = {"doi": doi}
+                citation = {"@type": "ScholarlyArticle", "doi": doi}
                 citations.append(citation)
         if pmids := additional.get("publication_pubmed"):
             for pmid in pmids:
-                citation = {"pmid": pmid}
+                citation = {"@type": "ScholarlyArticle", "pmid": pmid}
                 citations.append(citation)
 
         if pmids := additional.get("pubmed"):
             for pmid in pmids:
-                citation = {"pmid": pmid}
+                citation = {"@type": "ScholarlyArticle", "pmid": pmid}
                 citations.append(citation)
 
         if start_date := additional.get("study_start_year"):
@@ -431,7 +432,7 @@ def parse(record, dataset_name, _id, url):
             output["pmids"] = ",".join(pmids)
 
         if doi := cross_references.get("doi"):
-            is_related_to.append({"doi": doi})
+            is_related_to.append({"@type": "CreativeWork", "doi": doi})
 
         is_related_to_keys = [
             "Chinese Clinical Trial Register",
@@ -456,7 +457,7 @@ def parse(record, dataset_name, _id, url):
         for key in is_related_to_keys:
             if identifiers := cross_references.get(key):
                 for identifier in identifiers:
-                    is_related_to.append({"identifier": identifier})
+                    is_related_to.append({"@type": "CreativeWork", "identifier": identifier})
 
         # Define a lookup dictionary for cross_references
         is_related_to_lookup = {
@@ -480,6 +481,7 @@ def parse(record, dataset_name, _id, url):
                 for identifier in identifiers:
                     is_related_to.append(
                         {
+                            "@type": "CreativeWork",
                             "identifier": identifier,
                             "url": url_template.format(identifier),
                         }

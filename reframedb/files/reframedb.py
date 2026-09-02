@@ -132,11 +132,17 @@ def parse():
                 authors_list = []
                 for key in author_names.keys():
                     if key in authors and author_names[key]:
-                        authors_list.append({"name": key, "affiliation": {"name": author_names[key]}})
+                        authors_list.append(
+                            {
+                                "@type": "Person",
+                                "name": key,
+                                "affiliation": {"@type": "Organization", "name": author_names[key]},
+                            }
+                        )
                     elif key in authors:
-                        authors_list.append({"name": key})
+                        authors_list.append({"@type": "Person", "name": key})
                 if len(authors_list) == 0:
-                    authors_list.append({"name": authors})
+                    authors_list.append({"@type": "Person", "name": authors})
                 output["author"] = authors_list
             if summary := metadata.get("summary"):
                 output["description"] = summary
@@ -155,7 +161,7 @@ def parse():
             if drug_conc := metadata.get("drug_conc"):
                 output["description"] += "\nDrug Concetration\n" + drug_conc
             if indication := metadata.get("indication"):
-                output["healthCondition"] = {"name": indication}
+                output["healthCondition"] = {"@type": "DefinedTerm", "name": indication}
             if assay_type := metadata.get("assay_type"):
                 normalized_assay_type = assay_type.replace(";", ",")
                 split_names = [name_part.replace(".", "").strip() for name_part in normalized_assay_type.split(",")]

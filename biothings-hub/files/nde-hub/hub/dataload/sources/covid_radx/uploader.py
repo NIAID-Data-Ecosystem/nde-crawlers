@@ -1,13 +1,19 @@
 from hub.dataload.nde import NDESourceUploader
 
 COVID_HEALTH_CONDITION = {
+    "@type": "DefinedTerm",
     "alternateName": [
         "2019 novel coronavirus infection",
         "2019-nCoV infection",
         "coronavirus disease 2019",
         "severe acute respiratory syndrome coronavirus 2 infectious disease",
     ],
-    "curatedBy": {"dateModified": "2025-01-15", "name": "Biothings API", "url": "https://biothings.io/"},
+    "curatedBy": {
+        "@type": "SoftwareApplication",
+        "dateModified": "2025-01-15",
+        "name": "Biothings API",
+        "url": "https://biothings.io/",
+    },
     "identifier": "0100096",
     "inDefinedTermSet": "MONDO",
     "isCurated": True,
@@ -17,12 +23,14 @@ COVID_HEALTH_CONDITION = {
 }
 
 HOMO_SAPIENS = {
+    "@type": "DefinedTerm",
     "identifier": "9606",
     "inDefinedTermSet": "UniProt",
     "url": "https://www.uniprot.org/taxonomy/9606",
     "originalName": "homo sapiens",
     "isCurated": True,
     "curatedBy": {
+        "@type": "SoftwareApplication",
         "name": "PubTator",
         "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
         "dateModified": "2023-10-05",
@@ -52,6 +60,7 @@ HOMO_SAPIENS = {
 }
 
 COVID_INFECTIOUS_AGENT = {
+    "@type": "DefinedTerm",
     "alternateName": [
         "2019-nCoV",
         "Wuhan coronavirus",
@@ -67,6 +76,7 @@ COVID_INFECTIOUS_AGENT = {
     "classification": "infectiousAgent",
     "commonName": "2019-nCoV",
     "curatedBy": {
+        "@type": "SoftwareApplication",
         "dateModified": "2025-02-09",
         "name": "Data Discovery Engine",
         "url": "https://discovery.biothings.io/",

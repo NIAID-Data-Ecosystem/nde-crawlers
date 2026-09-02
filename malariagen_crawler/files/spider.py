@@ -50,7 +50,9 @@ class MalariaGenSpider(scrapy.Spider):
             title = block.css("h4.card-title::text").get().strip()
             description_texts = " ".join(block.css("p::text").getall()).strip()
             href_url = response.urljoin(block.css("a::attr(href)").get(default=None))
-            distribution.append({"name": title, "contentUrl": href_url, "description": description_texts})
+            distribution.append(
+                {"@type": "DataDownload", "name": title, "contentUrl": href_url, "description": description_texts}
+            )
 
         # Author information
         author_name = response.xpath('//blockquote[contains(.//h3, "Data package contact")]//a/text()').get(
@@ -110,13 +112,13 @@ class MalariaGenSpider(scrapy.Spider):
         details = {
             "url": response.url,
             "name": response.css("title::text").get().strip(),
-            "isPartOf": {"@type": "ResearchProject", "name": project_name, "url": project_url},
+            "isPartOf": {"@type": "CreativeWork", "name": project_name, "url": project_url},
             "datePublished": date_published,
             "keywords": keywords,
             "conditionsOfAccess": access_text,
             "description": description,
             "distribution": distribution,
-            "author": {"name": author_name, "url": author_url},
-            "citation": {"url": response.urljoin(citation_url)},
+            "author": {"@type": "Person", "name": author_name, "url": author_url},
+            "citation": {"@type": "CreativeWork", "url": response.urljoin(citation_url)},
         }
         yield details

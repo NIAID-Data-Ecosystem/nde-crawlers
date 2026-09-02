@@ -58,7 +58,7 @@ missing_attributes = {}
 
 def parse_section_file(file, accno, output):
     if path := file.get("path"):
-        dist_url = {"contentUrl": f"https://www.ebi.ac.uk/biostudies/files/{accno}/{path}"}
+        dist_url = {"@type": "DataDownload", "contentUrl": f"https://www.ebi.ac.uk/biostudies/files/{accno}/{path}"}
         if output.get("distribution"):
             output["distribution"].append(dist_url)
         else:
@@ -173,20 +173,20 @@ def parse_file(doc, accno):
                                     )
                         attribute.pop("valqual", None)
                     elif key == "organism":
-                        species = {"name": _clean_organism_name(value)}
+                        species = {"@type": "DefinedTerm", "name": _clean_organism_name(value)}
                         if output.get("species"):
                             output["species"].append(species)
                         else:
                             output["species"] = [species]
                     elif key == "method" or key == "study type" or key == "experimental design":
                         attribute.pop("valqual", None)
-                        mt = {"name": value}
+                        mt = {"@type": "DefinedTerm", "name": value}
                         if output.get("measurementTechnique"):
                             output["measurementTechnique"].append(mt)
                         else:
                             output["measurementTechnique"] = [mt]
                     elif key == "experimental factor":
-                        vm = {"name": value}
+                        vm = {"@type": "DefinedTerm", "name": value}
                         if output.get("variableMeasured"):
                             output["variableMeasured"].append(vm)
                         else:
@@ -214,7 +214,7 @@ def parse_file(doc, accno):
                 for link in links:
                     if isinstance(link, list):
                         continue
-                    irt = {}
+                    irt = {"@type": "CreativeWork"}
                     if url := link.get("url"):
                         irt["url"] = url
                     if link.get("attributes"):
@@ -243,7 +243,7 @@ def parse_file(doc, accno):
                             continue
                         attributes = subsection.pop("attributes", None)
                         if type == "author":
-                            author = {}
+                            author = {"@type": "Person"}
                             if attributes:
                                 for attribute in attributes:
                                     key = attribute.pop("name").casefold()
@@ -254,7 +254,7 @@ def parse_file(doc, accno):
                                     elif key == "orcid":
                                         author["identifier"] = value
                                     elif key == "affiliation":
-                                        author["affiliation"] = {"name": value}
+                                        author["affiliation"] = {"@type": "Organization", "name": value}
                                 if output.get("author"):
                                     output["author"].append(author)
                                 else:
@@ -272,14 +272,14 @@ def parse_file(doc, accno):
                                                 elif key == "rorid":
                                                     author["affiliation"]["identifier"] = value
                         elif type == "funding":
-                            funding = {}
+                            funding = {"@type": "MonetaryGrant"}
                             if attributes:
                                 for attribute in attributes:
                                     key = attribute.pop("name").casefold()
                                     if not (value := attribute.pop("value", None)):
                                         continue
                                     if key == "agency":
-                                        funding["funder"] = {"name": value}
+                                        funding["funder"] = {"@type": "Organization", "name": value}
                                     elif key == "grant_id":
                                         funding["identifier"] = value
                                 if output.get("funding"):
@@ -295,13 +295,13 @@ def parse_file(doc, accno):
                                     else:
                                         continue
                                     if key == "organism":
-                                        species = {"name": _clean_organism_name(value)}
+                                        species = {"@type": "DefinedTerm", "name": _clean_organism_name(value)}
                                         if output.get("species"):
                                             output["species"].append(species)
                                         else:
                                             output["species"] = [species]
                                     elif key == "experimental variable" or key == "extrinsic variable":
-                                        vm = {"name": value}
+                                        vm = {"@type": "DefinedTerm", "name": value}
                                         if output.get("variableMeasured"):
                                             output["variableMeasured"].append(vm)
                                         else:
@@ -315,14 +315,14 @@ def parse_file(doc, accno):
                                     else:
                                         continue
                                     if key == "imaging method" or key == "technology" or key == "assay by molecule":
-                                        mt = {"name": value}
+                                        mt = {"@type": "DefinedTerm", "name": value}
                                         if output.get("measurementTechnique"):
                                             output["measurementTechnique"].append(mt)
                                         else:
                                             output["measurementTechnique"] = [mt]
                         elif type == "publication":
                             if attributes:
-                                citation = {}
+                                citation = {"@type": "ScholarlyArticle"}
                                 for attribute in attributes:
                                     if attribute.get("name") and attribute.get("value"):
                                         key = attribute.pop("name").casefold()

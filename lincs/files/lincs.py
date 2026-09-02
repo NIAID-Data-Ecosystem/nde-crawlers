@@ -70,8 +70,9 @@ class LINCS:
                     for author in authors:
                         author_list.append(
                             {
+                                "@type": "Person",
                                 "name": author,
-                                "affiliation": {"name": document["centerfullname"]},
+                                "affiliation": {"@type": "Organization", "name": document["centerfullname"]},
                                 "url": document["centerurl"],
                             }
                         )
@@ -80,7 +81,7 @@ class LINCS:
                 document.pop("centerfullname")
 
             if "funding" in document:
-                document["funding"] = {"identifier": document.pop("funding")}
+                document["funding"] = {"@type": "MonetaryGrant", "identifier": document.pop("funding")}
 
             if "datemodified" in document:
                 try:
@@ -93,7 +94,7 @@ class LINCS:
             if "screeninglabinvestigator" in document:
                 authors = self.parse_authors(document["screeninglabinvestigator"])
                 for author in authors:
-                    author_list.append({"name": author})
+                    author_list.append({"@type": "Person", "name": author})
                 document.pop("screeninglabinvestigator")
 
             # Remove duplicate authors
@@ -127,20 +128,20 @@ class LINCS:
                 else:
                     assay_data = [name.strip() for name in assay_data]
                 unique_assays = list(dict.fromkeys(assay_data))
-                document["measurementTechnique"] = [{"name": assay} for assay in unique_assays]
+                document["measurementTechnique"] = [{"@type": "DefinedTerm", "name": assay} for assay in unique_assays]
 
             if "size" in document:
                 if len(set(document["size"])) > 1:
                     size_list = []
                     for size in document["size"]:
-                        size_list.append({"contentSize": size})
+                        size_list.append({"@type": "DataDownload", "contentSize": size})
                     document["distribution"] = size_list
                     document.pop("size")
                 else:
-                    document["distribution"] = {"contentSize": "".join(document.pop("size"))}
+                    document["distribution"] = {"@type": "DataDownload", "contentSize": "".join(document.pop("size"))}
 
             if "physicaldetection" in document:
-                document["variableMeasured"] = {"name": document.pop("physicaldetection")}
+                document["variableMeasured"] = {"@type": "DefinedTerm", "name": document.pop("physicaldetection")}
 
             keywords_set = set()
             if "assaydesignmethod" in document:
@@ -176,17 +177,20 @@ class LINCS:
             if "tool" in document and "toollink" in document:
                 isBasedOn_list = []
                 for index, tool in enumerate(document["tool"]):
-                    isBasedOn_list.append({"name": tool, "url": document["toollink"][index]})
+                    isBasedOn_list.append({"@type": "CreativeWork", "name": tool, "url": document["toollink"][index]})
                 document["isBasedOn"] = isBasedOn_list
                 document.pop("tool")
                 document.pop("toollink")
             if "protocol" in document:
-                document.setdefault("isBasedOn", []).append({"url": document.pop("protocol"), "name": "protocol"})
+                document.setdefault("isBasedOn", []).append(
+                    {"@type": "CreativeWork", "url": document.pop("protocol"), "name": "protocol"}
+                )
 
             # Only change isRelatedTo: initially set it based on datasetgroup, then update later.
             if "datasetgroup" in document:
                 rt_id = document.pop("datasetgroup")
                 document["isRelatedTo"] = {
+                    "@type": "CreativeWork",
                     "_id": rt_id.lower(),
                     "identifier": rt_id,
                     "name": rt_id,  # temporary; will be updated below

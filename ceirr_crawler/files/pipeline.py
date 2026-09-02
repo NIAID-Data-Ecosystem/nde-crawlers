@@ -257,7 +257,7 @@ def normalize_unit(unit):
 
 
 def add_sample_quantity(output, name, value=None, unit_text=None):
-    quantity = {"name": name}
+    quantity = {"@type": "QuantitativeValue", "name": name}
     if value is not None:
         quantity["value"] = value
     if unit_text:
@@ -365,7 +365,7 @@ class CeirrItemProcessorPipeline:
                 output["sampleAvailability"] = False
 
         if category := clean_value(item.get("_ceirr_reagent_category")):
-            insert_value(output, "sampleType", {"name": category})
+            insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": category})
             insert_value(output, "keywords", category)
 
         self.add_project(output, item)
@@ -418,7 +418,7 @@ class CeirrItemProcessorPipeline:
         )
         origin = clean_value(item.get("origin"))
         if host and host != origin:
-            species = {"name": host}
+            species = {"@type": "DefinedTerm", "name": host}
             if host_id := clean_value(item.get("host_identifier")):
                 species["identifier"] = host_id
             insert_value(output, "species", species)
@@ -433,32 +433,34 @@ class CeirrItemProcessorPipeline:
 
     def add_infectious_agent(self, output, item):
         for strain_name in split_multi_value(item.get("strain_name")):
-            insert_value(output, "infectiousAgent", {"name": strain_name})
+            insert_value(output, "infectiousAgent", {"@type": "DefinedTerm", "name": strain_name})
             insert_value(output, "associatedGenotype", strain_name)
 
         for parent_strain in split_multi_value(item.get("parent_strain_name")):
-            insert_value(output, "infectiousAgent", {"name": parent_strain})
+            insert_value(output, "infectiousAgent", {"@type": "DefinedTerm", "name": parent_strain})
             insert_value(output, "associatedGenotype", parent_strain)
 
         influenza_type = clean_value(item.get("influenza_type"))
         subtype = clean_value(item.get("subtype"))
         agent_terms = [term for term in [influenza_type, subtype] if term]
         if agent_terms:
-            insert_value(output, "infectiousAgent", {"name": "Influenza " + " ".join(agent_terms)})
+            insert_value(
+                output, "infectiousAgent", {"@type": "DefinedTerm", "name": "Influenza " + " ".join(agent_terms)}
+            )
 
         if influenza_type:
             add_additional_property(output, "Influenza Type", influenza_type)
 
         if origin := clean_value(item.get("origin")):
-            insert_value(output, "locationOfOrigin", {"name": origin})
+            insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "name": origin})
 
         if year := year_only(item.get("year")):
             output["dateCollected"] = year
 
     def add_biological_context(self, output, item):
         if material := expand_abbreviation(item, "sample_material", item.get("sample_material")):
-            insert_value(output, "sampleType", {"name": material})
-            insert_value(output, "cellType", {"name": material})
+            insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": material})
+            insert_value(output, "cellType", {"@type": "DefinedTerm", "name": material})
 
         if material_form := clean_value(item.get("sample_material_form")):
             insert_value(output, "sampleState", material_form, extend=True)
@@ -474,13 +476,13 @@ class CeirrItemProcessorPipeline:
             insert_value(output, "associatedGenotype", mutations)
 
         if vector := clean_value(item.get("vector")):
-            insert_value(output, "isBasedOn", {"@type": "BioChemEntity", "name": vector})
+            insert_value(output, "isBasedOn", {"@type": "CreativeWork", "name": vector})
 
         if immunogen := clean_value(item.get("immunogen")):
-            insert_value(output, "isBasedOn", {"@type": "BioChemEntity", "name": immunogen})
+            insert_value(output, "isBasedOn", {"@type": "CreativeWork", "name": immunogen})
 
         if produced_in := clean_value(item.get("produced_in")):
-            insert_value(output, "species", {"name": produced_in})
+            insert_value(output, "species", {"@type": "DefinedTerm", "name": produced_in})
 
         if compatibility := clean_value(item.get("compatibility")):
             insert_value(output, "experimentalPurpose", compatibility)
@@ -512,10 +514,10 @@ class CeirrItemProcessorPipeline:
             insert_value(output, "keywords", specificity)
 
         if protein := clean_value(item.get("protein")):
-            insert_value(output, "hasPart", {"@type": "BioChemEntity", "name": protein})
+            insert_value(output, "hasPart", {"@type": "CreativeWork", "name": protein})
 
         if segment := clean_value(item.get("segment")):
-            insert_value(output, "hasPart", {"@type": "BioChemEntity", "name": segment})
+            insert_value(output, "hasPart", {"@type": "CreativeWork", "name": segment})
 
     def add_publications(self, output, item):
         for pmid in split_pmids(item.get("publication_pmid")):
@@ -560,5 +562,5 @@ class CeirrItemProcessorPipeline:
             insert_value(
                 output,
                 "isBasedOn",
-                {"@type": "BioChemEntity", "name": value, "relationship": f"{field} segment source"},
+                {"@type": "CreativeWork", "name": value, "relationship": f"{field} segment source"},
             )

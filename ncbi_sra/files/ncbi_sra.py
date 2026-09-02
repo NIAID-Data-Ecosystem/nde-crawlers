@@ -448,7 +448,7 @@ class NCBI_SRA(NDEDatabase):
             health_condition_set = set()
 
             if bio_project := ftp_info.get("ftp_bioProject"):
-                bio_project_dict = {}
+                bio_project_dict = {"@type": "CreativeWork"}
                 bio_project_dict["identifier"] = bio_project
                 bio_project_dict["additionalType"] = {
                     "name": "BioProject",
@@ -462,7 +462,7 @@ class NCBI_SRA(NDEDatabase):
                 if study_abstract := run_metadata.get("study_abstract"):
                     output["description"] = study_abstract
 
-                author_dict = {}
+                author_dict = {"@type": "Person"}
                 if organisation := run_metadata.get("organisation"):
                     author_dict["name"] = organisation
                 if organisation_contact_email := run_metadata.get("organisation_contact_email"):
@@ -471,7 +471,7 @@ class NCBI_SRA(NDEDatabase):
                     author_list.append(author_dict)
 
                 # distribution
-                distribution_dict = {}
+                distribution_dict = {"@type": "DataDownload"}
                 if gcp_url := run_metadata.get("GCP_url"):
                     distribution_dict["contentUrl"] = gcp_url
                 if run_metadata.get("GCP_free_egress"):
@@ -479,7 +479,7 @@ class NCBI_SRA(NDEDatabase):
                 if bool(distribution_dict) and distribution_dict not in distribution_list:
                     distribution_list.append(distribution_dict)
 
-                distribution_dict = {}
+                distribution_dict = {"@type": "DataDownload"}
                 if aws_url := run_metadata.get("AWS_url"):
                     distribution_dict["contentUrl"] = aws_url
                 if run_metadata.get("AWS_free_egress"):
@@ -490,19 +490,19 @@ class NCBI_SRA(NDEDatabase):
                 # species
                 if taxon_name := run_metadata.get("taxon_name"):
                     if taxon_name not in seen_species:
-                        species_dict = {"name": taxon_name}
+                        species_dict = {"@type": "DefinedTerm", "name": taxon_name}
                         seen_species.add(taxon_name)
                         species_list.append(species_dict)
 
                 # measurement techniques
                 if measurement_technique := run_metadata.get("library_strategy"):
                     if measurement_technique not in seen_measurements_techniques:
-                        measurement_technique_dict = {"name": measurement_technique}
+                        measurement_technique_dict = {"@type": "DefinedTerm", "name": measurement_technique}
                         seen_measurements_techniques.add(measurement_technique)
                         measurement_technique_list.append(measurement_technique_dict)
 
                 # runs
-                run_dict = {}
+                run_dict = {"@type": "CreativeWork"}
                 if run_accession := run_metadata.get("run"):
                     run_dict["identifier"] = run_accession
                     run_dict["additionalType"] = {"name": "Run", "url": "http://purl.obolibrary.org/obo/NCIT_C47911"}
@@ -518,7 +518,7 @@ class NCBI_SRA(NDEDatabase):
                     is_based_on.append(run_dict)
 
                 # experiments
-                experiment_dict = {}
+                experiment_dict = {"@type": "CreativeWork"}
                 if experiment_accession := run_metadata.get("experiment_accession"):
                     experiment_dict["identifier"] = experiment_accession
                     experiment_dict["url"] = "https://www.ncbi.nlm.nih.gov/sra/" + experiment_accession
@@ -570,7 +570,7 @@ class NCBI_SRA(NDEDatabase):
                     }
 
                 # cells
-                cell_dict = {}
+                cell_dict = {"@type": "CreativeWork"}
                 if cell_line := run_metadata.get("cell line"):
                     cell_dict["name"] = cell_line
                 if cell_line_name := run_metadata.get("cell line name"):
@@ -582,7 +582,7 @@ class NCBI_SRA(NDEDatabase):
                     is_based_on.append(cell_dict)
 
                 # hapmap
-                hapmap_dict = {}
+                hapmap_dict = {"@type": "CreativeWork"}
                 if hapmap_id := run_metadata.get("HapMap sample ID"):
                     hapmap_dict["identifier"] = hapmap_id
                 if cell_line := run_metadata.get("Cell line"):
@@ -652,39 +652,40 @@ class NCBI_SRA(NDEDatabase):
             if len(measurement_technique_list):
                 output["measurementTechnique"] = measurement_technique_list
             if health_condition_set:
-                output["healthCondition"] = [{"name": v} for v in sorted(health_condition_set)]
+                output["healthCondition"] = [{"@type": "DefinedTerm", "name": v} for v in sorted(health_condition_set)]
 
             if sample_collection_items:
                 sample_collection = {
                     "@type": "SampleCollection",
                     "itemListElement": sample_collection_items,
                     "numberOfItems": {
+                        "@type": "QuantitativeValue",
                         "value": len(sample_collection_items),
                         "unitText": "sample",
                     },
                 }
 
                 # Build aggregateElement from collected sample attributes
-                aggregate_element = {}
+                aggregate_element = {"@type": "Sample"}
                 if aggregate_data["sex"]:
                     aggregate_element["sex"] = sorted(aggregate_data["sex"])
                 if aggregate_data["cellType"]:
                     aggregate_element["cellType"] = [
-                        {"name": v} for v in sorted(aggregate_data["cellType"])
+                        {"@type": "DefinedTerm", "name": v} for v in sorted(aggregate_data["cellType"])
                     ]
                 if aggregate_data["developmentalStage"]:
                     aggregate_element["developmentalStage"] = [
-                        {"name": v} for v in sorted(aggregate_data["developmentalStage"])
+                        {"@type": "DefinedTerm", "name": v} for v in sorted(aggregate_data["developmentalStage"])
                     ]
                 if aggregate_data["associatedGenotype"]:
                     aggregate_element["associatedGenotype"] = sorted(aggregate_data["associatedGenotype"])
                 if aggregate_data["associatedPhenotype"]:
                     aggregate_element["associatedPhenotype"] = [
-                        {"name": v} for v in sorted(aggregate_data["associatedPhenotype"])
+                        {"@type": "DefinedTerm", "name": v} for v in sorted(aggregate_data["associatedPhenotype"])
                     ]
                 if aggregate_data["sampleType"]:
                     aggregate_element["sampleType"] = [
-                        {"name": v} for v in sorted(aggregate_data["sampleType"])
+                        {"@type": "DefinedTerm", "name": v} for v in sorted(aggregate_data["sampleType"])
                     ]
 
                 if aggregate_element:

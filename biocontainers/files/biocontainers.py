@@ -89,6 +89,7 @@ def parse():
 
         if pulls := metadata.get("pulls"):
             output["interactionStatistic"] = {
+                "@type": "InteractionCounter",
                 "userInteractionCount": pulls,
                 "interactionType": "Number of downloads since release",
             }

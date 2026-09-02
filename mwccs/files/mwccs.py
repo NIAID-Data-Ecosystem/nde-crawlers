@@ -20,7 +20,9 @@ import calendar
 import copy
 import io
 import logging
+import os
 import re
+import ssl
 import time
 from html.parser import HTMLParser
 from typing import Any, Optional
@@ -44,6 +46,25 @@ SUBSTUDY_PAGE_URL = "https://statepi.jhsph.edu/mwccs/substudy-science/"
 USER_AGENT = "nde-mwccs-crawler/0.1"
 MAX_RETRIES = 3
 RETRY_BACKOFF = 10
+
+# statepi.jhsph.edu serves its leaf and "InCommon Intermediate CA - OVG2C" but
+# not the certificate bridging that intermediate to a root in the system bundle.
+# Browsers and macOS fetch the gap over AIA; OpenSSL does not, so it is shipped
+# alongside this module and added to the default trust store rather than
+# verification being turned off.
+_EXTRA_CA_BUNDLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "emsign_root_tls_ca_g1.pem")
+
+
+def _build_ssl_context():
+    context = ssl.create_default_context()
+    try:
+        context.load_verify_locations(cafile=_EXTRA_CA_BUNDLE)
+    except OSError as exc:
+        logger.warning("Could not load %s, TLS may fail: %s", _EXTRA_CA_BUNDLE, exc)
+    return context
+
+
+SSL_CONTEXT = _build_ssl_context()
 
 MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
@@ -278,7 +299,7 @@ def _fetch_bytes(url: str, timeout: int = 120, retries: int = MAX_RETRIES) -> by
     for attempt in range(1, retries + 1):
         try:
             req = Request(url, headers={"User-Agent": USER_AGENT})
-            with urlopen(req, timeout=timeout) as resp:
+            with urlopen(req, timeout=timeout, context=SSL_CONTEXT) as resp:
                 return resp.read()
         except Exception as exc:
             last_exc = exc
@@ -620,10 +641,11 @@ def _build_sample(data: dict[str, Any]) -> dict[str, Any]:
 
     median_age = data.get("median_age")
     if median_age:
-        sample["age"] = {
+        sample["developmentalStage"] = {
+            "@type": "QuantitativeValue",
+            "name": "median age",
             "minValue": median_age,
             "unitText": "years",
-            "valueType": "median",
         }
 
     count = data.get("participant_count")

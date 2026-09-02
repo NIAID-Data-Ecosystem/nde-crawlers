@@ -286,7 +286,7 @@ def parse_samples():
             for condition in _ensure_list(donor_mapped.get("medical_history")):
                 condition_value = _first_text(condition)
                 if condition_value:
-                    health_conditions.append({"name": str(condition_value)})
+                    health_conditions.append({"@type": "DefinedTerm", "name": str(condition_value)})
 
             mechanism_of_injury = _first_text(donor_mapped.get("mechanism_of_injury"))
             if mechanism_of_injury:
@@ -424,12 +424,14 @@ def parse_datasets():
             logger.info("Parsed %s out of %s datasets", count, len(datasets))
 
         homo_sapiens = {
+            "@type": "DefinedTerm",
             "identifier": "9606",
             "inDefinedTermSet": "UniProt",
             "url": "https://www.uniprot.org/taxonomy/9606",
             "originalName": "homo sapiens",
             "isCurated": True,
             "curatedBy": {
+                "@type": "SoftwareApplication",
                 "name": "PubTator",
                 "url": "https://www.ncbi.nlm.nih.gov/research/pubtator/api.html",
                 "dateModified": "2023-10-05",
@@ -487,9 +489,9 @@ def parse_datasets():
         author_list = []
         if contacts := metadata.get("contacts"):
             for contact in contacts:
-                author = {}
+                author = {"@type": "Person"}
                 if affiliation := contact.get("affiliation"):
-                    author["affiliation"] = {"name": affiliation}
+                    author["affiliation"] = {"@type": "Organization", "name": affiliation}
                 if first_name := contact.get("first_name"):
                     author["givenName"] = first_name
                 if last_name := contact.get("last_name"):
@@ -505,9 +507,9 @@ def parse_datasets():
 
         if contributors := metadata.get("contributors"):
             for contributor in contributors:
-                author = {}
+                author = {"@type": "Person"}
                 if affiliation := contributor.get("affiliation"):
-                    author["affiliation"] = {"name": affiliation}
+                    author["affiliation"] = {"@type": "Organization", "name": affiliation}
                 if first_name := contributor.get("first_name"):
                     author["givenName"] = first_name
                 if last_name := contributor.get("last_name"):
@@ -533,7 +535,7 @@ def parse_datasets():
             else:
                 output["isAccessibleForFree"] = False
 
-        measurement_technique = {}
+        measurement_technique = {"@type": "DefinedTerm"}
         if data_types := metadata.get("data_types"):
             measurement_technique["name"] = data_types[0]
         if dataset_info := metadata.get("dataset_info"):
@@ -553,7 +555,7 @@ def parse_datasets():
         if files := metadata.get("files"):
             distribution_list = []
             for file in files:
-                distribution_dict = {}
+                distribution_dict = {"@type": "DataDownload"}
                 if file_description := file.get("description"):
                     distribution_dict["name"] = file_description
                 # if edam_term := file.get('edam_term'):
@@ -578,8 +580,8 @@ def parse_datasets():
         if hubmap_id := metadata.get("hubmap_id"):
             output["name"] = hubmap_id
 
-        if version := metadata.get("version"):
-            output["version"] = version
+        # `version` is deliberately not emitted: check_schema rejects it on every
+        # record, so the HuBMAP dataset version is dropped here.
 
         if last_modified_timestamp := metadata.get("last_modified_timestamp"):
             output["dateModified"] = datetime.datetime.utcfromtimestamp(last_modified_timestamp / 1000).strftime(
@@ -593,18 +595,18 @@ def parse_datasets():
 
         if dataset_metadata := metadata.get("metadata"):
             if origin := dataset_metadata.get("dag_provenance_list"):
-                output["isBasedOn"] = {"name": origin[0]["origin"]}
+                output["isBasedOn"] = {"@type": "CreativeWork", "name": origin[0]["origin"]}
             if nested_metadata := dataset_metadata.get("metadata"):
                 if protocols_io_doi := nested_metadata.get("protocols_io_doi"):
                     if "isBasedOn" in output:
                         output["isBasedOn"]["doi"] = protocols_io_doi
                     else:
-                        output["isBasedOn"] = {"doi": protocols_io_doi}
+                        output["isBasedOn"] = {"@type": "ScholarlyArticle", "doi": protocols_io_doi}
                 if section_prep_protocols_io_doi := nested_metadata.get("section_prep_protocols_io_doi"):
                     if "isBasedOn" in output:
                         output["isBasedOn"]["doi"] = section_prep_protocols_io_doi
                     else:
-                        output["isBasedOn"] = {"doi": section_prep_protocols_io_doi}
+                        output["isBasedOn"] = {"@type": "ScholarlyArticle", "doi": section_prep_protocols_io_doi}
                 # if analyte_class := nested_metadata.get('analyte_class'):
                 #     output['variableMeasured'] = analyte_class
                 # if assay_category := nested_metadata.get('assay_category'):

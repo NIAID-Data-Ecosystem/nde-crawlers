@@ -1,5 +1,6 @@
 import datetime
 import logging
+import time
 
 import requests
 
@@ -7,11 +8,48 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 
+# The whole source arrives in one large response, so a dropped connection or an
+# HTML error page loses the entire crawl. `requests` has no default timeout,
+# which turns a stall into an indefinite hang.
+REQUEST_TIMEOUT = 300
+MAX_RETRIES = 4
+RETRY_BACKOFF = 30
+
+
+def _get_with_retries(url, timeout=REQUEST_TIMEOUT, retries=MAX_RETRIES):
+    """GET `url`, retrying transport errors and any response that is not JSON."""
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.get(url, timeout=timeout)
+            response.raise_for_status()
+            # VEuPathDB answers with an HTML error page on a bad day; json()
+            # would raise far away from here with no indication of the cause.
+            content_type = response.headers.get("Content-Type", "")
+            if "json" not in content_type.lower():
+                raise ValueError(f"expected JSON, got Content-Type {content_type!r}")
+            return response
+        except (requests.exceptions.RequestException, ValueError) as error:
+            last_error = error
+            # A 4xx means the request itself is wrong (VEuPathDB 400s an unknown
+            # attribute), so retrying it just delays the real error.
+            status = getattr(getattr(error, "response", None), "status_code", None)
+            if status is not None and 400 <= status < 500:
+                break
+            if attempt < retries:
+                wait = RETRY_BACKOFF * attempt
+                logger.warning(
+                    "Attempt %d/%d failed for VEuPathDB: %s - retrying in %ds", attempt, retries, error, wait
+                )
+                time.sleep(wait)
+    raise last_error
+
+
 def record_generator():
     # API call that returns a list of all available data records
-    api_command = 'https://veupathdb.org/veupathdb/service/record-types/dataset/searches/AllDatasets/reports/standard?reportConfig={"attributes":["primary_key","organism_prefix","project_id","eupath_release","newcategory","summary","contact","wdk_weight","version","institution","build_number_introduced","pmids_download","release_policy","short_attribution","type","genecount"],"tables":["Publications","Contacts","GenomeHistory","DatasetHistory","Version","References","HyperLinks","GeneTypeCounts","TranscriptTypeCounts"],"attributeFormat":"text"}'
+    api_command = 'https://veupathdb.org/veupathdb/service/record-types/dataset/searches/AllDatasets/reports/standard?reportConfig={"attributes":["primary_key","organism_prefix","eupath_release","newcategory","summary","contact","wdk_weight","version","institution","build_number_introduced","pmids_download","release_policy","short_attribution","type","genecount"],"tables":["Publications","Contacts","GenomeHistory","DatasetHistory","Version","References","HyperLinks","GeneTypeCounts","TranscriptTypeCounts"],"attributeFormat":"text"}'
     # send and retrieve request call
-    request = requests.get(api_command)
+    request = _get_with_retries(api_command)
     json_records = request.json()
     logging.info("[INFO] processing %s records...." % len(json_records["records"]))
     # paginate through records
@@ -48,8 +86,12 @@ def record_generator():
 
         # attributes
         _record_dict["description"] = _record_dict["attributes"].pop("summary")
-        _record_dict["measurementTechnique"] = {"name": _record_dict["attributes"].pop("type")}
-        _record_dict["sdPublisher"] = {"name": _record_dict["attributes"].pop("project_id")}
+        _record_dict["measurementTechnique"] = {"@type": "DefinedTerm", "name": _record_dict["attributes"].pop("type")}
+        # `project_id` named the component site (PlasmoDB, ToxoDB, ...). Those
+        # merged into UniDB and the attribute was retired, so this is only set
+        # if VEuPathDB ever brings it back rather than inventing a publisher.
+        if project_id := _record_dict["attributes"].pop("project_id", None):
+            _record_dict["sdPublisher"] = {"@type": "DataCatalog", "name": project_id}
         _record_dict["creditText"] = _record_dict["attributes"].pop("short_attribution")
 
         if _record_dict["attributes"]["release_policy"]:
@@ -57,7 +99,11 @@ def record_generator():
 
         # tablexs.Contacts
         _record_dict["author"] = [
-            {"name": _dict.pop("contact_name"), "affiliation": {"name": str(_dict.pop("affiliation"))}}
+            {
+                "@type": "Person",
+                "name": _dict.pop("contact_name"),
+                "affiliation": {"@type": "Organization", "name": str(_dict.pop("affiliation"))},
+            }
             for _dict in _record_dict["tables"]["Contacts"]
         ]
 
@@ -101,12 +147,15 @@ def record_generator():
                 logging.debug("[INFO] BAD DATE FROM _record_dict['tables']['Version']: %s" % published_dates)
 
         if _record_dict["tables"]["Version"]:
-            _record_dict["species"] = [{"name": hit["organism"]} for hit in _record_dict["tables"]["Version"]]
+            _record_dict["species"] = [
+                {"@type": "DefinedTerm", "name": hit["organism"]} for hit in _record_dict["tables"]["Version"]
+            ]
 
         # tables.HyperLinks
         if _record_dict["tables"]["HyperLinks"]:
             _record_dict["distribution"] = [
-                {"name": hit["text"], "url": hit["url"]} for hit in _record_dict["tables"]["HyperLinks"]
+                {"@type": "DataDownload", "name": hit["text"], "url": hit["url"]}
+                for hit in _record_dict["tables"]["HyperLinks"]
             ]
 
         # table.GeneTypeCounts
@@ -114,7 +163,7 @@ def record_generator():
         # gene_counts = [hit["gene_count"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         gene_refs = [hit["gene_type"] for hit in _record_dict["tables"]["GeneTypeCounts"]]
         if gene_refs:
-            _record_dict["variableMeasured"] = {"name": gene_refs[0]}
+            _record_dict["variableMeasured"] = {"@type": "DefinedTerm", "name": gene_refs[0]}
 
         # set conditionsOfAccess and isAccessibleForFree
         _record_dict["conditionsOfAccess"] = "Closed"

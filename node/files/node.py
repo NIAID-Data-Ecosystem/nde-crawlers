@@ -1,5 +1,6 @@
 import datetime
 import logging
+import time
 
 import dateutil.parser
 import requests
@@ -10,6 +11,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 from sample import add_aggregate_element, get_samples, insert_value, parse_sample
+
+# Every NODE endpoint answers 200 with {"msg", "code", "data"}, including for an
+# unknown project (data is just empty). A transient backend error still answers
+# 200 but drops "data" entirely, which the session's Retry cannot see because
+# the status is fine. Left unguarded that raised KeyError partway through and
+# discarded a multi-hour crawl, so it is retried like any transport failure.
+API_TIMEOUT = 120
+API_RETRIES = 4
+API_BACKOFF = 15
 
 
 def make_session_with_retries(total=3, backoff_factor=1, status_forcelist=(429,500,502,503,504), allow_post=True, pool_maxsize=10):
@@ -35,6 +45,31 @@ def make_session_with_retries(total=3, backoff_factor=1, status_forcelist=(429,5
     return session
 
 
+def api_data(session, url, json_payload=None, params=None):
+    """Call a NODE endpoint and return its `data` envelope, retrying error responses."""
+    last_error = None
+    for attempt in range(1, API_RETRIES + 1):
+        try:
+            if json_payload is not None:
+                response = session.post(url, json=json_payload, timeout=API_TIMEOUT)
+            else:
+                response = session.get(url, params=params, timeout=API_TIMEOUT)
+            response.raise_for_status()
+            body = response.json()
+            if not isinstance(body, dict) or body.get("data") is None:
+                raise ValueError(f"no 'data' in response: {str(body)[:200]}")
+            return body["data"]
+        except (requests.exceptions.RequestException, ValueError) as error:
+            last_error = error
+            if attempt < API_RETRIES:
+                wait = API_BACKOFF * attempt
+                logger.warning(
+                    "Attempt %d/%d failed for %s: %s - retrying in %ds", attempt, API_RETRIES, url, error, wait
+                )
+                time.sleep(wait)
+    raise last_error
+
+
 def get_ids(session):
     url = "https://www.biosino.org/node/api/app/browse/search"
     page_num = 1
@@ -50,18 +85,14 @@ def get_ids(session):
       ]
     }
 
-    response = session.post(url, json=payload)
-    response.raise_for_status()  # will raise an HTTPError if the HTTP request returned an unsuccessful status code
-    response = response.json()
-    pages = response["data"]["pageInfo"]["totalPages"]
+    data = api_data(session, url, json_payload=payload)
+    pages = data["pageInfo"]["totalPages"]
     logger.info(f"Total pages to crawl: {pages + 1}")
     for page in range(1, pages + 1):
         logger.info(f"Crawling page {page} of {pages}")
         payload["pageNum"] = page
-        response = session.post(url, json=payload)
-        response.raise_for_status()
-        response = response.json()
-        for project in response["data"]["pageInfo"]["content"]:
+        data = api_data(session, url, json_payload=payload)
+        for project in data["pageInfo"]["content"]:
             yield project["id"]
 
 def get_data_list(session, project_id):
@@ -76,19 +107,15 @@ def get_data_list(session, project_id):
         "pageSize": 100,
     }
 
-    response = session.post(url, json=payload)
-    response.raise_for_status()  # will raise an HTTPError if the HTTP request returned an unsuccessful status code
-    response = response.json()
-
-    pages = response["data"]["total"] // 100 + (1 if response["data"]["total"] % 100 > 0 else 0)
+    data = api_data(session, url, json_payload=payload)
+    total = data["total"]
+    pages = total // 100 + (1 if total % 100 > 0 else 0)
     for page in range(1, pages + 1):
         payload["pageNum"] = page
         logger.info(f"Crawling data ids for project {project_id}, page {page} of {pages}")
-        response = session.post(url, json=payload)
-        response.raise_for_status()
-        response = response.json()
-        for data in response["data"]["list"]:
-            yield data
+        page_data = api_data(session, url, json_payload=payload)
+        for entry in page_data["list"]:
+            yield entry
 
 def parse():
     with make_session_with_retries() as session:
@@ -96,10 +123,10 @@ def parse():
         for project_id in get_ids(session):
             logger.info(f"Processing project ID: {project_id}")
             count += 1
-            general_info = session.get(f"https://www.biosino.org/node/api/app/project/getGeneralInfo/{project_id}").json()
-            general_info = general_info["data"]
-            author_info = session.get(f"https://www.biosino.org/node/api/app/project/getAuthorInfo/{project_id}").json()
-            author_info = author_info["data"]
+            general_info = api_data(
+                session, f"https://www.biosino.org/node/api/app/project/getGeneralInfo/{project_id}"
+            )
+            author_info = api_data(session, f"https://www.biosino.org/node/api/app/project/getAuthorInfo/{project_id}")
             _id = general_info["projectNo"]
             url = f"https://www.biosino.org/node/project/detail/{_id}"
             output = {
@@ -164,16 +191,19 @@ def parse():
             if family_name := author_info.get("lastName"):
                 insert_value(author, "familyName", family_name)
             if name := author_info.get("orgName"):
-                insert_value(author, "affiliation", {"name": name})
+                insert_value(author, "affiliation", {"@type": "Organization", "name": name})
             if author:
+                author["@type"] = "Person"
                 insert_value(output, "author", author)
 
-            table_info = session.get(f"https://www.biosino.org/node/api/app/project/getExpAndSampleTable/{project_id}").json()
+            table_info = api_data(
+                session, f"https://www.biosino.org/node/api/app/project/getExpAndSampleTable/{project_id}"
+            )
             s = {
                 "@type": "SampleCollection",
                 "itemListElement": [],
                 "aggregateElement": {},
-                "numberOfItems": {"value": 0, "unitText": "sample"},
+                "numberOfItems": {"@type": "QuantitativeValue", "value": 0, "unitText": "sample"},
             }
             for sample in get_samples(session, table_info, project_id):
                 parsed_sample = parse_sample(sample)
@@ -202,8 +232,8 @@ def parse():
             if s.get("itemListElement"):
                 output["sample"] = s
 
-            if table_info.get("data") and table_info["data"].get("expTables"):
-                for exp_table in table_info["data"]["expTables"]:
+            if table_info.get("expTables"):
+                for exp_table in table_info["expTables"]:
                     data_type = exp_table["type"]
 
                     def get_experiment_page(page):
@@ -258,17 +288,18 @@ def parse():
                                 if family_name := submitter.get("lastName"):
                                     insert_value(author, "familyName", family_name)
                                 if name := submitter.get("orgName"):
-                                    insert_value(author, "affiliation", {"name": name})
+                                    insert_value(author, "affiliation", {"@type": "Organization", "name": name})
                                 if author:
+                                    author["@type"] = "Person"
                                     insert_value(output, "author", author)
 
                             if attributes := exp.get("attributes"):
                                 if name := attributes.get("library_selection"):
-                                    insert_value(output, "measurementTechnique", {"name": name})
+                                    insert_value(output, "measurementTechnique", {"@type": "DefinedTerm", "name": name})
                                 if name := attributes.get("library_strategy"):
-                                    insert_value(output, "measurementTechnique", {"name": name})
+                                    insert_value(output, "measurementTechnique", {"@type": "DefinedTerm", "name": name})
                                 if name := attributes.get("platform"):
-                                    insert_value(output, "measurementTechnique", {"name": name})
+                                    insert_value(output, "measurementTechnique", {"@type": "DefinedTerm", "name": name})
 
             if date_created := output.get("dateCreated"):
                 if not isinstance(date_created, list):

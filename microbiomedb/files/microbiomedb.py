@@ -87,7 +87,7 @@ def parse():
             output["description"] = "\n".join(output_description)
 
         # set up contributor field
-        contributor = {}
+        contributor = {"@type": "Person"}
         if contributor_aff := record["attributes"].get("institution"):
             contributor["affiliation"] = contributor_aff
 
@@ -121,11 +121,11 @@ def parse():
         if authors := record["tables"].get("Contacts"):
             a_list = []
             for author in authors:
-                a = {}
+                a = {"@type": "Person"}
                 if name := author.get("contact_name"):
                     a["name"] = name
                 if affiliation := author.get("affiliation"):
-                    a["affiliation"] = {"name": affiliation}
+                    a["affiliation"] = {"@type": "Organization", "name": affiliation}
                 if a:
                     a_list.append(a)
             if a_list:
@@ -135,7 +135,7 @@ def parse():
         if distributions := record["tables"].get("DownloadVersion"):
             d_list = []
             for distribution in distributions:
-                d = {}
+                d = {"@type": "DataDownload"}
                 if date := distribution.get("release_date"):
                     date = datetime.datetime.strptime(date, "%Y-%b-%d").date().isoformat()
                     d["datePublished"] = date
@@ -162,7 +162,7 @@ def parse():
             # isRelatedTo
             irt_list = []
             for ad in ads:
-                ipo = {}
+                ipo = {"@type": "CreativeWork"}
                 if name := ad.get("project"):
                     ipo["name"] = name
                 if alternate_name := ad.get("webapp_name"):
@@ -173,14 +173,14 @@ def parse():
                     ipo_list.append(ipo)
                     added_ipo.add(ipo_key)
 
-                irt = {}
+                irt = {"@type": "CreativeWork"}
                 if cite_url := ad.get("pubmed link"):
-                    irt["citation"] = {"url": cite_url}
+                    irt["citation"] = {"@type": "CreativeWork", "url": cite_url}
 
                 if (cite_pmid := ad.get("pmid")) and cite_url:
                     irt["citation"]["pmid"] = cite_pmid
                 elif cite_pmid := ad.get("pmid"):
-                    irt["citation"] = {"pmid": cite_pmid}
+                    irt["citation"] = {"@type": "ScholarlyArticle", "pmid": cite_pmid}
 
                 if url := ad.get("associated dataset"):
                     irt["url"] = url
@@ -200,7 +200,7 @@ def parse():
         # Should only be one url
         if links := record["tables"].get("HyperLinks"):
             link = links[0]
-            sd_publisher = {}
+            sd_publisher = {"@type": "DataCatalog"}
             if url := link.get("url"):
                 sd_publisher["url"] = url
             if dataset_id := link.get("dataset_id"):

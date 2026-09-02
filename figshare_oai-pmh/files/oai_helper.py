@@ -56,7 +56,7 @@ def oai_helper(last_updated=None):
         retries = Retry(
             total=60, backoff_factor=60, status_forcelist=[500, 502, 503, 504]
         )  # Retry every minute for 60 minutes
-        s.mount("http://", HTTPAdapter(max_retries=retries))
+        s.mount("https://", HTTPAdapter(max_retries=retries))
 
         now = datetime.now()
         response = s.get(url)
@@ -70,7 +70,7 @@ def oai_helper(last_updated=None):
         # Check if records exist
         try:
             records = response_dict["OAI-PMH"]["ListRecords"]["record"]
-        except KeyError:
+        except (KeyError, TypeError):
             logger.info("Could not find records in response")
             logger.info(response_dict)
             continue
@@ -99,7 +99,7 @@ def oai_helper(last_updated=None):
         logger.info("Time taken to request and store response: %s", end - now)
         try:
             resumptionToken = response_dict["OAI-PMH"]["ListRecords"]["resumptionToken"]["#text"]
-        except KeyError:
+        except (KeyError, TypeError):
             logger.info("Could not find resumptionToken in response")
             logger.info(response_dict)
             continue
@@ -120,7 +120,7 @@ def oai_helper(last_updated=None):
 
                 try:
                     records = response_dict["OAI-PMH"]["ListRecords"]["record"]
-                except KeyError:
+                except (KeyError, TypeError):
                     logger.info("Could not find records in response")
                     logger.info(response_dict)
                     logger.info("Checking if there is another page")
@@ -128,7 +128,7 @@ def oai_helper(last_updated=None):
                         resumptionToken = response_dict["OAI-PMH"]["ListRecords"]["resumptionToken"]["#text"]
                         logger.info("Found resumptionToken: %s", resumptionToken)
                         continue
-                    except KeyError:
+                    except (KeyError, TypeError):
                         logger.info("Could not find resumptionToken in response")
                         logger.info(response_dict)
                         break
@@ -174,7 +174,7 @@ def oai_helper(last_updated=None):
                     logger.info("Getting resumptionToken...")
                     resumptionToken = response_dict["OAI-PMH"]["ListRecords"]["resumptionToken"]["#text"]
                     logger.info("Found resumptionToken: %s", resumptionToken)
-                except KeyError:
+                except (KeyError, TypeError):
                     logger.info("Could not find resumptionToken in response")
                     logger.info(response_dict)
                     break

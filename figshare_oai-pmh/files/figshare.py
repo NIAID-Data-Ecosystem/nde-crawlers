@@ -98,7 +98,7 @@ class Figshare(NDEDatabase):
             if creators := metadata.get("creator"):
                 creator_list = []
                 for creator in creators:
-                    creator_list.append({"name": creator})
+                    creator_list.append({"@type": "Person", "name": creator})
                 output["author"] = creator_list
 
             # TODO
@@ -122,17 +122,17 @@ class Figshare(NDEDatabase):
 
             # sdPublsher = publisher > instituion/department > figshare
             if publisher := metadata.get("publisher"):
-                output["sdPublisher"] = {"name": publisher[0]}
+                output["sdPublisher"] = {"@type": "DataCatalog", "name": publisher[0]}
             if publisher == None:
                 institution = metadata.get("institution")
                 department = metadata.get("department")
                 if institution and department:
                     if institution[0] != department[0]:
-                        output["sdPublisher"] = {"name": institution[0] + "/" + department[0]}
+                        output["sdPublisher"] = {"@type": "DataCatalog", "name": institution[0] + "/" + department[0]}
                     else:
-                        output["sdPublisher"] = {"name": institution[0]}
+                        output["sdPublisher"] = {"@type": "DataCatalog", "name": institution[0]}
                 else:
-                    output["sdPublisher"] = {"name": "figshare"}
+                    output["sdPublisher"] = {"@type": "DataCatalog", "name": "figshare"}
 
             if type := metadata.get("type"):
                 if len(type) > 1:
@@ -143,17 +143,19 @@ class Figshare(NDEDatabase):
                             output["@type"] = type[0]
                     else:
                         output["@type"] = "Collection"
-                        output["hasPart"] = {"@type": type}
+                        # The figshare type is not an NDE @type; keep it in
+                        # additionalType so hasPart stays a valid CreativeWork.
+                        output["hasPart"] = [{"@type": "CreativeWork", "additionalType": t} for t in type]
                 else:
                     output["@type"] = "Collection"
-                    output["hasPart"] = {"@type": type[0]}
+                    output["hasPart"] = {"@type": "CreativeWork", "additionalType": type[0]}
 
             if identifier := metadata.get("identifier"):
                 for el in identifier:
                     # [None, 'https://ndownloader.figshare.com/files/35101450']
                     if el is not None:
                         if "ndownloader" in el:
-                            output["distribution"] = {"url": el}
+                            output["distribution"] = {"@type": "DataDownload", "url": el}
                         elif "10." in el:
                             output["doi"] = el
             if identifier == None:
@@ -161,7 +163,7 @@ class Figshare(NDEDatabase):
                     output["doi"] = reference[0]
 
             if language := metadata.get("language"):
-                output["language"] = language[0]
+                output["inLanguage"] = {"name": language[0]}
             if relation := metadata.get("relation"):
                 url = relation[0]
                 output["url"] = url
@@ -195,13 +197,13 @@ class Figshare(NDEDatabase):
                     grant_val = grantnumbers[idx] if idx < len(grantnumbers) else None
                     grant_val = grant_val.strip() if isinstance(grant_val, str) else grant_val
 
-                    funding_record = {}
+                    funding_record = {"@type": "MonetaryGrant"}
 
                     # Case 1: valid grantnumber provided
                     if grant_val and not is_invalid(grant_val):
                         # sponsor is treated as funder name
                         if sponsor_val:
-                            funding_record["funder"] = {"name": sponsor_val}
+                            funding_record["funder"] = {"@type": "Organization", "name": sponsor_val}
                         funding_record["identifier"] = grant_val
                     else:
                         # grantnumber invalid. Check if sponsor itself contains a grant id.
@@ -220,11 +222,11 @@ class Figshare(NDEDatabase):
                             funding_record["identifier"] = identifier_match
                             # If sponsor has more than just the identifier, store original as name
                             if sponsor_val and sponsor_val != identifier_match:
-                                funding_record["funder"] = {"name": sponsor_val}
+                                funding_record["funder"] = {"@type": "Organization", "name": sponsor_val}
                         else:
                             # No identifier; just treat sponsor as funder name
                             if sponsor_val:
-                                funding_record["funder"] = {"name": sponsor_val}
+                                funding_record["funder"] = {"@type": "Organization", "name": sponsor_val}
 
                     # Only append if we captured something meaningful
                     if funding_record:

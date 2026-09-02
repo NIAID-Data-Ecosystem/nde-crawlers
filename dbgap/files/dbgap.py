@@ -81,7 +81,7 @@ def _extract_unit(text: str) -> str | None:
 
 def parse_age_string(age_text: str) -> dict:
     """
-    Parse age text into {"minVal": int?, "maxVal": int?, "unitText": "year|month|day"?}
+    Parse age text into {"minValue": int?, "maxValue": int?, "unitText": "year|month|day"?}
     """
     s = age_text.strip().lower()
     result: dict = {}
@@ -92,8 +92,8 @@ def parse_age_string(age_text: str) -> dict:
         s,
     )
     if m:
-        result["minVal"] = int(m.group(1))
-        result["maxVal"] = int(m.group(2))
+        result["minValue"] = int(m.group(1))
+        result["maxValue"] = int(m.group(2))
         unit = _normalize_unit(m.group(3)) or _extract_unit(s)
         if unit:
             result["unitText"] = unit
@@ -112,7 +112,7 @@ def parse_age_string(age_text: str) -> dict:
     if m:
         num = m.group(1) or m.group(3)
         unit = m.group(2) or m.group(4)
-        result["maxVal"] = int(num)
+        result["maxValue"] = int(num)
         unit = _normalize_unit(unit) or _extract_unit(s)
         if unit:
             result["unitText"] = unit
@@ -132,7 +132,7 @@ def parse_age_string(age_text: str) -> dict:
     if m:
         num = m.group(1) or m.group(3)
         unit = m.group(2) or m.group(4) or m.group(5)
-        result["minVal"] = int(num)
+        result["minValue"] = int(num)
         unit = _normalize_unit(unit) or _extract_unit(s)
         if unit:
             result["unitText"] = unit
@@ -265,7 +265,7 @@ def parse():
 
             if identifier := data.get("@parentstudy"):
                 if identifier != accession:
-                    output["isPartOf"] = {"identifier": identifier}
+                    output["isPartOf"] = {"@type": "CreativeWork", "identifier": identifier}
 
             if date_created := data.get("@createdate"):
                 output["dateCreated"] = date_created
@@ -336,11 +336,15 @@ def parse():
                             author = {
                                 "@type": "Person",
                                 "name": name,
-                                "affiliation": {"name": institution},
+                                "affiliation": {"@type": "Organization", "name": institution},
                             }
                             authors.append(author)
                         elif title.casefold() in funding_list:
-                            funding = {"identifier": name, "funder": {"name": institution}}
+                            funding = {
+                                "@type": "MonetaryGrant",
+                                "identifier": name,
+                                "funder": {"@type": "Organization", "name": institution},
+                            }
                             fundings.append(funding)
                         elif any(
                             term in title.casefold()
@@ -355,13 +359,17 @@ def parse():
                                 "founding",
                             ]
                         ):
-                            funding = {"identifier": name, "funder": {"name": institution}}
+                            funding = {
+                                "@type": "MonetaryGrant",
+                                "identifier": name,
+                                "funder": {"@type": "Organization", "name": institution},
+                            }
                             fundings.append(funding)
                         else:
                             author = {
                                 "@type": ("Organization" if title.casefold() in organization_list else "Person"),
                                 "name": name,
-                                "affiliation": {"name": institution},
+                                "affiliation": {"@type": "Organization", "name": institution},
                             }
                             authors.append(author)
 
@@ -417,6 +425,7 @@ def parse():
                     diseases = [diseases]
                 for disease in diseases:
                     health_condition = {
+                        "@type": "DefinedTerm",
                         "inDefinedTermSet": disease.get("@vocab_source"),
                         "name": disease.get("@vocab_term"),
                     }
@@ -447,6 +456,7 @@ def parse():
                     study_types = [study_types]
                 for study_type in study_types:
                     measurement_technique = {
+                        "@type": "DefinedTerm",
                         "name": study_type,
                     }
                     measurement_techniques.append(measurement_technique)
@@ -460,7 +470,7 @@ def parse():
                 for study_url in study_urls:
                     name = study_url.get("@name")
                     url = study_url.get("@url")
-                    is_related_to.append({"name": name, "url": url})
+                    is_related_to.append({"@type": "CreativeWork", "name": name, "url": url})
 
             if is_related_to:
                 output["isRelatedTo"] = is_related_to

@@ -284,8 +284,8 @@ class Dataverse(NDEDatabase):
             if not isinstance(grant, dict):
                 continue
 
-            entry = {}
-            funder = {}
+            entry = {"@type": "MonetaryGrant"}
+            funder = {"@type": "Organization"}
 
             agency = grant.get("grantNumberAgency", {})
             if isinstance(agency, dict):
@@ -839,14 +839,25 @@ class Dataverse(NDEDatabase):
                         if dataset.get("creator"):
                             dataset["author"] = dataset.pop("creator")
                             for data_dict in dataset["author"]:
+                                # Harvested JSON-LD does not always type its
+                                # creators; the string-list path below settles on
+                                # Person, so match it rather than leave it bare.
+                                data_dict.setdefault("@type", "Person")
                                 if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
-                                    data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
+                                    data_dict["affiliation"] = {
+                                        "@type": "Organization",
+                                        "name": data_dict.pop("affiliation"),
+                                    }
                         else:
                             dataset.pop("creator", None)
                     else:
                         for data_dict in dataset["author"]:
+                            data_dict.setdefault("@type", "Person")
                             if "affiliation" in data_dict.keys() and isinstance(data_dict["affiliation"], str):
-                                data_dict["affiliation"] = {"name": data_dict.pop("affiliation")}
+                                data_dict["affiliation"] = {
+                                    "@type": "Organization",
+                                    "name": data_dict.pop("affiliation"),
+                                }
                         dataset.pop("creator", None)
 
                     if dataset.get("publisher") is None:
@@ -860,7 +871,7 @@ class Dataverse(NDEDatabase):
                         dataset.pop("provider", None)
 
                     if "funder" in dataset and "funding" not in dataset:
-                        dataset["funding"] = {"funder": dataset.pop("funder")}
+                        dataset["funding"] = {"@type": "MonetaryGrant", "funder": dataset.pop("funder")}
                         for data_dict in dataset["funding"]["funder"]:
                             data_dict.pop("@type", None)
                     elif "funder" in dataset and "funding" in dataset:
@@ -894,7 +905,9 @@ class Dataverse(NDEDatabase):
                         ]
 
                     if "spatialCoverage" in dataset:
-                        dataset["spatialCoverage"] = [{"name": dataset.pop("spatialCoverage")[0]}]
+                        dataset["spatialCoverage"] = [
+                            {"@type": "AdministrativeArea", "name": dataset.pop("spatialCoverage")[0]}
+                        ]
 
                     if "distribution" in dataset:
                         for data_dict in dataset["distribution"]:
@@ -913,7 +926,7 @@ class Dataverse(NDEDatabase):
                         cit_list = []
                         for data_dict in dataset["citation"]:
                             if "text" in data_dict:
-                                cit_list.append({"citation": data_dict["text"]})
+                                cit_list.append({"@type": "CreativeWork", "citation": data_dict["text"]})
                         if cit_list:
                             dataset["citation"] = cit_list
                         else:
@@ -970,6 +983,7 @@ class Dataverse(NDEDatabase):
 
                     if "identifier_of_dataverse" in dataset:
                         dataset["sdPublisher"] = {
+                            "@type": "DataCatalog",
                             "identifier": dataset.pop("identifier_of_dataverse"),
                             "name": dataset.pop("name_of_dataverse"),
                         }
@@ -980,9 +994,9 @@ class Dataverse(NDEDatabase):
                         elif len(dataset["subjects"]) > 1:
                             dataset["topicCategory"] = []
                             for subject in dataset["subjects"]:
-                                dataset["topicCategory"].append({"description": subject})
+                                dataset["topicCategory"].append({"@type": "DefinedTerm", "description": subject})
                         else:
-                            dataset["topicCategory"] = {"description": dataset["subjects"][0]}
+                            dataset["topicCategory"] = {"@type": "DefinedTerm", "description": dataset["subjects"][0]}
                         dataset.pop("subjects")
 
                     if "keywords" in dataset:
@@ -1001,13 +1015,13 @@ class Dataverse(NDEDatabase):
                         elif len(dataset["authors"]) > 1:
                             dataset["author"] = []
                             for author in dataset["authors"]:
-                                author_dict = {"name": author}
+                                author_dict = {"@type": "Person", "name": author}
                                 dataset["author"].append(author_dict)
                             dataset.pop("authors")
                         else:
-                            dataset["author"] = {"name": dataset.pop("authors")[0]}
+                            dataset["author"] = {"@type": "Person", "name": dataset.pop("authors")[0]}
                     if "citation" in dataset:
-                        dataset["citation"] = {"citation": dataset.pop("citation")}
+                        dataset["citation"] = {"@type": "CreativeWork", "citation": dataset.pop("citation")}
 
                     keys_to_remove = [
                         "dataSources",

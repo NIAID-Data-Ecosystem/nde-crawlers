@@ -26,14 +26,16 @@ class TychoItemProcessorPipeline:
 
     # map isAbout.value to variableMeasured field
     variable_measured_map = {
-        "case": {"name": "Case", "url": "http://purl.obolibrary.org/obo/NCIT_C49152"},
+        "case": {"@type": "DefinedTerm", "name": "Case", "url": "http://purl.obolibrary.org/obo/NCIT_C49152"},
         "cumulative incidence": {
+            "@type": "DefinedTerm",
             "name": "Cumulative incidence",
             "url": "http://purl.obolibrary.org/obo/EPO_0000061",
         },
-        "death": {"name": "Dead", "url": "http://purl.obolibrary.org/obo/NCIT_C28554"},
-        "dead": {"name": "Dead", "url": "http://purl.obolibrary.org/obo/NCIT_C28554"},
+        "death": {"@type": "DefinedTerm", "name": "Dead", "url": "http://purl.obolibrary.org/obo/NCIT_C28554"},
+        "dead": {"@type": "DefinedTerm", "name": "Dead", "url": "http://purl.obolibrary.org/obo/NCIT_C28554"},
         "complete recovery": {
+            "@type": "DefinedTerm",
             "name": "Complete recovery",
             "url": "http://purl.obolibrary.org/obo/NCIT_C82467",
         },
@@ -89,6 +91,7 @@ class TychoItemProcessorPipeline:
                 "classification": "host",
                 "commonName": "Human",
                 "curatedBy": {
+                    "@type": "SoftwareApplication",
                     "name": "Project Tycho",
                     "url": "https://www.tycho.pitt.edu/",
                     "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -175,7 +178,7 @@ class TychoItemProcessorPipeline:
             if not isinstance(metadata["spatialCoverage"], list):
                 s_coverage = [metadata["spatialCoverage"]]
             for coverage in s_coverage:
-                c = {"@type": "Country"}
+                c = {"@type": "AdministrativeArea"}
                 if coverage.get("identifier") and coverage["identifier"].get("identifier"):
                     c["identifier"] = coverage["identifier"]["identifier"]
                 if coverage.get("name"):
@@ -185,9 +188,10 @@ class TychoItemProcessorPipeline:
             output["spatialCoverage"] = s_cov
 
         vm = {
+            "@type": "DefinedTerm",
             "name": "Count of disease cases",
             "url": "http://purl.obolibrary.org/obo/APOLLO_SV_00000497",
-            "curatedBy": {"name": "NIAID Data Ecosystem"},
+            "curatedBy": {"@type": "SoftwareApplication", "name": "NIAID Data Ecosystem"},
             "isCurated": True,
         }
         vm_set = set()
@@ -197,7 +201,7 @@ class TychoItemProcessorPipeline:
             if not isinstance(metadata["types"], list):
                 types = [metadata["types"]]
             for t in types:
-                vm = {}
+                vm = {"@type": "DefinedTerm"}
                 mt = {"@type": "DefinedTerm"}
                 if information := t.get("information"):
                     if name := information.get("value"):
@@ -236,7 +240,7 @@ class TychoItemProcessorPipeline:
                 distributions = [metadata["distributions"]]
 
             for distribution in distributions:
-                d = {}
+                d = {"@type": "DataDownload"}
                 if distribution.get("access") and distribution["access"].get("landingPage"):
                     d["contentUrl"] = distribution["access"]["landingPage"]
                 if formats := distribution.get("formats"):
@@ -256,7 +260,7 @@ class TychoItemProcessorPipeline:
             if not isinstance(metadata["creators"], list):
                 authors = [metadata["creators"]]
             for author in authors:
-                a = {}
+                a = {"@type": "Person"}
                 if author_id := author.get("identifier"):
                     if author_id.get("identifierSource") and author_id["identifierSource"] == "URL":
                         a["@type"] = "Organization"
@@ -280,7 +284,7 @@ class TychoItemProcessorPipeline:
                     if not isinstance(author["affiliation"], list):
                         affiliations = [author["affiliation"]]
                     for affiliation in affiliations:
-                        aff = {}
+                        aff = {"@type": "Organization"}
                         if affiliation.get("name"):
                             aff["name"] = affiliation["name"]
                         if affiliation.get("identifier") and affiliation["identifier"].get("identifier"):
@@ -301,7 +305,7 @@ class TychoItemProcessorPipeline:
                     if not isinstance(acknowledge["funders"], list):
                         funders = [acknowledge["funders"]]
                     for funder in funders:
-                        f = {}
+                        f = {"@type": "Organization"}
                         if funder.get("identifier") and funder["identifier"].get("identifier"):
                             f["identifier"] = funder["identifier"]["identifier"]
                         if funder.get("name"):
@@ -312,13 +316,13 @@ class TychoItemProcessorPipeline:
                             f_list.append(f)
 
             if f_list:
-                output["funding"] = {"funder": f_list}
+                output["funding"] = {"@type": "MonetaryGrant", "funder": f_list}
 
                 if authors := acknowledge.get("awardees"):
                     if not isinstance(acknowledge["awardees"], list):
                         authors = [acknowledge["awardees"]]
                     for author in authors:
-                        a = {}
+                        a = {"@type": "Person"}
                         if name := author.get("fullName"):
                             a["name"] = name
                         if first_name := author.get("firstName"):
@@ -330,7 +334,7 @@ class TychoItemProcessorPipeline:
                                 affiliations = [author["affiliations"]]
                             aff_list = []
                             for affiliation in affiliations:
-                                aff = {}
+                                aff = {"@type": "Organization"}
                                 if affiliation.get("identifier") and affiliation["identifier"].get("identifier"):
                                     aff["url"] = affiliation["identifier"]["identifier"]
                                 if aff:
@@ -347,7 +351,7 @@ class TychoItemProcessorPipeline:
             if not isinstance(metadata["relatedIdentifiers"], list):
                 relatedIdentifiers = [metadata["relatedIdentifiers"]]
             for relatedIdentifier in relatedIdentifiers:
-                is_based_on = {}
+                is_based_on = {"@type": "CreativeWork"}
                 if relatedIdentifier.get("relationType") and relatedIdentifier["relationType"].get("value"):
                     if relatedIdentifier["relationType"]["value"].casefold() == "isderivedfrom":
                         if relatedIdentifier.get("identifier") and relatedIdentifier["identifier"].get("identifier"):
@@ -385,6 +389,7 @@ class TychoItemProcessorPipeline:
                             "url": f"{url.replace('http://purl.bioontology.org/ontology/NCBITAXON/', 'https://www.uniprot.org/taxonomy/')}",
                             "isCurated": True,
                             "curatedBy": {
+                                "@type": "SoftwareApplication",
                                 "name": "Project Tycho",
                                 "url": "https://www.tycho.pitt.edu/",
                                 "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -397,6 +402,7 @@ class TychoItemProcessorPipeline:
                         hc = {}
                         if hc_info := d.get(url):
                             hc = {
+                                "@type": "DefinedTerm",
                                 "originalName": hc_info[0],
                                 "name": hc_info[1],
                                 "url": hc_info[2],
@@ -404,6 +410,7 @@ class TychoItemProcessorPipeline:
                             }
                         else:
                             hc = {
+                                "@type": "DefinedTerm",
                                 "name": a["name"],
                                 "url": url,
                             }

@@ -20,6 +20,40 @@ logger = logging.getLogger("nde-logger")
 
 total = 0
 
+# The crawl walks ~8700 studies one request at a time, so a single bad response
+# used to discard the whole run -- it died at record 8300 of 8685 on a body that
+# was not JSON. `requests` also has no default timeout, which turns a stall into
+# an indefinite hang.
+REQUEST_TIMEOUT = 120
+MAX_RETRIES = 4
+RETRY_BACKOFF = 15
+# A handful of dud studies is upstream noise; more means something systemic.
+MAX_FAILED_STUDIES = 50
+
+
+def get_json(session, url, timeout=REQUEST_TIMEOUT, retries=MAX_RETRIES):
+    """GET `url` and decode it, retrying transport errors and non-JSON bodies."""
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            response = session.get(url, timeout=timeout)
+            response.raise_for_status()
+            return response.json()
+        except (requests.exceptions.RequestException, ValueError) as error:
+            last_error = error
+            # A 4xx is about this study, not the connection; retrying it just
+            # stalls the crawl behind a record that will never load.
+            status = getattr(getattr(error, "response", None), "status_code", None)
+            if status is not None and 400 <= status < 500:
+                break
+            if attempt < retries:
+                wait = RETRY_BACKOFF * attempt
+                logger.warning(
+                    "Attempt %d/%d failed for %s: %s - retrying in %ds", attempt, retries, url, error, wait
+                )
+                time.sleep(wait)
+    raise last_error
+
 
 def get_ids():
     # we need to create a session to keep-alive the http connection
@@ -33,7 +67,7 @@ def get_ids():
             "api-key=C8237BFE70B9CC48489DC7DD84D88379&search=*&$orderby=nctId%20desc,%20sponsorProtocolId%20desc&$count=true"
         )
 
-        request = session.get(url).json()
+        request = get_json(session, url)
         global total
         total = request.get("@odata.count")
 
@@ -44,7 +78,7 @@ def get_ids():
             # end = time.time()
             # print('Time: {}. url: {}'.format(end - start, url))
 
-            request = session.get(url).json()
+            request = get_json(session, url)
             time.sleep(0.5)
             for value in request["value"]:
                 yield value["id"]
@@ -60,9 +94,22 @@ def parse():
     with requests.Session() as session:
         logger.info("Getting IDS...")
         count = 0
+        failed = []
         for _id in ids:
             url = "https://prod-api.vivli.org/api/studies/" + _id + "/metadata"
-            request = session.get(url).json()
+            try:
+                request = get_json(session, url)
+            except (requests.exceptions.RequestException, ValueError) as error:
+                # One unreadable study out of thousands must not discard the
+                # crawl, but a systemic break still has to fail loudly.
+                logger.error("Skipping study %s: %s", _id, error)
+                failed.append(_id)
+                if len(failed) > MAX_FAILED_STUDIES:
+                    raise RuntimeError(
+                        f"Stopping after {len(failed)} unreadable studies (limit {MAX_FAILED_STUDIES}); "
+                        f"most recent: {failed[-10:]}"
+                    ) from error
+                continue
             # pprint(request)
             time.sleep(0.5)
 
@@ -92,7 +139,7 @@ def parse():
             if sdPublishers := request["registryInfo"]:
                 output["sdPublisher"] = []
                 for sdPublisher in sdPublishers:
-                    sd = {}
+                    sd = {"@type": "DataCatalog"}
                     if name := sdPublisher["registryName"]:
                         sd["name"] = name
                     if identifier := sdPublisher["registryId"]:
@@ -112,7 +159,7 @@ def parse():
             #         output["author"] = au
 
             if author := request.get("orgName"):
-                output["author"] = {"name": author}
+                output["author"] = {"@type": "Organization", "name": author}
 
             if name := request.get("studyTitle"):
                 output["name"] = "Dataset from " + name
@@ -120,13 +167,13 @@ def parse():
             funding = []
             if funder := request.get("leadSponsor"):
                 if name := funder.get("agency"):
-                    funder_name = {"funder": {"name": name}}
+                    funder_name = {"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": name}}
                     funding.append(funder_name)
 
             if funders := request.get("collaborators"):
                 for funder in funders:
                     if name := funder.get("agency"):
-                        funder_name = {"funder": {"name": name}}
+                        funder_name = {"@type": "MonetaryGrant", "funder": {"@type": "Organization", "name": name}}
                         funding.append(funder_name)
             if funding:
                 output["funding"] = funding
@@ -148,7 +195,7 @@ def parse():
             if locations := request.get("locationsOfStudySites"):
                 output["spatialCoverage"] = []
                 for location in locations:
-                    sc = {}
+                    sc = {"@type": "AdministrativeArea"}
                     if name := location.get("name"):
                         sc["name"] = name
                     if identifier := location.get("code"):
@@ -189,7 +236,7 @@ def parse():
             if conditions := request.get("conditions"):
                 output["healthCondition"] = []
                 for condition in conditions:
-                    output["healthCondition"].append({"name": condition})
+                    output["healthCondition"].append({"@type": "DefinedTerm", "name": condition})
 
             sample = {
                 "@type": "Sample",
@@ -238,12 +285,12 @@ def parse():
 
             vm = []
             if variable_measured := request.get("outcomeNames"):
-                vm.append({"name": variable_measured})
+                vm.append({"@type": "DefinedTerm", "name": variable_measured})
 
             if outcomes := request.get("outcomes"):
                 for outcome in outcomes:
                     if variable_measured := outcome.get("specificMeasurement"):
-                        vm.append({"name": variable_measured})
+                        vm.append({"@type": "DefinedTerm", "name": variable_measured})
 
             if vm:
                 output["variableMeasured"] = vm

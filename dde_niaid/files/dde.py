@@ -16,11 +16,11 @@ def process_affiliations(author):
     if isinstance(affiliations, list):
         for affiliation in affiliations:
             if isinstance(affiliation, str):
-                aff_list.append({"name": affiliation})
+                aff_list.append({"@type": "Organization", "name": affiliation})
         if aff_list:
             author["affiliation"] = aff_list
     elif isinstance(affiliations, str):
-        author["affiliation"] = {"name": affiliations}
+        author["affiliation"] = {"@type": "Organization", "name": affiliations}
 
 
 def process_authors(authors):
@@ -75,9 +75,11 @@ def query_bioportal(iri):
         return iri, False
 
     lookup = {
+        "@type": "DefinedTerm",
         "name": pref_label,
         "url": iri,
         "curatedBy": {
+            "@type": "SoftwareApplication",
             "name": "Data Discovery Engine",
             "url": "https://discovery.biothings.io/",
             "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -127,10 +129,12 @@ def query_ols(iri):
             return query_bioportal(iri)
 
         lookup = {
+            "@type": "DefinedTerm",
             "name": request["_embedded"]["terms"][0]["label"],
             "url": iri,
             "inDefinedTermSet": request["_embedded"]["terms"][0]["ontology_prefix"],
             "curatedBy": {
+                "@type": "SoftwareApplication",
                 "name": "Data Discovery Engine",
                 "url": "https://discovery.biothings.io/",
                 "dateModified": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -159,10 +163,10 @@ def format_query_ols(iri):
         if is_url:
             return info
         else:
-            return {"name": info}
+            return {"@type": "DefinedTerm", "name": info}
     except Exception as e:
         logger.error("Unexpected error in format_query_ols for %s: %s. Returning simple name format.", iri, e)
-        return {"name": str(iri)}
+        return {"@type": "DefinedTerm", "name": str(iri)}
 
 
 def format_query_ky(iri):
@@ -251,11 +255,14 @@ def parse():
                     {
                         "@type": "ResearchProject",
                         "name": "NIAID ReVAMPP Network",
-                        "abstract": "Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness (ReVAMPP) is a research network dedicated to developing vaccines and monoclonal antibodies for pandemic preparedness by studying \"prototype pathogens\" from virus families with high pandemic potential. The network conducts fundamental research to accelerate the development of countermeasures against emerging viral threats.",
+                        "abstract": 'Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness (ReVAMPP) is a research network dedicated to developing vaccines and monoclonal antibodies for pandemic preparedness by studying "prototype pathogens" from virus families with high pandemic potential. The network conducts fundamental research to accelerate the development of countermeasures against emerging viral threats.',
                         "description": "Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness (ReVAMPP) is a pandemic preparedness research network designed to conduct fundamental basic through IND-enabling translational research on representative viruses, or \u201cprototype pathogens,\u201d within specific virus families. The virus families that the ReVAMPP network study contain many viruses that have caused human disease for millennia\u2014many of which have a high likelihood of becoming pandemic threats in the future. For more information, visit the NIAID program page: https://www.niaid.nih.gov/research/vaccines-and-monoclonal-antibodies-pandemic-preparedness-revampp",
-                        "alternateName": ["ReVAMPP", "Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness"],
+                        "alternateName": [
+                            "ReVAMPP",
+                            "Research and Development of Vaccines and Monoclonal Antibodies for Pandemic Preparedness",
+                        ],
                         "url": "https://revampp.org/",
-                        "parentOrganization": ["NIAID"]
+                        "parentOrganization": ["NIAID"],
                     }
                 ]
 
@@ -456,10 +463,16 @@ def parse():
 
             # fix topicCategory
             if topicCategory := hit.pop("topicCategory", None):
-                if isinstance(topicCategory, str):
-                    hit["topicCategory"] = {"url": topicCategory}
-                elif isinstance(topicCategory, dict):
-                    hit["topicCategory"] = topicCategory
+                if not isinstance(topicCategory, list):
+                    topicCategory = [topicCategory]
+                topic_categories = []
+                for topic in topicCategory:
+                    if isinstance(topic, str):
+                        topic_categories.append({"@type": "DefinedTerm", "url": topic})
+                    elif isinstance(topic, dict):
+                        topic_categories.append({"@type": "DefinedTerm", **topic})
+                if topic_categories:
+                    hit["topicCategory"] = topic_categories
 
             # remove unnecessary values
             hit.pop("_meta", None)

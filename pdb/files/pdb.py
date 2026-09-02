@@ -163,7 +163,7 @@ def getPDBmetadata(id, organisms):
             },
             "license": "https://creativecommons.org/publicdomain/zero/1.0/",
             "conditionsOfAccess": "Open",
-            "usageInfo": {"url": "https://www.rcsb.org/pages/policies"},
+            "usageInfo": {"@type": "CreativeWork", "url": "https://www.rcsb.org/pages/policies"},
             "topicCategory": [
                 {
                 "@type": "DefinedTerm",
@@ -197,7 +197,7 @@ def getPDBmetadata(id, organisms):
             species = []
             for organism in organisms:
                 if organism:
-                    species.append({"name": organism})
+                    species.append({"@type": "DefinedTerm", "name": organism})
             if species:
                 md["species"] = species
 

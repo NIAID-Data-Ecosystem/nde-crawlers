@@ -85,28 +85,28 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
 
     out["description"] = " ".join(filter(None, [desc, inc_exc])).strip()
     authors = []
-    lab = {}
+    lab = {"@type": "Person"}
     if core.get("study", {}).get("lab_name"):
         lab["name"] = core["study"]["lab_name"]
     addr = core.get("study", {}).get("lab_address")
     if addr:
-        lab.setdefault("affiliation", {})["name"] = addr
+        lab.setdefault("affiliation", {"@type": "Organization"})["name"] = addr
     if lab:
         authors.append(lab)
     sub = core.get("study", {}).get("submitted_by")
     if sub:
         split = [s.strip() for s in re.split(r"[;,]", sub) if s.strip()]
         if split:
-            sb = {"name": split[0]}
+            sb = {"@type": "Person", "name": split[0]}
             if len(split) > 1:
-                sb.setdefault("affiliation", {})["name"] = split[1]
+                sb.setdefault("affiliation", {"@type": "Organization"})["name"] = split[1]
             authors.append(sb)
     coll = core.get("study", {}).get("collected_by", [])
     if isinstance(coll, str):
         coll = [coll]
     if coll:
         for name in coll:
-            authors.append({"name": name})
+            authors.append({"@type": "Person", "name": name})
     if authors:
         out["author"] = authors
     grants = core.get("study", {}).get("grants") or []
@@ -131,7 +131,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
     if pmids:
         out["pmids"] = ", ".join(pmids)
     if dois:
-        out.setdefault("citation", {})["doi"] = dois if len(dois) > 1 else dois[0]
+        out.setdefault("citation", {"@type": "ScholarlyArticle"})["doi"] = dois if len(dois) > 1 else dois[0]
     if core.get("study", {}).get("adc_publish_date"):
         out["datePublished"] = core["study"]["adc_publish_date"].split("T")[0]
     if core.get("study", {}).get("adc_update_date"):
@@ -141,9 +141,9 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
     dists = []
     di = core.get("download_info", {})
     if di.get("archive_file"):
-        dists.append({"contentUrl": di["archive_file"]})
+        dists.append({"@type": "DataDownload", "contentUrl": di["archive_file"]})
     if di.get("download_url"):
-        dists.append({"contentUrl": di["download_url"]})
+        dists.append({"@type": "DataDownload", "contentUrl": di["download_url"]})
     if di.get("file_size"):
 
         for d in dists:
@@ -157,7 +157,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
 
     for dp in data_processings:
         for fn in dp.get("data_processing_files", []):
-            out.setdefault("distribution", []).append({"contentUrl": fn})
+            out.setdefault("distribution", []).append({"@type": "DataDownload", "contentUrl": fn})
     grants = core.get("study", {}).get("grants") or []
 
     if isinstance(grants, str):
@@ -197,7 +197,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
         unique_key = species_name or species_id
         if unique_key and unique_key not in species_seen:
             species_seen.add(unique_key)
-            sp = {}
+            sp = {"@type": "DefinedTerm"}
             if species_id:
                 sp["identifier"] = species_id
             if species_name:
@@ -214,7 +214,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
 
         if disease_name and disease_name not in health_conditions_seen:
             health_conditions_seen.add(disease_name)
-            disease_entry = {"name": disease_name}
+            disease_entry = {"@type": "DefinedTerm", "name": disease_name}
             if disease_data.get("id"):
                 disease_entry["identifier"] = disease_data["id"]
             out.setdefault("healthCondition", []).append(disease_entry)
@@ -223,12 +223,14 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
     out["isAccessibleForFree"] = True
     out["variableMeasured"] = [
         {
+            "@type": "DefinedTerm",
             "identifier": "C20971",
             "name": "V(D)J Recombination",
             "inDefinedTermSet": "NCIT",
             "url": "https://evsexplore.semantics.cancer.gov/evsexplore/concept/ncit/C20971",
         },
         {
+            "@type": "DefinedTerm",
             "identifier": "data_2977",
             "name": "Nucleic acid sequence",
             "inDefinedTermSet": "EDAM",
@@ -265,7 +267,7 @@ def build_dataset_record(sid, metadata, core, samples, subjects):
             unique_key = species_name or species_id
             if unique_key and unique_key not in species_seen:
                 species_seen.add(unique_key)
-                species_entry = {}
+                species_entry = {"@type": "DefinedTerm"}
                 if species_id:
                     species_entry["identifier"] = species_id
                 if species_name:
@@ -506,7 +508,7 @@ def build_dataset_sample_objects(sample_collections):
         for bucket in aggregated.values():
             if bucket["minValue"] is None and bucket["maxValue"] is None:
                 continue
-            entry = {"name": bucket["name"]}
+            entry = {"@type": "QuantitativeValue", "name": bucket["name"]}
             if bucket["minValue"] is not None:
                 entry["minValue"] = bucket["minValue"]
             if bucket["maxValue"] is not None:
@@ -548,7 +550,7 @@ def build_dataset_sample_objects(sample_collections):
         for bucket in aggregated.values():
             if bucket["minValue"] is None and bucket["maxValue"] is None:
                 continue
-            entry = {}
+            entry = {"@type": "QuantitativeValue"}
             if bucket.get("unitCode"):
                 entry["unitCode"] = bucket["unitCode"]
             if bucket.get("unitText"):
@@ -561,7 +563,7 @@ def build_dataset_sample_objects(sample_collections):
         return results
 
     def _set_number_of_items(value):
-        sample_collection["numberOfItems"] = {"value": value, "unitText": "sample"}
+        sample_collection["numberOfItems"] = {"@type": "QuantitativeValue", "value": value, "unitText": "sample"}
 
     def _merge_list_field(field, values, target):
         if _is_empty(values):

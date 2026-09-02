@@ -31,10 +31,11 @@ from scores import (
 )
 
 from .common import as_list
+from .schema_types import is_type_or_descendant
 
 AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
 
-CONDITIONS_OF_ACCESS = ["Open", "Restricted", "Closed", "Embargoed", "Varied"]
+CONDITIONS_OF_ACCESS = ["Closed", "Open", "Restricted", "Embargoed", "Varied", "Unknown"]
 CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
 
 # Placeholders sources emit as terms; nothing upstream strips them.
@@ -271,9 +272,14 @@ def check_schema(doc: Dict) -> Dict:
 
     def assert_types(field, expected_types, value=none):
         entries = as_list(doc.get(field) if value is none else value)
+        invalid_types = [
+            item.get("@type") if isinstance(item, dict) else f"non-object {type(item).__name__}"
+            for item in entries
+            if not isinstance(item, dict) or not is_type_or_descendant(item.get("@type"), expected_types)
+        ]
         check(
-            all(isinstance(item, dict) and item.get("@type") in expected_types for item in entries),
-            f"{field} needs to be of type {' or '.join(expected_types)}",
+            not invalid_types,
+            f"{field} needs to be of type {' or '.join(expected_types)}, or a descendant; got {invalid_types}",
         )
 
     person_or_organization = ("Organization", "Person")
@@ -291,8 +297,14 @@ def check_schema(doc: Dict) -> Dict:
         assert_types(field, ("DefinedTerm",))
 
     citation_fields = ("citation", "citedBy", "isBasedOn", "isBasisFor", "isPartOf", "hasPart")
+    # `Sample` is allowed because NDE_schema.jsonld lets a Sample link to another
+    # Sample through any of these fields.
+    work_types = ("ScholarlyArticle", "CreativeWork", "Sample")
+    # A DataCollection additionally records how it was generated (an `Action`) and
+    # which catalog it was drawn from (a `ResourceCatalog`) in `isBasedOn`.
+    is_based_on_types = work_types + ("Action", "ResourceCatalog")
     for field in citation_fields:
-        assert_types(field, ("ScholarlyArticle", "CreativeWork"))
+        assert_types(field, is_based_on_types if field == "isBasedOn" else work_types)
 
     assert_types("funding", ("MonetaryGrant",))
     assert_types("sourceOrganization", ("Organization", "ResearchProject"))
@@ -356,14 +368,12 @@ def check_schema(doc: Dict) -> Dict:
             invalid = [status for status in cws if status not in CREATIVE_WORK_STATUS]
             check(
                 not invalid,
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
-                % (cws, CREATIVE_WORK_STATUS),
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS),
             )
         else:
             check(
                 cws in CREATIVE_WORK_STATUS,
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
-                % (cws, CREATIVE_WORK_STATUS),
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS),
             )
 
     if issues:

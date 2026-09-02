@@ -10,36 +10,99 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nde-logger")
 
 technique_lookup = {
-    "Pathway Figure OCR": {"name": "image processing", "url": "http://purl.obolibrary.org/obo/NCIT_C17606"},
-    "https://www.biorxiv.org/content/10.1101/2020.05.29.124503v1.full": {
+    "Pathway Figure OCR": {
+        "@type": "DefinedTerm",
         "name": "image processing",
         "url": "http://purl.obolibrary.org/obo/NCIT_C17606",
     },
-    "OSLOM clustering": {"name": "cluster analysis", "url": "http://purl.obolibrary.org/obo/NCIT_C63918"},
-    "Database Integration": {"name": "data integration and warehousing", "url": "http://edamontology.org/topic_3366"},
-    "Literature Curation": {"name": "curation", "url": "http://purl.obolibrary.org/obo/NCIT_C48292"},
-    "NCMine (Tadaka &  Kinoshita, 2016)": {
+    "https://www.biorxiv.org/content/10.1101/2020.05.29.124503v1.full": {
+        "@type": "DefinedTerm",
+        "name": "image processing",
+        "url": "http://purl.obolibrary.org/obo/NCIT_C17606",
+    },
+    "OSLOM clustering": {
+        "@type": "DefinedTerm",
         "name": "cluster analysis",
         "url": "http://purl.obolibrary.org/obo/NCIT_C63918",
     },
-    "STRING": {"name": "string", "url": "http://purl.obolibrary.org/obo/MI_1014"},
-    "coexpression analysis": {"name": "coexpression", "url": "http://purl.obolibrary.org/obo/MI_2231"},
-    "FAIRE-seq": {"name": "FAIRE-seq", "url": "http://www.ebi.ac.uk/efo/EFO_0004428"},
-    "STRING v11 (Szklarczyk et al 2019)": {"name": "string", "url": "http://purl.obolibrary.org/obo/MI_1014"},
-    "NCMine": {"name": "cluster analysis", "url": "http://purl.obolibrary.org/obo/NCIT_C63918"},
-    "R": {"name": "computational method", "url": "http://www.bioassayontology.org/bao#BAO_0002094"},
-    "RCy3": {"name": "computational method", "url": "http://www.bioassayontology.org/bao#BAO_0002094"},
-    "SPARQL": {"name": "computational method", "url": "http://www.bioassayontology.org/bao#BAO_0002094"},
-    "Cytoscape": {"name": "cytoscape network analysis", "url": "http://www.bioassayontology.org/bao#BAO_0002362"},
-    "computationally inferred PPI interactome using an interolog and domain-based approach": {
+    "Database Integration": {
+        "@type": "DefinedTerm",
+        "name": "data integration and warehousing",
+        "url": "http://edamontology.org/topic_3366",
+    },
+    "Literature Curation": {
+        "@type": "DefinedTerm",
+        "name": "curation",
+        "url": "http://purl.obolibrary.org/obo/NCIT_C48292",
+    },
+    "NCMine (Tadaka &  Kinoshita, 2016)": {
+        "@type": "DefinedTerm",
+        "name": "cluster analysis",
+        "url": "http://purl.obolibrary.org/obo/NCIT_C63918",
+    },
+    "STRING": {"@type": "DefinedTerm", "name": "string", "url": "http://purl.obolibrary.org/obo/MI_1014"},
+    "coexpression analysis": {
+        "@type": "DefinedTerm",
+        "name": "coexpression",
+        "url": "http://purl.obolibrary.org/obo/MI_2231",
+    },
+    "FAIRE-seq": {"@type": "DefinedTerm", "name": "FAIRE-seq", "url": "http://www.ebi.ac.uk/efo/EFO_0004428"},
+    "STRING v11 (Szklarczyk et al 2019)": {
+        "@type": "DefinedTerm",
+        "name": "string",
+        "url": "http://purl.obolibrary.org/obo/MI_1014",
+    },
+    "NCMine": {"@type": "DefinedTerm", "name": "cluster analysis", "url": "http://purl.obolibrary.org/obo/NCIT_C63918"},
+    "R": {
+        "@type": "DefinedTerm",
         "name": "computational method",
         "url": "http://www.bioassayontology.org/bao#BAO_0002094",
     },
-    "CRISPR screen": {"name": "CRISPR/Cas9 method", "url": "http://www.bioassayontology.org/bao#BAO_0010249"},
-    "Bayesian network (SiGN-BN)": {"name": "Bayesian approach", "url": "http://purl.obolibrary.org/obo/NCIT_C142403"},
-    "Bayesian": {"name": "Bayesian approach", "url": "http://purl.obolibrary.org/obo/NCIT_C142403"},
-    "Cytoscape v3.9": {"name": "cytoscape network analysis", "url": "http://www.bioassayontology.org/bao#BAO_0002362"},
-    "CRISPR screening": {"name": "CRISPR/Cas9 method", "url": "http://www.bioassayontology.org/bao#BAO_0010249"},
+    "RCy3": {
+        "@type": "DefinedTerm",
+        "name": "computational method",
+        "url": "http://www.bioassayontology.org/bao#BAO_0002094",
+    },
+    "SPARQL": {
+        "@type": "DefinedTerm",
+        "name": "computational method",
+        "url": "http://www.bioassayontology.org/bao#BAO_0002094",
+    },
+    "Cytoscape": {
+        "@type": "DefinedTerm",
+        "name": "cytoscape network analysis",
+        "url": "http://www.bioassayontology.org/bao#BAO_0002362",
+    },
+    "computationally inferred PPI interactome using an interolog and domain-based approach": {
+        "@type": "DefinedTerm",
+        "name": "computational method",
+        "url": "http://www.bioassayontology.org/bao#BAO_0002094",
+    },
+    "CRISPR screen": {
+        "@type": "DefinedTerm",
+        "name": "CRISPR/Cas9 method",
+        "url": "http://www.bioassayontology.org/bao#BAO_0010249",
+    },
+    "Bayesian network (SiGN-BN)": {
+        "@type": "DefinedTerm",
+        "name": "Bayesian approach",
+        "url": "http://purl.obolibrary.org/obo/NCIT_C142403",
+    },
+    "Bayesian": {
+        "@type": "DefinedTerm",
+        "name": "Bayesian approach",
+        "url": "http://purl.obolibrary.org/obo/NCIT_C142403",
+    },
+    "Cytoscape v3.9": {
+        "@type": "DefinedTerm",
+        "name": "cytoscape network analysis",
+        "url": "http://www.bioassayontology.org/bao#BAO_0002362",
+    },
+    "CRISPR screening": {
+        "@type": "DefinedTerm",
+        "name": "CRISPR/Cas9 method",
+        "url": "http://www.bioassayontology.org/bao#BAO_0010249",
+    },
 }
 
 
@@ -236,7 +299,7 @@ def process_networks(networks, valid_network_ids):
                 if "human" in token.lower():
                     token = "human"
                 if token not in seen:
-                    species_list.append({"name": token})
+                    species_list.append({"@type": "DefinedTerm", "name": token})
                     seen.add(token)
 
         output = {
@@ -282,7 +345,7 @@ def process_networks(networks, valid_network_ids):
             if properties_visibility is False:
                 output["conditionsOfAccess"] = "Open"
 
-        distribution = {}
+        distribution = {"@type": "DataDownload"}
         if cx_file_size := get_value("cxFileSize"):
             distribution["contentSize"] = cx_file_size
         if cx_format := get_value("cxFormat"):
@@ -290,7 +353,7 @@ def process_networks(networks, valid_network_ids):
         if distribution:
             output["distribution"] = distribution
 
-        author = {}
+        author = {"@type": "Person"}
         if author_name := get_value("author", "rightsHolder", "owner", "bel:author", "Author"):
             author["name"] = author_name
         if author:
@@ -302,12 +365,12 @@ def process_networks(networks, valid_network_ids):
             for item in disease_text.split(","):
                 cleaned_name = item.strip()
                 if cleaned_name:
-                    health_condition_list.append({"name": cleaned_name})
+                    health_condition_list.append({"@type": "DefinedTerm", "name": cleaned_name})
         if properties_disease := get_value("diseases_id"):
             for disease_item in properties_disease:
                 cleaned_name = strip_html_tags(disease_item).strip()
                 if cleaned_name:
-                    health_condition_list.append({"name": cleaned_name})
+                    health_condition_list.append({"@type": "DefinedTerm", "name": cleaned_name})
         if health_condition_list:
             output["healthCondition"] = health_condition_list
 
@@ -325,15 +388,16 @@ def process_networks(networks, valid_network_ids):
                 output["pmids"] = pmids
             if extra_url:
                 output["citation"] = {
+                    "@type": "CreativeWork",
                     "url": extra_url,
                     "description": f"{output['name']} is found accessible at {extra_url}",
                 }
             elif desc:
-                output["citation"] = {"description": desc}
+                output["citation"] = {"@type": "CreativeWork", "description": desc}
 
         # Process other related fields (still added as isRelatedTo)
         is_related_to_list = []
-        properties_is_related_to = {}
+        properties_is_related_to = {"@type": "CreativeWork"}
         if figure_title := get_value("figureTitle"):
             properties_is_related_to["name"] = figure_title
         if figure_link := get_value("figureLink"):
@@ -341,7 +405,7 @@ def process_networks(networks, valid_network_ids):
         if properties_is_related_to:
             is_related_to_list.append(properties_is_related_to)
         if uri := get_value("uri"):
-            is_related_to_list.append({"url": uri})
+            is_related_to_list.append({"@type": "CreativeWork", "url": uri})
         if is_related_to_list:
             output["isRelatedTo"] = is_related_to_list
 
@@ -390,11 +454,11 @@ def process_networks(networks, valid_network_ids):
 
         sd_publisher_list = []
         if data_source := get_value("Data source"):
-            sd_publisher_list.append({"name": data_source})
+            sd_publisher_list.append({"@type": "DataCatalog", "name": data_source})
         if tcga_data_source := get_value("TCGA Data Source"):
-            sd_publisher_list.append({"name": tcga_data_source})
+            sd_publisher_list.append({"@type": "DataCatalog", "name": tcga_data_source})
         if properties_source := get_value("source"):
-            sd_publisher_list.append({"name": properties_source})
+            sd_publisher_list.append({"@type": "DataCatalog", "name": properties_source})
         if sd_publisher_list:
             output["sdPublisher"] = sd_publisher_list
 
@@ -402,7 +466,7 @@ def process_networks(networks, valid_network_ids):
             date_formatted = date.split(" ")[0]
             output["date"] = date_formatted
 
-        is_based_on_dict = {}
+        is_based_on_dict = {"@type": "CreativeWork"}
         if properties_data_source := get_value("dataSource"):
             is_based_on_dict["url"] = properties_data_source
         if properties_source := get_value("Source"):
@@ -419,7 +483,7 @@ def process_networks(networks, valid_network_ids):
             output["isBasedOn"] = is_based_on_dict
 
         if properties_treatment := get_value("Treatment"):
-            output["variableMeasured"] = {"name": properties_treatment}
+            output["variableMeasured"] = {"@type": "DefinedTerm", "name": properties_treatment}
 
         measurement_technique_list = []
         measurement_technique_identifiers = set()
@@ -439,6 +503,7 @@ def process_networks(networks, valid_network_ids):
         # Default topicCategory remains unchanged.
         output["topicCategory"] = [
             {
+                "@type": "DefinedTerm",
                 "url": "http://edamontology.org/topic_0602",
                 "identifier": "topic_0602",
                 "name": "Molecular interactions, pathways and networks",

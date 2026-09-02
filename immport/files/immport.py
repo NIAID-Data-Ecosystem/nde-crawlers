@@ -34,6 +34,20 @@ def get_ids():
     return ids
 
 
+def _type_terms(schema_json, field):
+    """Type an ontology term list ImmPort exports untyped, and its `curatedBy`."""
+    terms = schema_json.get(field)
+    if not terms:
+        return
+    for term in terms if isinstance(terms, list) else [terms]:
+        if not isinstance(term, dict):
+            continue
+        term.setdefault("@type", "DefinedTerm")
+        # "ImmPort Curation" is a curation effort by the repository, not a tool.
+        if isinstance(term.get("curatedBy"), dict):
+            term["curatedBy"].setdefault("@type", "Organization")
+
+
 def map_schema_json(schema_json):
     """Map the ImmPort JSON-LD export to the NDE schema.
 
@@ -52,7 +66,9 @@ def map_schema_json(schema_json):
     if author := schema_json.pop("creator", None):
         for data in author:
             if isinstance(data.get("affiliation"), str):
-                data["affiliation"] = {"name": data["affiliation"]}
+                data["affiliation"] = {"@type": "Organization", "name": data["affiliation"]}
+            # The upstream JSON-LD does not always type its creators.
+            data.setdefault("@type", "Person")
         schema_json["author"] = author
 
     # citation → citedBy
@@ -62,17 +78,21 @@ def map_schema_json(schema_json):
     # species: list of strings → list of {"name": ...}
     if species := schema_json.pop("species", None):
         if isinstance(species, list):
-            species_list = [{"name": s} for s in species]
+            species_list = [{"@type": "DefinedTerm", "name": s} for s in species]
             if species_list:
                 schema_json["species"] = species_list
         else:
-            schema_json["species"] = {"name": species}
+            schema_json["species"] = {"@type": "DefinedTerm", "name": species}
 
     # measurementTechnique: list of strings → list of {"name": ...}
     if measurement_techniques := schema_json.pop("measurementTechnique", None):
-        mt_list = [{"name": mt} for mt in measurement_techniques]
+        mt_list = [{"@type": "DefinedTerm", "name": mt} for mt in measurement_techniques]
         if mt_list:
             schema_json["measurementTechnique"] = mt_list
+
+    # healthCondition comes through from the JSON-LD export untouched, and
+    # ImmPort types neither the term nor the curation record on it.
+    _type_terms(schema_json, "healthCondition")
 
     # identifier: list of strings/dicts → list of strings (extract "value" if dict)
     if identifiers := schema_json.pop("identifier", None):
@@ -95,7 +115,7 @@ def map_protocol_json(protocol_json, immport_id):
     if protocols := protocol_json.get("protocols"):
         is_based_on_list = []
         for protocol in protocols:
-            is_based_on_dict = {}
+            is_based_on_dict = {"@type": "CreativeWork"}
             if description := protocol.get("description"):
                 is_based_on_dict["description"] = description
             if file_name := protocol.get("fileName"):

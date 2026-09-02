@@ -1024,6 +1024,7 @@ class NDESourceUploader(BaseSourceUploader):
                             },
                             "anatomicalStructure": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "identifier": {"type": "text", "copy_to": ["all"]},
                                     "name": {"type": "keyword", "copy_to": ["all"]},
                                     "url": {"type": "keyword"},
@@ -1031,6 +1032,7 @@ class NDESourceUploader(BaseSourceUploader):
                             },
                             "anatomicalSystem": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "identifier": {"type": "text", "copy_to": ["all"]},
                                     "name": {"type": "keyword", "copy_to": ["all"]},
                                     "url": {"type": "keyword"},
@@ -1038,28 +1040,24 @@ class NDESourceUploader(BaseSourceUploader):
                             },
                             "cellType": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "identifier": {"type": "text", "copy_to": ["all"]},
                                     "name": {"type": "keyword", "copy_to": ["all"]},
                                     "url": {"type": "keyword"},
                                 }
                             },
-                            "collectionMethod": {
-                                "properties": {
-                                    "identifier": {"type": "text", "copy_to": ["all"]},
-                                    "name": {"type": "keyword", "copy_to": ["all"]},
-                                    "url": {"type": "keyword"},
-                                }
-                            },
+                            "collectionMethod": {"type": "text"},
                             "dateCollected": {"type": "date"},
                             "dateProcessed": {"type": "date"},
                             "developmentalStage": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "maxValue": {"type": "double"},
                                     "minValue": {"type": "double"},
                                     "name": {"type": "text"},
                                     "unitCode": {"type": "keyword"},
                                     "unitText": {"type": "text"},
-                                    "value": {"type": "integer"},
+                                    "value": {"type": "double"},
                                 }
                             },
                             "experimentalPurpose": {"type": "text"},
@@ -1074,6 +1072,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "sampleAvailability": {"type": "boolean"},
                             "sampleQuantity": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "maxValue": {"type": "double"},
                                     "minValue": {"type": "double"},
                                     "name": {"type": "text"},
@@ -1093,6 +1092,7 @@ class NDESourceUploader(BaseSourceUploader):
                             },
                             "sampleType": {
                                 "properties": {
+                                    "@type": {"type": "keyword"},
                                     "name": {"type": "keyword", "copy_to": ["all"]},
                                     "url": {"type": "text", "copy_to": ["all"]},
                                 }
@@ -1134,6 +1134,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "anatomicalStructure": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "identifier": {"type": "text", "copy_to": ["all"]},
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "keyword"},
@@ -1141,6 +1142,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "anatomicalSystem": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "identifier": {"type": "text", "copy_to": ["all"]},
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "keyword"},
@@ -1148,28 +1150,24 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "cellType": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "identifier": {"type": "text", "copy_to": ["all"]},
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "keyword"},
                         }
                     },
-                    "collectionMethod": {
-                        "properties": {
-                            "identifier": {"type": "text", "copy_to": ["all"]},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "keyword"},
-                        }
-                    },
+                    "collectionMethod": {"type": "text"},
                     "dateCollected": {"type": "date"},
                     "dateProcessed": {"type": "date"},
                     "developmentalStage": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "maxValue": {"type": "double"},
                             "minValue": {"type": "double"},
                             "name": {"type": "text"},
                             "unitCode": {"type": "keyword"},
                             "unitText": {"type": "text"},
-                            "value": {"type": "integer"},
+                            "value": {"type": "double"},
                         }
                     },
                     "experimentalPurpose": {"type": "text"},
@@ -1184,6 +1182,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "sampleAvailability": {"type": "boolean"},
                     "sampleQuantity": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "maxValue": {"type": "double"},
                             "minValue": {"type": "double"},
                             "name": {"type": "text"},
@@ -1203,6 +1202,7 @@ class NDESourceUploader(BaseSourceUploader):
                     },
                     "sampleType": {
                         "properties": {
+                            "@type": {"type": "keyword"},
                             "name": {"type": "keyword", "copy_to": ["all"]},
                             "url": {"type": "text", "copy_to": ["all"]},
                         }
@@ -1490,6 +1490,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "@type": {"type": "keyword", "copy_to": ["all"]},
             "additionalPhenotype": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "keyword"},
@@ -1512,6 +1513,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "alternateName": {"type": "text", "copy_to": ["all"]},
             "anatomicalStructure": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "keyword"},
@@ -1559,6 +1561,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "cellType": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "keyword"},
@@ -1663,12 +1666,13 @@ class NDESourceSampleUploader(BaseSourceUploader):
             },
             "developmentalStage": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
                     "name": {"type": "text"},
                     "unitCode": {"type": "keyword"},
                     "unitText": {"type": "text"},
-                    "value": {"type": "integer"},
+                    "value": {"type": "double"},
                 }
             },
             "distribution": {
@@ -2098,6 +2102,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "sampleProcess": {"type": "text", "copy_to": ["all"]},
             "sampleQuantity": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "maxValue": {"type": "double"},
                     "minValue": {"type": "double"},
                     "name": {"type": "text"},
@@ -2233,6 +2238,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
             "url": {"type": "text", "copy_to": ["all"]},
             "variableMeasured": {
                 "properties": {
+                    "@type": {"type": "keyword"},
                     "alternateName": {
                         "type": "keyword",
                         "normalizer": "keyword_lowercase_normalizer",

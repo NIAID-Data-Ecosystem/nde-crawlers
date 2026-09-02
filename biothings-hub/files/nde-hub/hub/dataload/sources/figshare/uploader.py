@@ -85,7 +85,7 @@ def create_defined_term(label, iri):
         "@type": "DefinedTerm",
         "name": label,
         "identifier": iri,
-        "curatedBy": {"name": "Text2Term-assisted manual mapping"},
+        "curatedBy": {"@type": "SoftwareApplication", "name": "Text2Term-assisted manual mapping"},
         "isCurated": True,
     }
 

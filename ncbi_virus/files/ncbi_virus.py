@@ -359,6 +359,19 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
+def _type_person(person: dict[str, Any]) -> dict[str, Any]:
+    """Type a submitter and the affiliation hanging off it."""
+    person.setdefault("@type", "Person")
+    affiliation = person.get("affiliation")
+    if isinstance(affiliation, dict):
+        affiliation.setdefault("@type", "Organization")
+    elif isinstance(affiliation, list):
+        for org in affiliation:
+            if isinstance(org, dict):
+                org.setdefault("@type", "Organization")
+    return person
+
+
 def _affiliation_from_value(value: Any) -> Optional[dict[str, Any]]:
     text = _clean_string(value)
     if not text:
@@ -366,8 +379,8 @@ def _affiliation_from_value(value: Any) -> Optional[dict[str, Any]]:
     parts = [_clean_string(part) for part in text.split(",")]
     names = [part for part in parts if part]
     if len(names) > 1:
-        return {"name": names}
-    return {"name": text}
+        return {"@type": "Organization", "name": names}
+    return {"@type": "Organization", "name": text}
 
 
 def _add_counter(counter: Counter[str], value: Any, limit: int = MAX_AGGREGATE_VALUES) -> None:
@@ -449,7 +462,8 @@ def _taxonomy_hint(tax_id: Any = None, name: Any = None) -> Optional[dict[str, A
     if not clean_name and not clean_id:
         return None
 
-    term: dict[str, Any] = {}
+    # Feeds species / infectiousAgent, both validated as DefinedTerm.
+    term: dict[str, Any] = {"@type": "DefinedTerm"}
     if clean_name:
         term["name"] = clean_name
     if clean_id:
@@ -1113,6 +1127,16 @@ class TaxonAccumulator:
             setattr(accumulator, field, data.get(field) or {})
         for field in cls.LIST_FIELDS:
             setattr(accumulator, field, data.get(field) or [])
+        # The accumulator cache outlives the code that wrote it, so rows stored
+        # before `_affiliation_from_value` and `_taxonomy_hint` typed their
+        # output replay untyped and fail schema validation on upload. `hosts`
+        # becomes `species`, `authors` becomes `author`.
+        for person in accumulator.authors.values():
+            if isinstance(person, dict):
+                _type_person(person)
+        for host in accumulator.hosts.values():
+            if isinstance(host, dict):
+                host.setdefault("@type", "DefinedTerm")
         return accumulator
 
     def add(self, report: dict[str, Any]) -> None:
@@ -1222,12 +1246,13 @@ class TaxonAccumulator:
                 self.sample_examples.append(sample)
 
     def _infectious_agent(self) -> dict[str, Any]:
-        return _taxonomy_hint(self.tax_id, self.virus_name) or {"identifier": self.tax_id}
+        return _taxonomy_hint(self.tax_id, self.virus_name) or {"@type": "DefinedTerm", "identifier": self.tax_id}
 
     def _sample_collection(self) -> Optional[dict[str, Any]]:
         sample: dict[str, Any] = {
             "@type": "SampleCollection",
             "numberOfItems": {
+                "@type": "QuantitativeValue",
                 "value": self.record_count,
                 "unitText": "samples",
             },
@@ -1389,6 +1414,7 @@ class TaxonAccumulator:
             "measurementTechnique": copy.deepcopy(MEASUREMENT_TECHNIQUE),
             "variableMeasured": copy.deepcopy(collection["variable_measured"]),
             "collectionSize": {
+                "@type": "QuantitativeValue",
                 "minValue": record_count,
                 "unitText": collection["unit_text"],
             },
@@ -1485,7 +1511,7 @@ class TaxonAccumulator:
         }
 
         source_obj = {
-            "@type": "nde:ResourceCatalog",
+            "@type": "ResourceCatalog",
             "name": SOURCE_NAME,
             "url": SOURCE_CATALOG_RECORD,
         }

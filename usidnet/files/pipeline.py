@@ -397,7 +397,7 @@ def _add_health_condition(output, name):
     name = _normalize(name)
     if not name:
         return
-    insert_value(output, "healthCondition", {"name": name})
+    insert_value(output, "healthCondition", {"@type": "DefinedTerm", "name": name})
 
 
 def _add_associated_genotype(output, value):
@@ -449,9 +449,9 @@ class USIDNETItemProcessorPipeline:
 
         # ---- sampleType (prefer the descriptive "Product", fall back to "ProductTypeID")
         if product := _normalize(item.get("Product")):
-            insert_value(output, "sampleType", {"name": product})
+            insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": product})
         elif product_type_id := _normalize(item.get("ProductTypeID")):
-            insert_value(output, "sampleType", {"name": product_type_id})
+            insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": product_type_id})
 
         # ---- sdPublisher
         if sdpublisher := _normalize(item.get("Repository")):
@@ -467,11 +467,11 @@ class USIDNETItemProcessorPipeline:
         species_name = _normalize(item.get("Species"))
         common_name = _normalize(item.get("Common Name"))
         if species_name:
-            sp = {"name": species_name}
+            sp = {"@type": "DefinedTerm", "name": species_name}
             if common_name:
                 sp["commonName"] = common_name
             insert_value(output, "species", sp)
-            ia = {"name": species_name}
+            ia = {"@type": "DefinedTerm", "name": species_name}
             if common_name:
                 ia["commonName"] = common_name
             insert_value(output, "infectiousAgent", ia)
@@ -489,7 +489,7 @@ class USIDNETItemProcessorPipeline:
         for field in _ANATOMY_FIELDS:
             val = _normalize(item.get(field))
             if val and not _is_excluded(val):
-                insert_value(output, "anatomicalStructure", {"name": val})
+                insert_value(output, "anatomicalStructure", {"@type": "DefinedTerm", "name": val})
 
         # ---- developmentalStage
         # "Age at Sampling" takes precedence; otherwise "Age".
@@ -521,7 +521,7 @@ class USIDNETItemProcessorPipeline:
         for field in _DEFINED_TERM_PHENOTYPE_FIELDS:
             val = _normalize(item.get(field))
             if val and not _is_excluded(val):
-                insert_value(output, "associatedPhenotype", {"name": val})
+                insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": val})
 
         # ---- associatedPhenotype: Handedness ("Right" -> "Right Handedness")
         for field in ("Handedness", "Handedness:"):
@@ -530,12 +530,16 @@ class USIDNETItemProcessorPipeline:
                 # Spider may concatenate multiple radio options into a single string
                 # ("Right   Left  Ambidextrous"). Best-effort: pick the first token.
                 first = val.split()[0]
-                insert_value(output, "associatedPhenotype", {"name": f"{first} Handedness"})
+                insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": f"{first} Handedness"})
 
         # ---- associatedPhenotype: Unilateral Babinski sign  ("{property}{value}")
         ubs = _normalize(item.get("Unilateral Babinski sign"))
         if ubs and not _is_excluded(ubs):
-            insert_value(output, "associatedPhenotype", {"name": f"Unilateral Babinski sign {ubs}"})
+            insert_value(
+                output,
+                "associatedPhenotype",
+                {"@type": "DefinedTerm", "name": f"Unilateral Babinski sign {ubs}"},
+            )
 
         # ---- sampleQuantity ("Quantity": "10 µg")
         quantity = _normalize(item.get("Quantity"))
@@ -562,7 +566,7 @@ class USIDNETItemProcessorPipeline:
         for field in ("Cell Type", "Cell Subtype"):
             val = _normalize(item.get(field))
             if val and not _is_excluded(val):
-                insert_value(output, "cellType", {"name": val})
+                insert_value(output, "cellType", {"@type": "DefinedTerm", "name": val})
 
         # ---- sampleProcess
         ipsc = _normalize(item.get("Induced Pluripotent Stem Cell"))
@@ -605,7 +609,7 @@ class USIDNETItemProcessorPipeline:
         geo = _normalize(item.get("GEO"))
         geo_id = _extract_geo_id(geo)
         if geo_id:
-            insert_value(output, "isBasisFor", {"identifier": geo_id})
+            insert_value(output, "isBasisFor", {"@type": "CreativeWork", "identifier": geo_id})
 
         # ---- healthCondition (long-tail of disease columns from the mapping)
         for hc_field in _HEALTH_CONDITION_FIELDS:

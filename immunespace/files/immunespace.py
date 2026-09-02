@@ -21,6 +21,8 @@ SIGNATURE_RESULTS_URL = "https://immunespace.org/query/results/?ordering_tab=sig
 STUDY_URL_TEMPLATE = "https://immunespace.org/query/study/{study_id}"
 REQUEST_TIMEOUT = 120
 
+# Columns a signature record cannot be built without. Losing one of these is a
+# real schema break and should stop the crawl.
 SIGNATURE_FIELDS = {
     "Signature ID",
     "Response Component Type",
@@ -31,7 +33,57 @@ SIGNATURE_FIELDS = {
     "Arm ID",
     "Study ID",
     "Disease",
-    "Disease Stage",
+}
+
+# Columns that only enrich a record. Everything downstream already guards for
+# their absence, so ImmuneSpace dropping one should be logged, not fatal --
+# "Disease Stage" disappeared in August 2026 and took the whole crawl with it.
+OPTIONAL_SIGNATURE_FIELDS = {"Disease Stage", "Material"}
+
+# "Material" arrived in the same August 2026 change that removed "Disease Stage",
+# and mixes three different kinds of value in one column: what the sample was
+# taken from, what the subjects were given, and what infected them. Each belongs
+# somewhere different, so they are sorted rather than dumped into one field.
+# Anything unrecognized falls through to keywords, where it is at least
+# searchable, and is logged so a new value gets noticed.
+MATERIAL_CELL_TYPES = {
+    "macrophage",
+    "peripheral blood mononuclear cell",
+    "t cell",
+}
+
+MATERIAL_ANATOMICAL_STRUCTURES = {
+    "bone marrow",
+    "colon",
+    "ileum",
+    "inguinal lymph node",
+    "jejunum",
+    "lung",
+    "lymph node",
+    "mesenteric lymph node",
+    "pulmonary lymph node",
+    "spleen",
+    "thymus",
+    "tonsil",
+}
+
+MATERIAL_SAMPLE_TYPES = {
+    "blood",
+    "blood plasma",
+    "blood serum",
+}
+
+MATERIAL_INFECTIOUS_AGENTS = {
+    "chikungunya virus",
+    "dengue virus",
+    "mycobacterium tuberculosis variant bovis bcg",
+    "sars-cov-2",
+}
+
+# Carries no information about the specimen, so it is dropped rather than indexed.
+MATERIAL_PLACEHOLDERS = {
+    "pool of specimens",
+    "specimen type: other",
 }
 
 CATALOG = {
@@ -44,6 +96,7 @@ CATALOG = {
 
 RESPONSE_COMPONENTS = {
     "gene": {
+        "@type": "DefinedTerm",
         "additional_type": "Gene",
         "measured_property": {
             "@type": "Property",
@@ -63,24 +116,28 @@ RESPONSE_COMPONENTS = {
         },
     },
     "protein": {
+        "@type": "DefinedTerm",
         "additional_type": "Protein",
         "measured_property": {"@type": "Property", "name": "Protein Abundance"},
         "observation_about_type": "Protein",
         "observation_type": {"@type": "DefinedTerm", "name": "Differential Protein Abundance"},
     },
     "metabolite": {
+        "@type": "DefinedTerm",
         "additional_type": "Metabolite",
         "measured_property": {"@type": "Property", "name": "Metabolite Abundance"},
         "observation_about_type": "ChemicalSubstance",
         "observation_type": {"@type": "DefinedTerm", "name": "Differential Metabolite Abundance"},
     },
     "cell": {
+        "@type": "DefinedTerm",
         "additional_type": "Cell",
         "measured_property": {"@type": "Property", "name": "Cell Abundance"},
         "observation_about_type": "DefinedTerm",
         "observation_type": {"@type": "DefinedTerm", "name": "Differential Cell Abundance"},
     },
     "weight": {
+        "@type": "DefinedTerm",
         "additional_type": "Weight",
         "measured_property": {"@type": "Property", "name": "Body Weight"},
         "observation_about_type": "DefinedTerm",
@@ -90,18 +147,21 @@ RESPONSE_COMPONENTS = {
 
 DIRECTIONS = {
     "Up": {
+        "@type": "SemanticTriple",
         "gene_label": "Upregulated",
         "other_label": "Increased",
         "qualifier": "increase",
         "gene_identifier": "https://w3id.org/biolink/vocab/DirectionQualifierEnum#upregulated",
     },
     "Down": {
+        "@type": "SemanticTriple",
         "gene_label": "Downregulated",
         "other_label": "Decreased",
         "qualifier": "decrease",
         "gene_identifier": "https://w3id.org/biolink/vocab/DirectionQualifierEnum#downregulated",
     },
     "Changed": {
+        "@type": "SemanticTriple",
         "gene_label": "Differentially expressed",
         "other_label": "Changed",
         "qualifier": "changed",
@@ -137,6 +197,31 @@ def _single_or_list(values):
     if not values:
         return None
     return values[0] if len(values) == 1 else values
+
+
+def _classify_material(value):
+    """Sort a `Material` value into the group it belongs to, or None to drop it.
+
+    A vaccine is recognized by name rather than by list, since ImmuneSpace keeps
+    adding them; the rest are small, stable vocabularies.
+    """
+    key = (_clean(value) or "").casefold()
+    if not key or key in MATERIAL_PLACEHOLDERS:
+        return None
+    if key in MATERIAL_CELL_TYPES:
+        return "cell_types"
+    if key in MATERIAL_ANATOMICAL_STRUCTURES:
+        return "anatomical_structures"
+    if key in MATERIAL_SAMPLE_TYPES:
+        return "sample_types"
+    if key in MATERIAL_INFECTIOUS_AGENTS:
+        return "infectious_agents"
+    # A vaccine has no dedicated NDE field, so it stays a keyword rather than
+    # being forced into one that does not mean it.
+    if "vaccine" in key or "vax" in key:
+        return "material_keywords"
+    logger.info("Unrecognized ImmuneSpace Material %r, keeping it as a keyword", value)
+    return "material_keywords"
 
 
 def _normalize_response_type(value):
@@ -192,9 +277,14 @@ def _fetch_signature_rows(requester=requests):
     response.raise_for_status()
     text = response.content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
-    missing_fields = SIGNATURE_FIELDS - set(reader.fieldnames or [])
+    fieldnames = set(reader.fieldnames or [])
+    missing_fields = SIGNATURE_FIELDS - fieldnames
     if missing_fields:
         raise ValueError(f"ImmuneSpace signatures CSV is missing fields: {sorted(missing_fields)}")
+    if missing_optional := OPTIONAL_SIGNATURE_FIELDS - fieldnames:
+        logger.warning("ImmuneSpace signatures CSV no longer provides: %s", sorted(missing_optional))
+    if new_fields := fieldnames - SIGNATURE_FIELDS - OPTIONAL_SIGNATURE_FIELDS:
+        logger.info("ImmuneSpace signatures CSV has new unmapped fields: %s", sorted(new_fields))
     return reader
 
 
@@ -210,12 +300,17 @@ def _group_signature_rows(rows):
         group = groups.setdefault(
             signature_id,
             {
+                "anatomical_structures": [],
                 "arms": [],
+                "cell_types": [],
                 "components": {direction: [] for direction in DIRECTIONS},
                 "description": description,
                 "disease_stages": [],
                 "diseases": [],
+                "infectious_agents": [],
+                "material_keywords": [],
                 "response_type": response_type,
+                "sample_types": [],
                 "studies": [],
             },
         )
@@ -226,6 +321,8 @@ def _group_signature_rows(rows):
         _append_unique(group["studies"], _study_id(signature_id, row.get("Study ID")))
         _append_unique(group["diseases"], row.get("Disease"))
         _append_unique(group["disease_stages"], row.get("Disease Stage"))
+        if bucket := _classify_material(row.get("Material")):
+            _append_unique(group[bucket], row.get("Material"))
         for direction in DIRECTIONS:
             for component in _split_components(row.get(direction)):
                 _append_unique(group["components"][direction], component)
@@ -358,14 +455,22 @@ def _build_signature_doc(signature_id, group, direction, component, source_organ
             direction_label,
             *group["diseases"],
             *group["disease_stages"],
+            *group["material_keywords"],
         ],
-        "species": {"@type": "Taxon", "name": "Homo sapiens"},
+        "species": {"@type": "DefinedTerm", "name": "Homo sapiens"},
     }
     if source_organization:
         doc["sourceOrganization"] = source_organization
     if group["diseases"]:
         conditions = [{"@type": "DefinedTerm", "name": disease} for disease in group["diseases"]]
         doc["healthCondition"] = _single_or_list(conditions)
+    if group["infectious_agents"]:
+        agents = [{"@type": "DefinedTerm", "name": agent} for agent in group["infectious_agents"]]
+        doc["infectiousAgent"] = _single_or_list(agents)
+
+    # The sample block is assembled from whatever the signature described about
+    # the specimen: the disease stage it was taken at, and the material it was.
+    sample = {"@type": "Sample"}
     if group["disease_stages"]:
         properties = [
             {
@@ -376,7 +481,16 @@ def _build_signature_doc(signature_id, group, direction, component, source_organ
             }
             for stage in group["disease_stages"]
         ]
-        doc["sample"] = {"@type": "Sample", "additionalProperty": _single_or_list(properties)}
+        sample["additionalProperty"] = _single_or_list(properties)
+    for bucket, field in (
+        ("sample_types", "sampleType"),
+        ("cell_types", "cellType"),
+        ("anatomical_structures", "anatomicalStructure"),
+    ):
+        if group[bucket]:
+            sample[field] = _single_or_list([{"@type": "DefinedTerm", "name": name} for name in group[bucket]])
+    if len(sample) > 1:
+        doc["sample"] = sample
     return doc
 
 
@@ -408,7 +522,7 @@ def parse_datasets(source_organization=None, requester=requests):
             "_id": record["value"],
             "url": f"https://immunespace.org/query/study/{record['value']}",
             "sourceOrganization": source_organization,
-            "species": {"name": "Homo sapiens"},
+            "species": {"@type": "DefinedTerm", "name": "Homo sapiens"},
         }
         yield output
 

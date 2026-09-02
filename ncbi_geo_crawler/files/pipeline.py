@@ -33,7 +33,7 @@ class GeoItemProcessorPipeline:
             "_id": _id,
             "identifier": _id,
             "url": url,
-            "distribution": {"@type": "dataDownload", "contentUrl": url},
+            "distribution": {"@type": "DataDownload", "contentUrl": url},
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "NCBI GEO",
@@ -58,12 +58,14 @@ class GeoItemProcessorPipeline:
         if name := item.pop("Title", None):
             output["name"] = name
         if species := item.pop("Organism", None):
-            output["species"] = {"name": species}
+            output["species"] = {"@type": "DefinedTerm", "name": species}
         if measurement_technique := item.pop("Experiment type", None):
             if isinstance(measurement_technique, list):
-                output["measurementTechnique"] = [{"name": technique} for technique in measurement_technique]
+                output["measurementTechnique"] = [
+                    {"@type": "DefinedTerm", "name": technique} for technique in measurement_technique
+                ]
             else:
-                output["measurementTechnique"] = {"name": measurement_technique}
+                output["measurementTechnique"] = {"@type": "DefinedTerm", "name": measurement_technique}
         description = ""
         if summary := item.pop("Summary", None):
             description += summary

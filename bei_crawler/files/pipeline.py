@@ -59,7 +59,7 @@ class BeiItemProcessorPipeline:
         }
 
         if name := item.get("Organism:"):
-            insert_value(output, "species", {"name": name})
+            insert_value(output, "species", {"@type": "DefinedTerm", "name": name})
 
         if "Product Name:" not in item and "Designations:" in item:
             name = item.get("Designations:")
@@ -88,10 +88,10 @@ class BeiItemProcessorPipeline:
 
 
         if name := item.get("Storage Temperature:"):
-            insert_value(output, "sampleStorageTemperature", {"name": name})
+            insert_value(output, "sampleStorageTemperature", {"@type": "QuantitativeValue", "name": name})
 
         if name := item.get("Contributor:"):
-            insert_value(output, "contributor", {"name": name})
+            insert_value(output, "contributor", {"@type": "Person", "name": name})
 
         if description := item.get("Comments:"):
             insert_value(output, "description", description, extend=True)
@@ -100,7 +100,7 @@ class BeiItemProcessorPipeline:
             insert_value(output, "creditText", credit_text, extend=True)
 
         if citation := item.get("Publications Citing this Reagent:"):
-            insert_value(output, "citedBy", {"citation": citation})
+            insert_value(output, "citedBy", {"@type": "CreativeWork", "citation": citation})
 
         if license := item.get("Restrictions On Use:"):
             insert_value(output, "license", license)
@@ -133,15 +133,15 @@ class BeiItemProcessorPipeline:
             insert_value(output, "experimentalPurpose", experimental_purpose)
 
         if citation := item.get("References:"):
-            insert_value(output, "isBasedOn", {"citation": citation})
+            insert_value(output, "isBasedOn", {"@type": "CreativeWork", "citation": citation})
 
         if identifiers := item.get("Components:"):
             identifiers = identifiers.split(",")
             identifiers = [id.strip() for id in identifiers if id.strip()]
-            output["hasPart"] = [{"identifier": id} for id in identifiers]
+            output["hasPart"] = [{"@type": "CreativeWork", "identifier": id} for id in identifiers]
 
         if name := item.get("Additional Information:"):
-            insert_value(output, "isRelatedTo", {"name": name})
+            insert_value(output, "isRelatedTo", {"@type": "CreativeWork", "name": name})
 
         if description := item.get("Ownership statement:"):
             insert_value(output.setdefault("usageInfo", {}), "description", description, extend=True)
@@ -151,7 +151,7 @@ class BeiItemProcessorPipeline:
 
         if not "Organism:" in item and "Taxonomy:" in item:
             name = item.get("Taxonomy:")
-            insert_value(output, "species", {"name": name})
+            insert_value(output, "species", {"@type": "DefinedTerm", "name": name})
 
         if additional_property := item.get("Growth Conditions:"):
             insert_value(output, "additionalProperty", {"@type": "PropertyValue", "name": "Growth Conditions", "value": additional_property})

@@ -120,7 +120,7 @@ def parse():
             if contributors := metadata.get("contributors"):
                 authors = []
                 for contributor in contributors:
-                    author_obj = {}
+                    author_obj = {"@type": "Person"}
                     if first_name := contributor.get("first_name"):
                         author_obj["givenName"] = first_name
                     if last_name := contributor.get("last_name"):
@@ -130,7 +130,7 @@ def parse():
                     authors.append(author_obj)
                 output["author"] = authors
             if files := metadata.get("files"):
-                distribution_obj = {}
+                distribution_obj = {"@type": "DataDownload"}
                 for file in files:
                     if filename := file.get("filename"):
                         distribution_obj["name"] = filename
@@ -161,7 +161,7 @@ def parse():
             citation_list = []
             if articles := metadata.get("articles"):
                 for article in articles:
-                    citation_obj = {}
+                    citation_obj = {"@type": "ScholarlyArticle"}
                     if title := article.get("title"):
                         citation_obj["name"] = title
                     if doi := article.get("doi"):
@@ -187,9 +187,12 @@ def parse():
 
             if related_links := metadata.get("related_links"):
                 for link in related_links:
-                    citation_obj = {}
+                    # A related link is not necessarily an article, and Mendeley's
+                    # own link type ("html", "pdf", ...) is not a schema @type, so
+                    # keep it in additionalType.
+                    citation_obj = {"@type": "CreativeWork"}
                     if citation_type := link.get("type"):
-                        citation_obj["@type"] = citation_type
+                        citation_obj["additionalType"] = citation_type
                     if url := link.get("url"):
                         citation_obj["url"] = url
                     if href := link.get("href"):
@@ -206,7 +209,7 @@ def parse():
                 output["url"] = links["view"]
                 output["includedInDataCatalog"]["archivedAt"] = links["view"]
             if repository := metadata.get("repository"):
-                output["sdPublisher"] = {"name": repository["name"]}
+                output["sdPublisher"] = {"@type": "DataCatalog", "name": repository["name"]}
 
             if license_info := metadata.get("data_licence"):
                 output["license"] = license_info.get("url")
@@ -214,9 +217,9 @@ def parse():
             if funders := metadata.get("funders"):
                 funding = []
                 for funder in funders:
-                    funding_entry = {}
+                    funding_entry = {"@type": "MonetaryGrant"}
 
-                    funder_info = {}
+                    funder_info = {"@type": "Organization"}
                     if name := funder.get("name"):
                         funder_info["name"] = name
                     if identity := funder.get("identity"):

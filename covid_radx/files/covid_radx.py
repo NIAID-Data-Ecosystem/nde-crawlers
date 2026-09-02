@@ -107,10 +107,10 @@ def parse(hit):
         output["dateCreated"] = dateutil.parser.parse(date_created, ignoretz=True).date().isoformat()
 
     if ibo_url := hit.get("ct_url"):
-        output["isBasedOn"] = {"url": ibo_url}
+        output["isBasedOn"] = {"@type": "CreativeWork", "url": ibo_url}
 
     if sd_name := hit.get("dcc"):
-        output["sdPublisher"] = {"name": sd_name}
+        output["sdPublisher"] = {"@type": "DataCatalog", "name": sd_name}
 
     if description := hit.get("description"):
         output["description"] = description
@@ -119,9 +119,9 @@ def parse(hit):
         health_conditions = health_conditions.split(", ")
         output["healthCondition"] = [{"name": health_condition for health_condition in health_conditions}]
     else:
-        output["healthCondition"] = {"name": "COVID-19"}
+        output["healthCondition"] = {"@type": "DefinedTerm", "name": "COVID-19"}
 
-    funding = {}
+    funding = {"@type": "MonetaryGrant"}
     identifier = hit.get("grant_number").strip("{}").split(",")
     funder = hit.get("institutes_supporting_study_array")
 
@@ -131,16 +131,17 @@ def parse(hit):
                 funders = []
                 funders.append(
                     {
+                        "@type": "Organization",
                         "name": funder[i],
                         "identifier": identifier[i],
                     }
                 )
         else:
             for f in funder:
-                funders.append({"name": f})
+                funders.append({"@type": "Organization", "name": f})
     elif funder:
         for f in funder:
-            funders = {"name": f}
+            funders = {"@type": "Organization", "name": f}
 
     if funders:
         funding["funder"] = funders
@@ -179,7 +180,7 @@ def parse(hit):
     for measurement_technique in mts:
         if measurement_technique:
             for mt in measurement_technique:
-                total_measurement_techniques.append({"name": mt})
+                total_measurement_techniques.append({"@type": "DefinedTerm", "name": mt})
     if total_measurement_techniques:
         output["measurementTechnique"] = total_measurement_techniques
 
@@ -212,7 +213,7 @@ def parse(hit):
     if variable_measured := hit.get("subject_array"):
         vms = []
         for vm in variable_measured:
-            vms.append({"name": vm})
+            vms.append({"@type": "DefinedTerm", "name": vm})
         output["variableMeasured"] = vms
 
     if name := hit.get("title"):
@@ -226,7 +227,7 @@ def parse(hit):
     for key in usage_info_keys:
         if name := hit.get(key):
             name = convert_group_string_to_list(name)
-            usage_info = {"name": name}
+            usage_info = {"@type": "CreativeWork", "name": name}
             usage_info_list.append(usage_info)
     if usage_info_list:
         output["usageInfo"] = usage_info_list
