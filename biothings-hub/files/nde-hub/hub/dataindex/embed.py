@@ -1,7 +1,8 @@
 """Embedding pipeline for NDE indices.
 
-Generates dense-vector embeddings for Dataset, ComputationalTool, and
-ResourceCatalog documents and writes them back to the same ES index.
+Generates dense-vector embeddings for Dataset, DataCollection,
+ComputationalTool, and ResourceCatalog documents and writes them back to the
+same ES index.
 Embeddings are reused from a local SQLite cache when possible, and model
 inference is delegated to a remote embed server (see embed_server.py).
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "256"))
 BULK_UPDATE_SIZE = int(os.getenv("BULK_UPDATE_SIZE", "512"))
 SCAN_BATCH_SIZE = int(os.getenv("ES_SCAN_BATCH_SIZE", "1000"))
-DOC_TYPES = ["Dataset", "ComputationalTool", "ResourceCatalog"]
+DOC_TYPES = ["Dataset", "DataCollection", "ComputationalTool", "ResourceCatalog"]
 
 ES_COMPATIBLE_WITH = os.getenv("ES_COMPATIBLE_WITH", "9").strip().lower()
 ES_REQUEST_TIMEOUT = int(os.getenv("ES_REQUEST_TIMEOUT", "120"))

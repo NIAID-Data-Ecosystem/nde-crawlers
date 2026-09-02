@@ -1,3 +1,5 @@
+import math
+
 import dateutil.parser
 import regex as re
 from utils.sex import _parse_mf_list, extract_sex, find_sex_number_map
@@ -8,6 +10,97 @@ except ImportError:
     import logging
 
     logger = logging.getLogger(__name__)
+
+
+# JSON-LD @type for each object-valued field in gsm_nde_mapping.json /
+# gse_nde_mapping.json, per NDE_schema.jsonld.
+NDE_OBJECT_TYPES = {
+    "anatomicalStructure": "DefinedTerm",
+    "anatomicalSystem": "DefinedTerm",
+    "associatedPhenotype": "DefinedTerm",
+    "cellType": "DefinedTerm",
+    "collector": "Organization",
+    "developmentalStage": "DefinedTerm",
+    "healthCondition": "DefinedTerm",
+    "infectiousAgent": "DefinedTerm",
+    "locationOfOrigin": "AdministrativeArea",
+    "measurementTechnique": "DefinedTerm",
+    "sampleQuantity": "QuantitativeValue",
+    "sampleType": "DefinedTerm",
+    "species": "DefinedTerm",
+    "temporalCoverage": "TemporalInterval",
+    "variableMeasured": "DefinedTerm",
+}
+
+# Units for the quantity-valued subproperties in mapping_dict.json, used when the
+# value itself carries no unit. QuantitativeValue requires unitText.
+SAMPLE_QUANTITY_UNITS = {
+    "number_of_genes": "genes",
+    "number_of_mapped_reads": "reads",
+    "number_of_unique_reads_(umi)": "reads",
+    "total_number_of_reads": "reads",
+}
+
+DEVELOPMENTAL_STAGE_UNITS = {
+    "age(years)": "years",
+    "age_(days)": "days",
+    "age_(weeks)": "weeks",
+    "age_(yrs)": "years",
+}
+
+# Above this a GEO characteristic is a typo or an identifier, not a measurement.
+# It also keeps every emitted value inside the 8 bytes BSON allows for an int.
+MAX_PLAUSIBLE_QUANTITY = 1e12
+
+# Sentinel for a numeric value outside MAX_PLAUSIBLE_QUANTITY.
+OUT_OF_RANGE = object()
+
+# Magnitude suffixes GEO submitters write into read counts, e.g. "5.5 M reads".
+SAMPLE_QUANTITY_MULTIPLIERS = {
+    "K": 1e3,
+    "thousand": 1e3,
+    "M": 1e6,
+    "million": 1e6,
+    "G": 1e9,
+    "B": 1e9,
+    "billion": 1e9,
+}
+
+
+def build_quantity(subproperty, field_value, units):
+    """QuantitativeValue for a numeric characteristic.
+
+    Returns None when the value is not numeric, and OUT_OF_RANGE when it is
+    numeric but too large to be a real measurement.
+    """
+    match = re.match(r"\s*([+-]?[\d,]*\.?\d+(?:[eE][+-]?\d+)?)\s*(.*)$", str(field_value))
+    if not match:
+        return None
+    try:
+        number = float(match.group(1).replace(",", ""))
+    except (ValueError, OverflowError):
+        return OUT_OF_RANGE
+
+    unit = match.group(2).strip()
+    if multiplier := SAMPLE_QUANTITY_MULTIPLIERS.get(unit.split()[0] if unit else ""):
+        number *= multiplier
+        unit = unit.split(maxsplit=1)[1].strip() if " " in unit else ""
+
+    if not math.isfinite(number) or abs(number) > MAX_PLAUSIBLE_QUANTITY:
+        return OUT_OF_RANGE
+
+    d = {"@type": "QuantitativeValue", "value": int(number) if number.is_integer() else number}
+    if unit := (unit or units.get(subproperty)):
+        d["unitText"] = unit
+    return d
+
+
+def as_additional_property(output, subproperty, field_value):
+    insert_value(
+        output,
+        "additionalProperty",
+        {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value},
+    )
 
 
 def insert_value(d, key, value):
@@ -55,7 +148,8 @@ def find_age(text):
 
 
 def apply_heuristics(subproperty, value):
-    if value is None:
+    # Every branch below is a string operation.
+    if not isinstance(value, str):
         return None
     if subproperty == "sex":
         if value.startswith("m") and not _parse_mf_list(value):
@@ -128,19 +222,13 @@ def apply_heuristics(subproperty, value):
     return None
 
 
-def parse_sex(subproperty, value, mapping):
-    """Parses the sex from the given subproperty and value.
-    Returns either:
-      - Tuple of (sex, developmentalStage dict)
-      - sex string e.g. "Female"
-      - List of sex strings e.g. ["Male", "Female"]
-      - None if unable to parse
-    """
-    subproperty = subproperty.strip().lower()
-    if isinstance(value, str):
-        value = value.strip().lower()
+_SEX_CACHE = {}
+_SEX_CACHE_MAPPING = None
 
-    valid_subproperties = [
+# Subproperty names parse_sex recognizes. Module-level frozenset: this is tested
+# once per sample characteristic, and rebuilding a list here dominated the call.
+_SEX_SUBPROPERTIES = frozenset(
+    {
         "sex   male=1;female=2",
         "sex  (f /m)",
         "sex (0 = female, 1 = male)",
@@ -222,9 +310,58 @@ def parse_sex(subproperty, value, mapping):
         "sexe",
         "sexo",
         "sexual phenotype",
-    ]
+    }
+)
 
-    if subproperty not in valid_subproperties:
+
+def _copy_sex_result(result):
+    """Copy the mutable parts of a parse_sex result so callers cannot edit the cache."""
+    if isinstance(result, tuple):
+        return tuple(_copy_sex_result(part) for part in result)
+    if isinstance(result, list):
+        return list(result)
+    if isinstance(result, dict):
+        return dict(result)
+    return result
+
+
+def parse_sex(subproperty, value, mapping):
+    """Memoizing wrapper around _parse_sex.
+
+    Characteristic strings repeat across the samples of a series, and _parse_sex
+    costs ~48us for a "sex" subproperty. The cache is keyed on the arguments that
+    vary; a change of `mapping` identity resets it.
+    """
+    global _SEX_CACHE_MAPPING
+
+    if mapping is not _SEX_CACHE_MAPPING:
+        _SEX_CACHE.clear()
+        _SEX_CACHE_MAPPING = mapping
+
+    try:
+        key = (subproperty, value)
+        hash(key)
+    except TypeError:
+        return _parse_sex(subproperty, value, mapping)
+
+    if key not in _SEX_CACHE:
+        _SEX_CACHE[key] = _parse_sex(subproperty, value, mapping)
+    return _copy_sex_result(_SEX_CACHE[key])
+
+
+def _parse_sex(subproperty, value, mapping):
+    """Parses the sex from the given subproperty and value.
+    Returns either:
+      - Tuple of (sex, developmentalStage dict)
+      - sex string e.g. "Female"
+      - List of sex strings e.g. ["Male", "Female"]
+      - None if unable to parse
+    """
+    subproperty = subproperty.strip().lower()
+    if isinstance(value, str):
+        value = value.strip().lower()
+
+    if subproperty not in _SEX_SUBPROPERTIES:
         return None
 
     if subproperty in ["sex", "sex/age", "sex-age", "sex/mating type"]:
@@ -279,11 +416,24 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
             if v:
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":
-                    d = {"@type": "PropertyValue", nde_mapping[k][1]: v}
                     if k == "sampleQuantity":
+                        d = build_quantity(subproperty, v, SAMPLE_QUANTITY_UNITS)
+                        if d is None or d is OUT_OF_RANGE:
+                            logger.warning(f"Unusable sampleQuantity '{subproperty}': {v}")
+                            as_additional_property(output, subproperty, v)
+                            continue
                         d["name"] = subproperty
-                    if k == "variableMeasured" or k == "anatomicalStructure":
-                        d["@type"] = "DefinedTerm"
+                    elif k == "developmentalStage":
+                        # A numeric age is a quantity; a named stage stays a term.
+                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS)
+                        if d is OUT_OF_RANGE:
+                            logger.warning(f"Implausible developmentalStage '{subproperty}': {v}")
+                            as_additional_property(output, subproperty, v)
+                            continue
+                        if d is None:
+                            d = {"@type": "DefinedTerm", nde_mapping[k][1]: v}
+                    else:
+                        d = {"@type": NDE_OBJECT_TYPES.get(k, "PropertyValue"), nde_mapping[k][1]: v}
                     insert_value(output, k, d)
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     if k == "date":
@@ -298,8 +448,7 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                 else:
                     logger.warning(f"Unmapped nde_mapping property: {k}")
             else:
-                d = {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value}
-                insert_value(output, "additionalProperty", d)
+                as_additional_property(output, subproperty, field_value)
 
         else:
             logger.warning(f"Unmapped sample characteristic subproperty: {subproperty}")
@@ -343,11 +492,22 @@ def parse_series_sample_characteristics(output, value, sample_mapping, nde_mappi
             if v:
                 v = subproperty if v == "subproperty" else field_value
                 if k in nde_mapping and nde_mapping[k][0] == "object":
-                    d = {nde_mapping[k][1]: v}
                     if k == "sampleQuantity":
+                        d = build_quantity(subproperty, v, SAMPLE_QUANTITY_UNITS)
+                        if d is None or d is OUT_OF_RANGE:
+                            logger.warning(f"Unusable sampleQuantity '{subproperty}': {v}")
+                            continue
                         d["name"] = subproperty
-                    if k == "anatomicalStructure":
-                        d["@type"] = "DefinedTerm"
+                    elif k == "developmentalStage":
+                        # A numeric age is a quantity; a named stage stays a term.
+                        d = build_quantity(subproperty, v, DEVELOPMENTAL_STAGE_UNITS)
+                        if d is OUT_OF_RANGE:
+                            logger.warning(f"Implausible developmentalStage '{subproperty}': {v}")
+                            continue
+                        if d is None:
+                            d = {"@type": "DefinedTerm", nde_mapping[k][1]: v}
+                    else:
+                        d = {"@type": NDE_OBJECT_TYPES.get(k, "PropertyValue"), nde_mapping[k][1]: v}
                     insert_value(output, k, d)
                 elif k in nde_mapping and nde_mapping[k][0] == "value":
                     insert_value(output, k, v)

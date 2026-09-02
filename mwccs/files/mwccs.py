@@ -138,9 +138,17 @@ IS_BASED_ON = [
     {
         "@type": "Action",
         "name": "DataCollection Generation Process in the NIAID Data Ecosystem",
-        "description": (
+        "disambiguatingDescription": (
             "How this MWCCS Study Subjects DataCollection Record was "
             "generated for the NIAID Data Ecosystem."
+        ),
+        "description": (
+            "This record aggregated MWCCS Patient data into a single "
+            "collection, grouped by substudy. Collection size, temporal "
+            "coverage, and dates are derived from the underlying substudy "
+            "summary; descriptive fields such as topic category and "
+            "conditions of access are manually curated. Full generation "
+            "methods are described in the \"How To\" section."
         ),
         "actionProcess": {
             "@type": "HowTo",

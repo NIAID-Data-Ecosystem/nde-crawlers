@@ -62,6 +62,17 @@ Required structure, in this order:
    - `insert_value(d, key, value, extend=False)`
    - `_to_iso_date(val)`
    These must be in *every* parser. Do not modify the function bodies; do not rename them.
+
+   **Advanced `insert_value`:** if the user asks for the advanced version, copy `_marker` and `insert_value` from [references/advanced_func.py](references/advanced_func.py) instead, along with its `import json`. `_to_iso_date` still comes from `base_func.py`. The advanced version adds a `seen=` parameter that dedupes against a hash set rather than scanning the list, turning O(n^2) aggregation into O(n); output is identical either way. Do not copy both versions of `insert_value` into the same parser. Use it at call sites where one key accumulates thousands of values (aggregating many sub-records into one document), creating one `seen = {}` per output dict:
+
+   ```python
+   aggregate = {}
+   seen = {}
+   for s in samples:
+       insert_value(aggregate, "url", s["url"], seen=seen)
+   ```
+
+   Never share a `seen` across two output dicts — values get silently dropped. Omit `seen` for one-off fields.
 4. **Record iterator** — the existing `iter_<name>_records()` (or equivalent) the user pointed to. If they gave it in the input dir, copy it through. Do not invent one.
 5. **Helper parsers** — small private helpers (e.g. `_as_list`, `_parse_quantitative_length`) only if the mapping needs them. Keep them minimal.
 6. **`parse()` generator** — yields one dict per record. Build the boilerplate output first, then walk the mapping row-by-row.

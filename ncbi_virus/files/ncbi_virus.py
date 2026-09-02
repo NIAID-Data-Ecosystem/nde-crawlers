@@ -1485,13 +1485,23 @@ class TaxonAccumulator:
         ]
         if collection["key"] == "assembly":
             targets.append(VIRUS_VARIATION_SEARCH_URL)
+        about_name = collection["about"][0]["name"]
 
         action_obj = {
             "@type": "Action",
             "name": "DataCollection Generation Process in the NIAID Data Ecosystem",
-            "description": (
+            "disambiguatingDescription": (
                 f"How this NCBI Virus {record_name} DataCollection Record was "
                 "generated for the NIAID Data Ecosystem."
+            ),
+            "description": (
+                f"This record aggregated NCBI Virus {about_name} "
+                "data into a single collection, grouped by NCBI Taxonomy IDs. "
+                "Collection size, temporal coverage, and dates are derived "
+                "from the underlying records; descriptive fields such as "
+                "measurement technique and conditions of access are manually "
+                "curated. Full generation methods are described in the \"How "
+                "To\" section."
             ),
             "actionProcess": {
                 "@type": "HowTo",

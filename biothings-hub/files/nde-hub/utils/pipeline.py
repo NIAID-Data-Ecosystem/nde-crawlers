@@ -11,7 +11,7 @@ through every applicable stage. A stage is applicable when
 An inapplicable stage does not open its lookup tables, a database connection
 or the network. Its tracked fields are still counted for repository statistics.
 
-Records are processed in batches of 1000 by default.
+Records are processed in batches of 10,000 by default.
 
 At the end of an upload, each active stage logs repository-wide before/after
 counts for the fields it manages, along with the number of records it changed.
@@ -40,11 +40,11 @@ from itertools import batched
 import bson
 from config import logger
 
-from .common import dict_entries, supports_description_enrichment
+from .common import dict_entries, supports_description_enrichment, supports_term_standardization
 from .corrections import apply_corrections
 from .validate import add_date, add_metadata_score, check_schema, clean_description, drop_placeholder_terms
 
-DEFAULT_BATCH_SIZE = 1000
+DEFAULT_BATCH_SIZE = 10_000
 MONGO_DOC_SIZE_LIMIT = 16 * 1024 * 1024
 
 
@@ -247,7 +247,9 @@ def _needs_funding(doc):
 
 
 def _needs_terms(doc):
-    return bool(doc.get("species") or doc.get("infectiousAgent") or doc.get("healthCondition"))
+    return supports_term_standardization(doc) and bool(
+        doc.get("species") or doc.get("infectiousAgent") or doc.get("healthCondition")
+    )
 
 
 def _needs_descriptions(doc):
@@ -277,7 +279,13 @@ def _run_funding(docs, source):
 def _run_terms(docs, source):
     from .terms import standardize_terms
 
-    return standardize_terms(docs)
+    # Stage.applies only gates the batch. Keep ordinary Sample records out of
+    # taxonomy resolution when a mixed batch contains eligible records.
+    doc_list = list(docs)
+    eligible = [doc for doc in doc_list if _needs_terms(doc)]
+    if eligible:
+        list(standardize_terms(eligible))
+    return doc_list
 
 
 def _run_descriptions(docs, source):

@@ -1,24 +1,17 @@
 def insert_value(d, key, value, extend=False):
-    """ Insert a value into a dictionary, handling existing keys by converting to lists or extending strings as needed.
+    """ Insert a value into a dictionary, promoting to a list on repeats and dropping duplicates.
     """
 
-    if key in d and not extend:
-        if isinstance(d[key], list):
-            if isinstance(value, list):
-                for item in value:
-                    if item not in d[key]:
-                        d[key].append(item)
-            elif value not in d[key]:
-                d[key].append(value)
-        else:
-            if isinstance(value, list):
-                d[key] = [d[key]] + [v for v in value if v != d[key]]
-            elif d[key] != value:
-                d[key] = [d[key], value]
-    elif d.get(key) and extend:
-        d[key] = (d.get(key) + " " + value).strip()
-    else:
-        d[key] = value
+    if extend:
+        d[key] = (d[key] + " " + value).strip() if d.get(key) else value
+        return
+
+    was_list = isinstance(d.get(key), list)
+    merged = list(d[key]) if was_list else ([d[key]] if key in d else [])
+    for item in value if isinstance(value, list) else [value]:
+        if item not in merged:
+            merged.append(item)
+    d[key] = merged if was_list or isinstance(value, list) or len(merged) > 1 else merged[0]
 
 def _to_iso_date(val):
     if val is None:

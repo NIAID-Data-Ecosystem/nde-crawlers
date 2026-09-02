@@ -49,8 +49,10 @@ def _parse_mf_list(value: str):
     return list(set(canon))
 
 
-def extract_sex(value: str, mapping=None):
+def extract_sex(value, mapping=None):
     """Given a string value and optional mapping dict, return a standardized sex label or list of labels."""
+    if not isinstance(value, str):
+        return None
     v = value.lower().strip()
 
     # Strict m/f list handling (and reject other separator-based formats)

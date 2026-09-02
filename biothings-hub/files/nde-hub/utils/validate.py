@@ -16,6 +16,10 @@ from scores import (
     COMPUTATIONAL_TOOL_RECOMMENDED_AUGMENTED,
     COMPUTATIONAL_TOOL_REQUIRED,
     COMPUTATIONAL_TOOL_REQUIRED_AUGMENTED,
+    DATA_COLLECTION_RECOMMENDED,
+    DATA_COLLECTION_RECOMMENDED_AUGMENTED,
+    DATA_COLLECTION_REQUIRED,
+    DATA_COLLECTION_REQUIRED_AUGMENTED,
     DATASET_RECOMMENDED_AUGMENTED_FIELDS,
     DATASET_RECOMMENDED_FIELDS,
     DATASET_REQUIRED_AUGMENTED_FIELDS,
@@ -31,7 +35,7 @@ from .schema_types import is_type_or_descendant
 
 AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
 
-CONDITIONS_OF_ACCESS = ["Open", "Restricted", "Closed", "Embargoed", "Varied"]
+CONDITIONS_OF_ACCESS = ["Closed", "Open", "Restricted", "Embargoed", "Varied", "Unknown"]
 CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
 
 # Placeholders sources emit as terms; nothing upstream strips them.
@@ -62,6 +66,12 @@ PLACEHOLDER_TERMS = frozenset(
 _BREAK_TAGS = re.compile(r"(<br\s*/?>|</p>)", re.IGNORECASE)
 
 _SCORE_FIELDS = {
+    "DataCollection": (
+        DATA_COLLECTION_REQUIRED,
+        DATA_COLLECTION_RECOMMENDED,
+        DATA_COLLECTION_REQUIRED_AUGMENTED,
+        DATA_COLLECTION_RECOMMENDED_AUGMENTED,
+    ),
     "ComputationalTool": (
         COMPUTATIONAL_TOOL_REQUIRED,
         COMPUTATIONAL_TOOL_RECOMMENDED,
@@ -196,8 +206,8 @@ def check_augmented_fields(doc: Dict, fields) -> list:
 def add_metadata_score(doc: Dict) -> Dict:
     """Score required/recommended field coverage into `_meta.completeness`.
 
-    The field sets are chosen from the document's `@type`; anything that isn't a
-    ComputationalTool or a ResourceCatalog is scored as a Dataset.
+    The field sets are chosen from the document's `@type`; types without a
+    dedicated configuration are scored as a Dataset.
     """
     required, recommended, required_augmented, recommended_augmented = _SCORE_FIELDS.get(
         doc.get("@type"), _DEFAULT_SCORE_FIELDS
@@ -358,14 +368,12 @@ def check_schema(doc: Dict) -> Dict:
             invalid = [status for status in cws if status not in CREATIVE_WORK_STATUS]
             check(
                 not invalid,
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
-                % (cws, CREATIVE_WORK_STATUS),
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS),
             )
         else:
             check(
                 cws in CREATIVE_WORK_STATUS,
-                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s"
-                % (cws, CREATIVE_WORK_STATUS),
+                "%s is not a valid creativeWorkStatus. Allowed creativeWorkStatus: %s" % (cws, CREATIVE_WORK_STATUS),
             )
 
     if issues:

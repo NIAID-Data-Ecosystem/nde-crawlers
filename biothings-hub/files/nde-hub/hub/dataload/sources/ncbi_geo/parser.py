@@ -27,6 +27,46 @@ def get_full_name(name):
     return full_name
 
 
+def build_species(names, taxids):
+    """DefinedTerms for GEO organism names, carrying the NCBI taxid listed alongside them."""
+    if not names:
+        return []
+    names = names if isinstance(names, list) else [names]
+    taxids = taxids if isinstance(taxids, list) else ([] if taxids is None else [taxids])
+
+    species = []
+    for i, name in enumerate(names):
+        term = {"@type": "DefinedTerm", "name": name}
+        if i < len(taxids) and str(taxids[i]).strip().isdigit():
+            term["identifier"] = str(taxids[i]).strip()
+        if term not in species:
+            species.append(term)
+    return species
+
+
+# The only GSM fields a parent GSE document reads. Keep in sync with
+# parse_series_sample: a field missing here is silently absent from every GSE.
+_GSM_SUMMARY_FIELDS = frozenset(
+    {
+        "!Sample_geo_accession",
+        "!Sample_type",
+        "!Sample_library_source",
+    }
+)
+_GSM_CHARACTERISTICS_PREFIX = "!Sample_characteristics"
+
+
+def _store_soft_value(result, key, value):
+    """Store a SOFT field, promoting to a list when the key repeats."""
+    if key in result:
+        if isinstance(result[key], list):
+            result[key].append(value)
+        else:
+            result[key] = [result[key], value]
+    else:
+        result[key] = value
+
+
 def parse_soft_series(filepath):
     """
     Parse a GEO SOFT series file into a dictionary.
@@ -40,16 +80,27 @@ def parse_soft_series(filepath):
                 continue
             if "=" in line:
                 key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip()
-                # Store as list if key repeats
-                if key in result:
-                    if isinstance(result[key], list):
-                        result[key].append(value)
-                    else:
-                        result[key] = [result[key], value]
-                else:
-                    result[key] = value
+                _store_soft_value(result, key.strip(), value.strip())
+    return result
+
+
+def parse_gsm_summary(filepath):
+    """
+    Parse only the GSM fields a parent GSE document consumes.
+    Equivalent to parse_soft_series restricted to _GSM_SUMMARY_FIELDS and
+    !Sample_characteristics*, without materializing protocols and the rest.
+    """
+    result = {}
+    with open(filepath, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line.startswith("!Sample_") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in _GSM_SUMMARY_FIELDS and not key.startswith(_GSM_CHARACTERISTICS_PREFIX):
+                continue
+            _store_soft_value(result, key, value.strip())
     return result
 
 
@@ -88,6 +139,7 @@ def parse_gsm(data_folder):
                 "archivedAt": url,
             },
             "additionalType": "ExperimentalRunSample",
+            "conditionsOfAccess": "Open",
         }
 
         if name := item.get("!Sample_title"):
@@ -136,7 +188,16 @@ def parse_gsm(data_folder):
         if author := item.get("!Sample_contact_name"):
             output["author"] = {"@type": "Person", "name": get_full_name(author)}
             if affiliation := item.get("!Sample_contact_institute"):
-                output["author"]["affilliation"] = {"name": affiliation}
+                output["author"]["affiliation"] = {"@type": "Organization", "name": affiliation}
+
+        species = []
+        for key in sorted(k for k in item if k.startswith("!Sample_organism_ch")):
+            channel = key[len("!Sample_organism_ch") :]
+            for term in build_species(item[key], item.get(f"!Sample_taxid_ch{channel}")):
+                if term not in species:
+                    species.append(term)
+        if species:
+            output["species"] = species
 
         if instrument := item.get("!Sample_instrument_model"):
             if isinstance(instrument, list):
@@ -305,7 +366,7 @@ def parse_gse(data_folder):
             "_id": _id.casefold(),
             "identifier": _id,
             "url": url,
-            "distribution": {"@type": "dataDownload", "contentUrl": url},
+            "distribution": {"@type": "DataDownload", "contentUrl": url},
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "name": "NCBI GEO",
@@ -313,6 +374,7 @@ def parse_gse(data_folder):
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
             },
+            "conditionsOfAccess": "Open",
         }
 
         if gsm_ids := item.get("!Series_sample_id"):
@@ -337,7 +399,7 @@ def parse_gse(data_folder):
                 sample["numberOfItems"]["value"] += 1
                 gsm_file = find_gsm_file(gsm_dir, gsm_id)
                 try:
-                    sample_item = parse_soft_series(gsm_file)
+                    sample_item = parse_gsm_summary(gsm_file)
                     parse_series_sample(sample_item, sample, sample_mapping, nde_mapping, sex_mapping)
                 except Exception as e:
                     logger.error(f"Error parsing GSM file {gsm_file}: {e}")
@@ -404,16 +466,13 @@ def parse_gse(data_folder):
             else:
                 output["author"] = [{"@type": "Person", "name": get_full_name(authors)}]
 
-        if publishers := item.get("!Series_contact_institute"):
-            if isinstance(publishers, list):
-                output["sdPublisher"] = [{"@type": "Organization", "name": p} for p in publishers]
+        if institutes := item.get("!Series_contact_institute"):
+            if isinstance(institutes, list):
+                output["sdPublisher"] = [{"@type": "Organization", "name": i} for i in institutes]
             else:
-                output["sdPublisher"] = [{"@type": "Organization", "name": publishers}]
+                output["sdPublisher"] = [{"@type": "Organization", "name": institutes}]
 
-        if species := item.get("!Series_platform_organism"):
-            if isinstance(species, list):
-                output["species"] = [{"@type": "DefinedTerm", "name": s} for s in species]
-            else:
-                output["species"] = [{"@type": "DefinedTerm", "name": species}]
+        if species := build_species(item.get("!Series_platform_organism"), item.get("!Series_platform_taxid")):
+            output["species"] = species
 
         yield output

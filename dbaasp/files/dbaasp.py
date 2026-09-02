@@ -605,9 +605,17 @@ def _build_is_based_on(species: str) -> list[dict]:
                 "Process for creating the DBAASP Peptide Data Collection "
                 "in the NIAID Data Ecosystem Discovery Portal"
             ),
-            "description": (
+            "disambiguatingDescription": (
                 "How this DBAASP Antimicrobial Peptide DataCollection Record "
                 "was generated for the NIAID Data Ecosystem."
+            ),
+            "description": (
+                "This record aggregated DBAASP Antimicrobial Peptide data "
+                "into a single collection, grouped by target species value. "
+                "Collection size and dates are derived from the underlying "
+                "records; descriptive fields such as credit text and "
+                "conditions of access are manually curated. Full generation "
+                "methods are described in the \"How To\" section."
             ),
             "actionProcess": {
                 "@type": "HowTo",

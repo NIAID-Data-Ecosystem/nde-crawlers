@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import os
 import re
 import socket
 from pathlib import Path
@@ -12,8 +13,17 @@ from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wai
 
 DEFAULT_TIMEOUT = 30  # seconds
 socket.setdefaulttimeout(DEFAULT_TIMEOUT)
-GEO_API_KEY = "3048f6bdb7c91cc8ad7af802559ec470e609"
-GEO_EMAIL = "cwu@scripps.edu"
+
+GEO_API_KEY = os.environ.get("NCBI_API_KEY")
+GEO_EMAIL = os.environ.get("NCBI_EMAIL")
+if not GEO_API_KEY or not GEO_EMAIL:
+    try:
+        import config_local
+
+        GEO_API_KEY = GEO_API_KEY or getattr(config_local, "GEO_API_KEY", None)
+        GEO_EMAIL = GEO_EMAIL or getattr(config_local, "GEO_EMAIL", None)
+    except ImportError:
+        pass
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -23,6 +33,8 @@ logging.basicConfig(
 )
 
 
+if not GEO_API_KEY:
+    logger.warning("No NCBI API key found; Entrez requests are limited to 3/sec")
 Entrez.email = GEO_EMAIL
 Entrez.api_key = GEO_API_KEY
 
@@ -45,6 +57,7 @@ def normalize_key(s: str) -> str:
     s = re.sub(r"\s+", "_", s)
     return s
 
+
 def parse_lat_lon(s):
     """Assumes format '54 N 20 W' -> (54.0, -20.0)."""
     parts = s.strip().split()
@@ -57,19 +70,47 @@ def parse_lat_lon(s):
         lon_dir = parts[3].upper()
     except ValueError:
         return None, None
-    lat = lat_deg if lat_dir == 'N' else -lat_deg
-    lon = lon_deg if lon_dir == 'E' else -lon_deg
+    lat = lat_deg if lat_dir == "N" else -lat_deg
+    lon = lon_deg if lon_dir == "E" else -lon_deg
     return lat, lon
 
 
-def insert_value(d, key, value):
-    if key in d:
-        if isinstance(d[key], list) and value not in d[key]:
-            d[key].append(value)
-        if not isinstance(d[key], list) and d[key] != value:
-            d[key] = [d[key], value]
+# @type for the schema objects built from mapping_dict targets. Nested targets are
+# looked up by their full path first, then by their parent property.
+OBJECT_TYPES = {
+    "additionalPhenotype": "DefinedTerm",
+    "anatomicalStructure": "DefinedTerm",
+    "associatedPhenotype": "DefinedTerm",
+    "author": "Organization",
+    "cellType": "DefinedTerm",
+    "collector": "Organization",
+    "collector.name": "Person",
+    "developmentalStage": "QuantitativeValue",
+    "environmentalSystem": "DefinedTerm",
+    "healthCondition": "DefinedTerm",
+    "infectiousAgent": "DefinedTerm",
+    "isBasedOn": "Sample",
+    "isPartOf": "CreativeWork",
+    "itemLocation": "AdministrativeArea",
+    "locationOfOrigin": "AdministrativeArea",
+    "measurementTechnique": "DefinedTerm",
+    "sampleQuantity": "QuantitativeValue",
+    "sampleStorageTemperature": "QuantitativeValue",
+    "sdPublisher": "DataCatalog",
+    "species": "DefinedTerm",
+    "variableMeasured": "DefinedTerm",
+}
+
+
+def typed_object(target, obj):
+    """Add the schema @type for a mapping target such as 'isPartOf' or 'isPartOf.name'."""
+    object_type = OBJECT_TYPES.get(target) or OBJECT_TYPES.get(target.split(".")[0])
+    if object_type:
+        obj["@type"] = object_type
     else:
-        d[key] = value
+        logger.warning(f"No @type defined for mapping target: {target}")
+    return obj
+
 
 class EsummaryTooLargeError(Exception):
     """esummary returned the 10MB JSON-size error; retrying won't help — split the range."""
@@ -106,9 +147,7 @@ def query_acc(term, retstart, retmax):
     handle.close()
     if "result" not in records:
         if _is_size_error(records):
-            raise EsummaryTooLargeError(
-                f"esummary response over 10MB at retstart={retstart}, retmax={retmax}"
-            )
+            raise EsummaryTooLargeError(f"esummary response over 10MB at retstart={retstart}, retmax={retmax}")
         logger.warning(f"Unexpected esummary response (retstart={retstart}): {records}")
         raise RuntimeError(f"esummary missing 'result' key: {records}")
     return records["result"]
@@ -239,7 +278,10 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
     geo = {"@type": "GeoCoordinates"}
     for subproperty, field_value in attributes.items():
         if subproperty in sample_mapping:
-            if len(sample_mapping[subproperty].keys()) > 1 and "locationOfOrigin.geo.latitude" in sample_mapping[subproperty]:
+            if (
+                len(sample_mapping[subproperty].keys()) > 1
+                and "locationOfOrigin.geo.latitude" in sample_mapping[subproperty]
+            ):
                 try:
                     lat, lon = parse_lat_lon(field_value)
                     if lat is not None and lon is not None:
@@ -249,7 +291,9 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                         geo = {"@type": "GeoCoordinates"}  # reset geo after inserting
                     continue
                 except Exception as e:
-                    logger.warning(f"Failed to parse latitude and longitude from value '{field_value}' for subproperty '{subproperty}': {e}")
+                    logger.warning(
+                        f"Failed to parse latitude and longitude from value '{field_value}' for subproperty '{subproperty}': {e}"
+                    )
                     continue
 
             for k, v in sample_mapping[subproperty].items():
@@ -260,7 +304,7 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                     key_split = k.split(".")
                     if len(key_split) == 2:
                         parent, child = key_split
-                        insert_value(output, parent, {child: value})
+                        insert_value(output, parent, typed_object(k, {child: value}))
                     if len(key_split) == 3:
                         parent, child1, child2 = key_split
                         if child2 == "latitude" or child2 == "longitude":
@@ -272,7 +316,7 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                         if child2 in ["latitude", "longitude", "altitude", "depth"]:
                             insert_value(geo, child2, value)
                         else:
-                            insert_value(output, parent, {child1: {child2: value}})
+                            insert_value(output, parent, typed_object(parent, {child1: {child2: value}}))
                 elif k == "sampleAvailability":
                     try:
                         value = int(value)
@@ -282,10 +326,7 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                     insert_value(output, k, value)
                 else:
                     if k in nde_mapping and nde_mapping[k][0] == "object":
-                        d = {nde_mapping[k][1]: value}
-                        if k == "variableMeasured" or k == "anatomicalStructure":
-                            d["@type"] = "DefinedTerm"
-                        insert_value(output, k, d)
+                        insert_value(output, k, typed_object(k, {nde_mapping[k][1]: value}))
                     elif k in nde_mapping and nde_mapping[k][0] == "value":
                         if k in ["dateCollected", "dateModified", "datePublished"]:
                             try:
@@ -305,10 +346,83 @@ def parse_xml(sample_dict, output, sample_mapping, nde_mapping):
                     else:
                         logger.warning(f"Unmapped nde_mapping property: {k}: {value}")
         else:
-            insert_value(output, "additionalProperty", {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value})
+            insert_value(
+                output,
+                "additionalProperty",
+                {"@type": "PropertyValue", "propertyID": subproperty, "value": field_value},
+            )
 
-    if geo:
+    if len(geo) > 1:
         insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
+
+
+def build_record(uid, sample, id_list, sample_mapping, nde_mapping):
+    """Build one NDE Sample document from an esummary record. Returns None without an accession."""
+    if not sample.get("accession"):
+        return None
+    _id = sample["accession"]
+    url = f"https://www.ncbi.nlm.nih.gov/biosample/{uid}"
+
+    # parse at the end
+    xml_string = sample.pop("sampledata", None)
+
+    output = {
+        "@context": "http://schema.org/",
+        "@type": "Sample",
+        "_id": _id.casefold(),
+        "identifier": _id,
+        "url": url,
+        "distribution": [{"@type": "DataDownload", "contentUrl": url}],
+        "includedInDataCatalog": {
+            "@type": "DataCatalog",
+            "name": "BioSample",
+            "url": "https://www.ncbi.nlm.nih.gov/biosample/",
+            "versionDate": datetime.date.today().isoformat(),
+            "archivedAt": url,
+        },
+        "additionalType": "ExperimentalRunSample",
+    }
+    if uid in id_list:
+        output["additionalType"] = ["ExperimentalRunSample", "BioSample"]
+
+    if name := sample.get("title"):
+        output["name"] = name
+
+    if date := sample.get("date"):
+        output["date"] = dateutil.parser.parse(date, ignoretz=True).date().isoformat()
+
+    if date_published := sample.get("publicationdate"):
+        output["datePublished"] = dateutil.parser.parse(date_published, ignoretz=True).date().isoformat()
+
+    if date_modified := sample.get("modificationdate"):
+        output["dateModified"] = dateutil.parser.parse(date_modified, ignoretz=True).date().isoformat()
+
+    if name := sample.get("organization"):
+        output["author"] = {"@type": "Organization", "name": name}
+
+    if sample.get("taxonomy") or sample.get("organism"):
+        species = {"@type": "DefinedTerm"}
+        if sample.get("taxonomy"):
+            species["identifier"] = sample.get("taxonomy")
+        if sample.get("organism"):
+            species["name"] = sample.get("organism")
+        output["species"] = species
+
+    if ids := sample.get("identifiers"):
+        alternate_identifiers = []
+        for part in ids.split("; "):
+            if ":" in part:
+                id_type, value = [x.strip() for x in part.split(":", 1)]
+                if id_type != "BioSample":
+                    alternate_identifiers.append(value)
+        if alternate_identifiers:
+            output["alternateIdentifier"] = alternate_identifiers
+
+    sample_dict = xmltodict.parse(xml_string) if xml_string else {}
+    if sample_dict:
+        parse_xml(sample_dict, output, sample_mapping, nde_mapping)
+    return output
+
 
 def parse():
 
@@ -320,72 +434,8 @@ def parse():
     id_list = get_all_addtype_records()
 
     for sample_list in fetch_all_samples():
-        for key, sample in sample_list.items():
-            if key == "uids":
+        for uid, sample in sample_list.items():
+            if uid == "uids":
                 continue
-            if sample.get("accession"):
-                _id = sample.get("accession")
-                url = f"https://www.ncbi.nlm.nih.gov/biosample/{key}"
-            else:
-                continue
-
-            # parse at the end
-            xml_string = sample.pop("sampledata", None)
-
-            output = {
-                "@context": "http://schema.org/",
-                "@type": "Sample",
-                "_id": _id.casefold(),
-                "identifier": _id,
-                "url": url,
-                "distribution": [{"@type": "DataDownload", "contentUrl": url}],
-                "includedInDataCatalog": {
-                    "@type": "DataCatalog",
-                    "name": "BioSample",
-                    "url": "https://www.ncbi.nlm.nih.gov/biosample/",
-                    "versionDate": datetime.date.today().isoformat(),
-                    "archivedAt": url,
-                },
-                "additionalType": "ExperimentalRunSample"
-            }
-            if key in id_list:
-                output["additionalType"] = ["ExperimentalRunSample", "BioSample"]
-
-            if name := sample.get("title"):
-                output["name"] = name
-
-            if date := sample.get("date"):
-                output["date"] = dateutil.parser.parse(date, ignoretz=True).date().isoformat()
-
-            if date_published := sample.get("publicationdate"):
-                output["datePublished"] = dateutil.parser.parse(date_published, ignoretz=True).date().isoformat()
-
-            if date_modified := sample.get("modificationdate"):
-                output["dateModified"] = dateutil.parser.parse(date_modified, ignoretz=True).date().isoformat()
-
-            if name := sample.get("organization"):
-                output["author"] = {"@type": "Person", "affiliation": {"@type": "Organization", "name": name}}
-
-            if sample.get("taxonomy") or sample.get("organism"):
-                species = {"@type": "DefinedTerm"}
-                if sample.get("taxonomy"):
-                    species["identifier"] = sample.get("taxonomy")
-                if sample.get("organism"):
-                    species["name"] = sample.get("organism")
-                output["species"] = species
-
-            if ids := sample.get("identifiers"):
-                alternate_identifiers = []
-                parts = ids.split("; ")
-                for part in parts:
-                    if ":" in part:
-                        key, value = [x.strip() for x in part.split(":", 1)]
-                        if key != "BioSample":
-                            alternate_identifiers.append(value)
-                if alternate_identifiers:
-                    output["alternateIdentifier"] = alternate_identifiers
-
-            sample_dict = xmltodict.parse(xml_string) if xml_string else {}
-            if sample_dict:
-                parse_xml(sample_dict, output, sample_mapping, nde_mapping)
-            yield output
+            if output := build_record(uid, sample, id_list, sample_mapping, nde_mapping):
+                yield output
