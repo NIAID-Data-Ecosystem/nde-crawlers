@@ -169,6 +169,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  iedb-crawler:
+    build:
+      context: iedb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   immport-crawler:
     build:
       context: immport

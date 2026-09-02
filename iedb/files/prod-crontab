@@ -1,0 +1,3 @@
+# IEDB publishes rolling exports; refresh every Saturday.
+# m h dom mon dow user command
+0 11 * * 6 root /home/biothings/run-api-crawler.sh
