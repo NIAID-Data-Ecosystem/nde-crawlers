@@ -614,8 +614,7 @@ def _build_is_based_on(species: str) -> list[dict]:
                 "into a single collection, grouped by target species value. "
                 "Collection size and dates are derived from the underlying "
                 "records; descriptive fields such as credit text and "
-                "conditions of access are manually curated. Full generation "
-                "methods are described in the \"How To\" section."
+                "conditions of access are manually curated."
             ),
             "actionProcess": {
                 "@type": "HowTo",

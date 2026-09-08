@@ -147,8 +147,7 @@ IS_BASED_ON = [
             "collection, grouped by substudy. Collection size, temporal "
             "coverage, and dates are derived from the underlying substudy "
             "summary; descriptive fields such as topic category and "
-            "conditions of access are manually curated. Full generation "
-            "methods are described in the \"How To\" section."
+            "conditions of access are manually curated."
         ),
         "actionProcess": {
             "@type": "HowTo",

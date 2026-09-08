@@ -648,8 +648,7 @@ def _build_is_based_on(
             "data into a single collection, grouped by health condition "
             "(MONDO IDs). Collection size, author, and dates are derived from "
             "the underlying records; descriptive fields such as measurement "
-            "technique and conditions of access are manually curated. Full "
-            "generation methods are described in the \"How To\" section."
+            "technique and conditions of access are manually curated."
         ),
         "actionProcess": {
             "@type": "HowTo",

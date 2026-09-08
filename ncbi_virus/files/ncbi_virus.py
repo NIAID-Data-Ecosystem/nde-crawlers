@@ -1500,8 +1500,7 @@ class TaxonAccumulator:
                 "Collection size, temporal coverage, and dates are derived "
                 "from the underlying records; descriptive fields such as "
                 "measurement technique and conditions of access are manually "
-                "curated. Full generation methods are described in the \"How "
-                "To\" section."
+                "curated."
             ),
             "actionProcess": {
                 "@type": "HowTo",

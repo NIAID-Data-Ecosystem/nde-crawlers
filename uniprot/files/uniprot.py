@@ -499,8 +499,7 @@ def _is_based_on(
                 "a single collection, grouped by NCBI Taxon IDs. Collection "
                 "size, version, and dates are derived from the underlying "
                 "records; descriptive fields such as measurement technique "
-                "and conditions of access are manually curated. Full "
-                "generation methods are described in the \"How To\" section."
+                "and conditions of access are manually curated."
             ),
             "actionProcess": {
                 "@type": "HowTo",
