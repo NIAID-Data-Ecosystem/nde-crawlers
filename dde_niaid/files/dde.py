@@ -24,11 +24,11 @@ def process_affiliations(author):
 
 
 def process_authors(authors):
-    if isinstance(authors, list):
-        for author in authors:
+    # DDE submitters leave the author @type off; the schema needs Person or Organization.
+    for author in authors if isinstance(authors, list) else [authors]:
+        if isinstance(author, dict):
+            author.setdefault("@type", "Person")
             process_affiliations(author)
-    else:
-        process_affiliations(authors)
     return authors
 
 
@@ -307,12 +307,16 @@ def parse():
             if citations := hit.get("citation"):
                 if not isinstance(citations, list):
                     citations = [citations]
+                # Submitters omit the citation @type or use a non-work type such as
+                # Organization. A pmid means a paper; anything else is a CreativeWork.
                 for citation in citations:
-                    if citation.get("@type") == "ScholarlyArticle":
-                        if pmid := citation.get("pmid"):
-                            hit["pmids"] = (
-                                hit.get("pmids") + "," + str(pmid).lstrip("0") if hit.get("pmids") else str(pmid)
-                            )
+                    if pmid := citation.get("pmid"):
+                        citation["@type"] = "ScholarlyArticle"
+                        hit["pmids"] = (
+                            hit.get("pmids") + "," + str(pmid).lstrip("0") if hit.get("pmids") else str(pmid)
+                        )
+                    elif citation.get("@type") != "ScholarlyArticle":
+                        citation["@type"] = "CreativeWork"
 
                 # Use list comprehension to filter out citations with a PMID
                 hit["citation"] = [
