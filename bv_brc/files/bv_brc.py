@@ -763,8 +763,7 @@ def _build_is_based_on(about_name: str) -> list[dict[str, Any]]:
             "Collection size, temporal coverage, and dates are derived from "
             "the underlying genome records; descriptive fields such as "
             "measurement technique and conditions of access are manually "
-            "curated. Full generation methods are described in the \"How To\" "
-            "section."
+            "curated."
         ),
         "actionProcess": {
             "@type": "HowTo",

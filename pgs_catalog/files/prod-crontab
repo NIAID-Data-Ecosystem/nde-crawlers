@@ -1,0 +1,3 @@
+# PGS Catalog publishes on a regular release cycle; refresh every Saturday.
+# m h dom mon dow user command
+0 10 * * 6 root /home/biothings/run-api-crawler.sh

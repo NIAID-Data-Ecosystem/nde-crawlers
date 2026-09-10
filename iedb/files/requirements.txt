@@ -1,0 +1,4 @@
+orjson
+python-dateutil
+requests
+urllib3

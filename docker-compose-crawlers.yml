@@ -169,6 +169,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  iedb-crawler:
+    build:
+      context: iedb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   immport-crawler:
     build:
       context: immport
@@ -277,6 +283,12 @@ services:
   pdb-crawler:
     build:
       context: pdb
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
+  pgs_catalog-crawler:
+    build:
+      context: pgs_catalog
       dockerfile: Dockerfile
     volumes:
       - data:/data
