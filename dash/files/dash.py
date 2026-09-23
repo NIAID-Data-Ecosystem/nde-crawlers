@@ -284,7 +284,7 @@ def parse():
 
                 output["includedInDataCatalog"] = {
                     "@type": "DataCatalog",
-                    "name": "NICHD DASH",
+                    "name": "NICHD Data and Specimen Hub (NICHD DASH)",
                     "url": "https://dash.nichd.nih.gov/",
                     "versionDate": datetime.date.today().isoformat(),
                 }
@@ -331,7 +331,7 @@ def parse():
                     "identifier": x["_id"],
                     "hasPart": {"@type": "CreativeWork", "identifier": x["isPartOf"][0]["identifier"]},
                     "@type": "Dataset",
-                    "includedInDataCatalog": {"@type": "DataCatalog", "name": "NICHD DASH"},
+                    "includedInDataCatalog": {"@type": "DataCatalog", "name": "NICHD Data and Specimen Hub (NICHD DASH)"},
                     "relationship": "Datasets in the same study",
                 }
                 for x in related_datasets

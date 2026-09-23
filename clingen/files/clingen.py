@@ -716,7 +716,7 @@ def _build_gene_validity_record(
         "about": copy.deepcopy(settings["about"]),
         "includedInDataCatalog": [{
             "@type": "DataCatalog",
-            "name": "Clinical Genomics Resource (ClinGen)",
+            "name": "Clinical Genome Resource (ClinGen)",
             "url": "https://clinicalgenome.org/",
             "versionDate": dt.datetime.now().date().isoformat(),
             "archivedAt": url
@@ -811,7 +811,7 @@ def _build_variant_pathogenicity_record(
         "about": copy.deepcopy(settings["about"]),
         "includedInDataCatalog": [{
             "@type": "DataCatalog",
-            "name": "Clinical Genomics Resource (ClinGen)",
+            "name": "Clinical Genome Resource (ClinGen)",
             "url": "https://clinicalgenome.org/",
             "versionDate": dt.datetime.now().date().isoformat(),
             "archivedAt": url

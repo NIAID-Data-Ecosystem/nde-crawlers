@@ -217,7 +217,7 @@ def record_generator():
                 "@type": "Dataset",
                 "includedInDataCatalog": {
                     "@type": "DataCatalog",
-                    "name": "ClinEpiDB",
+                    "name": "Clinical Epidemiology Database (ClinEpiDB)",
                     "url": "https://clinepidb.org/ce/app/",
                     "versionDate": datetime.date.today().isoformat(),
                     "archivedAt": url,

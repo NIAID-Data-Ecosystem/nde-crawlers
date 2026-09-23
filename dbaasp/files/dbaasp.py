@@ -56,7 +56,7 @@ ABOUT_DEFINED_TERM = {
 
 INCLUDED_IN_DATA_CATALOG = {
     "@type": "DataCatalog",
-    "name": "Database of Antimicrobial Activity and Structure of Peptides",
+    "name": "Database of Antimicrobial Activity and Structure of Peptides (DBAASP)",
     "alternateName": "DBAASP",
     "url": "https://dbaasp.org/",
 }

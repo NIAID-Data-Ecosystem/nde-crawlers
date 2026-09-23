@@ -381,7 +381,7 @@ def process_dataset_row(syn: Synapse, row: pd.Series) -> Dict:
     "usageInfo": {"@type": "CreativeWork", "url": "https://help.arkportal.org/help/data-use-certificate#DataUse&Acknowledgement-Acknowledgement"},
         "includedInDataCatalog": {
             "@type": "DataCatalog",
-            "name": "SAGE ARK Portal",
+            "name": "SAGE Arthritis and Autoimmune and Related Diseases Knowledge Portal (SAGE ARK Portal)",
             "url": "https://arkportal.synapse.org/",
             "versionDate": datetime.date.today().isoformat(),
             "archivedAt": ARK_PORTAL_DATASET_URL.format(syn_id=digits_only_id),

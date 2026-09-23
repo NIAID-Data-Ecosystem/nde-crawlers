@@ -547,7 +547,7 @@ class CeirrItemProcessorPipeline:
                 "url": bei_url,
                 "includedInDataCatalog": {
                     "@type": "DataCatalog",
-                    "name": "BEI Resources",
+                    "name": "Biological and Emerging Infections Research Resources (BEIResources)",
                     "url": self.BEI_HOME_URL,
                 },
                 "relationship": "also available from",
