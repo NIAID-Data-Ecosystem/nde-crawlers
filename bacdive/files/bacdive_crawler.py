@@ -216,7 +216,7 @@ def parse_dsm(ccn, output):
         return
     included_in_data_catalog = {
         "@type": "DataCatalog",
-        "name": _as_list(data.get("collections"))[0].get("legalName"),
+        "name": "Leibniz-Institute DSMZ",
         "url": "https://www.dsmz.de/",
         "versionDate": datetime.date.today().isoformat(),
         "archivedAt": f"https://www.dsmz.de/collection/catalogue/details/culture/DSM-{dsm_number}",
@@ -498,7 +498,7 @@ def parse():
             "distribution": [{"@type": "DataDownload", "contentUrl": url}],
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "BacDive",
+                "name": "Bacterial Diversity Metadatabase (BacDive)",
                 "url": "https://bacdive.dsmz.de/",
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,

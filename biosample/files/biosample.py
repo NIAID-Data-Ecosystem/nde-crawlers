@@ -375,7 +375,7 @@ def build_record(uid, sample, id_list, sample_mapping, nde_mapping):
         "distribution": [{"@type": "DataDownload", "contentUrl": url}],
         "includedInDataCatalog": {
             "@type": "DataCatalog",
-            "name": "BioSample",
+            "name": "NCBI BioSample",
             "url": "https://www.ncbi.nlm.nih.gov/biosample/",
             "versionDate": datetime.date.today().isoformat(),
             "archivedAt": url,

@@ -427,7 +427,7 @@ class USIDNETItemProcessorPipeline:
             "distribution": [{"@type": "DataDownload", "contentUrl": url}],
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "USIDNET",
+                "name": "United States Immunodeficiency Network (USIDNET)",
                 "url": "https://www.usidnet.org/",
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,

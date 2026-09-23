@@ -33,7 +33,7 @@ SEGMENT_FIELDS = ["HA", "NA", "NP", "NS", "PA", "PB1", "PB2", "MP"]
 
 CEIRR_CATALOG = {
     "@type": "DataCatalog",
-    "name": "Centers of Excellence for Influenza Research and Response (CEIRR) Resources",
+    "name": "NIAID CEIRR Network Resources",
     "alternateName": ["CEIRR Resources", "CEIRR Network Resources"],
     "identifier": "dde_5a908221f16d72c6",
     "url": "https://www.ceirr-network.org/",
