@@ -845,7 +845,7 @@ def _build_data_collection(
         "includedInDataCatalog": [
             {
                 "@type": "DataCatalog",
-                "name": "Bacterial and Viral Bioinformatics Resource Center",
+                "name": "Bacterial and Viral Bioinformatics Resource Center (BV-BRC)",
                 "alternateName": "BV-BRC",
                 "url": "https://www.bv-brc.org/",
                 "archivedAt": url,

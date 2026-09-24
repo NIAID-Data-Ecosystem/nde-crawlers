@@ -79,7 +79,7 @@ def _actt_links(nct_number):
                 "name": name,
                 "identifier": "accessclinicaldata_" + nct,
                 "hasPart": {"@type": "CreativeWork", "identifier": "ACTT"},
-                "includedInDataCatalog": {"@type": "DataCatalog", "name": "accessclinicaldata@NIAID"},
+                "includedInDataCatalog": {"@type": "DataCatalog", "name": "accessclinicaldata@NIAID (ACD@NIAID)"},
                 "relationship": _ACTT_RELATIONSHIP,
             }
             for nct, name in _ACTT_ITERATIONS.items()
@@ -168,7 +168,7 @@ def parse():
         result["url"] = dataset_url
         result["includedInDataCatalog"] = {
             "@type": "DataCatalog",
-            "name": "accessclinicaldata@NIAID",
+            "name": "accessclinicaldata@NIAID (ACD@NIAID)",
             "archivedAt": dataset_url,
         }
         result["@type"] = "Dataset"

@@ -20,8 +20,8 @@ class dashUploader(NDESourceUploader):
         "src_meta": {
             "sourceInfo": {
                 "description": "The NICHD Data and Specimen Hub(DASH) is a centralized resource that allows researchers to share and access de-identified data from studies funded by NICHD. DASH also serves as a portal for requesting biospecimens from selected DASH studies. DASH serves as a mechanism for NICHD-funded extramural and intramural investigators to share research data from studies in accordance with NIH Data Sharing Policies. Many of the NICHD-funded research studies also collected biospecimens that are stored in the NICHD Contracted Biorepository. To provide access to these biospecimens, DASH will store and make available to other investigators the biospecimen catalog for studies that have associated research data in DASH. By supporting data and biospecimen access through DASH, NICHD aims to accelerate scientific findings and improve human health.",
-                "identifier": "NICHD DASH",
-                "name": "NICHD Data and Specimen Hub (DASH)",
+                "identifier": "NICHD Data and Specimen Hub (NICHD DASH)",
+                "name": "NICHD Data and Specimen Hub (NICHD DASH)",
                 "schema": get_source_data(name),
                 "url": "https://dash.nichd.nih.gov/",
             }

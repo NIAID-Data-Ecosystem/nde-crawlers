@@ -220,7 +220,7 @@ def parse():
             included_in_data_catalog = [
                 {
                     "@type": "DataCatalog",
-                    "name": "Data Discovery Engine",
+                    "name": "Data Discovery Engine (DDE)",
                     "url": "https://discovery.biothings.io/",
                     "versionDate": datetime.date.today().isoformat(),
                     "archivedAt": "https://discovery.biothings.io/resource/" + hit["_id"].lower(),

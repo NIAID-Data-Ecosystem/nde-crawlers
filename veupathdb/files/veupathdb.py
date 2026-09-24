@@ -61,7 +61,7 @@ def record_generator():
                 "@type": "Dataset",
                 "includedInDataCatalog": {
                     "@type": "DataCatalog",
-                    "name": "VEuPathDB",
+                    "name": "Eukaryotic Pathogen, Vector and Host Informatics Resource (VEuPathDB)",
                     "url": "https://veupathdb.org/veupathdb/app",
                     "versionDate": datetime.date.today().isoformat(),
                     "archivedAt": "https://veupathdb.org/veupathdb/app/record/dataset/"

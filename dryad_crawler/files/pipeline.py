@@ -47,7 +47,7 @@ class DryadItemProcessorPipeline:
             "_id": "DRYAD_" + last_part.replace(".", "_"),
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "Dryad Digital Repository",
+                "name": "Dryad Digital Repository (Dryad)",
                 "url": "https://datadryad.org",
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,

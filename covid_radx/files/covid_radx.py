@@ -60,7 +60,7 @@ def parse(hit):
         "@type": "Dataset",
         "includedInDataCatalog": {
             "@type": "DataCatalog",
-            "name": "RADx Data Hub",
+            "name": "COVID Rapid Acceleration of Diagnostics (RADx) Data Hub",
             "url": "https://radxdatahub.nih.gov/",
             "versionDate": datetime.date.today().isoformat(),
         },

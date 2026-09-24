@@ -107,7 +107,7 @@ OBSERVATION_PERIOD_PROPERTIES = {
 
 CATALOG = {
     "@type": "DataCatalog",
-    "name": "Gene Expression Atlas",
+    "name": "Gene Expression Atlas (GXA)",
     "alternateName": "GXA",
     "identifier": "GXA",
     "url": API_ROOT + "/",

@@ -102,7 +102,7 @@ def parse():
             output = {
                 "includedInDataCatalog": {
                     "@type": "DataCatalog",
-                    "name": "Mendeley",
+                    "name": "Mendeley Data",
                     "versionDate": datetime.today().isoformat(),
                     "url": "https://data.mendeley.com/",
                 },

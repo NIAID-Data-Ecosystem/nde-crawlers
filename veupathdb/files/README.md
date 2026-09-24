@@ -9,7 +9,7 @@ Extracting data [records](https://veupathdb.org/veupathdb/app/record/dataset/DS_
     "_id": "veupathdb_DS_09efa311b1",
     "@type": "Dataset",
     "includedInDataCatalog": {
-        "name": "VEuPathDB"
+        "name": "Eukaryotic Pathogen, Vector and Host Informatics Resource (VEuPathDB)"
     },
     "url": "https://veupathdb.org/veupathdb/app/record/dataset/DS_09efa311b1",
     "name": "<i>Candida tropicalis</i> MYA-3404 2020 Genome Sequence and Annotation",

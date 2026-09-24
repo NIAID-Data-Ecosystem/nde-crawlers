@@ -8,6 +8,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nde-logger")
 
+CATALOG_NAME = "Immunology Database and Analysis Portal (ImmPort)"
+
 
 def get_ids():
     base_url = "https://www.immport.org/shared/data/query/api/search/study?term="
@@ -54,6 +56,7 @@ def map_schema_json(schema_json):
     The JSON-LD export is already largely schema.org compatible.
     This function handles the remaining transformations:
     - Remove JSON-LD context fields
+    - includedInDataCatalog: use the curated ImmPort catalog name
     - creator → author (with affiliation wrapping)
     - citation → citedBy
     - species/measurementTechnique: wrap strings in {"name": ...}
@@ -61,6 +64,13 @@ def map_schema_json(schema_json):
     # Remove JSON-LD context fields not needed downstream
     schema_json.pop("@context", None)
     schema_json.pop("@id", None)
+
+    # The export labels ImmPort's own catalog with its tagline ("ImmPort -
+    # Bioinformatics For the Future of Immunology"); NDE searches by the curated name.
+    catalogs = schema_json.get("includedInDataCatalog")
+    for catalog in catalogs if isinstance(catalogs, list) else [catalogs]:
+        if isinstance(catalog, dict) and "immport" in str(catalog.get("name", "")).casefold():
+            catalog["name"] = CATALOG_NAME
 
     # creator → author (wrap affiliation string in {"name": ...})
     if author := schema_json.pop("creator", None):

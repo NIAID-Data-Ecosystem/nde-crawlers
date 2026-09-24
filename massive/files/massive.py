@@ -18,7 +18,7 @@ logger = logging.getLogger("nde-logger")
 BASE_URL = "https://massive.ucsd.edu/ProteoSAFe"
 QUERY_DATASETS_URL = f"{BASE_URL}/QueryDatasets"
 MASSIVE_CATALOG = {
-    "name": "MassIVE",
+    "name": "Mass Spectrometry Interactive Virtual Environment (MassIVE)",
     "url": "https://massive.ucsd.edu/ProteoSAFe/static/massive.jsp",
     "@type": "DataCatalog",
 }

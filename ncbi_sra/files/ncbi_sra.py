@@ -408,7 +408,7 @@ class NCBI_SRA(NDEDatabase):
                 "@context": "https://schema.org/",
                 "includedInDataCatalog": {
                     "@type": "DataCatalog",
-                    "name": "NCBI SRA",
+                    "name": "NCBI Sequence Read Archive (NCBI SRA)",
                     "url": "https://www.ncbi.nlm.nih.gov/sra/",
                     "versionDate": datetime.date.today().strftime("%Y-%m-%d"),
                 },

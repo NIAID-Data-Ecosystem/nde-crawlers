@@ -51,7 +51,7 @@ class LINCS:
         for document in lincsportal_data["results"]["documents"]:
             document["@type"] = "Dataset"
             document["includedInDataCatalog"] = {
-                "name": "LINCS",
+                "name": "Library of Integrated Network-based Cellular Signatures (LINCS)",
                 "url": "https://lincsportal.ccs.miami.edu/datasets/",
                 "@type": "DataCatalog",
                 "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),

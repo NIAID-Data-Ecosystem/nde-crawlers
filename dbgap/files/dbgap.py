@@ -236,7 +236,7 @@ def parse():
             "@type": "Dataset",
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "The Database of Genotypes and Phenotypes",
+                "name": "NCBI Database of Genotypes and Phenotypes (NCBI dbGaP)",
                 "url": "https://www.ncbi.nlm.nih.gov/gap/",
                 "versionDate": datetime.date.today().isoformat(),
             },

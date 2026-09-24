@@ -113,7 +113,7 @@ def parse():
             output = {
                 "includedInDataCatalog": {
                     "@type": "DataCatalog",
-                    "name": "ReframeDB",
+                    "name": "Repurposing, Focused Rescue, and Accelerated Medchem Database (REFRAMEdb)",
                     "versionDate": datetime.today().isoformat(),
                     "url": "https://reframedb.org/",
                 },

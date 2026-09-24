@@ -133,7 +133,7 @@ def parse_gsm(data_folder):
             "distribution": [{"@type": "DataDownload", "contentUrl": url}],
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "NCBI GEO",
+                "name": "NCBI Gene Expression Omnibus (NCBI GEO)",
                 "url": "https://www.ncbi.nlm.nih.gov/geo/",
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,
@@ -369,7 +369,7 @@ def parse_gse(data_folder):
             "distribution": {"@type": "DataDownload", "contentUrl": url},
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "NCBI GEO",
+                "name": "NCBI Gene Expression Omnibus (NCBI GEO)",
                 "url": "https://www.ncbi.nlm.nih.gov/geo/",
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,

@@ -25,7 +25,7 @@ class CeirrSpider(scrapy.Spider):
     SOURCE_URL = "https://www.ceirr-network.org/resources/reagents"
     DEFAULT_DATA_URL = "https://www.ceirr-network.org/api/resources/reagents"
     PAGE_SIZE = 500
-    SOURCE_NAME = "Centers of Excellence for Influenza Research and Response (CEIRR) Resources"
+    SOURCE_NAME = "NIAID CEIRR Network Resources"
 
     start_urls = [SOURCE_URL]
 
