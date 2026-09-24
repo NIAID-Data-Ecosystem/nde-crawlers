@@ -13,8 +13,24 @@ or the network. Its tracked fields are still counted for repository statistics.
 
 Records are processed in batches of 10,000 by default.
 
-At the end of an upload, each active stage logs repository-wide before/after
-counts for the fields it manages, along with the number of records it changed.
+At the end of an upload, each active stage logs repository-wide counts for the
+fields it manages (`Pipeline util stats`). The same counts are then logged for
+the pipeline as a whole, counting each record once however many stages touched
+it (`Pipeline augmentation summary`). For each field:
+
+    records, values       populated records and values, before -> after
+    changed               records whose field changed at all, split into
+                          added (was empty), modified and removed (now empty)
+    augmented             records whose field gained values
+    rewritten             records whose existing values were replaced, e.g. a
+                          term by its standardized form or a DOI stub by the
+                          full citation
+    values_added          values that are new
+    values_rewritten      values that replaced an existing one
+    values_removed        values dropped with no replacement
+
+A stage's own line adds up its fields and names the ones it augmented and
+rewrote; each summary field line names the stages that did.
 
 Usage in an uploader::
 
@@ -26,22 +42,22 @@ The base class already decorates `load_data`. Override it (keeping
 settings on the uploader change the pipeline:
 
     post_process(self, doc)      applied after every stage but before
-                                 `lineage`; return the document or None to
-                                 drop it
+                                 `lineage` and `corrections`; return the
+                                 document or None to drop it
     skip_stages = ("...",)       stage names this source should not run
 """
 
-import copy
 import functools
 import os
 import time
+from collections import Counter
 from itertools import batched
 
 import bson
+import orjson
 from config import logger
 
 from .common import dict_entries, supports_description_enrichment, supports_term_standardization
-from .corrections import apply_corrections
 from .validate import add_date, add_metadata_score, check_schema, clean_description, drop_placeholder_terms
 
 DEFAULT_BATCH_SIZE = 10_000
@@ -87,27 +103,38 @@ class Stage:
 # ---------------------------------------------------------------------------
 # Per-stage statistics
 # ---------------------------------------------------------------------------
-def _new_stage_stats(stage):
+_RECORD_COUNTS = (
+    "records_seen",
+    "records_processed",
+    "records_output",
+    "records_changed",
+    "records_added",
+    "records_dropped",
+    "records_augmented",
+    "records_rewritten",
+)
+_VALUE_CHANGES = ("values_added", "values_rewritten", "values_removed")
+_FIELD_COUNTS = (
+    "records_before",
+    "records_after",
+    "values_before",
+    "values_after",
+    "changed",
+    "added",
+    "modified",
+    "removed",
+    "augmented",
+    "rewritten",
+) + _VALUE_CHANGES
+
+# Values are compared by their JSON form, so key order never counts as a change.
+_VALUE_KEY_OPTIONS = orjson.OPT_SORT_KEYS | orjson.OPT_NON_STR_KEYS
+
+
+def _new_stats(fields):
     return {
-        "records_seen": 0,
-        "records_processed": 0,
-        "records_output": 0,
-        "records_changed": 0,
-        "records_added": 0,
-        "records_dropped": 0,
-        "fields": {
-            field: {
-                "records_before": 0,
-                "records_after": 0,
-                "values_before": 0,
-                "values_after": 0,
-                "changed": 0,
-                "added": 0,
-                "modified": 0,
-                "removed": 0,
-            }
-            for field in stage.tracked_fields
-        },
+        **dict.fromkeys(_RECORD_COUNTS, 0),
+        "fields": {field: dict.fromkeys(_FIELD_COUNTS, 0) for field in fields},
     }
 
 
@@ -123,28 +150,59 @@ def _record_key(doc, occurrences):
     return base, occurrence
 
 
-def _field_state(doc, field, copy_value):
+def _field_values(doc, field):
+    """The values of `field` in `doc`: a list's items, or the value itself."""
     value = doc
     for part in field.split("."):
         if not isinstance(value, dict) or part not in value:
-            return False, None
+            return ()
         value = value[part]
-    return True, copy.deepcopy(value) if copy_value else value
+    if not value:
+        return ()
+    return value if isinstance(value, (list, tuple, set)) else (value,)
 
 
-def _snapshot_docs(docs, fields, *, copy_values):
+def _value_key(value):
+    try:
+        return orjson.dumps(value, option=_VALUE_KEY_OPTIONS, default=repr)
+    except TypeError:  # orjson.JSONEncodeError, e.g. an integer beyond 64 bits
+        return repr(value)
+
+
+def _snapshot_docs(docs, fields, *, keyed):
+    """Each document's values for `fields`, by record.
+
+    A keyed snapshot holds every value's JSON form instead of the value: it
+    survives a stage editing the documents in place, and the values can be
+    diffed. Unkeyed snapshots are only for batches no stage will touch.
+    """
     occurrences = {}
-    return {
-        _record_key(doc, occurrences): {field: _field_state(doc, field, copy_values) for field in fields}
-        for doc in docs
-    }
+    snapshot = {}
+    for doc in docs:
+        values = {field: _field_values(doc, field) for field in fields}
+        if keyed:
+            values = {field: tuple(map(_value_key, field_values)) for field, field_values in values.items()}
+        snapshot[_record_key(doc, occurrences)] = values
+    return snapshot
 
 
-def _value_count(state):
-    present, value = state
-    if not present or not value:
-        return 0
-    return len(value) if isinstance(value, (list, tuple, set)) else 1
+def _value_diff(before_keys, after_keys):
+    """Split one record's field change into (appended, rewritten, dropped) values.
+
+    The values are compared as multisets of their keys. When a stage both
+    removed and added values, each added value is paired with a removed one as
+    a rewrite; the rest were appended or dropped outright.
+    """
+    if not before_keys:
+        return len(after_keys), 0, 0
+    if not after_keys:
+        return 0, 0, len(before_keys)
+    before_counts = Counter(before_keys)
+    after_counts = Counter(after_keys)
+    new = (after_counts - before_counts).total()
+    gone = (before_counts - after_counts).total()
+    rewritten = min(new, gone)
+    return new - rewritten, rewritten, gone - rewritten
 
 
 def _update_stage_stats(stats, before, after, *, applied):
@@ -159,67 +217,93 @@ def _update_stage_stats(stats, before, after, *, applied):
     stats["records_dropped"] += len(before_keys - after_keys)
 
     changed_records = before_keys ^ after_keys
-    for key in before_keys & after_keys:
-        if any(before[key][field] != after[key][field] for field in stats["fields"]):
-            changed_records.add(key)
-    stats["records_changed"] += len(changed_records)
-
-    absent = (False, None)
+    augmented_records = set()
+    rewritten_records = set()
     for field, field_stats in stats["fields"].items():
         for key in before_keys | after_keys:
-            before_state = before.get(key, {}).get(field, absent)
-            after_state = after.get(key, {}).get(field, absent)
-            before_count = _value_count(before_state)
-            after_count = _value_count(after_state)
+            before_values = before.get(key, {}).get(field, ())
+            after_values = after.get(key, {}).get(field, ())
 
-            field_stats["records_before"] += bool(before_count)
-            field_stats["records_after"] += bool(after_count)
-            field_stats["values_before"] += before_count
-            field_stats["values_after"] += after_count
+            field_stats["records_before"] += bool(before_values)
+            field_stats["records_after"] += bool(after_values)
+            field_stats["values_before"] += len(before_values)
+            field_stats["values_after"] += len(after_values)
 
-            if before_state == after_state:
+            if before_values == after_values:
                 continue
+            changed_records.add(key)
             field_stats["changed"] += 1
-            if not before_count and after_count:
+            if not before_values and after_values:
                 field_stats["added"] += 1
-            elif before_count and not after_count:
+            elif before_values and not after_values:
                 field_stats["removed"] += 1
             else:
                 field_stats["modified"] += 1
 
+            appended, rewritten, dropped = _value_diff(before_values, after_values)
+            field_stats["values_added"] += appended
+            field_stats["values_rewritten"] += rewritten
+            field_stats["values_removed"] += dropped
+            if appended:
+                field_stats["augmented"] += 1
+                augmented_records.add(key)
+            if rewritten:
+                field_stats["rewritten"] += 1
+                rewritten_records.add(key)
 
-def _log_stage_stats(source, stages, stage_stats):
+    stats["records_changed"] += len(changed_records)
+    stats["records_augmented"] += len(augmented_records)
+    stats["records_rewritten"] += len(rewritten_records)
+
+
+def _names(names):
+    return ",".join(names) or "none"
+
+
+def _stats_line(stats):
+    """Record counts, value totals and the fields augmented / rewritten."""
+    fields = stats["fields"]
+    counts = [f"{key}={stats[key]}" for key in _RECORD_COUNTS]
+    counts += [f"{key}={sum(field_stats[key] for field_stats in fields.values())}" for key in _VALUE_CHANGES]
+    counts.append("fields_augmented=" + _names(field for field, s in fields.items() if s["augmented"]))
+    counts.append("fields_rewritten=" + _names(field for field, s in fields.items() if s["rewritten"]))
+    return " ".join(counts)
+
+
+def _field_line(field_stats):
+    return (
+        "records={records_before}->{records_after} values={values_before}->{values_after} "
+        "changed={changed} added={added} modified={modified} removed={removed} "
+        "augmented={augmented} rewritten={rewritten} "
+        "values_added={values_added} values_rewritten={values_rewritten} values_removed={values_removed}"
+    ).format(**field_stats)
+
+
+def _log_stats(source, stages, stage_stats, summary):
     repository = source or "unknown"
     for stage in stages:
         stats = stage_stats[stage.name]
-        logger.info(
-            "Pipeline util stats: repository=%s util=%s records_seen=%s records_processed=%s "
-            "records_output=%s records_changed=%s records_added=%s records_dropped=%s",
-            repository,
-            stage.name,
-            stats["records_seen"],
-            stats["records_processed"],
-            stats["records_output"],
-            stats["records_changed"],
-            stats["records_added"],
-            stats["records_dropped"],
-        )
+        logger.info("Pipeline util stats: repository=%s util=%s %s", repository, stage.name, _stats_line(stats))
         for field, field_stats in stats["fields"].items():
             logger.info(
-                "Pipeline util stats: repository=%s util=%s field=%s records=%s->%s values=%s->%s "
-                "changed=%s added=%s modified=%s removed=%s",
+                "Pipeline util stats: repository=%s util=%s field=%s %s",
                 repository,
                 stage.name,
                 field,
-                field_stats["records_before"],
-                field_stats["records_after"],
-                field_stats["values_before"],
-                field_stats["values_after"],
-                field_stats["changed"],
-                field_stats["added"],
-                field_stats["modified"],
-                field_stats["removed"],
+                _field_line(field_stats),
             )
+
+    logger.info("Pipeline augmentation summary: repository=%s %s", repository, _stats_line(summary))
+    for field, field_stats in summary["fields"].items():
+        by_stage = [(stage.name, stage_stats[stage.name]["fields"].get(field)) for stage in stages]
+        logger.info(
+            "Pipeline augmentation summary: repository=%s field=%s %s augmented_by=%s rewritten_by=%s",
+            repository,
+            field,
+            _field_line(field_stats),
+            _names(name for name, s in by_stage if s and s["augmented"]),
+            _names(name for name, s in by_stage if s and s["rewritten"]),
+        )
 
 
 def _any_doc(predicate):
@@ -331,6 +415,12 @@ def _run_lineage(docs, source):
     return process_lineage(docs)
 
 
+def _run_corrections(docs, source):
+    from .corrections import apply_corrections
+
+    return [apply_corrections(doc) for doc in docs]
+
+
 def _reset_terms():
     from .terms import reset_caches
 
@@ -368,7 +458,8 @@ def _disambiguating_description_file(source):
 
 
 # The pipeline, in order. Citations run first because they add funding, species
-# and health conditions the later stages then standardize.
+# and health conditions the later stages then standardize. Corrections run last,
+# once funding is final, because they match on funding identifiers.
 STAGES = (
     Stage(
         "citations",
@@ -420,6 +511,7 @@ STAGES = (
         tracked_fields=("disambiguatingDescription",),
     ),
     Stage("lineage", _run_lineage, _always, tracked_fields=("_meta.lineage",)),
+    Stage("corrections", _run_corrections, _always, tracked_fields=("sourceOrganization",)),
 )
 
 STAGE_NAMES = tuple(stage.name for stage in STAGES)
@@ -428,8 +520,9 @@ STAGE_NAMES = tuple(stage.name for stage in STAGES)
 def _post_process_stage(post_process):
     """Wrap an uploader's `post_process` method as a stage.
 
-    It runs after every augmentation but before `lineage`, so a source can still
-    add, correct or drop taxonomy and have the lineage reflect it.
+    It runs after every augmentation but before `lineage` and `corrections`, so
+    a source can still add, correct or drop taxonomy and have the lineage
+    reflect it.
     """
 
     def run(docs, source):
@@ -471,31 +564,41 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
         stage.reset()
 
     if post_process is not None:
-        lineage_index = next((i for i, stage in enumerate(stages) if stage.name == "lineage"), len(stages))
-        stages.insert(lineage_index, _post_process_stage(post_process))
+        finishing_index = next(
+            (i for i, stage in enumerate(stages) if stage.name in ("lineage", "corrections")), len(stages)
+        )
+        stages.insert(finishing_index, _post_process_stage(post_process))
 
     logger.info("Pipeline for %s: %s", source, ", ".join(stage.name for stage in stages) or "no stages")
 
     batch_size = batch_size or DEFAULT_BATCH_SIZE
     started = time.monotonic()
     ran = {}
-    stage_stats = {stage.name: _new_stage_stats(stage) for stage in stages}
+    stage_stats = {stage.name: _new_stats(stage.tracked_fields) for stage in stages}
+    # The whole pipeline as one stage: each record counts once however many
+    # stages augmented it, and a value one stage adds and a later one
+    # standardizes counts as a single addition.
+    summary_fields = tuple(dict.fromkeys(field for stage in stages for field in stage.tracked_fields))
+    summary = _new_stats(summary_fields)
     total = 0
     yielded = 0
 
     try:
         for batch in batched(docs, batch_size):
             total += len(batch)
+            source_state = _snapshot_docs(batch, summary_fields, keyed=True)
             for stage in stages:
                 applied = stage.applies(batch)
-                before = _snapshot_docs(batch, stage.tracked_fields, copy_values=applied)
+                before = _snapshot_docs(batch, stage.tracked_fields, keyed=applied)
                 if applied:
                     batch = list(stage.run(batch, source))
                     ran[stage.name] = ran.get(stage.name, 0) + 1
-                    after = _snapshot_docs(batch, stage.tracked_fields, copy_values=False)
+                    after = _snapshot_docs(batch, stage.tracked_fields, keyed=True)
                 else:
                     after = before
                 _update_stage_stats(stage_stats[stage.name], before, after, applied=applied)
+            final_state = _snapshot_docs(batch, summary_fields, keyed=True)
+            _update_stage_stats(summary, source_state, final_state, applied=True)
 
             for doc in batch:
                 doc = finalize(doc)
@@ -507,7 +610,7 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
     finally:
         # Also report partial statistics when validation or upload consumption
         # stops the generator before the repository has finished.
-        _log_stage_stats(source, stages, stage_stats)
+        _log_stats(source, stages, stage_stats, summary)
 
     # A stage that was active but never applied had no record that needed it.
     skipped.update({stage.name: "no matching records" for stage in stages if stage.name not in ran})
@@ -525,9 +628,6 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
 
 def finalize(doc):
     """Apply the per-document finishing touches. Returns None for oversized documents."""
-    # Apply sourceOrganization corrections on the fly, using the index cached
-    # once per process. Matches by _id (records.txt) AND funding.identifier.
-    apply_corrections(doc)
     add_date(doc)
     add_metadata_score(doc)
     clean_description(doc)
