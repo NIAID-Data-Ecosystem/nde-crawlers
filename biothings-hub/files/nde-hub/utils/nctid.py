@@ -4,22 +4,56 @@ Runs for records that carry an `nctid`. The trial's design (study type,
 intervention model, allocation, masking) is looked up on clinicaltrials.gov and
 matched against the curated NCIT mapping CSV, which yields up to three NCIT
 terms per design.
+
+Designs are fetched a few hundred trials per request and cached in SQLite next
+to the mapping CSV. A cached design is refetched once it is `_CACHE_DAYS` old,
+since a trial's design can be amended while it is still recruiting; if
+clinicaltrials.gov cannot answer, the stale design is used instead.
 """
 
-from functools import cache, lru_cache
+import os
+import re
+from datetime import date, timedelta
+from functools import cache
+from itertools import batched
 
 import pandas as pd
 import requests
 from config import logger
 
+from .cache import SqliteCache
+from .common import as_list, retry
+
 CSV_FILE = "/nvme/nde-hub/standardizers/nctid_lookup/nctid.csv"
+DB_PATH = os.path.join(os.path.dirname(CSV_FILE), "nctid_lookup.db")
+
+STUDIES_URL = "https://clinicaltrials.gov/api/v2/studies"
+NCIT_TERMS_URL = "https://www.ebi.ac.uk/ols4/api/ontologies/ncit/terms"
+
+# The IDs travel in the query string: 500 is ~7 KB, and 1,000 is rejected as too long.
+_REQUEST_SIZE = 400
+_CACHE_DAYS = 30
+# One malformed ID fails the whole request, so only well-formed ones are sent.
+_NCT_ID = re.compile(r"NCT\d{8}")
 
 _DESIGN_COLUMNS = ["studytype", "studymodel", "designmodel", "designmethod"]
 _IRI_COLUMNS = ["IRI", "IRI.1", "IRI.2"]
 
+# nctid -> {"design": the trial's designModule, "fetched": ISO date}
+DESIGNS = SqliteCache(DB_PATH, "trial_designs", "nctid", "design", normalize=False)
+# NCIT IRI -> label, only for labels OLS actually returned
+NCIT_NAMES = SqliteCache(DB_PATH, "ncit_names", "iri", "name", preload=True, normalize=False)
+
 
 def lookup_file():
     return CSV_FILE
+
+
+def reset_caches():
+    """Re-read the mapping CSV and the SQLite caches on the next upload."""
+    load_mapping.cache_clear()
+    DESIGNS.reset()
+    NCIT_NAMES.reset()
 
 
 @cache
@@ -32,60 +66,101 @@ def load_mapping():
     return df
 
 
-def fetch_trial(nctid):
-    """Fetch one trial's design module from the clinicaltrials.gov v2 API."""
-    logger.debug("Fetching trial data for NCT ID: %s", nctid)
-    response = requests.get(
-        f"https://clinicaltrials.gov/api/v2/studies/{nctid}",
-        params={"fields": "protocolSection.designModule"},
-    )
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data for {nctid}: {response.status_code}")
-    return response.json()
+def nct_ids(value):
+    """The well-formed NCT IDs in a record's `nctid`, upper-cased."""
+    ids = []
+    for item in as_list(value):
+        nctid = str(item).strip().upper()
+        if _NCT_ID.fullmatch(nctid):
+            ids.append(nctid)
+        else:
+            logger.warning("Skipping malformed NCT ID %r", item)
+    return ids
 
 
-@cache
-def get_ncit_name(iri):
-    """Resolve an NCIT IRI to its official term label.
+@retry(3, 10)
+def _fetch_designs(nctids):
+    """{nctid: designModule} for up to `_REQUEST_SIZE` trials, in one request.
 
-    Unbounded: the IRIs come from the mapping CSV, so there are at most three per
-    row, and the values are short labels.
+    Trials clinicaltrials.gov does not know are simply absent from the answer.
     """
+    response = requests.get(
+        STUDIES_URL,
+        params={"filter.ids": ",".join(nctids), "fields": "NCTId,DesignModule", "pageSize": len(nctids)},
+        timeout=120,
+    )
+    response.raise_for_status()
+    designs = {}
+    for study in response.json().get("studies", []):
+        protocol = study.get("protocolSection", {})
+        if nctid := protocol.get("identificationModule", {}).get("nctId"):
+            designs[nctid.upper()] = protocol.get("designModule", {})
+    return designs
+
+
+def trial_designs(nctids):
+    """{nctid: designModule} for `nctids`, from the cache or clinicaltrials.gov."""
+    nctids = set(nctids)
+    today = date.today()
+    fresh_after = (today - timedelta(days=_CACHE_DAYS)).isoformat()
+    cached = DESIGNS.get_many(nctids)
+    designs = {nctid: entry["design"] for nctid, entry in cached.items() if entry["fetched"] > fresh_after}
+
+    to_fetch = sorted(nctids - designs.keys())
+    fetched = {}
+    failed = set()
+    for chunk in batched(to_fetch, _REQUEST_SIZE):
+        try:
+            fetched.update(_fetch_designs(chunk))
+        except Exception as e:
+            failed.update(chunk)
+            logger.error("Could not fetch %s trial designs from clinicaltrials.gov: %s", len(chunk), e)
+    DESIGNS.put_many({nctid: {"design": design, "fetched": today.isoformat()} for nctid, design in fetched.items()})
+    designs.update(fetched)
+
+    unanswered = set(to_fetch) - fetched.keys()
+    stale = {nctid: cached[nctid]["design"] for nctid in unanswered if nctid in cached}
+    designs.update(stale)
+
+    logger.info(
+        "NCT trial designs: trials=%s cache_hits=%s fetched=%s requests=%s not_found=%s failed=%s stale_used=%s",
+        len(nctids),
+        len(nctids) - len(to_fetch),
+        len(fetched),
+        -(-len(to_fetch) // _REQUEST_SIZE),
+        len(unanswered - failed),
+        len(failed),
+        len(stale),
+    )
+    return designs
+
+
+def design_key(design_module):
+    """(study_type, intervention_model, allocation, design_method) of a trial's designModule."""
+    design_info = design_module.get("designInfo", {})
+    return (
+        design_module.get("studyType", "").upper(),
+        design_info.get("interventionModel", "").upper(),
+        design_info.get("allocation", "").upper(),
+        design_info.get("maskingInfo", {}).get("masking", "NONE").upper() or "NONE",
+    )
+
+
+def get_ncit_name(iri):
+    """Resolve an NCIT IRI to its official term label."""
+    if name := NCIT_NAMES.get(iri):
+        return name
     identifier = iri.split("_")[-1]
     try:
-        response = requests.get(f"https://www.ebi.ac.uk/ols/api/ontologies/ncit/terms?obo_id=NCIT:{identifier}")
+        response = requests.get(NCIT_TERMS_URL, params={"obo_id": f"NCIT:{identifier}"}, timeout=60)
         if response.status_code == 200:
             terms = response.json().get("_embedded", {}).get("terms", [])
-            if terms:
-                return terms[0].get("label", f"NCIT Term {identifier}")
+            if terms and (name := terms[0].get("label")):
+                NCIT_NAMES.put(iri, name)
+                return name
     except Exception as e:
         logger.error("Error retrieving NCIT name for %s: %s", iri, e)
     return f"NCIT Term {identifier}"
-
-
-def extract_trial_info(api_data):
-    """Return (study_type, intervention_model, allocation, design_method) for a trial."""
-    try:
-        design_module = api_data["protocolSection"]["designModule"]
-        design_info = design_module.get("designInfo", {})
-        return (
-            design_module.get("studyType", "").upper(),
-            design_info.get("interventionModel", "").upper(),
-            design_info.get("allocation", "").upper(),
-            design_info.get("maskingInfo", {}).get("masking", "NONE").upper() or "NONE",
-        )
-    except Exception as e:
-        raise Exception("Error extracting trial info: " + str(e))
-
-
-@lru_cache(maxsize=4096)
-def trial_design(nctid):
-    """The (study_type, intervention_model, allocation, design_method) of one trial.
-
-    Caches the four fields, not fetch_trial's response. Bounded because the keys
-    come from records, not a curated file.
-    """
-    return extract_trial_info(fetch_trial(nctid))
 
 
 def get_measurement_technique(design, mapping_df):
@@ -123,18 +198,31 @@ def get_measurement_technique(design, mapping_df):
 
 
 def add_nct_measurement_techniques(docs):
-    """Add design-derived measurementTechnique to every record with an nctid."""
-    mapping_df = load_mapping()
-    added = 0
+    """Add design-derived measurementTechnique to every record with an nctid.
 
-    for doc in docs:
-        if nctid := doc.get("nctid"):
-            try:
-                if measurement_techniques := get_measurement_technique(trial_design(nctid), mapping_df):
-                    doc["measurementTechnique"] = measurement_techniques
-                    added += 1
-            except Exception as e:
-                logger.error("Error processing NCT ID %s: %s", nctid, e)
-        yield doc
+    `docs` is one pipeline batch; every trial in it is looked up at once.
+    """
+    docs = list(docs)
+    mapping_df = load_mapping()
+    ids_per_doc = [nct_ids(doc.get("nctid")) for doc in docs]
+    designs = trial_designs(nctid for ids in ids_per_doc for nctid in ids)
+
+    techniques_by_design = {}
+    added = 0
+    for doc, ids in zip(docs, ids_per_doc):
+        techniques = []
+        for nctid in ids:
+            if (design := designs.get(nctid)) is None:
+                logger.debug("No trial design for NCT ID %s in %s", nctid, doc.get("_id"))
+                continue
+            key = design_key(design)
+            if key not in techniques_by_design:
+                techniques_by_design[key] = get_measurement_technique(key, mapping_df)
+            techniques += [t for t in techniques_by_design[key] if t not in techniques]
+        if techniques:
+            # Each record gets its own copies, so a later stage editing one cannot touch another.
+            doc["measurementTechnique"] = [dict(technique) for technique in techniques]
+            added += 1
 
     logger.info("MeasurementTechnique added to %s documents from NCT trial designs", added)
+    return docs

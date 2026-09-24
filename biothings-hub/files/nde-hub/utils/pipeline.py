@@ -433,6 +433,12 @@ def _reset_descriptions():
     reset_caches()
 
 
+def _reset_nctid():
+    from .nctid import reset_caches
+
+    reset_caches()
+
+
 def _measurement_technique_file(source):
     from .measurement_technique import lookup_file
 
@@ -494,6 +500,7 @@ STAGES = (
         _run_nctid,
         _any_doc(lambda doc: bool(doc.get("nctid"))),
         _nctid_file,
+        reset=_reset_nctid,
         tracked_fields=("measurementTechnique",),
     ),
     Stage(
