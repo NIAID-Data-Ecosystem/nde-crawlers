@@ -1272,6 +1272,8 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "administrativeType": {"type": "keyword"},
+                    "locationType": {"type": "keyword"},
                     "geo": {
                         "properties": {
                             "@type": {
@@ -2147,6 +2149,8 @@ class NDESourceSampleUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
+                    "administrativeType": {"type": "keyword"},
+                    "locationType": {"type": "keyword"},
                     "geo": {
                         "properties": {
                             "@type": {

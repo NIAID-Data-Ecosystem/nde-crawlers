@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 from functools import cache
 
 import dateutil.parser
@@ -16,11 +17,6 @@ BATCH_SIZE = 10000
 # frequency, so this keeps the most common values.
 MAX_VALUES = 100
 
-# Copied verbatim from PLACEHOLDER_TERMS in
-# biothings-hub/files/nde-hub/utils/validate.py. The hub strips these from
-# species / infectiousAgent / healthCondition only, so every other field this
-# crawler emits -- associatedPhenotype, additionalProperty, spatialCoverage --
-# has to be cleaned here or the placeholders reach the index. Keep in sync.
 PLACEHOLDER_TERMS = frozenset(
     {
         "",
@@ -49,8 +45,9 @@ PLACEHOLDER_TERMS = frozenset(
 # values rather than as an unset field: sequencingAssayType reports OTHER, and
 # hostRole / exposureSetting / purposeOfSampling each offer an Other option. A
 # bare "Other" is never worth a facet value, but it is not a placeholder in the
-# hub's sense, so it is kept as a separate set.
-UNINFORMATIVE_TERMS = frozenset({"other", "others", "unspecified", "undetermined"})
+# hub's sense, so it is kept as a separate set. "no" is a free-text answer in
+# travelHistory, not a value.
+UNINFORMATIVE_TERMS = frozenset({"other", "others", "unspecified", "undetermined", "no"})
 
 # Superseded revisions stay in the index, so an unfiltered query roughly
 # double-counts any accession that was ever revised. Revoked records are
@@ -74,7 +71,6 @@ ORDER_BY = [{"field": "sampleCollectionDate", "type": "descending"}]
 # Output key -> source fields. The Elasticsearch mapping in nde.py types these
 # as plain keyword/text, so they stay lists of strings.
 STRING_LIST_FIELDS = {
-    "alternateName": ("specimenCollectorSampleId", "submissionId"),
     "identifier": ("gcaAccession", "gisaidIsolateId"),
     "keywords": ("outbreak",),
     "sameAs": ("gcaAccession",),
@@ -99,19 +95,25 @@ NAMED_OBJECT_FIELDS = {
     "variableMeasured": ("DefinedTerm", ("diagnosticMeasurementUnit", "diagnosticTargetGeneName")),
 }
 
-# nde.py types spatialCoverage as {@type, geo, name, identifier}. The sheet also
-# asks for administrativeType and locationType, which the mapping has no slot
-# for, so they are left off and geoLocCountry/hostOriginCountry merge by name.
-SPATIAL_COVERAGE_FIELDS = (
-    "exposureSetting",
-    "geoLocAdmin1",
-    "geoLocAdmin2",
-    "geoLocCity",
-    "geoLocCountry",
-    "geoLocSite",
-    "hostOriginCountry",
-    "travelHistory",
-)
+# spatialCoverage source field -> (administrativeType, locationType). The sheet
+# types geoLocAdmin1/geoLocAdmin2 as "Local Government Area"; they are left
+# untyped. exposureSetting is left out: its values are settings ("Home"), not
+# places.
+SPATIAL_COVERAGE_FIELDS = {
+    "geoLocCountry": ("country", "collection"),
+    "hostOriginCountry": ("country", "residence"),
+    "travelHistory": ("country", "exposure"),
+    "geoLocAdmin1": (None, "collection"),
+    "geoLocAdmin2": (None, "collection"),
+    "geoLocCity": ("city", "collection"),
+    "geoLocSite": (None, "collection"),
+}
+
+# travelHistory is free text; only values that are a known country name are kept.
+COUNTRY_NAME_ONLY_FIELDS = ("travelHistory",)
+
+# Brazilian municipality code suffix, e.g. "SP, Sao Paulo [IBGE7 3550308]".
+IBGE_CODE = re.compile(r"\s*\[IBGE7? \d+\]")
 
 # sample.aggregateElement keys nde.py types as objects with a name.
 SAMPLE_OBJECT_FIELDS = {
@@ -146,7 +148,6 @@ SAMPLE_KEYWORD_FIELDS = {
 # sample.aggregateElement keys nde.py types as bare text.
 SAMPLE_TEXT_FIELDS = {
     "collectionMethod": ("collectionMethod",),
-    "identifier": ("cultureId", "specimenCollectorSampleId"),
 }
 
 # sample.aggregateElement keys nde.py types as dates. Values are passed through
@@ -207,8 +208,7 @@ IS_BASED_ON = {
     "@type": "Action",
     "name": "DataCollection Generation Process in the NIAID Data Ecosystem",
     "disambiguatingDescription": (
-        "How this Pathoplexus MolecularSequence DataCollection record was "
-        "generated for the NIAID Data Ecosystem."
+        "How this Pathoplexus MolecularSequence DataCollection record was " "generated for the NIAID Data Ecosystem."
     ),
     "description": (
         "This record aggregated Pathoplexus MolecularSequence data into a "
@@ -362,9 +362,10 @@ def is_uninformative(value):
     return text in PLACEHOLDER_TERMS or text in UNINFORMATIVE_TERMS
 
 
-def add_split_values(target, values, separator=";", max_size=MAX_VALUES):
+def add_split_values(target, values, separator=";", max_size: int | None = MAX_VALUES):
     """Split each string in values on separator and add the pieces to target.
 
+    target is a dict used as an ordered set, so pieces keep the order of values.
     Mutates target in place and returns it, so it can be called repeatedly to
     accumulate across several lists. Pieces are stripped, and empty ones are
     dropped so a trailing separator does not leave a blank entry behind.
@@ -374,8 +375,9 @@ def add_split_values(target, values, separator=";", max_size=MAX_VALUES):
     collect_values keeps them from consuming max_size slots that real values
     would otherwise get.
 
-    Stops once target holds max_size pieces. value_counts orders its keys by
-    frequency, so passing one of those keeps the most common values.
+    Stops once target holds max_size pieces; None means no limit. value_counts
+    orders its keys by frequency, so passing one of those keeps the most common
+    values.
     """
     if isinstance(values, str):
         values = [values]
@@ -384,9 +386,9 @@ def add_split_values(target, values, separator=";", max_size=MAX_VALUES):
             part = part.strip()
             if not part or is_uninformative(part) or part in target:
                 continue
-            if len(target) >= max_size:
+            if max_size is not None and len(target) >= max_size:
                 return target
-            target.add(part)
+            target[part] = None
     return target
 
 
@@ -593,11 +595,22 @@ def collect_values(organism, fields, top_n=MAX_VALUES):
     Fields the organism does not have are skipped rather than queried.
     """
     available = get_schema_fields(organism)
-    values = set()
+    values = {}
     for field in fields:
         if field in available:
             add_split_values(values, field_values(organism, field, top_n), max_size=top_n)
     return sorted(values)
+
+
+@cache
+def known_countries():
+    """Casefolded geoLocCountry value -> its spelling, across every organism."""
+    names = {}
+    for organism in get_organisms():
+        if "geoLocCountry" in get_schema_fields(organism):
+            for name in field_values(organism, "geoLocCountry", None):
+                names.setdefault(name.casefold(), name)
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -628,9 +641,7 @@ def build_has_part(organism):
     for accession in collect_values(organism, HAS_PART_IDENTIFIER_FIELDS):
         part = {"@type": "CreativeWork", "identifier": accession}
         if accession in with_url:
-            part["url"] = (
-                f"https://pathoplexus.org/{organism}/search?selectedSeq={accession}"
-            )
+            part["url"] = f"https://pathoplexus.org/{organism}/search?selectedSeq={accession}"
         if accession in with_same_as:
             part["sameAs"] = f"https://www.ncbi.nlm.nih.gov/nuccore/{accession}"
         parts.append(part)
@@ -659,8 +670,7 @@ def build_sample(organism):
             element[key] = values
 
     items = [
-        {"@type": "BioSample", "identifier": accession,
-         "url": f"https://www.ebi.ac.uk/biosamples/samples/{accession}"}
+        {"@type": "BioSample", "identifier": accession, "url": f"https://www.ebi.ac.uk/biosamples/samples/{accession}"}
         for accession in collect_values(organism, SAMPLE_ITEM_FIELDS)
     ]
 
@@ -676,12 +686,48 @@ def build_sample(organism):
     return sample
 
 
+def clean_place_name(name):
+    """name without an IBGE code, or None when it has no letters (e.g. a date)."""
+    name = IBGE_CODE.sub("", name).strip()
+    return name if any(ch.isalpha() for ch in name) else None
+
+
 def build_spatial_coverage(organism):
-    """spatialCoverage: one entry per distinct place name."""
-    return [
-        {"@type": "Place", "name": name}
-        for name in collect_values(organism, SPATIAL_COVERAGE_FIELDS)
-    ]
+    """spatialCoverage: one AdministrativeArea per place, countries first.
+
+    Names merge case-insensitively, keeping the most frequent spelling. A
+    country's locationTypes merge into one entry. A finer-grained name is typed
+    city if any field reports it as one, and is dropped when it is also a
+    country. Country fields are uncapped; the others keep MAX_VALUES each.
+    """
+    available = get_schema_fields(organism)
+    countries, places = {}, {}
+    for field, (admin_type, location_type) in SPATIAL_COVERAGE_FIELDS.items():
+        if field not in available:
+            continue
+        top_n = None if admin_type == "country" else MAX_VALUES
+        for name in add_split_values({}, field_values(organism, field, top_n), max_size=top_n):
+            name = clean_place_name(name)
+            if name and field in COUNTRY_NAME_ONLY_FIELDS:
+                name = known_countries().get(name.casefold())
+            if not name:
+                continue
+            target = countries if admin_type == "country" else places
+            entry = target.setdefault(
+                name.casefold(), {"@type": "AdministrativeArea", "name": name, "locationType": []}
+            )
+            if admin_type:
+                entry["administrativeType"] = admin_type
+            if location_type not in entry["locationType"]:
+                entry["locationType"].append(location_type)
+
+    for key in countries:
+        places.pop(key, None)
+    entries = [*countries.values(), *places.values()]
+    for entry in entries:
+        if len(entry["locationType"]) == 1:
+            entry["locationType"] = entry["locationType"][0]
+    return sorted(entries, key=lambda e: (e.get("administrativeType") != "country", e["name"].casefold()))
 
 
 def build_named_pair(organism, pair):
@@ -775,9 +821,7 @@ def build_record(organism, info=None):
             "@type": "DataCatalog",
             "name": "Pathoplexus",
             "url": "https://pathoplexus.org",
-            "versionDate": version_to_isodate(
-                info.get("version"), datetime.date.today().isoformat()
-            ),
+            "versionDate": version_to_isodate(info.get("version"), datetime.date.today().isoformat()),
             "archivedAt": f"https://pathoplexus.org/{organism}/search",
         },
         "name": f"{name} sequence records at Pathoplexus",
@@ -791,11 +835,10 @@ def build_record(organism, info=None):
         "dateCreated": _to_iso_date(info.get("dateCreated")),
         "dateModified": _to_iso_date(info.get("dateModified")),
         "datePublished": _to_iso_date(info.get("datePublished")),
-        # nde.py types collectionSize as {@type, value, unitText, min/maxValue},
-        # not a bare integer.
+        # minValue, not value: the indexed count lags the live Pathoplexus count.
         "collectionSize": {
             "@type": "QuantitativeValue",
-            "value": info.get("collectionSize"),
+            "minValue": info.get("collectionSize"),
             "unitText": "sequences",
         },
         # "version": info.get("version"),
