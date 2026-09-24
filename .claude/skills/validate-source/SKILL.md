@@ -139,7 +139,7 @@ Run all checks that the available fixtures and environment support:
 
 Do not claim runtime validation passed when imports, credentials, fixtures, or external services prevented it. Continue with static checks and report the exact limitation.
 
-After a real upload, use the pipeline's `Pipeline util stats` logs to confirm per-stage before/after counts. `records_processed` is batch-level; `records_changed` reflects tracked-field changes. `post_process` has stage-level counts only.
+After a real upload, use the pipeline's `Pipeline util stats` logs to confirm per-stage before/after counts, and `Pipeline augmentation summary` for what the whole pipeline augmented or rewrote per field. `records_processed` is batch-level; `records_changed` reflects tracked-field changes; `augmented` / `rewritten` split those into records that gained values and records whose values were replaced. `post_process` has stage-level counts only.
 
 ## Report the result
 
