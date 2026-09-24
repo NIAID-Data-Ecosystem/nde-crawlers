@@ -33,9 +33,12 @@ def load_mapping():
 
 
 def fetch_trial(nctid):
-    """Fetch one trial from clinicaltrials.gov."""
+    """Fetch one trial's design module from the clinicaltrials.gov v2 API."""
     logger.debug("Fetching trial data for NCT ID: %s", nctid)
-    response = requests.get(f"https://clinicaltrials.gov/api/int/studies/{nctid}")
+    response = requests.get(
+        f"https://clinicaltrials.gov/api/v2/studies/{nctid}",
+        params={"fields": "protocolSection.designModule"},
+    )
     if response.status_code != 200:
         raise Exception(f"Error fetching data for {nctid}: {response.status_code}")
     return response.json()
@@ -63,7 +66,7 @@ def get_ncit_name(iri):
 def extract_trial_info(api_data):
     """Return (study_type, intervention_model, allocation, design_method) for a trial."""
     try:
-        design_module = api_data["study"]["protocolSection"]["designModule"]
+        design_module = api_data["protocolSection"]["designModule"]
         design_info = design_module.get("designInfo", {})
         return (
             design_module.get("studyType", "").upper(),
@@ -79,8 +82,8 @@ def extract_trial_info(api_data):
 def trial_design(nctid):
     """The (study_type, intervention_model, allocation, design_method) of one trial.
 
-    Caches the four fields, not fetch_trial's ~1 MB response. Bounded because the
-    keys come from records, not a curated file.
+    Caches the four fields, not fetch_trial's response. Bounded because the keys
+    come from records, not a curated file.
     """
     return extract_trial_info(fetch_trial(nctid))
 
