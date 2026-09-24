@@ -939,7 +939,7 @@ def _transform_record(record: dict[str, Any]) -> Optional[dict[str, Any]]:
         "distribution": [],
         "includedInDataCatalog": {
             "@type": "DataCatalog",
-            "name": "PGS Catalog",
+            "name": "Polygenic Score Catalog (PGS Catalog)",
             "url": "https://www.pgscatalog.org/",
             "versionDate": release_date or datetime.date.today().isoformat(),
             "archivedAt": trait_url,

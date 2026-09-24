@@ -157,7 +157,7 @@ def getPDBmetadata(id, organisms):
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
                 "archivedAt": url,
-                "name": "Protein Data Bank",
+                "name": "Protein Data Bank (PDB)",
                 "url": "https://www.rcsb.org/",
                 "versionDate": date.today().isoformat(),
             },

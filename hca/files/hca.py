@@ -93,7 +93,7 @@ def parse():
         output = {
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "Human Cell Atlas",
+                "name": "Human Cell Atlas (HCA)",
                 "url": "https://data.humancellatlas.org/",
                 "versionDate": datetime.date.today().isoformat(),
             },

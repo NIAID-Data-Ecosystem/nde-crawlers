@@ -200,7 +200,7 @@ def parse_samples():
         output = {
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "HuBMAP",
+                "name": "Human Biomolecular Atlas Program (HuBMAP)",
                 "url": "https://hubmapconsortium.org/",
                 "versionDate": datetime.date.today().isoformat(),
             },
@@ -463,7 +463,7 @@ def parse_datasets():
         output = {
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "HuBMAP",
+                "name": "Human Biomolecular Atlas Program (HuBMAP)",
                 "url": "https://hubmapconsortium.org/",
                 "versionDate": datetime.date.today().isoformat(),
             },

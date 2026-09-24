@@ -160,13 +160,15 @@ class NDEDataBuilder(builder.DataBuilder):
         )
 
     def identifier_deduplication(self, identifier_source_catalog, source_catalogs, prefer_matching_catalog_doc=False):
-        """Given a source catalog (e.g., Data Discovery Engine) and a list of primary source catalogs
-        (e.g., NCBI GEO), find and match the identifers from the source catalog to the _id fields of
-        documents from the source catalogs. Merge the resulting documents.
+        """Given a source catalog (e.g., Data Discovery Engine (DDE)) and a list of primary source catalogs
+        (e.g., NCBI Gene Expression Omnibus (NCBI GEO)), find and match the identifers from the source catalog
+        to the _id fields of documents from the source catalogs. Merge the resulting documents.
 
         Args:
-            identifier_source_catalog (str): The name of the source identifier catalog to search (e.g., "Data Discovery Engine")
-            source_catalogs (list): A list of source catalogs to match against (e.g., ["NCBI GEO", "accessclinicaldata@NIAID"])
+            identifier_source_catalog (str): The name of the source identifier catalog to search
+                (e.g., "Data Discovery Engine (DDE)")
+            source_catalogs (list): A list of source catalogs to match against
+                (e.g., ["NCBI Gene Expression Omnibus (NCBI GEO)", "accessclinicaldata@NIAID (ACD@NIAID)"])
             prefer_matching_catalog_doc (bool): When True, keep matching source catalog fields authoritative and
                 merge identifier-source catalog provenance into that record.
 
@@ -336,7 +338,7 @@ class NDEDataBuilder(builder.DataBuilder):
 
         delete_result = collection.delete_many(
             {
-                "includedInDataCatalog.name": "Electron Microscopy Public Image Archive",
+                "includedInDataCatalog.name": "Electron Microscopy Public Image Archive (EMPIAR)",
                 "$nor": [{"includedInDataCatalog.name": "Omics Discovery Index (OmicsDI)"}],
             }
         )
@@ -350,13 +352,18 @@ class NDEDataBuilder(builder.DataBuilder):
         sources = ["dryad", "tycho"]
         self.deduplication(sources, duplicate)
 
-        identifier_source_catalog = "Data Discovery Engine"
-        source_catalogs = ["NCBI GEO", "MassIVE", "NCBI BioProject", "Protein Data Bank"]
+        identifier_source_catalog = "Data Discovery Engine (DDE)"
+        source_catalogs = [
+            "NCBI Gene Expression Omnibus (NCBI GEO)",
+            "Mass Spectrometry Interactive Virtual Environment (MassIVE)",
+            "NCBI BioProject",
+            "Protein Data Bank (PDB)",
+        ]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
 
         self.identifier_deduplication(
             "ProteomeXchange",
-            ["MassIVE"],
+            ["Mass Spectrometry Interactive Virtual Environment (MassIVE)"],
             prefer_matching_catalog_doc=True,
         )
 

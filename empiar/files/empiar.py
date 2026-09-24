@@ -24,7 +24,7 @@ ALWAYS_ALLOWED_KEYS = {"@context", "@type"}
 
 CATALOG = {
     "@type": "DataCatalog",
-    "name": "Electron Microscopy Public Image Archive",
+    "name": "Electron Microscopy Public Image Archive (EMPIAR)",
     "alternateName": "EMPIAR",
     "identifier": "EMPIAR",
     "url": CATALOG_URL,
@@ -865,7 +865,7 @@ def parse(ids: Iterable[str] | None = None):
         for emdb_id in _as_list(record.get("cross_references")):
             item = _relationship(
                 emdb_id,
-                "Electron Microscopy Data Bank",
+                "Electron Microscopy Data Bank (EMDB)",
                 "https://www.ebi.ac.uk/emdb",
                 "related EMDB entry",
                 url_template="https://www.ebi.ac.uk/emdb/{accession}/",
@@ -875,7 +875,7 @@ def parse(ids: Iterable[str] | None = None):
         for pdb_id in _as_list(record.get("related_pdb_entries")):
             item = _relationship(
                 pdb_id,
-                "Protein Data Bank",
+                "Protein Data Bank (PDB)",
                 "https://www.rcsb.org/",
                 "related PDB entry",
                 url_template="https://www.rcsb.org/structure/{accession}",
@@ -912,7 +912,7 @@ def parse(ids: Iterable[str] | None = None):
         for empiar_id in _as_list(record.get("empiar_references")):
             item = _relationship(
                 empiar_id,
-                "Electron Microscopy Public Image Archive",
+                CATALOG["name"],
                 CATALOG_URL,
                 "related EMPIAR entry",
                 url_template="https://www.ebi.ac.uk/empiar/{accession}/",

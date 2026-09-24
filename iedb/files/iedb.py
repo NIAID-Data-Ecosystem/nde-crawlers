@@ -1184,7 +1184,7 @@ def _build_documents(
             "url": url,
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "Immune Epitope Database and Analysis Resource",
+                "name": "Immune Epitope Database (IEDB)",
                 "url": f"{WEB_BASE}/",
                 "versionDate": release_date,
                 "archivedAt": url,

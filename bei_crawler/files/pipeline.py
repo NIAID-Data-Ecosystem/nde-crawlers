@@ -48,7 +48,7 @@ class BeiItemProcessorPipeline:
             "url": url,
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "BEI Resources",
+                "name": "Biological and Emerging Infections Research Resources (BEIResources)",
                 "url": "https://www.beiresources.org/Home.aspx",
                 "versionDate": datetime.date.today().isoformat(),
                 "archivedAt": url,

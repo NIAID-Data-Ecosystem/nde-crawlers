@@ -21,8 +21,8 @@ class Hubmap_Uploader(NDECombinedUploader):
         "src_meta": {
             "sourceInfo": {
                 "description": "HuBMAP is part of a rich ecosystem of established and emerging atlasing programs supported by NIH and globally by other funding organizations, many of which are focused on specific organs or diseases. HuBMAP has connected with these programs to ensure data interoperability, avoid duplication of work, and leverage and synergize gained knowledge. The consortium has organized a number of events to bring together these communities to discuss topics of shared interest and is committed to improving coordination and collaboration among different programs. In addition, many of the HuBMAP PIs had been or are still actively participating in these efforts, helping with cross-pollination and advancing our global understanding. HuBMAP, as its name implies, was specifically initiated to resolve the challenge of building integrated, comprehensive, high-resolution spatial maps of human tissues and organs, which has resulted in HuBMAP providing leadership in the ecosystem around techniques for integrating disparate, multi-dimensional and multi-scale datasets, the development of a Common Coordinate Framework (CCF) for integrating data across many individuals, and the development and validation of these assays. To further increase interoperability, HuBMAP has adopted a number of standards and processes developed by other domain expert consortia, working and is actively involved in the knowledge exchange. The consortium sees itself as an integral part of the ecosystem, sharing its strengths and actively contributing to the community.",
-                "identifier": "HuBMAP",
-                "name": "HuBMAP",
+                "identifier": "Human Biomolecular Atlas Program (HuBMAP)",
+                "name": "Human Biomolecular Atlas Program (HuBMAP)",
                 "schema": get_source_data(name),
                 "url": "https://hubmapconsortium.org/",
             }

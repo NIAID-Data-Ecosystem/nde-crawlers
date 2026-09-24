@@ -305,7 +305,7 @@ def process_networks(networks, valid_network_ids):
         output = {
             "includedInDataCatalog": {
                 "@type": "DataCatalog",
-                "name": "NDEx",
+                "name": "The Network Data Exchange (NDEx)",
                 "url": "https://www.ndexbio.org/",
                 "versionDate": datetime.date.today().isoformat(),
             },

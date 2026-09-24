@@ -26,7 +26,7 @@ class MalariaGenItemProcessorPipeline:
         item["_id"] = "malariagen_" + _id
 
         item["includedInDataCatalog"] = {
-            "name": "MalariaGEN",
+            "name": "Malaria Genomic Epidemiology Network (MalariaGEN)",
             "url": "https://www.malariagen.net/",
             "@type": "DataCatalog",
             "versionDate": datetime.datetime.today().strftime("%Y-%m-%d"),

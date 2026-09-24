@@ -50,7 +50,7 @@ SOURCE_ORGANIZATION = {
 
 CATALOG = {
     "@type": "DataCatalog",
-    "name": "UniProt Knowledgebase",
+    "name": "UniProt",
     "alternateName": "UniProtKB",
     "url": "https://www.uniprot.org/",
 }

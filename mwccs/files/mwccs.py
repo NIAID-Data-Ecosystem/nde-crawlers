@@ -77,8 +77,9 @@ MONTHS = {
 
 INCLUDED_IN_DATA_CATALOG = {
     "@type": "DataCatalog",
+    # The sheet name uses a typographic apostrophe.
     "name": (
-        "The Multicenter AIDS Cohort Study (MACS) / Women's Interagency "
+        "The Multicenter AIDS Cohort Study (MACS) / Women\u2019s Interagency "
         "HIV Study (WIHS) Combined Cohort Study (MWCCS)"
     ),
     "alternateName": "MWCCS",

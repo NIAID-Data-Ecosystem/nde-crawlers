@@ -261,7 +261,7 @@ def parse_sample(sample):
         "distribution": [{"@type": "DataDownload", "contentUrl": url}],
         "includedInDataCatalog": {
             "@type": "DataCatalog",
-            "name": "National Omics Data Encyclopedia",
+            "name": "National Omics Data Encyclopedia (NODE)",
             "url": "https://www.biosino.org/node/home",
             "versionDate": datetime.date.today().isoformat(),
             "archivedAt": url,

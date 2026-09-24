@@ -665,7 +665,7 @@ def _build_data_collection(
         "includedInDataCatalog": [
             {
                 "@type": "DataCatalog",
-                "name": "Electron Microscopy Data Bank",
+                "name": "Electron Microscopy Data Bank (EMDB)",
                 "url": "https://www.ebi.ac.uk/emdb/",
                 "versionDate": dt.datetime.now(dt.timezone.utc)
                 .date()

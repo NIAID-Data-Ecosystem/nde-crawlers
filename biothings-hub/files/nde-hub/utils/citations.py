@@ -535,11 +535,14 @@ def remove_first_by_name(lst, target):
             break
 
 
+_BACDIVE_CATALOG_NAME = "bacterial diversity metadatabase (bacdive)"
+
+
 def is_bacdive_record(rec):
     for catalog in as_list(rec.get("includedInDataCatalog")):
-        if isinstance(catalog, dict) and str(catalog.get("name", "")).lower() == "bacdive":
+        if isinstance(catalog, dict) and str(catalog.get("name", "")).lower() == _BACDIVE_CATALOG_NAME:
             return True
-        if isinstance(catalog, str) and catalog.lower() == "bacdive":
+        if isinstance(catalog, str) and catalog.lower() == _BACDIVE_CATALOG_NAME:
             return True
     return False
 
