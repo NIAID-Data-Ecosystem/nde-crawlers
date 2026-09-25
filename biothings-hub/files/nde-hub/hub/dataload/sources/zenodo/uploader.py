@@ -1,12 +1,23 @@
-import json
 import os
 import sqlite3
-from datetime import datetime
 
 import orjson
 from config import logger
 from hub.dataload.nde import NDESourceUploader
-from utils import nde_upload_wrapper
+from utils import as_list, iter_ndjson, nde_upload_wrapper
+
+
+def _merge_versions(doc, other):
+    """Keep the later-published version and append the other's sameAs and distribution to it."""
+    # datePublished is an ISO date, so string order is date order. A missing date sorts oldest.
+    if (doc.get("datePublished") or "") > (other.get("datePublished") or ""):
+        newer, older = doc, other
+    else:
+        newer, older = other, doc
+    for field in ("sameAs", "distribution"):
+        if values := as_list(newer.get(field)) + as_list(older.get(field)):
+            newer[field] = values
+    return newer
 
 
 class ZenodoUploader(NDESourceUploader):
@@ -14,87 +25,66 @@ class ZenodoUploader(NDESourceUploader):
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
-        with open(os.path.join(data_folder, "data.ndjson"), "rb") as f:
-            # connect to database
-            con = sqlite3.connect(data_folder + "/zenodo.db")
-            c = con.cursor()
-            c.execute("DROP TABLE IF EXISTS zenodo")
-            c.execute(
-                """CREATE TABLE zenodo (
-                        versionId text NOT NULL PRIMARY KEY,
-                        doc text NOT NULL
-                        )"""
-            )
-            con.commit()
+        """Yield Zenodo Datasets, with the versions of each record merged into one document.
 
-            count_uploaded = 0
-            for count_total, line in enumerate(f, start=1):
-                new_doc = orjson.loads(line)
-                if version_id := new_doc.pop("versionId", None):
-                    new_doc_str = json.dumps(new_doc)
-                    is_newer = True
-                    # check if there is a need to compare date_published.
-                    c.execute("SELECT doc from zenodo WHERE versionId=(?)", (version_id,))
-                    current_doc = c.fetchone()
-                    if current_doc:
-                        current_doc = json.loads(current_doc[0])
+        Versions share a versionId (the concept DOI) and are merged in a scratch
+        SQLite database. Records of any other @type are dropped before the pipeline.
+        """
+        db_path = os.path.join(data_folder, "zenodo.db")
+        if os.path.exists(db_path):
+            os.remove(db_path)
+        con = sqlite3.connect(db_path)
+        try:
+            con.execute("CREATE TABLE zenodo (versionId TEXT NOT NULL PRIMARY KEY, doc BLOB NOT NULL)")
 
-                        # Append sameAs and distribution.contentUrl to either new doc or current doc before upserting depending on datePublished
-                        if datetime.fromisoformat(new_doc["datePublished"]) > datetime.fromisoformat(
-                            current_doc["datePublished"]
-                        ):
-                            new_doc["sameAs"] += current_doc.get("sameAs")
-                            new_doc["distribution"] += current_doc.get("distribution")
-                            new_doc_str = json.dumps(new_doc)
-                        else:
-                            current_doc["sameAs"] += new_doc.get("sameAs")
-                            current_doc["distribution"] += new_doc.get("distribution")
-                            current_doc_str = json.dumps(current_doc)
-                            is_newer = False
-
-                    # insert into the database
-                    if is_newer:
-                        c.execute(
-                            """INSERT INTO zenodo VALUES(?, ?)
-                                        ON CONFLICT(versionId) DO UPDATE SET doc=excluded.doc
-                                    """,
-                            (version_id, new_doc_str),
-                        )
-                        con.commit()
-                    else:
-                        c.execute(
-                            """INSERT INTO zenodo VALUES(?, ?)
-                                        ON CONFLICT(versionId) DO UPDATE SET doc=excluded.doc
-                                    """,
-                            (version_id, current_doc_str),
-                        )
-                        con.commit()
-
-                else:
-                    count_uploaded += 1
-                    # does not have a versionId just yield
-                    yield new_doc
-
+            count_total = count_unversioned = count_versions = count_merged = count_datasets = 0
+            for count_total, doc in enumerate(iter_ndjson(data_folder), start=1):
                 if count_total % 10000 == 0:
                     logger.info("Looping through ndjson: %s records", count_total)
-            count_inserted = count_total - count_uploaded
+
+                version_id = doc.pop("versionId", None)
+                if not version_id:
+                    count_unversioned += 1
+                    if doc.get("@type") == "Dataset":
+                        count_datasets += 1
+                        yield doc
+                    continue
+
+                count_versions += 1
+                row = con.execute("SELECT doc FROM zenodo WHERE versionId = ?", (version_id,)).fetchone()
+                if row:
+                    doc = _merge_versions(doc, orjson.loads(row[0]))
+                else:
+                    count_merged += 1
+                con.execute(
+                    "INSERT INTO zenodo VALUES (?, ?) ON CONFLICT(versionId) DO UPDATE SET doc = excluded.doc",
+                    (version_id, orjson.dumps(doc)),
+                )
+            con.commit()
+
             logger.info(
-                "Total records: %s. Uploaded records %s. Records inserted into zenodo database %s.",
+                "Total records: %s. Records without a versionId: %s. Versions: %s, merged into %s records.",
                 count_total,
-                count_uploaded,
-                count_inserted,
+                count_unversioned,
+                count_versions,
+                count_merged,
             )
+            logger.info("Retrieving merged records from zenodo database...")
 
-            logger.info("Retrieving dumped records from zenodo database...")
-
-            # loop through the database and upload remaining records
-            c.execute("SELECT * from zenodo")
-            for count_db, record in enumerate(c, start=1):
+            # The merged record takes the @type of its latest version, so filter only after merging.
+            for count_db, (blob,) in enumerate(con.execute("SELECT doc FROM zenodo"), start=1):
                 if count_db % 10000 == 0:
-                    logger.info("Retrieving records from zenodo sqlitedb. %s records", count_db)
-                yield json.loads(record[1])
+                    logger.info("Retrieving records from zenodo database: %s records", count_db)
+                doc = orjson.loads(blob)
+                if doc.get("@type") == "Dataset":
+                    count_datasets += 1
+                    yield doc
+
             logger.info(
-                "Finished. Records retrieved and uploaded from database: %s. Total duplicate records %s",
-                count_db,
-                count_inserted - count_db,
+                "Finished. Uploaded %s Datasets. Dropped %s non-Dataset records.",
+                count_datasets,
+                count_unversioned + count_merged - count_datasets,
             )
+        finally:
+            con.close()
+            os.remove(db_path)
