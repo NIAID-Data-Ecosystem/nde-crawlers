@@ -150,14 +150,16 @@ SAMPLE_TEXT_FIELDS = {
     "collectionMethod": ("collectionMethod",),
 }
 
-# sample.aggregateElement keys nde.py types as dates. Values are passed through
-# unnormalised: Pathoplexus reports partial dates ("1905", "1900-01") and the
-# Elasticsearch date type accepts those, whereas _to_iso_date would invent a
-# month and day for them.
+# sample.aggregateElement keys nde.py types as dates. sampleCollectionDate
+# includes partial dates ("1905", "1900-01") and ISO 8601 intervals
+# ("2012/2015"); see _to_sample_dates.
 SAMPLE_DATE_FIELDS = {
     "dateCollected": ("sampleCollectionDate",),
     "dateProcessed": ("sampleReceivedDate",),
 }
+
+# ISO 8601 calendar date at year, month, or day precision.
+ISO_DATE = re.compile(r"\d{4}(-\d{2}){0,2}")
 
 # sample.itemListElement is typed {@type, identifier, url}.
 SAMPLE_ITEM_FIELDS = ("biosampleAccession",)
@@ -423,14 +425,23 @@ def drop_empty(record: dict) -> dict:
 
 
 def _to_iso_date(val):
+    """val unchanged if it is a valid ISO date ("1905", "1900-01", "1900-01-02"), else None."""
     if val is None:
         return None
     try:
-        dt = dateutil.parser.parse(val, ignoretz=True).date().isoformat()
-    except (dateutil.parser.ParserError, TypeError):
+        dateutil.parser.parse(val)
+    except (dateutil.parser.ParserError, OverflowError, TypeError):
         logger.warning(f"Could not parse date: {val}")
         return None
-    return dt
+    if not ISO_DATE.fullmatch(val):
+        logger.warning(f"Not an ISO date: {val}")
+        return None
+    return val
+
+
+def _to_sample_dates(val):
+    """ISO dates in val; an interval ("2012/2015") gives both ends."""
+    return [date for date in map(_to_iso_date, val.split("/")) if date]
 
 
 def version_to_isodate(data_version, default=None):
@@ -665,7 +676,7 @@ def build_sample(organism):
         if values:
             element[key] = values
     for key, fields in SAMPLE_DATE_FIELDS.items():
-        values = collect_values(organism, fields)
+        values = sorted({date for value in collect_values(organism, fields) for date in _to_sample_dates(value)})
         if values:
             element[key] = values
 
