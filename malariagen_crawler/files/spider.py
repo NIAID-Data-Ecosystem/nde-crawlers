@@ -23,7 +23,7 @@ class MalariaGenSpider(scrapy.Spider):
         }
     }
 
-    start_urls = ["https://www.malariagen.net/data/archive/#"]
+    start_urls = ["https://malariagen.net/data/archive/"]
 
     def parse(self, response):
         # Extract dataset links

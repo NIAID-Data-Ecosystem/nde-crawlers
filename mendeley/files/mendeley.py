@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -8,6 +9,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from sickle import Sickle
+from sickle.oaiexceptions import OAIError
 
 # used to test single record
 # record = sickle.GetRecord(
@@ -47,9 +49,31 @@ def get_url(url):
         return None
 
 
+# OAI-PMH pages that fail are retried with exponential backoff before the crawl gives up
+OAI_MAX_ATTEMPTS = 5
+OAI_RETRY_DELAY = 30  # seconds before the first retry, doubled after each failure
+
+
+def with_oai_retries(call):
+    # Sickle only moves to the next resumption token after a page parses cleanly, so calling
+    # records.next again re-requests the page that failed. OAIError subclasses (badResumptionToken,
+    # noRecordsMatch, ...) won't succeed on a retry; a bare OAIError is an error without a known code,
+    # like the "Internal Server Error" Mendeley sometimes returns partway through the harvest.
+    for attempt in range(1, OAI_MAX_ATTEMPTS + 1):
+        try:
+            return call()
+        except (OAIError, requests.exceptions.RequestException) as e:
+            protocol_error = isinstance(e, OAIError) and type(e) is not OAIError
+            if protocol_error or attempt == OAI_MAX_ATTEMPTS:
+                raise
+            delay = OAI_RETRY_DELAY * 2 ** (attempt - 1)
+            logger.warning(f"OAI-PMH request failed: {e!r}. Retrying in {delay}s ({attempt}/{OAI_MAX_ATTEMPTS})")
+            time.sleep(delay)
+
+
 def parse():
     sickle = Sickle("https://data.mendeley.com/oai", max_retries=3)
-    records = sickle.ListRecords(metadataPrefix="oai_dc", ignore_deleted=True)
+    records = with_oai_retries(lambda: sickle.ListRecords(metadataPrefix="oai_dc", ignore_deleted=True))
 
     logger.info("Retrieving Dataset ids")
 
@@ -64,7 +88,7 @@ def parse():
             if count % 1000 == 0:
                 logger.info(f"Retrieved {count} ids")
 
-            record = records.next()
+            record = with_oai_retries(records.next)
             metadata = record.metadata
 
             if relation := metadata.get("relation"):

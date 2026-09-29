@@ -77,14 +77,6 @@ AUTHORS = [
     },
 ]
 
-SOURCE_ORGANIZATION = {
-    "@type": "Organization",
-    "name": "Polygenic Score Catalog",
-    "alternateName": "PGS Catalog",
-    "parentOrganization": "EMBL-EBI and University of Cambridge",
-    "url": "https://www.pgscatalog.org/",
-}
-
 ABOUT = {
     "@type": "DefinedTerm",
     "name": "MedicalRiskScore",
@@ -983,7 +975,6 @@ def _transform_record(record: dict[str, Any]) -> Optional[dict[str, Any]]:
         insert_value(output, "sample", samples)
     insert_value(output, "author", copy.deepcopy(AUTHORS))
     insert_value(output, "creator", copy.deepcopy(AUTHORS))
-    insert_value(output, "sourceOrganization", copy.deepcopy(SOURCE_ORGANIZATION))
     citations = _citations(info, scores, performance)
     if citations:
         insert_value(output, "citation", citations)

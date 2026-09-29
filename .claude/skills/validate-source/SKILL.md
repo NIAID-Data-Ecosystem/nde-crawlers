@@ -103,6 +103,7 @@ instead of rewriting a correct child type as its parent.
 - Require non-empty `_id`, `@type`, and `url`.
 - Require `includedInDataCatalog`; require every catalog object to contain `archivedAt`.
 - Do not emit `version`.
+- Emit `sourceOrganization` from the parser only when the source's mapping explicitly targets it. Otherwise the hub's `corrections` stage assigns it from the program/funding spreadsheet. That includes a mapping row whose note says to assign it from the program/funding mapping: the parser must not emit that row's example value. If a parser sets it without a mapping row (typically by copying the repository or the `author` / `creator` object), report it and remove it. If no mapping file is available, report the value for review rather than removing it.
 - Restrict `conditionsOfAccess` to `Open`, `Restricted`, `Closed`, `Embargoed`, or `Varied`.
 - For `Sample`, restrict `creativeWorkStatus` to `Bespoke`, `Available`, `Backordered`, or `Retired`.
 - Keep `description` as one string, never a list.

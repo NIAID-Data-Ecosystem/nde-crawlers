@@ -42,7 +42,7 @@ DEFAULT_PROTEOME_QUERY = os.environ.get(
     "proteome_type:REFERENCE",
 )
 
-SOURCE_ORGANIZATION = {
+AUTHOR = {
     "@type": "Organization",
     "name": "UniProt Consortium",
     "url": "https://www.uniprot.org/",
@@ -558,9 +558,8 @@ def _base_record(
         }
         if collection_size is not None
         else None,
-        "author": copy.deepcopy(SOURCE_ORGANIZATION),
-        "creator": copy.deepcopy(SOURCE_ORGANIZATION),
-        "sourceOrganization": copy.deepcopy(SOURCE_ORGANIZATION),
+        "author": copy.deepcopy(AUTHOR),
+        "creator": copy.deepcopy(AUTHOR),
         "citation": copy.deepcopy(CITATION),
         "conditionsOfAccess": "Open",
         "funding": copy.deepcopy(FUNDING),

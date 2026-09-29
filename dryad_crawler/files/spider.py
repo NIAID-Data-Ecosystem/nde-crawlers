@@ -4,7 +4,6 @@
 # If you are using the Dockerfile, runspider does this for you: /home/biothings/run-spider.sh
 
 import json
-import time
 
 import scrapy
 from extruct import JsonLdExtractor
@@ -44,9 +43,11 @@ class DryadSpider(SitemapSpider):
 
         for jsld in jslds:
             out = jsld
-            time.sleep(2)
             request = scrapy.Request(callback_url, callback=self.parse_api)
             request.meta["item"] = out
+            # paced by the "dryad-api" entry of DOWNLOAD_SLOTS in settings.py, without blocking the crawl
+            request.meta["download_slot"] = "dryad-api"
+            request.meta["autothrottle_dont_adjust_delay"] = True
             yield request
 
     def parse_api(self, response):

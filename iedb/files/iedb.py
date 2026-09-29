@@ -66,14 +66,6 @@ QUERY_PAGE_SIZE = int(os.environ.get("IEDB_QUERY_PAGE_SIZE", "1000"))
 HAS_PART_LIMIT = int(os.environ.get("IEDB_HAS_PART_LIMIT", "1000"))
 COMMIT_INTERVAL = int(os.environ.get("IEDB_COMMIT_INTERVAL", "50000"))
 
-SOURCE_ORGANIZATION = {
-    "@type": "Organization",
-    "name": "Immune Epitope Database and Analysis Resource",
-    "alternateName": "IEDB",
-    "parentOrganization": "La Jolla Institute for Immunology",
-    "url": "https://www.iedb.org/",
-}
-
 IEDB_OPERATOR = {
     "@type": "Organization",
     "name": "La Jolla Institute for Immunology",
@@ -1212,7 +1204,6 @@ def _build_documents(
         insert_value(output, "species", _species_term(organism))
         insert_value(output, "author", copy.deepcopy(IEDB_OPERATOR))
         insert_value(output, "creator", copy.deepcopy(IEDB_OPERATOR))
-        insert_value(output, "sourceOrganization", copy.deepcopy(SOURCE_ORGANIZATION))
         insert_value(output, "citation", copy.deepcopy(CANONICAL_CITATION))
         insert_value(output, "conditionsOfAccess", "Open")
         insert_value(output, "isAccessibleForFree", True)
