@@ -144,7 +144,10 @@ def parse():
                         sd["name"] = name
                     if identifier := sdPublisher["registryId"]:
                         sd["identifier"] = identifier
+                        output["identifier"].append(identifier.strip())
                     output["sdPublisher"].append(sd)
+
+            output["identifier"] = list(dict.fromkeys(output["identifier"]))
 
             # DOES NOT WORK
             # if author := request.get("principalInvestigator"):

@@ -23,6 +23,8 @@ class NDEDataBuilder(builder.DataBuilder):
             "immunespace",
             "veupathdb",
             "veupath_collections",
+            "covid_radx",
+            "dbgap",
         ]
         # Reverse list b/c sources are upserted so highest priority needs to be merged last
         for source in reversed(priority):
@@ -62,9 +64,7 @@ class NDEDataBuilder(builder.DataBuilder):
             finally:
                 cursor.close()
 
-        self.logger.info(
-            f"Scanning documents with duplicate {duplicate} and sources {sources} in {collection_name}"
-        )
+        self.logger.info(f"Scanning documents with duplicate {duplicate} and sources {sources} in {collection_name}")
 
         source_docs_by_doi = defaultdict(list)
         source_counts_by_doi = defaultdict(int)
@@ -76,9 +76,7 @@ class NDEDataBuilder(builder.DataBuilder):
                     track_doc(source_docs_by_doi, source_counts_by_doi, key, doc)
                     source_doc_count += 1
 
-        self.logger.info(
-            f"Found {len(source_docs_by_doi)} DOI groups from {source_doc_count} source records"
-        )
+        self.logger.info(f"Found {len(source_docs_by_doi)} DOI groups from {source_doc_count} source records")
 
         duplicate_docs_by_doi = defaultdict(list)
         duplicate_counts_by_doi = defaultdict(int)
@@ -159,7 +157,13 @@ class NDEDataBuilder(builder.DataBuilder):
             f"Merging complete. {group} groups found. Updated {count} records. Skipped {skipped_count} groups"
         )
 
-    def identifier_deduplication(self, identifier_source_catalog, source_catalogs, prefer_matching_catalog_doc=False):
+    def identifier_deduplication(
+        self,
+        identifier_source_catalog,
+        source_catalogs,
+        prefer_matching_catalog_doc=False,
+        keep_identifier_source_id=False,
+    ):
         """Given a source catalog (e.g., Data Discovery Engine (DDE)) and a list of primary source catalogs
         (e.g., NCBI Gene Expression Omnibus (NCBI GEO)), find and match the identifers from the source catalog
         to the _id fields of documents from the source catalogs. Merge the resulting documents.
@@ -171,6 +175,22 @@ class NDEDataBuilder(builder.DataBuilder):
                 (e.g., ["NCBI Gene Expression Omnibus (NCBI GEO)", "accessclinicaldata@NIAID (ACD@NIAID)"])
             prefer_matching_catalog_doc (bool): When True, keep matching source catalog fields authoritative and
                 merge identifier-source catalog provenance into that record.
+            keep_identifier_source_id (bool): When True, the merged record keeps the identifier-source catalog _id
+                and the matching records are deleted. Otherwise it keeps the matching source catalog _id and the
+                identifier-source record is deleted.
+
+        Flag combinations (I = identifier-source record, M = matching source catalog record):
+
+        prefer_matching_catalog_doc | keep_identifier_source_id | _id kept | fields that win | deleted | used by
+        ----------------------------+---------------------------+----------+-----------------+---------+----------------
+        False                       | False                     | M        | I               | I       | DDE, Vivli
+        True                        | False                     | M        | M               | I       | ProteomeXchange
+        False                       | True                      | I        | I               | M       |
+        True                        | True                      | I        | M               | M       |
+
+        In every case includedInDataCatalog entries are combined, fields present on only one record are kept, and
+        "fields that win" settles fields both records have. When one I matches several M: False/False carries earlier
+        M catalogs and fields into later M records (merge_struct mutates I); True/True keeps only the last M catalog.
 
         """
         db = mongo.get_target_db()
@@ -290,10 +310,17 @@ class NDEDataBuilder(builder.DataBuilder):
         count = 0
 
         for result in results:
-            records_to_delete.append(result.get("_id"))
+            if not keep_identifier_source_id:
+                records_to_delete.append(result.get("_id"))
 
             identifier_doc = result["original_doc"]
             for matching_doc in result["matching_catalogs"]:
+                if keep_identifier_source_id:
+                    records_to_delete.append(matching_doc["_id"])
+                    merged_id = result["_id"]
+                else:
+                    merged_id = matching_doc["_id"]
+
                 if prefer_matching_catalog_doc:
                     base_doc = matching_doc
                     provenance_doc = identifier_doc
@@ -306,7 +333,7 @@ class NDEDataBuilder(builder.DataBuilder):
                     aslistofdict="includedInDataCatalog",
                     include=["includedInDataCatalog"],
                 )
-                merged_doc["_id"] = matching_doc["_id"]  # keep the matching source catalog id
+                merged_doc["_id"] = merged_id
                 bulk_operations.append(
                     UpdateOne(
                         {"_id": merged_doc["_id"]},
@@ -365,6 +392,11 @@ class NDEDataBuilder(builder.DataBuilder):
             "ProteomeXchange",
             ["Mass Spectrometry Interactive Virtual Environment (MassIVE)"],
             prefer_matching_catalog_doc=True,
+        )
+
+        self.identifier_deduplication(
+            "Vivli",
+            ["COVID Rapid Acceleration of Diagnostics (RADx) Data Hub"],
         )
 
         if "empiar" in source_names:

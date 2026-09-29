@@ -93,6 +93,11 @@ COVID_INFECTIOUS_AGENT = {
 
 class Covid_Radx_Uploader(NDESourceUploader):
     name = "covid_radx"
+    # _id is the phs accession, which dbGaP also uses as its _id.
+    __metadata__ = {
+        "merger": "merge_struct",
+        "merger_kwargs": {"aslistofdict": "includedInDataCatalog", "include": ["includedInDataCatalog"]},
+    }
 
     def post_process(self, doc):
         """Every RADx record is COVID-19 in humans, whatever the source metadata says."""
