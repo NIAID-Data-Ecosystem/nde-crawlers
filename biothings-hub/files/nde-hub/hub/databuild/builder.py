@@ -183,9 +183,9 @@ class NDEDataBuilder(builder.DataBuilder):
 
         prefer_matching_catalog_doc | keep_identifier_source_id | _id kept | fields that win | deleted | used by
         ----------------------------+---------------------------+----------+-----------------+---------+----------------
-        False                       | False                     | M        | I               | I       | DDE, Vivli
+        False                       | False                     | M        | I               | I       | DDE
         True                        | False                     | M        | M               | I       | ProteomeXchange
-        False                       | True                      | I        | I               | M       |
+        False                       | True                      | I        | I               | M       | Vivli
         True                        | True                      | I        | M               | M       |
 
         In every case includedInDataCatalog entries are combined, fields present on only one record are kept, and
@@ -397,6 +397,7 @@ class NDEDataBuilder(builder.DataBuilder):
         self.identifier_deduplication(
             "Vivli",
             ["COVID Rapid Acceleration of Diagnostics (RADx) Data Hub"],
+            keep_identifier_source_id=True,
         )
 
         if "empiar" in source_names:
