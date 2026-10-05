@@ -9,7 +9,8 @@ through every applicable stage. A stage is applicable when
     `topicCategory`, ...), that file exists for this source.
 
 An inapplicable stage does not open its lookup tables, a database connection
-or the network. Its tracked fields are still counted for repository statistics.
+or the network. Whole-pipeline statistics count every defined tracked field,
+including fields whose utility is explicitly skipped or has no lookup file.
 
 Records are processed in batches of 10,000 by default.
 
@@ -582,10 +583,12 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
     started = time.monotonic()
     ran = {}
     stage_stats = {stage.name: _new_stats(stage.tracked_fields) for stage in stages}
-    # The whole pipeline as one stage: each record counts once however many
-    # stages augmented it, and a value one stage adds and a later one
-    # standardizes counts as a single addition.
-    summary_fields = tuple(dict.fromkeys(field for stage in stages for field in stage.tracked_fields))
+    # Track all defined fields, not just those managed by active stages: a
+    # crawler or uploader may populate a field even when its utility is skipped
+    # or has no lookup file. Utility-specific stats still use active stages.
+    # Each record counts once however many stages augmented it, and a value one
+    # stage adds and a later one standardizes counts as a single addition.
+    summary_fields = tuple(dict.fromkeys(field for stage in STAGES for field in stage.tracked_fields))
     summary = _new_stats(summary_fields)
     total = 0
     yielded = 0
