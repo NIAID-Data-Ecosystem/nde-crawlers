@@ -74,6 +74,7 @@ _EXCLUSION_TOKENS = frozenset(
         "not yet",
         "not yet reported",
         "n/a",
+        "n/a not applicable",
         "na",
         "null",
         "unknown",
@@ -84,7 +85,17 @@ _EXCLUSION_TOKENS = frozenset(
 def _normalize(value):
     if value is None:
         return ""
+    if isinstance(value, list):
+        return " ".join(v for v in map(_normalize, value) if v)
     return str(value).strip()
+
+
+def _values(value):
+    """Non-empty normalized strings of a scalar or list (multi-row / multi-line / multi-checked) value."""
+    if isinstance(value, list):
+        return [v for v in map(_normalize, value) if v]
+    value = _normalize(value)
+    return [value] if value else []
 
 
 def _clean_token(value):
@@ -376,7 +387,8 @@ def _parse_quantity(raw):
     except (TypeError, ValueError):
         return None, str(raw).strip()
     unit = m.group("unit").strip() or None
-    if unit and unit.casefold() in {"µg", "ug", "mcg"}:
+    # lower(), not casefold(): casefold() maps the micro sign to Greek mu
+    if unit and unit.lower() in {"µg", "ug", "mcg"}:
         unit = "ug"
     return value, unit
 
@@ -416,7 +428,7 @@ class USIDNETItemProcessorPipeline:
         if not catalog_id:
             return None
 
-        url = f"https://www.coriell.org/0/Sections/Search/Sample_Detail.aspx?Ref={catalog_id}"
+        url = item["url"]
 
         output = {
             "@context": "http://schema.org/",
@@ -438,6 +450,10 @@ class USIDNETItemProcessorPipeline:
             "sampleAvailability": True,
         }
 
+        # ---- name (Description + banner, e.g. "MAPLE SYRUP URINE DISEASE (MSUD), TYPE IA Fibroblast")
+        if name := " ".join(p for p in (_normalize(item.get("Description")), _normalize(item.get("Banner"))) if p):
+            output["name"] = name
+
         # ---- isAccessibleForFree (Coriell shows tiered pricing; any $0.00 tier => free)
         amounts = []
         for price in item.get("Prices") or []:
@@ -448,8 +464,9 @@ class USIDNETItemProcessorPipeline:
             output["isAccessibleForFree"] = any(a == 0 for a in amounts)
 
         # ---- sampleType (prefer the descriptive "Product", fall back to "ProductTypeID")
-        if product := _normalize(item.get("Product")):
-            insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": product})
+        if products := _values(item.get("Product")):
+            for product in products:
+                insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": product})
         elif product_type_id := _normalize(item.get("ProductTypeID")):
             insert_value(output, "sampleType", {"@type": "DefinedTerm", "name": product_type_id})
 
@@ -466,7 +483,7 @@ class USIDNETItemProcessorPipeline:
         # ---- species / infectiousAgent (mapping says both)
         species_name = _normalize(item.get("Species"))
         common_name = _normalize(item.get("Common Name"))
-        if species_name:
+        if species_name and not _is_excluded(species_name):
             sp = {"@type": "DefinedTerm", "name": species_name}
             if common_name:
                 sp["commonName"] = common_name
@@ -482,8 +499,8 @@ class USIDNETItemProcessorPipeline:
             insert_value(output, "sex", sex)
 
         # ---- keywords
-        if keywords := _normalize(item.get("Subcollection")):
-            insert_value(output, "keywords", keywords)
+        for keyword in _values(item.get("Subcollection")):
+            insert_value(output, "keywords", keyword)
 
         # ---- anatomicalStructure
         for field in _ANATOMY_FIELDS:
@@ -515,6 +532,7 @@ class USIDNETItemProcessorPipeline:
             except (TypeError, ValueError):
                 logger.warning(f"Could not parse age in years: {age_yrs}")
         if dev_stage:
+            dev_stage = {"@type": "QuantitativeValue" if "value" in dev_stage else "DefinedTerm", **dev_stage}
             insert_value(output, "developmentalStage", dev_stage)
 
         # ---- associatedPhenotype (DefinedTerm-style fields)
@@ -527,10 +545,7 @@ class USIDNETItemProcessorPipeline:
         for field in ("Handedness", "Handedness:"):
             val = _normalize(item.get(field))
             if val and not _is_excluded(val):
-                # Spider may concatenate multiple radio options into a single string
-                # ("Right   Left  Ambidextrous"). Best-effort: pick the first token.
-                first = val.split()[0]
-                insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": f"{first} Handedness"})
+                insert_value(output, "associatedPhenotype", {"@type": "DefinedTerm", "name": f"{val} Handedness"})
 
         # ---- associatedPhenotype: Unilateral Babinski sign  ("{property}{value}")
         ubs = _normalize(item.get("Unilateral Babinski sign"))
@@ -545,7 +560,7 @@ class USIDNETItemProcessorPipeline:
         quantity = _normalize(item.get("Quantity"))
         if quantity and not _is_excluded(quantity):
             value, unit = _parse_quantity(quantity)
-            sq: dict = {"name": quantity}
+            sq: dict = {"@type": "QuantitativeValue", "name": quantity}
             if value is not None:
                 sq["value"] = value
             if unit:
@@ -605,23 +620,18 @@ class USIDNETItemProcessorPipeline:
         if fragile_x and not _is_excluded(fragile_x):
             _add_associated_genotype(output, f"Fragile X: {fragile_x}")
 
-        # ---- isBasisFor.identifier (GEO accession)
-        geo = _normalize(item.get("GEO"))
-        geo_id = _extract_geo_id(geo)
-        if geo_id:
-            insert_value(output, "isBasisFor", {"@type": "CreativeWork", "identifier": geo_id})
+        # ---- isBasisFor.identifier (GEO accessions, one row each)
+        for geo in _values(item.get("GEO")):
+            if geo_id := _extract_geo_id(geo):
+                insert_value(output, "isBasisFor", {"@type": "CreativeWork", "identifier": geo_id})
 
         # ---- healthCondition (long-tail of disease columns from the mapping)
         for hc_field in _HEALTH_CONDITION_FIELDS:
-            if hc_field not in item:
-                continue
-            raw = item.get(hc_field)
-            if _is_excluded(raw):
-                continue
-            value = _normalize(raw)
+            values = [v for v in _values(item.get(hc_field)) if not _is_excluded(v)]
             if hc_field in _HC_VALUE_IS_DISEASE:
-                _add_health_condition(output, value)
-            else:
+                for value in values:
+                    _add_health_condition(output, value)
+            elif values:
                 _add_health_condition(output, hc_field)
 
         return output

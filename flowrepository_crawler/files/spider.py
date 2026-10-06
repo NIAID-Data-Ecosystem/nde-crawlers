@@ -49,7 +49,7 @@ class FlowRepositorySpider(scrapy.Spider):
     url = "http://flowrepository.org/ajax/list_public_ds"
     allowed_domains = ["flowrepository.org"]
 
-    def start_requests(self):
+    async def start(self):
         """Simulate the AJAX post request to get the table of ids.
         Yields:
             To a function that will parse the urls from the table.
@@ -63,11 +63,6 @@ class FlowRepositorySpider(scrapy.Spider):
             headers={"Content-Type": "application/json"},
             callback=self.get_urls,
         )
-
-    async def start(self):
-        # Scrapy >= 2.13 calls start() instead of start_requests()
-        for request in self.start_requests():
-            yield request
 
     def get_urls(self, response):
         id_urls = response.xpath('//td[@class="repid"]/a/@href').extract()

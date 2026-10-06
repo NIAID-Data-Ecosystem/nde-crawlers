@@ -56,14 +56,14 @@ class NCBIGeoSpider(scrapy.Spider):
     # THIS USED FOR TESTING/DEBUGGING
     # for small tests can use (start, end) = (1,20)
     # this should be the most recent assession (GSE) link: https://www.ncbi.nlm.nih.gov/geo/browse/?view=series&display=1&zsort=acc
-    # def start_requests(self):
+    # async def start(self):
     #     start = 1
     #     end = 200
     #     prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE"
     #     for acc_id in range(start, end + 1):
     #         yield scrapy.Request(url=prefix + str(acc_id))
 
-    def start_requests(self):
+    async def start(self):
         # there may be a connection error sometimes. Retry up to 5 times if there is one.
         tries = 6
         for attempt in range(tries):
@@ -79,11 +79,6 @@ class NCBIGeoSpider(scrapy.Spider):
         prefix = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
         for acc_id in ids:
             yield scrapy.Request(url=prefix + str(acc_id))
-
-    async def start(self):
-        # Scrapy >= 2.13 calls start() instead of start_requests()
-        for request in self.start_requests():
-            yield request
 
     def parse(self, response):
 
