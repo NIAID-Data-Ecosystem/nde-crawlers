@@ -1,74 +1,78 @@
 import csv
-import logging
 import re
+from pathlib import Path
 
+from config import logger
 from hub.dataload.nde import NDESourceUploader
 from utils import iter_ndjson, nde_upload_wrapper
 
-logging.basicConfig(level=logging.INFO)
+# Figshare keyword -> EDAM topic sheet (Text2term suggestions, manually reviewed).
+MAPPING_FILE = Path(__file__).resolve().parent / "topic_mappings.tsv"
+ACCEPTED_DECISIONS = {"good", "ok"}
 
 _SPECIAL_CHARS_RE = re.compile(r"[!@#$%^&*()\[\]{};:,<>?/|\\~`]")
 
 
-def load_mapping_sheet_from_csv(csv_file):
-    """Load mapping sheet from a CSV file and return as a list of dictionaries."""
-    mappings = []
-    with open(csv_file, "r", newline="", encoding="utf-8-sig") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            mappings.append(row)
-    return mappings
+def row_topics(row):
+    """Return the (name, identifier) topics a sheet row maps its keyword to.
+
+    A Better mapping CURIE overrides the Text2term match; multiple terms are
+    '|'-separated in both Better mapping columns. An empty result means the
+    keyword isn't a topic (ignored, or rejected without a replacement) and stays a keyword.
+    """
+    better = (row.get("Better mapping") or "").strip()
+    curies = (row.get("Better mapping CURIE") or "").strip()
+    if better.lower() == "ignore":
+        return []
+    if curies:
+        names = [name.strip() for name in better.split("|")]
+        identifiers = [curie.strip() for curie in curies.split("|")]
+        if len(names) != len(identifiers):
+            logger.warning(
+                "Figshare topic mapping for %r: Better mapping %r doesn't pair up with CURIEs %r",
+                row.get("Source Term"),
+                better,
+                curies,
+            )
+            return []
+        return list(zip(names, identifiers))
+    if (row.get("Decision") or "").strip().lower() in ACCEPTED_DECISIONS:
+        return [(row["Mapped Term Label"].strip(), row["Mapped Term CURIE"].strip())]
+    return []
+
+
+def load_mapping_index(mapping_file=MAPPING_FILE):
+    """Map each lowercased source term to its topics; the first row for a term wins."""
+    mapping_index = {}
+    with open(mapping_file, "r", newline="", encoding="utf-8") as file:
+        for row in csv.DictReader(file, delimiter="\t"):
+            source_term = (row.get("Source Term") or "").strip().lower()
+            if source_term and source_term not in mapping_index:
+                mapping_index[source_term] = row_topics(row)
+    return mapping_index
 
 
 def process_documents(documents, mapping_index):
     for doc in documents:
-        keywords = doc.get("keywords", [])
-        unique_names = set()  # Handle duplicates
-        topic_terms = []
+        topic_categories = []
+        seen_identifiers = set()  # Handle duplicates
         remaining_keywords = []
 
-        for keyword in keywords:
-            keyword_lc = keyword.lower()
-            mapping = mapping_index.get(keyword_lc)
+        for keyword in doc.get("keywords", []):
+            keyword_lc = keyword.strip().lower()
+            topics = mapping_index.get(keyword_lc)
 
-            if mapping:
-                # Check if the term is deprecated and GOOD
-                decision = (mapping.get("Decision") or "").strip().lower()
-                if decision == "good":
-                    if "obsolete" in (mapping.get("Tags") or "").lower():
-                        replacement = mapping.get("Consider")  # Replacement term
-                        if replacement and replacement.lower() != "ignored":
-                            if replacement not in unique_names:
-                                unique_names.add(replacement)
-                                topic_terms.append((replacement, "Plant biology"))
-                            # logging.debug(f"Keyword '{keyword}' is obsolete. Using replacement '{replacement}'.")
-                    else:
-                        label = mapping["Mapped Term Label"]
-                        if label.lower() != "ignored" and label not in unique_names:
-                            unique_names.add(label)
-                            topic_terms.append((label, mapping["Mapped Term CURIE"]))
-                else:
-                    better_mapping = mapping.get("Better mapping")
-                    if better_mapping == "Ignore":
-                        remaining_keywords.append(keyword)
-                        # logging.debug(f"Keyword '{keyword}' ignored due to mapping decision.")
-                    else:
-                        # Only add if not ignored and not duplicated
-                        if (
-                            better_mapping
-                            and better_mapping.lower() != "ignored"
-                            and better_mapping not in unique_names
-                        ):
-                            unique_names.add(better_mapping)
-                            topic_terms.append((better_mapping, mapping["Mapped Term CURIE"]))
-                            # logging.debug(f"Keyword '{keyword}' mapped to better mapping: {better_mapping}.")
-            else:
+            if topics is None:
                 # Handle unmapped terms
                 if not contains_special_characters(keyword) and "years" not in keyword_lc:
                     remaining_keywords.append(keyword)
-
-        # Convert the collected terms into DefinedTerm objects
-        topic_categories = [create_defined_term(label, curie) for (label, curie) in topic_terms]
+            elif not topics:
+                remaining_keywords.append(keyword)
+            else:
+                for name, identifier in topics:
+                    if identifier not in seen_identifiers:
+                        seen_identifiers.add(identifier)
+                        topic_categories.append(create_defined_term(name, identifier))
 
         # Update document fields
         if topic_categories:
@@ -100,17 +104,7 @@ class FigshareUploader(NDESourceUploader):
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
-        mapping_file = "mappings.csv"
-
-        mappings = load_mapping_sheet_from_csv(mapping_file)
-        mapping_index = {}
-        for m in mappings:
-            source_term = (m.get("Source Term") or "").strip().lower()
-            if source_term and source_term not in mapping_index:
-                mapping_index[source_term] = m
-
-        # logging.debug(f"Loaded mappings: {mappings[:5]}")
-
+        mapping_index = load_mapping_index()
         processed_documents = process_documents(iter_ndjson(data_folder), mapping_index)
 
         def _has_valid_topic_category(doc):
