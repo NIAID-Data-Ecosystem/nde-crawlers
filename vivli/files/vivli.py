@@ -286,17 +286,14 @@ def parse():
 
             output["sample"] = sample
 
-            vm = []
-            if variable_measured := request.get("outcomeNames"):
-                vm.append({"@type": "DefinedTerm", "name": variable_measured})
+            # outcomeNames is a list with one domain per outcome, so names repeat
+            vm_names = list(request.get("outcomeNames") or [])
+            for outcome in request.get("outcomes") or []:
+                vm_names.append(outcome.get("specificMeasurement"))
+            vm_names = dict.fromkeys(name.strip() for name in vm_names if name and name.strip())
 
-            if outcomes := request.get("outcomes"):
-                for outcome in outcomes:
-                    if variable_measured := outcome.get("specificMeasurement"):
-                        vm.append({"@type": "DefinedTerm", "name": variable_measured})
-
-            if vm:
-                output["variableMeasured"] = vm
+            if vm_names:
+                output["variableMeasured"] = [{"@type": "DefinedTerm", "name": name} for name in vm_names]
 
             if doi := request.get("digitalObjectId"):
                 output["doi"] = doi
