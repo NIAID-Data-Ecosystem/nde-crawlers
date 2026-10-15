@@ -199,13 +199,20 @@ def parse():
             table_info = api_data(
                 session, f"https://www.biosino.org/node/api/app/project/getExpAndSampleTable/{project_id}"
             )
+
+            def get_list_page(params):
+                """A page of the project's samples or experiments: the `data` of getExpAndSampleList"""
+                return api_data(
+                    session, "https://www.biosino.org/node/api/app/project/getExpAndSampleList", params=params
+                )
+
             s = {
                 "@type": "SampleCollection",
                 "itemListElement": [],
                 "aggregateElement": {},
                 "numberOfItems": {"@type": "QuantitativeValue", "value": 0, "unitText": "sample"},
             }
-            for sample in get_samples(session, table_info, project_id):
+            for sample in get_samples(get_list_page, table_info, project_id):
                 parsed_sample = parse_sample(sample)
                 if parsed_sample:
                     parsed_sample["isBasisFor"] = {
@@ -237,9 +244,8 @@ def parse():
                     data_type = exp_table["type"]
 
                     def get_experiment_page(page):
-                        response = session.get(
-                            "https://www.biosino.org/node/api/app/project/getExpAndSampleList",
-                            params={
+                        data = get_list_page(
+                            {
                                 "projectNo": project_id,
                                 "type": "experiment",
                                 "dataType": data_type,
@@ -248,16 +254,13 @@ def parse():
                                 "pageSize": 100,
                                 "sortKey": "expNo",
                                 "sortType": "asc",
-                            },
+                            }
                         )
-                        response.raise_for_status()
-                        payload = response.json()
-                        data = payload.get("data") if isinstance(payload, dict) else None
                         exp_table_data = data.get("expTableData") if isinstance(data, dict) else None
                         if not isinstance(exp_table_data, dict):
                             raise RuntimeError(
                                 f"Unexpected NODE experiment response for project {project_id}, "
-                                f"data type {data_type!r}, page {page}: {payload}"
+                                f"data type {data_type!r}, page {page}: {data}"
                             )
                         return exp_table_data
 
@@ -265,7 +268,8 @@ def parse():
                     pages = exp_table_data["totalPages"]
                     for page in range(1, pages + 1):
                         logger.info(f"Crawling experiment info page {page} of {pages} for project {project_id}")
-                        exp_table_data = get_experiment_page(page)
+                        if page > 1:
+                            exp_table_data = get_experiment_page(page)
                         for exp in exp_table_data.get("content", []):
                             if date_created := exp.get("createDate"):
                                 try:
