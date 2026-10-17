@@ -204,18 +204,21 @@ def find_age(text):
             return None
     return None
 
-def get_samples(session, table_info, project_id):
-    if table_info.get("data") and table_info["data"].get("sapTables"):
-        for sample_table in table_info["data"]["sapTables"]:
+def get_samples(get_list_page, table_info, project_id):
+    """
+    Yield the samples of a project. table_info is the `data` of its getExpAndSampleTable call
+    (see node.api_data), and get_list_page(params) returns the `data` of a getExpAndSampleList call.
+    """
+    if table_info.get("sapTables"):
+        for sample_table in table_info["sapTables"]:
             data_type = sample_table.get("type")
             if not data_type:
                 logger.warning(f"Skipping sample table with missing type for project {project_id}: {sample_table}")
                 continue
 
             def get_sample_page(page):
-                response = session.get(
-                    "https://www.biosino.org/node/api/app/project/getExpAndSampleList",
-                    params={
+                data = get_list_page(
+                    {
                         "projectNo": project_id,
                         "type": "sample",
                         "dataType": data_type,
@@ -224,16 +227,13 @@ def get_samples(session, table_info, project_id):
                         "pageSize": 100,
                         "sortKey": "sapNo",
                         "sortType": "asc",
-                    },
+                    }
                 )
-                response.raise_for_status()
-                payload = response.json()
-                data = payload.get("data") if isinstance(payload, dict) else None
                 sap_table_data = data.get("sapTableData") if isinstance(data, dict) else None
                 if not isinstance(sap_table_data, dict):
                     raise RuntimeError(
                         f"Unexpected NODE sample response for project {project_id}, "
-                        f"data type {data_type!r}, page {page}: {payload}"
+                        f"data type {data_type!r}, page {page}: {data}"
                     )
                 return sap_table_data
 
@@ -241,7 +241,8 @@ def get_samples(session, table_info, project_id):
             pages = sap_table_data["totalPages"]
             for page in range(1, pages + 1):
                 logger.info(f"Crawling sample info page {page} of {pages} for project {project_id}")
-                sap_table_data = get_sample_page(page)
+                if page > 1:
+                    sap_table_data = get_sample_page(page)
                 for sap in sap_table_data.get("content", []):
                     yield sap
 
@@ -511,7 +512,7 @@ def parse_sample(sample):
             else:
                 insert_value(output, "additionalProperty", {"@type": "PropertyValue", "propertyID": key, "value": value})
 
-    if geo:
+    if len(geo) > 1:  # (not just its @type)
         insert_value(output, "locationOfOrigin", {"@type": "AdministrativeArea", "geo": geo})
 
     if cinf := sample.get("calc_info"):

@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import os
+import sqlite3
 import time
 from html.parser import HTMLParser
 
@@ -16,6 +17,9 @@ logging.basicConfig(
 logger = logging.getLogger("nde-logger")
 
 MAX_RETRIES = 5
+# attempts for each page of search results: a full crawl takes days, so ride out outages of a few minutes
+# (with MAX_DELAY, about 7 minutes) rather than failing it
+PAGE_RETRIES = int(os.getenv("DATAVERSE_PAGE_RETRIES", "10"))
 BASE_DELAY = 2  # 2 seconds
 MAX_DELAY = 60  # 1 minute
 REQUEST_DELAY = float(os.getenv("DATAVERSE_REQUEST_DELAY", "1.0"))  # seconds between API calls
@@ -36,13 +40,73 @@ class Dataverse(NDEDatabase):
         self._session = requests.Session()
         self._headers = {"User-Agent": "nde-crawlers/dataverse"}
         self._headers["X-Dataverse-key"] = api_key
+        self.stopped_early = False  # set by load_cache() when DATAVERSE_MAX_RECORDS stops a crawl
+
+    # A full crawl takes days and can stop partway (rate limits, outages, restarts). It then fails rather
+    # than saving a partial crawl, and the next run resumes it: the "crawled" table lists the datasets done.
+    # The cache is reused as is only once a crawl completed ("crawl_completed" in the metadata table).
+
+    def _progress_db(self):
+        """
+        Connection to the cache database, with its "crawled" table, in autocommit mode: dump() writes the
+        cache through another connection between the steps of load_cache()
+        """
+        con = sqlite3.connect(os.path.join(self.path, self.SQL_DB), isolation_level=None)
+        con.execute("CREATE TABLE IF NOT EXISTS crawled (_id text NOT NULL PRIMARY KEY)")
+        return con
+
+    def _metadata_date(self, name):
+        """A date of the metadata table (see new_cache()), None if not set"""
+        con = sqlite3.connect(os.path.join(self.path, self.SQL_DB))
+        try:
+            row = con.execute("SELECT date FROM metadata WHERE name=?", (name,)).fetchone()
+        except sqlite3.OperationalError:  # no metadata table yet
+            row = None
+        finally:
+            con.close()
+        return datetime.date.fromisoformat(row[0]) if row else None
+
+    def new_cache(self):
+        """Start a new crawl: empty cache, no dataset crawled yet, not completed"""
+        super().new_cache()
+        con = sqlite3.connect(os.path.join(self.path, self.SQL_DB))
+        con.execute("DROP TABLE IF EXISTS crawled")
+        con.execute("DELETE FROM metadata WHERE name='crawl_completed'")
+        con.commit()
+        con.close()
+
+    def upload(self):
+        """
+        Unless a crawl completed recently, crawl into the cache (a new crawl, or the rest of a stopped one),
+        then parse the cache
+        """
+        today = datetime.date.today()
+        completed = self._metadata_date("crawl_completed")
+        started = self._metadata_date("date_created")
+        if self.NO_CACHE or not completed or today - completed >= self.EXPIRE:
+            if self.NO_CACHE or completed or not started or today - started >= self.EXPIRE:
+                self.new_cache()
+            else:
+                logger.info(f"Resuming the crawl started on {started}")
+            self.dump(self.load_cache())
+            if self.stopped_early:
+                logger.warning("Crawl stopped by DATAVERSE_MAX_RECORDS: not marked as completed")
+            else:
+                con = sqlite3.connect(os.path.join(self.path, self.SQL_DB))
+                con.execute("INSERT OR REPLACE INTO metadata VALUES('crawl_completed', ?)", (today.isoformat(),))
+                con.commit()
+                con.close()
+        else:
+            logger.info(f"Using the cache of the crawl completed on {completed}")
+        return self.parse(self.retreive_cache())
 
     def _sleep_for_rate_limit(self, response, backoff_time=None):
         """Sleep when rate-limited. Handles both 429 and 403 responses."""
-        status = getattr(response, "status_code", None) if response else None
-        if status not in (429, 403):
+        # (not `if response`: a requests.Response is falsy for any 4xx or 5xx status, so it never slept)
+        if response is None or response.status_code not in (429, 403):
             return
-        retry_after = response.headers.get("Retry-After") if response else None
+        status = response.status_code
+        retry_after = response.headers.get("Retry-After")
         try:
             seconds = int(retry_after) if retry_after else (backoff_time or MAX_DELAY)
         except ValueError:
@@ -526,61 +590,57 @@ class Dataverse(NDEDatabase):
         return None
 
     def compile_paginated_data(self, query_endpoint, per_page=400, start=0):
+        """
+        Yield (id, url, search item) for each item of a search, page by page. A page that still fails after
+        PAGE_RETRIES attempts raises: ending the crawl there would save a partial crawl as if it were complete.
+        """
         logger.info(f"Compiling paginated data from {query_endpoint}")
-        continue_paging = True
+        total = None
 
-        while continue_paging:
+        while total is None or start < total:
             pager = per_page
-            response = None
-            retries = 0
+            data = None
             backoff_time = BASE_DELAY
-            while retries <= MAX_RETRIES and not response:
+            for attempt in range(1, PAGE_RETRIES + 1):
+                url = f"{query_endpoint}&per_page={pager}&start={start}"
                 try:
-                    url = f"{query_endpoint}&per_page={pager}&start={start}"
                     logger.info(f"Requesting {url}")
                     if REQUEST_DELAY > 0:
                         time.sleep(REQUEST_DELAY)
                     req = self._session.get(url, headers=self._headers, timeout=30)
                     if req.status_code == 429:
                         self._sleep_for_rate_limit(req, backoff_time)
-                        retries += 1
                         backoff_time = min(MAX_DELAY, backoff_time * 2)
                         continue
                     req.raise_for_status()  # Raise an exception for HTTP errors (including 403)
-                    response = req.json()
-                    retries = 0  # Reset the retry counter after a successful request
+                    data = req.json().get("data")
+                    if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+                        raise ValueError(f"unexpected search response: {str(data)[:200]}")
+                    break
                 except (requests.RequestException, ValueError) as e:
+                    data = None
                     pager = max(1, pager // 2)
-                    logger.error(f"Error accessing {url}: {str(e)}")
-                    retries += 1
-                    if retries > MAX_RETRIES:
-                        logger.error(f"Max retries reached for {url}. Skipping.")
-                        return
+                    logger.error(f"Error accessing {url} (attempt {attempt}/{PAGE_RETRIES}): {str(e)}")
                     logger.info(f"Retrying in {backoff_time} seconds...")
                     time.sleep(backoff_time)
                     # double the wait time, but cap at MAX_DELAY
                     backoff_time = min(MAX_DELAY, backoff_time * 2)
-            if response:
-                try:
-                    total = response.get("data").get("total_count")
-                    page_data = response.get("data").get("items")
-                    logger.info(f"Retrieved {len(page_data)} items")
-                    start += pager
-                    for page in page_data:
-                        # dataset pages use "global_id" key
-                        if "global_id" in page.keys():
-                            yield (page["global_id"], page["url"], page)
-                        # dataverse pages have "identifier" key
-                        elif "identifier" in page.keys():
-                            # EXTRACT ID HERE
-                            yield (page["identifier"], page["url"], page)
-                    # data_pages.extend(page_data)
-                    continue_paging = total and start < total
-                except Exception as exception:
-                    logger.info(f"passing datapage because of exception: {exception}")
-            else:
-                logger.error(f"Failed to get response for start={start} after {MAX_RETRIES} retries. Stopping pagination.")
-                return
+            if data is None:
+                raise RuntimeError(f"Failed to get search results at start={start} after {PAGE_RETRIES} attempts")
+
+            total = data.get("total_count") or 0
+            page_data = data["items"]
+            logger.info(f"Retrieved {len(page_data)} items (start={start}, total={total})")
+            start += pager
+            for page in page_data:
+                # dataset pages use "global_id" key, dataverse pages have "identifier" key
+                item_id = page.get("global_id") or page.get("identifier")
+                if item_id and page.get("url"):
+                    yield (item_id, page["url"], page)
+                else:
+                    logger.warning(f"Skipping search item without id or url: {str(page)[:200]}")
+            if not page_data:
+                break  # (no more items, whatever total_count says)
 
     def log_memory_usage(self):
         process = psutil.Process()
@@ -628,16 +688,29 @@ class Dataverse(NDEDatabase):
             "external_search_records": 0,
         }
 
-        query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset"
+        # oldest first: datasets published during a crawl (which takes days) are added at the end, rather
+        # than shifting the pages still to crawl
+        query_endpoint = "https://dataverse.harvard.edu/api/search?q=*&type=dataset&sort=date&order=asc"
+
+        # datasets already crawled, when resuming a crawl that stopped (see upload())
+        progress = self._progress_db()
+        crawled = {row[0] for row in progress.execute("SELECT _id FROM crawled")}
+        if crawled:
+            logger.info(f"Resuming the crawl: skipping {len(crawled)} datasets already crawled")
+        skipped = 0
 
         # Iterate through the paginated data starting from the adjusted initial position
         for global_id, data_url, data_page in self.compile_paginated_data(
             query_endpoint, per_page=400, start=initial_page_start
         ):
+            if global_id in crawled:
+                skipped += 1
+                continue
             records_processed += 1
 
             if max_records and records_processed > max_records:
                 logger.info(f"Reached DATAVERSE_MAX_RECORDS={max_records}; stopping early.")
+                self.stopped_early = True
                 break
 
             if "https://hdl.handle.net/" in data_url:
@@ -719,6 +792,9 @@ class Dataverse(NDEDatabase):
                     schemas_gathered_ct += 1
                     counters["external_search_records"] += 1
 
+            # done with this dataset (its record, if any, is in the cache): skipped if the crawl is resumed
+            progress.execute("INSERT OR IGNORE INTO crawled VALUES (?)", (global_id,))
+
             if sleep_every > 0 and records_processed % sleep_every == 0:
                 logger.info(
                     f"Processed {records_processed} datasets, going to sleep for {sleep_time} seconds to manage load..."
@@ -762,9 +838,10 @@ class Dataverse(NDEDatabase):
                 f"({((overall_yielded - harvard_export_ok) / overall_yielded) * 100:.1f}%)"
             )
         logger.info(
-            f"Processed {records_processed} datasets and yielded {schemas_gathered_ct} cached records. "
-            f"Counters: {counters}"
+            f"Processed {records_processed} datasets and yielded {schemas_gathered_ct} cached records "
+            f"(skipped {skipped} crawled before). Counters: {counters}"
         )
+        progress.close()
 
     def parse(self, records):
         start_time = time.process_time()
