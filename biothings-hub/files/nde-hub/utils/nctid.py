@@ -197,10 +197,22 @@ def get_measurement_technique(design, mapping_df):
     return measurement_techniques
 
 
+def _is_present(technique, entries):
+    """True when entries already hold technique, by URL or case-insensitive name."""
+    name = technique["name"].lower().strip()
+    return any(
+        isinstance(entry, dict)
+        and (entry.get("url") == technique["url"] or (entry.get("name") or "").lower().strip() == name)
+        for entry in entries
+    )
+
+
 def add_nct_measurement_techniques(docs):
     """Add design-derived measurementTechnique to every record with an nctid.
 
-    `docs` is one pipeline batch; every trial in it is looked up at once.
+    Design terms are appended to the record's own measurementTechnique, skipping
+    any already present. `docs` is one pipeline batch; every trial in it is
+    looked up at once.
     """
     docs = list(docs)
     mapping_df = load_mapping()
@@ -219,9 +231,11 @@ def add_nct_measurement_techniques(docs):
             if key not in techniques_by_design:
                 techniques_by_design[key] = get_measurement_technique(key, mapping_df)
             techniques += [t for t in techniques_by_design[key] if t not in techniques]
-        if techniques:
+        current = as_list(doc.get("measurementTechnique"))
+        new = [technique for technique in techniques if not _is_present(technique, current)]
+        if new:
             # Each record gets its own copies, so a later stage editing one cannot touch another.
-            doc["measurementTechnique"] = [dict(technique) for technique in techniques]
+            doc["measurementTechnique"] = current + [dict(technique) for technique in new]
             added += 1
 
     logger.info("MeasurementTechnique added to %s documents from NCT trial designs", added)

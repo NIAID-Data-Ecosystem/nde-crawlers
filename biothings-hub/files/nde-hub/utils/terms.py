@@ -715,29 +715,38 @@ def _standardize_section(section, lookup_dict, is_species_section=False):
 
 
 def _dedupe_by_identifier(entries):
+    """Drop repeated terms: same identifier, or same name for terms without one."""
     seen = set()
     unique = []
     for entry in entries:
         if not entry:
             continue
-        identifier = entry.get("identifier")
-        if identifier not in seen:
-            seen.add(identifier)
+        if identifier := entry.get("identifier"):
+            key = ("identifier", identifier)
+        else:
+            key = ("name", (entry.get("name") or "").lower().strip())
+        if key not in seen:
+            seen.add(key)
             unique.append(entry)
     return unique
 
 
 def standardize_doc_terms(doc, hc_dict, species_dict):
-    """Standardize one record's species, infectiousAgent and healthCondition."""
-    health_conditions = _standardize_section(as_list(doc.get("healthCondition")), hc_dict)
-    organisms = _standardize_section(
-        as_list(doc.get("species")) + as_list(doc.get("infectiousAgent")),
-        species_dict,
-        is_species_section=True,
-    )
+    """Standardize one record's species, infectiousAgent and healthCondition.
 
-    infectious_agents = [item for item in organisms if item.get("classification") == "infectiousAgent"]
-    species = [item for item in organisms if item.get("classification") != "infectiousAgent"]
+    A term is filed by its classification; a term without one stays in the
+    field the source put it in.
+    """
+    health_conditions = _standardize_section(as_list(doc.get("healthCondition")), hc_dict)
+    infectious_agents = []
+    species = []
+    for field in _SPECIES_FIELDS:
+        for item in _standardize_section(as_list(doc.get(field)), species_dict, is_species_section=True):
+            if classification := item.get("classification"):
+                is_agent = classification == "infectiousAgent"
+            else:
+                is_agent = field == "infectiousAgent"
+            (infectious_agents if is_agent else species).append(item)
 
     # A species reclassified as an infectiousAgent must not stay in both fields.
     converted_names = {

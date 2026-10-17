@@ -335,6 +335,12 @@ services:
       dockerfile: Dockerfile
     volumes:
       - data:/data
+  vac-crawler:
+    build:
+      context: vac
+      dockerfile: Dockerfile
+    volumes:
+      - data:/data
   vdj-crawler:
     build:
       context: vdj
