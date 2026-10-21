@@ -804,7 +804,6 @@ def get_organism_info(organism, filters=None, top_n=MAX_VALUES):
         "dateCreated": date_created,
         "dateModified": date_modified,
         "datePublished": published,
-        "countries": value_counts(organism, "geoLocCountry", filters, top_n),
         "data_use_terms": value_counts(organism, "dataUseTerms", filters, top_n),
     }
 
@@ -818,12 +817,6 @@ def build_record(organism, info=None):
     data_use_terms = info.get("data_use_terms", {})
     open_count = data_use_terms.get("OPEN", 0)
     restricted_count = data_use_terms.get("RESTRICTED", 0)
-    # value_counts drops nulls but not placeholder strings, and these go
-    # straight into the description sentence, so filter them here too. That can
-    # empty the list -- an organism whose only geoLocCountry value is "unknown"
-    # -- so the clause below is omitted rather than left dangling.
-    countries = [c for c in info.get("countries", {}) if not is_uninformative(c)]
-    origin = f" collected from {', '.join(countries)}" if countries else ""
 
     output = {
         "_id": "pathoplexus_" + organism,
@@ -836,11 +829,12 @@ def build_record(organism, info=None):
             "archivedAt": f"https://pathoplexus.org/{organism}/search",
         },
         "name": f"{name} sequence records at Pathoplexus",
+        # Countries are in spatialCoverage; the description stays generic.
         "description": (
             f"Viral nucleotide sequence records for {name} available through "
-            f"Pathoplexus. {name} viral sequences{origin}, including "
-            f"{open_count} Open access sequences and {restricted_count} "
-            f"embargoed sequences."
+            f"Pathoplexus. {name} viral sequences collected in the US and "
+            f"globally, including {open_count:,} open-access sequences and "
+            f"{restricted_count:,} embargoed sequences."
         ),
         "url": f"https://pathoplexus.org/{organism}/search",
         "dateCreated": _to_iso_date(info.get("dateCreated")),
