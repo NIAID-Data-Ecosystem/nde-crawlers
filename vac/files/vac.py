@@ -850,8 +850,8 @@ def build_record(records, collection_size):
         "url": f"{VAC_URL}/browse",
         "includedInDataCatalog": {
             "@type": "DataCatalog",
-            "name": "Vaccine Adjuvant Compendium (VAC)",
-            "url": f"{VAC_URL}/",
+            "name": "NIAID Vaccine Adjuvant Compendium (VAC)",
+            "url": VAC_URL,
             "versionDate": datetime.date.today().isoformat(),
             "archivedAt": f"{VAC_URL}/browse",
         },
