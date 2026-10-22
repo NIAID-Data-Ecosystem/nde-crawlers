@@ -122,8 +122,8 @@ def _strip_html(description) -> str:
 
 
 def drop_placeholder_terms(doc: Dict) -> Dict:
-    """Strip placeholder entries from species / infectiousAgent / healthCondition."""
-    for field in ("species", "infectiousAgent", "healthCondition"):
+    """Strip placeholder entries from species / infectiousAgent / healthCondition / measurementTechnique."""
+    for field in ("species", "infectiousAgent", "healthCondition", "measurementTechnique"):
         if field not in doc:
             continue
         value = doc[field]

@@ -152,10 +152,13 @@ class Figshare(NDEDatabase):
 
             if identifier := metadata.get("identifier"):
                 for el in identifier:
-                    # [None, 'https://ndownloader.figshare.com/files/35101450']
+                    # ['10.6084/m9.figshare.5849037.v1',
+                    #  {'@xsi:type': 'dcterms:URI', '#text': 'https://ndownloader.figshare.com/files/10368390'}]
+                    if isinstance(el, dict):
+                        el = el.get("#text")
                     if el is not None:
                         if "ndownloader" in el:
-                            output["distribution"] = {"@type": "DataDownload", "url": el}
+                            output["distribution"] = {"@type": "DataDownload", "contentUrl": el}
                         elif "10." in el:
                             output["doi"] = el
             if identifier == None:

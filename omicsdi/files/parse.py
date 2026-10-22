@@ -222,11 +222,14 @@ def parse(record, dataset_name, _id, url):
             "study_type",
         ]
 
-        # Iterate over the keys and append to `mt`
+        # Iterate over the keys and append to `mt`, skipping the blank values
+        # OmicsDI sends, e.g. quantification_method [""]
         for key in mt_keys:
             if mt_names := additional.get(key):
                 for mt_name in mt_names:
-                    mt.append({"@type": "DefinedTerm", "name": mt_name})
+                    mt_name = str(mt_name or "").strip()
+                    if mt_name:
+                        mt.append({"@type": "DefinedTerm", "name": mt_name})
 
         protocols = {
             "capillary_electrophoresis_protocol": {

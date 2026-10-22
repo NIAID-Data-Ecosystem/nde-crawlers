@@ -62,7 +62,7 @@ class NCBI_SRA(NDEDatabase):
     EXPIRE = datetime.timedelta(days=365)
 
     # Used for testing small chunks of data
-    DATA_LIMIT = 5
+    DATA_LIMIT = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
