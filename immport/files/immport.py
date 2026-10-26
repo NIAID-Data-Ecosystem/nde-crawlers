@@ -12,25 +12,30 @@ CATALOG_NAME = "Immunology Database and Analysis Portal (ImmPort)"
 
 REQUEST_TIMEOUT = 30
 REQUEST_ATTEMPTS = 5
+TRANSIENT_ERRORS = (
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.ChunkedEncodingError,
+)
 
 
 def get_json(url, **kwargs):
-    """GET `url` as JSON, retrying timeouts. Raises Timeout after REQUEST_ATTEMPTS tries."""
+    """GET `url` as JSON, retrying TRANSIENT_ERRORS. Re-raises the last one after REQUEST_ATTEMPTS tries."""
     for attempt in range(1, REQUEST_ATTEMPTS + 1):
         try:
             return requests.get(url, timeout=REQUEST_TIMEOUT, **kwargs).json()
-        except requests.exceptions.Timeout:
-            logger.info(f"Timeout fetching {url} (attempt {attempt}/{REQUEST_ATTEMPTS})")
-            if attempt < REQUEST_ATTEMPTS:
-                time.sleep(5 * attempt)
-    raise requests.exceptions.Timeout(f"{url} timed out {REQUEST_ATTEMPTS} times")
+        except TRANSIENT_ERRORS as e:
+            logger.info(f"{type(e).__name__} fetching {url} (attempt {attempt}/{REQUEST_ATTEMPTS})")
+            if attempt == REQUEST_ATTEMPTS:
+                raise
+            time.sleep(5 * attempt)
 
 
 def get_studies():
     """Return {study accession: study search hit} for every ImmPort study.
 
     The search hit reports fields the JSON-LD export leaves out, such as
-    actual_enrollment. A search page that keeps timing out fails the crawl
+    actual_enrollment. A search page that keeps failing fails the crawl
     instead of leaving its studies out.
     """
     base_url = "https://www.immport.org/shared/data/query/api/search/study?term="
@@ -190,8 +195,8 @@ def parse():
         try:
             schema_json = get_json(schema_url)
             schema_json = map_schema_json(schema_json)
-        except requests.exceptions.Timeout:
-            logger.info(f"Timeout fetching ImmPort JSON-LD: {immport_id}")
+        except TRANSIENT_ERRORS as e:
+            logger.info(f"Skipping {immport_id}, could not fetch its JSON-LD: {e}")
             continue
 
         schema_json.update(map_study_search(study))
@@ -200,8 +205,8 @@ def parse():
         try:
             protocol_json = get_json(protocol_url)
             protocol_json = map_protocol_json(protocol_json, immport_id)
-        except requests.exceptions.Timeout:
-            logger.info(f"Timeout fetching ImmPort protocol: {immport_id}")
+        except TRANSIENT_ERRORS as e:
+            logger.info(f"Could not fetch ImmPort protocols for {immport_id}: {e}")
             protocol_json = {}
 
         if protocol_json:
