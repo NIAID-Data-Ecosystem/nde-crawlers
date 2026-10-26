@@ -1,10 +1,21 @@
 import re
 from collections import defaultdict
+from itertools import batched
 
 import biothings.hub.databuild.builder as builder
 import biothings.utils.mongo as mongo
+import bson
 from biothings.utils.dataload import merge_struct
-from pymongo import UpdateOne
+from pymongo import ReplaceOne, UpdateOne
+from utils.pipeline import MONGO_DOC_SIZE_LIMIT
+
+GEO_CATALOG = "NCBI Gene Expression Omnibus (NCBI GEO)"
+SRA_CATALOG = "NCBI Sequence Read Archive (NCBI SRA)"
+BIOPROJECT_CATALOG = "NCBI BioProject"
+DDE_CATALOG = "Data Discovery Engine (DDE)"
+
+# Fields a merged NCBI project record combines; for every other field the kept record's value wins.
+PROJECT_MERGE_FIELDS = ("includedInDataCatalog", "identifier", "isBasedOn")
 
 
 class NDEDataBuilder(builder.DataBuilder):
@@ -357,6 +368,114 @@ class NDEDataBuilder(builder.DataBuilder):
             delete_result = collection.delete_many({"_id": {"$in": records_to_delete}})
             self.logger.info(f"Deleted {delete_result.deleted_count} duplicate records")
 
+    def bioproject_deduplication(self, batch_size=1000):
+        """Merge the GEO series, SRA study and BioProject records of one NCBI project.
+
+        GEO series and SRA studies name their BioProject in isBasedOn, and a BioProject record's _id is its
+        accession. The records of one BioProject merge into one, which keeps its _id and its fields: the
+        DDE-curated record when there is one, so the curation keeps the precedence the DDE merge gave it, else
+        the GEO series, else the SRA study. includedInDataCatalog, identifier and isBasedOn are combined, fields
+        only another record has are added, and the other records are deleted.
+
+        When a catalog has several records for one BioProject, such as two SRA studies, they are different
+        datasets and stay unmerged; the other catalogs' records still merge.
+        """
+        db = mongo.get_target_db()
+        collection_name = self.target_backend.target_name
+        collection = db[collection_name]
+
+        def catalog_names(doc):
+            catalogs = doc.get("includedInDataCatalog")
+            if not isinstance(catalogs, list):
+                catalogs = [catalogs]
+            return {catalog.get("name") for catalog in catalogs if isinstance(catalog, dict)}
+
+        # {BioProject accession: [GEO _id, SRA _id, BioProject _id]}, False marking a catalog with several records
+        projects = defaultdict(lambda: [None, None, None])
+        curated = set()
+
+        def add(accession, index, _id):
+            ids = projects[accession]
+            ids[index] = _id if ids[index] is None else False
+
+        self.logger.info(f"Scanning {GEO_CATALOG} and {SRA_CATALOG} records for their BioProject in {collection_name}")
+        cursor = collection.find(
+            {
+                "includedInDataCatalog.name": {"$in": [GEO_CATALOG, SRA_CATALOG]},
+                "isBasedOn.additionalType.name": "BioProject",
+            },
+            {"includedInDataCatalog.name": 1, "isBasedOn": {"$elemMatch": {"additionalType.name": "BioProject"}}},
+            no_cursor_timeout=True,
+        ).batch_size(1000)
+        try:
+            for doc in cursor:
+                bioprojects = doc.get("isBasedOn") or [{}]
+                accession = str(bioprojects[0].get("identifier") or "").casefold()
+                if not accession:
+                    continue
+                names = catalog_names(doc)
+                add(accession, 0 if GEO_CATALOG in names else 1, doc["_id"])
+                if DDE_CATALOG in names:
+                    curated.add(doc["_id"])
+        finally:
+            cursor.close()
+
+        for accessions in batched(list(projects), 1000):
+            for doc in collection.find(
+                {"_id": {"$in": list(accessions)}, "includedInDataCatalog.name": BIOPROJECT_CATALOG},
+                {"includedInDataCatalog.name": 1},
+            ):
+                add(doc["_id"], 2, doc["_id"])
+                if DDE_CATALOG in catalog_names(doc):
+                    curated.add(doc["_id"])
+
+        groups = []
+        several = 0
+        for ids in projects.values():
+            several += any(_id is False for _id in ids)
+            # A record merged on an earlier run can fill two slots; it is still one record.
+            group = list(dict.fromkeys(_id for _id in ids if _id))
+            if len(group) > 1:
+                group.sort(key=lambda _id: _id not in curated)
+                groups.append(group)
+        self.logger.info(
+            f"Found {len(groups)} BioProjects with records to merge from {len(projects)} named by GEO or SRA records. "
+            f"{several} have several records in one catalog, which stay unmerged"
+        )
+
+        merged = deleted = too_large = 0
+        for batch in batched(groups, batch_size):
+            ids = [_id for group in batch for _id in group]
+            docs = {doc["_id"]: doc for doc in collection.find({"_id": {"$in": ids}})}
+            replacements = []
+            duplicates = []
+            for group in batch:
+                if any(_id not in docs for _id in group):
+                    continue
+                record = docs[group[0]]
+                for _id in group[1:]:
+                    other = docs[_id]
+                    # merge_struct needs every included field on both records.
+                    include = [field for field in PROJECT_MERGE_FIELDS if field in record and field in other]
+                    record = merge_struct(record, other, aslistofdict="includedInDataCatalog", include=include)
+                if len(bson.BSON.encode(record)) >= MONGO_DOC_SIZE_LIMIT:
+                    too_large += 1
+                    self.logger.warning(f"Not merging {group}: the merged record exceeds MongoDB's size limit")
+                    continue
+                replacements.append(ReplaceOne({"_id": group[0]}, record))
+                duplicates.extend(group[1:])
+
+            if replacements:
+                collection.bulk_write(replacements)
+                merged += len(replacements)
+                deleted += collection.delete_many({"_id": {"$in": duplicates}}).deleted_count
+                self.logger.info(f"{merged} NCBI project records merged, {deleted} duplicate records deleted")
+
+        self.logger.info(
+            f"BioProject merging complete. Merged {merged} records, deleted {deleted} duplicates. "
+            f"Skipped {too_large} groups too large to merge"
+        )
+
     def delete_unmerged_empiar_records(self):
         """Remove direct EMPIAR records that did not merge with OMICS-DI."""
         db = mongo.get_target_db()
@@ -387,6 +506,9 @@ class NDEDataBuilder(builder.DataBuilder):
             "Protein Data Bank (PDB)",
         ]
         self.identifier_deduplication(identifier_source_catalog, source_catalogs)
+
+        # After the DDE merge, so DDE records already merged into BioProject or GEO records carry over.
+        self.bioproject_deduplication()
 
         self.identifier_deduplication(
             "ProteomeXchange",

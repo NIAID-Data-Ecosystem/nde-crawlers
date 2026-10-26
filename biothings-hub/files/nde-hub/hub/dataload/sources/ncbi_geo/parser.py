@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import re
 import traceback
 from pathlib import Path
 
@@ -42,6 +43,35 @@ def build_species(names, taxids):
         if term not in species:
             species.append(term)
     return species
+
+
+_BIOPROJECT_ACCESSION = re.compile(r"\bPRJ[A-Z]{2}\d+\b")
+
+
+def build_bioprojects(relations):
+    """isBasedOn entries for the BioProjects a series lists in !Series_relation.
+
+    "BioProject: https://www.ncbi.nlm.nih.gov/bioproject/PRJNA254351". The
+    entries match the NCBI SRA crawler's, so the builder can merge a series
+    with the SRA study and BioProject records of the same project.
+    """
+    if not relations:
+        return []
+    relations = relations if isinstance(relations, list) else [relations]
+
+    bioprojects = []
+    for relation in relations:
+        if not relation.startswith("BioProject:"):
+            continue
+        if match := _BIOPROJECT_ACCESSION.search(relation):
+            entry = {
+                "@type": "CreativeWork",
+                "identifier": match.group(),
+                "additionalType": {"name": "BioProject", "url": "http://purl.obolibrary.org/obo/NCIT_C45293"},
+            }
+            if entry not in bioprojects:
+                bioprojects.append(entry)
+    return bioprojects
 
 
 # The only GSM fields a parent GSE document reads. Keep in sync with
@@ -474,5 +504,8 @@ def parse_gse(data_folder):
 
         if species := build_species(item.get("!Series_platform_organism"), item.get("!Series_platform_taxid")):
             output["species"] = species
+
+        if bioprojects := build_bioprojects(item.get("!Series_relation")):
+            output["isBasedOn"] = bioprojects
 
         yield output
