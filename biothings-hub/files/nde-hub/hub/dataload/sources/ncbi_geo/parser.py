@@ -52,8 +52,8 @@ def build_bioprojects(relations):
     """isBasedOn entries for the BioProjects a series lists in !Series_relation.
 
     "BioProject: https://www.ncbi.nlm.nih.gov/bioproject/PRJNA254351". The
-    entries match the NCBI SRA crawler's, so the builder can merge a series
-    with the SRA study and BioProject records of the same project.
+    entries match the NCBI SRA crawler's, so a project's GEO series, SRA study
+    and BioProject records all name it the same way.
     """
     if not relations:
         return []
