@@ -5,6 +5,8 @@ ComputationalTool, and ResourceCatalog documents and writes them back to the
 same ES index.
 Embeddings are reused from a local SQLite cache when possible, and model
 inference is delegated to a remote embed server (see embed_server.py).
+Documents are processed by ``EMBED_WORKERS`` worker processes, each scanning
+one slice of the index.
 
 Can be imported and called from the hub indexer via ``run_embeddings()``,
 or executed standalone::
@@ -12,13 +14,19 @@ or executed standalone::
     python embed.py
 """
 
+import contextlib
+import gc
 import hashlib
 import logging
+import multiprocessing
 import os
+import queue
 import re
 import sqlite3
 import time
+import traceback
 from array import array
+from collections import Counter
 
 import requests
 from elasticsearch import Elasticsearch, helpers
@@ -29,6 +37,10 @@ logger = logging.getLogger(__name__)
 EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "256"))
 BULK_UPDATE_SIZE = int(os.getenv("BULK_UPDATE_SIZE", "512"))
 SCAN_BATCH_SIZE = int(os.getenv("ES_SCAN_BATCH_SIZE", "1000"))
+# Each worker scans a slice that lives on one shard. A shard works through each request it gets serially, so
+# throughput grows with workers per shard; keep this a multiple of the index's shard count (3). 1 runs the whole scan
+# in the calling process.
+EMBED_WORKERS = int(os.getenv("EMBED_WORKERS", "24"))
 DOC_TYPES = ["Dataset", "DataCollection", "ComputationalTool", "ResourceCatalog"]
 
 ES_COMPATIBLE_WITH = os.getenv("ES_COMPATIBLE_WITH", "9").strip().lower()
@@ -677,6 +689,7 @@ def run_embeddings(es_hosts, index_name, cache_index_name=None, log=None):
         for model_name, model_info in MODEL_CONFIGS.items():
             sqlite_cache = _run_model_embeddings(
                 es,
+                es_hosts,
                 index_name,
                 model_name,
                 model_info,
@@ -689,7 +702,7 @@ def run_embeddings(es_hosts, index_name, cache_index_name=None, log=None):
             sqlite_cache.close()
 
 
-def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, cache_index_name, log):
+def _run_model_embeddings(es, es_hosts, index_name, model_name, model_info, sqlite_cache, cache_index_name, log):
     target_field = model_info["field_name"]
     metadata_fields = _embedding_metadata_fields(target_field)
     model_version = model_info.get("model_version") or model_name
@@ -766,6 +779,238 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
         update_total,
     )
 
+    scan_queries = [(current_scan_query, True), (update_scan_query, False)]
+    start_time = time.time()
+    if EMBED_WORKERS > 1:
+        use_sqlite_cache = sqlite_cache is not None
+        if use_sqlite_cache:
+            # A SQLite connection must not be open across fork(); each worker opens its own.
+            sqlite_cache.close()
+        stats = _embed_documents_in_workers(
+            es_hosts,
+            index_name,
+            model_name,
+            model_info,
+            scan_queries,
+            use_sqlite_cache,
+            active_cache_index,
+            total,
+            start_time,
+            log,
+        )
+        sqlite_cache = _open_embedding_cache(EMBED_CACHE_DB_PATH, log) if use_sqlite_cache else None
+    else:
+        stats, sqlite_cache = _embed_documents(
+            es,
+            index_name,
+            model_name,
+            model_info,
+            scan_queries,
+            sqlite_cache,
+            active_cache_index,
+            log,
+            lambda progress: _log_progress(log, progress, total, start_time),
+        )
+
+    elapsed = _fmt_duration(time.time() - start_time)
+    log.info(
+        (
+            "Finished %s: %d/%d checked, %d updated (%d embedded, %d reused, %d cleared), "
+            "%d unchanged, %d cache misses, %d skipped empty text (elapsed %s)"
+        ),
+        target_field,
+        stats["checked"],
+        total,
+        stats["processed"],
+        stats["embedded"],
+        stats["reused"],
+        stats["cleared"],
+        stats["unchanged"],
+        stats["cache_miss"],
+        stats["skip_count"],
+        elapsed,
+    )
+    log.info(
+        "Cache reuse breakdown for %s: %d SQLite, %d ES",
+        target_field,
+        stats["sqlite_reused"],
+        stats["es_reused"],
+    )
+    return sqlite_cache
+
+
+def _log_progress(log, stats, total, start_time):
+    log.info(
+        "Checked %d/%d (%d updated: %d embedded, %d reused, %d cleared; %d unchanged; ETA %s)",
+        stats["checked"],
+        total,
+        stats["processed"],
+        stats["embedded"],
+        stats["reused"],
+        stats["cleared"],
+        stats["unchanged"],
+        _eta(stats["checked"], total, start_time),
+    )
+
+
+_WORKER_PROGRESS_LOG_SECONDS = 30
+
+
+def _embed_documents_in_workers(
+    es_hosts,
+    index_name,
+    model_name,
+    model_info,
+    scan_queries,
+    use_sqlite_cache,
+    active_cache_index,
+    total,
+    start_time,
+    log,
+):
+    """Run ``_embed_documents()`` on one sliced scroll per worker process and return the summed counters."""
+    ctx = multiprocessing.get_context("fork")
+    messages = ctx.Queue()
+    # Keeps the embed server at one request at a time, as with a single process.
+    embed_lock = ctx.Lock()
+    workers = []
+    stats_by_slice = {}
+    finished = set()
+    # Keeps the objects the workers inherit out of their garbage collections, which would otherwise copy this
+    # process's heap into every worker.
+    gc.freeze()
+    try:
+        for slice_id in range(EMBED_WORKERS):
+            sliced_queries = [
+                ({**scan_query, "slice": {"id": slice_id, "max": EMBED_WORKERS}}, verify_current_hash)
+                for scan_query, verify_current_hash in scan_queries
+            ]
+            worker = ctx.Process(
+                target=_embed_slice,
+                args=(
+                    slice_id,
+                    messages,
+                    embed_lock,
+                    es_hosts,
+                    index_name,
+                    model_name,
+                    model_info,
+                    sliced_queries,
+                    use_sqlite_cache,
+                    active_cache_index,
+                    log,
+                ),
+                name=f"embed-slice-{slice_id}",
+            )
+            worker.start()
+            workers.append(worker)
+        log.info("Started %d embedding workers", len(workers))
+
+        last_logged = time.time()
+        while len(finished) < len(workers):
+            try:
+                kind, slice_id, payload = messages.get(timeout=5)
+            except queue.Empty:
+                kind = None
+            if kind == "error":
+                raise RuntimeError(f"Embedding worker {slice_id} failed:\n{payload}")
+            if kind:
+                stats_by_slice[slice_id] = payload
+                if kind == "done":
+                    finished.add(slice_id)
+            for worker_id, worker in enumerate(workers):
+                if worker_id in finished or worker.exitcode is None:
+                    continue
+                # A clean exit queues "done" first, so only treat it as lost once the queue has gone quiet.
+                if worker.exitcode != 0 or kind is None:
+                    raise RuntimeError(f"Embedding worker {worker_id} exited with code {worker.exitcode}")
+            if time.time() - last_logged >= _WORKER_PROGRESS_LOG_SECONDS:
+                _log_progress(log, _sum_stats(stats_by_slice.values()), total, start_time)
+                last_logged = time.time()
+    except BaseException:
+        for worker in workers:
+            worker.terminate()
+        raise
+    finally:
+        gc.unfreeze()
+        for worker in workers:
+            worker.join()
+    return _sum_stats(stats_by_slice.values())
+
+
+def _embed_slice(
+    slice_id,
+    messages,
+    embed_lock,
+    es_hosts,
+    index_name,
+    model_name,
+    model_info,
+    scan_queries,
+    use_sqlite_cache,
+    active_cache_index,
+    log,
+):
+    orchestrator_pid = os.getppid()
+
+    def report_progress(progress):
+        # Stop instead of carrying on as an orphan if the orchestrating process has died.
+        if os.getppid() != orchestrator_pid:
+            raise RuntimeError("Embedding orchestrator process exited")
+        messages.put(("progress", slice_id, progress))
+
+    sqlite_cache = _open_embedding_cache(EMBED_CACHE_DB_PATH, log) if use_sqlite_cache else None
+    try:
+        stats, sqlite_cache = _embed_documents(
+            _make_es_client(es_hosts),
+            index_name,
+            model_name,
+            model_info,
+            scan_queries,
+            sqlite_cache,
+            active_cache_index,
+            log,
+            report_progress,
+            embed_lock,
+        )
+        messages.put(("done", slice_id, stats))
+    except BaseException:
+        messages.put(("error", slice_id, traceback.format_exc()))
+        raise
+    finally:
+        if sqlite_cache:
+            sqlite_cache.close()
+
+
+def _sum_stats(stats_list):
+    totals = Counter()
+    for stats in stats_list:
+        totals.update(stats)
+    return totals
+
+
+def _embed_documents(
+    es,
+    index_name,
+    model_name,
+    model_info,
+    scan_queries,
+    sqlite_cache,
+    active_cache_index,
+    log,
+    report_progress,
+    embed_lock=None,
+):
+    """Embed, or reuse cached vectors for, the docs matched by *scan_queries* and write them to *index_name*.
+
+    Returns the run counters and the SQLite connection, which is None if the cache was disabled.
+    """
+    target_field = model_info["field_name"]
+    metadata_fields = _embedding_metadata_fields(target_field)
+    model_version = model_info.get("model_version") or model_name
+    text_version = model_info.get("text_version") or "default"
+    dims = model_info["dims"]
+
     embedded = 0
     reused = 0
     sqlite_reused = 0
@@ -780,7 +1025,23 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
     embed_batch: list[dict] = []
     bulk_actions: list[dict] = []
     seen_doc_ids = set()
-    start_time = time.time()
+
+    def _stats():
+        return {
+            "checked": checked,
+            "processed": processed,
+            "embedded": embedded,
+            "reused": reused,
+            "cleared": cleared,
+            "unchanged": unchanged,
+            "cache_miss": cache_miss,
+            "skip_count": skip_count,
+            "sqlite_reused": sqlite_reused,
+            "es_reused": es_reused,
+        }
+
+    def _report_progress():
+        report_progress(_stats())
 
     def _embedding_update_doc(vector, text_hash):
         return {
@@ -789,19 +1050,6 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
             metadata_fields["model"]: model_version,
             metadata_fields["text_version"]: text_version,
         }
-
-    def _log_progress():
-        log.info(
-            "Checked %d/%d (%d updated: %d embedded, %d reused, %d cleared; %d unchanged; ETA %s)",
-            checked,
-            total,
-            processed,
-            embedded,
-            reused,
-            cleared,
-            unchanged,
-            _eta(checked, total, start_time),
-        )
 
     def _flush_bulk():
         nonlocal bulk_actions
@@ -842,7 +1090,7 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
         elif source == "es":
             es_reused += 1
         if processed % 1000 == 0:
-            _log_progress()
+            _report_progress()
         if len(bulk_actions) >= BULK_UPDATE_SIZE:
             _flush_bulk()
 
@@ -862,7 +1110,7 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
         cleared += 1
         processed += 1
         if processed % 1000 == 0:
-            _log_progress()
+            _report_progress()
         if len(bulk_actions) >= BULK_UPDATE_SIZE:
             _flush_bulk()
 
@@ -873,7 +1121,8 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
 
         unique_payloads = list({item["text_hash"]: item for item in embed_batch}.values())
         texts = [item["text"] for item in unique_payloads]
-        vectors = _remote_embed(texts)
+        with embed_lock or contextlib.nullcontext():
+            vectors = _remote_embed(texts)
         if len(vectors) != len(unique_payloads):
             raise RuntimeError(
                 f"Embedding server returned {len(vectors)} vectors for {len(unique_payloads)} texts"
@@ -910,7 +1159,7 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
             embedded += 1
             processed += 1
             if processed % 1000 == 0:
-                _log_progress()
+                _report_progress()
             if len(bulk_actions) >= BULK_UPDATE_SIZE:
                 _flush_bulk()
         if sqlite_cache and not _store_cached_embeddings(
@@ -1065,7 +1314,7 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
                 skip_count += 1
                 _clear_embedding(doc_id)
                 if checked % 10000 == 0:
-                    _log_progress()
+                    _report_progress()
                 continue
 
             text_hash = _embedding_text_hash(
@@ -1077,7 +1326,7 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
             if verify_current_hash and source.get(metadata_fields["hash"]) == text_hash:
                 unchanged += 1
                 if checked % 10000 == 0:
-                    _log_progress()
+                    _report_progress()
                 continue
 
             cache_batch.append(
@@ -1091,36 +1340,12 @@ def _run_model_embeddings(es, index_name, model_name, model_info, sqlite_cache, 
                 _flush_cache_lookups()
 
             if checked % 10000 == 0:
-                _log_progress()
+                _report_progress()
 
-    _scan_for_updates(current_scan_query, verify_current_hash=True)
-    _scan_for_updates(update_scan_query, verify_current_hash=False)
+    for scan_query, verify_current_hash in scan_queries:
+        _scan_for_updates(scan_query, verify_current_hash)
 
     _flush_cache_lookups()
     _flush_embeds()
     _flush_bulk()
-    elapsed = _fmt_duration(time.time() - start_time)
-    log.info(
-        (
-            "Finished %s: %d/%d checked, %d updated (%d embedded, %d reused, %d cleared), "
-            "%d unchanged, %d cache misses, %d skipped empty text (elapsed %s)"
-        ),
-        target_field,
-        checked,
-        total,
-        processed,
-        embedded,
-        reused,
-        cleared,
-        unchanged,
-        cache_miss,
-        skip_count,
-        elapsed,
-    )
-    log.info(
-        "Cache reuse breakdown for %s: %d SQLite, %d ES",
-        target_field,
-        sqlite_reused,
-        es_reused,
-    )
-    return sqlite_cache
+    return _stats(), sqlite_cache
