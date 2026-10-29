@@ -34,6 +34,7 @@ AGGREGATE_ATTR_MAP = {
     "cell type": "cellType",
     "cell_line": "cellType",
     "cell line": "cellType",
+    "Cell line": "cellType",
     "cell line name": "cellType",
     "dev_stage": "developmentalStage",
     "development_stage": "developmentalStage",
@@ -62,7 +63,7 @@ class NCBI_SRA(NDEDatabase):
     EXPIRE = datetime.timedelta(days=365)
 
     # Used for testing small chunks of data
-    DATA_LIMIT = 5
+    DATA_LIMIT = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -273,7 +274,8 @@ class NCBI_SRA(NDEDatabase):
                         timeout=120,
                     )
                     res.raise_for_status()
-                    batch = self._parse_efetch_xml(res.text)
+                    # efetch sends text/xml with no charset, so res.text would decode the UTF-8 body as Latin-1
+                    batch = self._parse_efetch_xml(res.content)
                     all_data.extend(batch)
                     retstart += retmax
 
@@ -444,17 +446,9 @@ class NCBI_SRA(NDEDatabase):
                 "associatedGenotype": set(),
                 "associatedPhenotype": set(),
                 "sampleType": set(),
+                "instrument": set(),
             }
             health_condition_set = set()
-
-            if bio_project := ftp_info.get("ftp_bioProject"):
-                bio_project_dict = {"@type": "CreativeWork"}
-                bio_project_dict["identifier"] = bio_project
-                bio_project_dict["additionalType"] = {
-                    "name": "BioProject",
-                    "url": "http://purl.obolibrary.org/obo/NCIT_C45293",
-                }
-                is_based_on.append(bio_project_dict)
 
             for run_metadata in study_metadata:
                 if study_title := run_metadata.get("study_title"):
@@ -557,44 +551,18 @@ class NCBI_SRA(NDEDatabase):
                         }
                     if sample_title := run_metadata.get("sample_title"):
                         sample_item["name"] = sample_title
+                    # HapMap sample IDs are the Coriell IDs (e.g. NA12878) of the same sample
+                    if hapmap_id := run_metadata.get("HapMap sample ID"):
+                        if srs_id := sample_item.get("additionalIdentifier"):
+                            sample_item["additionalIdentifier"] = [srs_id, hapmap_id]
+                        else:
+                            sample_item["additionalIdentifier"] = hapmap_id
                     sample_collection_items.append(sample_item)
 
                 # instruments
-                instrument_dict = {}
                 if model := run_metadata.get("model"):
-                    instrument_dict["name"] = model
-                if bool(instrument_dict) and instrument_dict not in is_based_on:
-                    instrument_dict["additionalType"] = {
-                        "name": "Instrument",
-                        "url": "http://purl.obolibrary.org/obo/NCIT_C16742",
-                    }
-
-                # cells
-                cell_dict = {"@type": "CreativeWork"}
-                if cell_line := run_metadata.get("cell line"):
-                    cell_dict["name"] = cell_line
-                if cell_line_name := run_metadata.get("cell line name"):
-                    cell_dict["name"] = cell_line_name
-                if cell_strain := run_metadata.get("strain"):
-                    cell_dict["identifier"] = cell_strain
-                if bool(cell_dict) and cell_dict not in is_based_on:
-                    cell_dict["additionalType"] = {"name": "Cell", "url": "http://purl.obolibrary.org/obo/NCIT_C12508"}
-                    is_based_on.append(cell_dict)
-
-                # hapmap
-                hapmap_dict = {"@type": "CreativeWork"}
-                if hapmap_id := run_metadata.get("HapMap sample ID"):
-                    hapmap_dict["identifier"] = hapmap_id
-                if cell_line := run_metadata.get("Cell line"):
-                    hapmap_dict["name"] = cell_line
-                if sex := run_metadata.get("sex"):
-                    hapmap_dict["gender"] = sex
-                if bool(hapmap_dict) and hapmap_dict not in is_based_on:
-                    hapmap_dict["additionalType"] = {
-                        "name": "HapMap",
-                        "url": "http://purl.obolibrary.org/obo/NCIT_C70979",
-                    }
-                    is_based_on.append(hapmap_dict)
+                    if model.casefold() not in INVALID_SAMPLE_VALUES:
+                        aggregate_data["instrument"].add(model)
 
                 # Collect aggregate values from sample attributes
                 for attr_tag, agg_field in AGGREGATE_ATTR_MAP.items():
@@ -609,6 +577,22 @@ class NCBI_SRA(NDEDatabase):
                         val_clean = val.strip()
                         if val_clean.casefold() not in INVALID_SAMPLE_VALUES and not val_clean.casefold().startswith("missing:"):
                             health_condition_set.add(val_clean)
+
+            if bio_project := ftp_info.get("ftp_bioProject"):
+                bio_project_dict = {
+                    "@type": "CreativeWork",
+                    "identifier": bio_project,
+                    "url": f"https://www.ncbi.nlm.nih.gov/bioproject/{bio_project}",
+                    "includedInDataCatalog": {
+                        "@type": "DataCatalog",
+                        "name": "NCBI BioProject",
+                        "url": "https://www.ncbi.nlm.nih.gov/bioproject/",
+                    },
+                }
+                # SRA studies are registered from their BioProject and almost always carry its title
+                if study_name := output.get("name"):
+                    bio_project_dict["name"] = study_name
+                is_based_on.insert(0, bio_project_dict)
 
             def sanitize_json_string(json_string):
                 # Replace single quotes with double quotes
@@ -686,6 +670,10 @@ class NCBI_SRA(NDEDatabase):
                 if aggregate_data["sampleType"]:
                     aggregate_element["sampleType"] = [
                         {"@type": "DefinedTerm", "name": v} for v in sorted(aggregate_data["sampleType"])
+                    ]
+                if aggregate_data["instrument"]:
+                    aggregate_element["instrument"] = [
+                        {"@type": "DefinedTerm", "name": v} for v in sorted(aggregate_data["instrument"])
                     ]
 
                 if aggregate_element:

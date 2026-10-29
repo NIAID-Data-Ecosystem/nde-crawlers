@@ -17,7 +17,7 @@ organism_name,species.name
 run_accession,isBasedOn.identifier
 BioProject,isBasedOn.identifier
 experiment_accession,isBasedOn.identifier
-sample_accession,isBasedOn.identifier
-instrument,isBasedOn.identifier
-cell line,isBasedOn.identifier
-HapMap sample ID,isBasedOn.identifier
+sample_accession,sample.itemListElement.identifier
+instrument,sample.aggregateElement.instrument.name
+cell line,sample.aggregateElement.cellType.name
+HapMap sample ID,sample.itemListElement.additionalIdentifier

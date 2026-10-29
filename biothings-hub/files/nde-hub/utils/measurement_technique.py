@@ -3,7 +3,8 @@
 Runs for records with a `measurementTechnique` when the source has a mapping
 CSV in `/data/nde-hub/standardizers/measurement_technique_lookup/`. Each row
 maps a repository technique to an ontology term, optionally routing it to a
-different field (`Field` column, e.g. `keywords`).
+different field (`Field` column, e.g. `keywords`). A row whose manually mapped
+term is `DELETE` removes the repository technique instead.
 """
 
 import csv
@@ -18,6 +19,9 @@ from rdflib.namespace import RDFS, SKOS
 from .common import dict_entries
 
 LOOKUP_DIR = "/data/nde-hub/standardizers/measurement_technique_lookup"
+
+# Curators map placeholder techniques ("Not available", "not known") to this.
+DELETE = "DELETE"
 
 
 def lookup_file(source):
@@ -89,8 +93,9 @@ def load_mapping(source):
     """Load a source's technique mapping: {repository technique: [target terms]}.
 
     Term names come from the ontology URL when it resolves, falling back to the
-    manually mapped term and then to the repository's own wording. Cached, since
-    resolving the URLs costs a request each.
+    manually mapped term and then to the repository's own wording. A technique
+    mapped to DELETE maps to no terms, so it is dropped. Cached, since resolving
+    the URLs costs a request each.
     """
     mapping = {}
     with open(lookup_file(source), "r", newline="", encoding="utf-8") as csvfile:
@@ -98,6 +103,10 @@ def load_mapping(source):
             repo_technique = row["Repository Technique"].strip()
             manually_mapped = row["Manually Mapped Term"].strip() if row["Manually Mapped Term"] else ""
             url = row["URL"].strip()
+
+            if manually_mapped.upper() == DELETE:
+                mapping.setdefault(repo_technique, [])
+                continue
 
             entry = {
                 "@type": "DefinedTerm",

@@ -29,11 +29,15 @@ MIN_EXPECTED_RECORDS = int(os.getenv("MASSIVE_MIN_EXPECTED_RECORDS", "1000"))
 MIN_COMPLETION_RATIO = float(os.getenv("MASSIVE_MIN_COMPLETION_RATIO", "0.95"))
 FETCH_HTML_DETAILS = os.getenv("MASSIVE_FETCH_HTML_DETAILS", "true").casefold() in {"1", "true", "yes", "y"}
 HTML_DETAILS_CACHE_PATH = os.getenv("MASSIVE_HTML_DETAILS_CACHE", "/cache/massive_html_details.json")
-HTML_DETAIL_SLEEP = float(os.getenv("MASSIVE_HTML_DETAIL_SLEEP", "0.2"))
+HTML_DETAIL_SLEEP = float(os.getenv("MASSIVE_HTML_DETAIL_SLEEP", "1.0"))
 HTML_CACHE_SAVE_INTERVAL = int(os.getenv("MASSIVE_HTML_CACHE_SAVE_INTERVAL", "100"))
 USE_SQL_CACHE = os.getenv("MASSIVE_USE_SQL_CACHE", "true").casefold() in {"1", "true", "yes", "y"}
 SQL_CACHE_EXPIRE_DAYS = int(os.getenv("MASSIVE_SQL_CACHE_EXPIRE_DAYS", "30"))
 UPDATE_KNOWN_PAGE_LIMIT = int(os.getenv("MASSIVE_UPDATE_KNOWN_PAGE_LIMIT", "1"))
+
+# Set when MassIVE still answers 429 after the session's retries: the rest of the
+# run skips dataset-page lookups instead of waiting out the rate limit on each one.
+_html_details_paused = False
 
 
 def make_session():
@@ -206,11 +210,27 @@ def save_html_details_cache(cache, cache_path=HTML_DETAILS_CACHE_PATH):
 
 
 def get_html_details(task, session=None, cache=None):
+    """DOI and license from a dataset's page, or (None, None) when the page can't be fetched.
+
+    A failed lookup isn't cached, so a later run retries it instead of the whole
+    crawl failing on one page.
+    """
+    global _html_details_paused
     if cache is not None and task in cache:
         detail = cache[task] or {}
         return detail.get("doi"), detail.get("license")
+    if _html_details_paused:
+        return None, None
 
-    html_content = fetch_html_content(task, session=session)
+    try:
+        html_content = fetch_html_content(task, session=session)
+    except requests.exceptions.RequestException as e:
+        if getattr(e.response, "status_code", None) == 429:
+            _html_details_paused = True
+            logger.warning("MassIVE is rate limiting dataset pages, skipping the rest for this run: %s", e)
+        else:
+            logger.warning("Could not fetch the MassIVE dataset page for task %s: %s", task, e)
+        return None, None
     doi, license_url = parse_html_for_doi_and_license(html_content)
     if cache is not None:
         cache[task] = {"doi": doi, "license": license_url}
