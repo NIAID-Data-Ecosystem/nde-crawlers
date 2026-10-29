@@ -807,6 +807,14 @@ class NDESourceUploader(BaseSourceUploader):
                     "doi": {"type": "text", "copy_to": ["all"]},
                     "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "text", "copy_to": ["all"]},
+                    "includedInDataCatalog": {
+                        "properties": {
+                            "@type": {"type": "text"},
+                            "name": {"type": "keyword", "copy_to": ["all"]},
+                            "url": {"type": "text"},
+                            "versionDate": {"type": "date"},
+                        }
+                    },
                     "journalName": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "text", "analyzer": "nde_analyzer"},
                     "pmid": {"type": "text", "copy_to": ["all"]},
