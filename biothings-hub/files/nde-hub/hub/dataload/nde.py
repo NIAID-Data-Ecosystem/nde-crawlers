@@ -117,6 +117,7 @@ class NDEFileSystemDumper(BaseDumper):
 
 class NDESourceUploader(BaseSourceUploader):
     storage_class = IgnoreDuplicatedStorage
+    keep_archive = 8
 
     @nde_upload_wrapper
     def load_data(self, data_folder):
@@ -1450,6 +1451,7 @@ class NDESourceUploader(BaseSourceUploader):
 
 class NDESourceSampleUploader(BaseSourceUploader):
     storage_class = IgnoreDuplicatedStorage
+    keep_archive = 8
 
     @nde_upload_wrapper
     def load_data(self, data_folder):

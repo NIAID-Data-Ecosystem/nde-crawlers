@@ -12,6 +12,7 @@ from .parser import parse_files
 class Biostudies_Uploader(uploader.ParallelizedSourceUploader):
     name = "biostudies"
     storage_class = biothings.utils.storage.IgnoreDuplicatedStorage
+    keep_archive = 8
     MAX_PARALLEL_UPLOAD = 3
 
     def jobs(self):
