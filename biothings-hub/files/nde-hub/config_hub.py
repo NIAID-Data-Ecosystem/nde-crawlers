@@ -343,3 +343,5 @@ DOCKER_HOST = None
 APITEST_PATH = "/opt/home/nde/nde_hub/src/tests"
 
 APITEST_CONFIG = "config_web"
+
+HUB_FREE_THREADED_WORKERS = False
