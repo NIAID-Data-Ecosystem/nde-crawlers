@@ -91,7 +91,7 @@ def parse():
             output["interactionStatistic"] = {
                 "@type": "InteractionCounter",
                 "userInteractionCount": pulls,
-                "interactionType": "Number of downloads since release",
+                "interactionType": {"@type": "Action", "name": "Number of downloads since release"},
             }
 
         if tool_tags := metadata.get("tool_tags"):

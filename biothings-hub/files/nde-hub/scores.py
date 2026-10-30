@@ -113,7 +113,7 @@ DATASET_RECOMMENDED_FIELDS = [
 ]
 DATASET_REQUIRED_AUGMENTED_FIELDS = ["funding", "measurementTechnique"]
 DATASET_RECOMMENDED_AUGMENTED_FIELDS = [
-    "species", "infectiousAgent", "healthCondition", "citation", "topicCategory"]
+    "species", "infectiousAgent", "healthCondition", "citation", "topicCategory", "citedBy", "interactionStatistic"]
 DATA_COLLECTION_REQUIRED = [
     "about",
     "collectionSize",

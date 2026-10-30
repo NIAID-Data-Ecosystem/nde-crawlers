@@ -43,8 +43,9 @@ The base class already decorates `load_data`. Override it (keeping
 settings on the uploader change the pipeline:
 
     post_process(self, doc)      applied after every stage but before
-                                 `lineage` and `corrections`; return the
-                                 document or None to drop it
+                                 `make_data_count`, `lineage` and
+                                 `corrections`; return the document or None
+                                 to drop it
     skip_stages = ("...",)       stage names this source should not run
 """
 
@@ -58,7 +59,7 @@ import bson
 import orjson
 from config import logger
 
-from .common import dict_entries, supports_description_enrichment, supports_term_standardization
+from .common import as_list, dict_entries, supports_description_enrichment, supports_term_standardization
 from .validate import add_date, add_metadata_score, check_schema, clean_description, drop_placeholder_terms
 
 DEFAULT_BATCH_SIZE = 10_000
@@ -345,6 +346,10 @@ def _needs_descriptions(doc):
     return ("species" not in doc and "infectiousAgent" not in doc) or "healthCondition" not in doc
 
 
+def _needs_make_data_count(doc):
+    return "Dataset" in as_list(doc.get("@type"))
+
+
 # ---------------------------------------------------------------------------
 # Stage runners. Each imports its module on call, so a hub process only loads
 # text2term, pandas, rdflib and Bio for the stages a source actually runs.
@@ -410,6 +415,17 @@ def _run_disambiguating_description(docs, source):
     return add_disambiguating_description(docs, source)
 
 
+def _run_make_data_count(docs, source):
+    from .make_data_count import add_data_citations
+
+    # Stage.applies only gates the batch. Only Datasets are looked up.
+    doc_list = list(docs)
+    eligible = [doc for doc in doc_list if _needs_make_data_count(doc)]
+    if eligible:
+        add_data_citations(eligible)
+    return doc_list
+
+
 def _run_lineage(docs, source):
     from .lineage import process_lineage
 
@@ -440,6 +456,12 @@ def _reset_nctid():
     reset_caches()
 
 
+def _reset_make_data_count():
+    from .make_data_count import reset_caches
+
+    reset_caches()
+
+
 def _measurement_technique_file(source):
     from .measurement_technique import lookup_file
 
@@ -464,9 +486,16 @@ def _disambiguating_description_file(source):
     return lookup_file(source)
 
 
+def _make_data_count_file(source):
+    from .make_data_count import lookup_file
+
+    return lookup_file()
+
+
 # The pipeline, in order. Citations run first because they add funding, species
-# and health conditions the later stages then standardize. Corrections run last,
-# once funding is final, because they match on funding identifiers.
+# and health conditions the later stages then standardize. make_data_count runs
+# after post_process, so records a source drops are never looked up. Corrections
+# run last, once funding is final, because they match on funding identifiers.
 STAGES = (
     Stage(
         "citations",
@@ -518,6 +547,14 @@ STAGES = (
         _disambiguating_description_file,
         tracked_fields=("disambiguatingDescription",),
     ),
+    Stage(
+        "make_data_count",
+        _run_make_data_count,
+        _any_doc(_needs_make_data_count),
+        _make_data_count_file,
+        reset=_reset_make_data_count,
+        tracked_fields=("citation", "citedBy", "interactionStatistic"),
+    ),
     Stage("lineage", _run_lineage, _always, tracked_fields=("_meta.lineage",)),
     Stage("corrections", _run_corrections, _always, tracked_fields=("sourceOrganization",)),
 )
@@ -528,9 +565,9 @@ STAGE_NAMES = tuple(stage.name for stage in STAGES)
 def _post_process_stage(post_process):
     """Wrap an uploader's `post_process` method as a stage.
 
-    It runs after every augmentation but before `lineage` and `corrections`, so
-    a source can still add, correct or drop taxonomy and have the lineage
-    reflect it.
+    It runs after every augmentation but before `make_data_count`, `lineage`
+    and `corrections`, so a source can still add, correct or drop taxonomy and
+    have the lineage reflect it, and dropped records skip the MDC lookups.
     """
 
     def run(docs, source):
@@ -573,7 +610,8 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
 
     if post_process is not None:
         finishing_index = next(
-            (i for i, stage in enumerate(stages) if stage.name in ("lineage", "corrections")), len(stages)
+            (i for i, stage in enumerate(stages) if stage.name in ("make_data_count", "lineage", "corrections")),
+            len(stages),
         )
         stages.insert(finishing_index, _post_process_stage(post_process))
 

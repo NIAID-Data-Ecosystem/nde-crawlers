@@ -311,6 +311,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "datePublished": {"type": "date"},
                     "description": {"type": "text"},
                     "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "fromMDC": {"type": "boolean"},
                     "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "issueNumber": {"type": "text"},
@@ -339,6 +340,7 @@ class NDESourceUploader(BaseSourceUploader):
                     "datePublished": {"type": "date"},
                     "description": {"type": "text"},
                     "doi": {"type": "keyword", "copy_to": ["all"]},
+                    "fromMDC": {"type": "boolean"},
                     "fromPMID": {"type": "boolean"},
                     "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "issueNumber": {"type": "text"},
@@ -768,7 +770,23 @@ class NDESourceUploader(BaseSourceUploader):
             "interactionStatistic": {
                 "properties": {
                     "@type": {"type": "text"},
-                    "interactionType": {"type": "text"},
+                    "endTime": {"type": "date"},
+                    "fromMDC": {"type": "boolean"},
+                    "interactionType": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "name": {"type": "keyword"},
+                            "url": {"type": "keyword"},
+                        }
+                    },
+                    "name": {"type": "keyword"},
+                    "owner": {
+                        "properties": {
+                            "@type": {"type": "keyword"},
+                            "name": {"type": "keyword"},
+                            "parentOrganization": {"type": "keyword"},
+                        }
+                    },
                     "userInteractionCount": {"type": "unsigned_long"},
                 }
             },

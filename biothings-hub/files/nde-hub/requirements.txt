@@ -7,3 +7,4 @@ timeout-decorator   # for timeout in biostudies
 lxml        # for utils to remove html tags
 rdflib      # for parsing RDF/OWL ontology data
 regex       # for advanced regex operations in utils
+google-cloud-bigquery   # for the make_data_count release dumper
