@@ -16,7 +16,7 @@ VAC_URL = "https://vac.niaid.nih.gov"
 # adjuvants are kept.
 MAX_VALUES = 100
 
-# Longest keyword kept (Mapping rows 59, 175, 199).
+# Longest keyword kept.
 MAX_KEYWORD_LENGTH = 100
 
 # From utils/validate.py.
@@ -46,8 +46,7 @@ PLACEHOLDER_TERMS = frozenset(
 
 
 # ---------------------------------------------------------------------------
-# Field mappings, from "VAC - Mapping.tsv", "VAC - grouping term.tsv" and
-# "VAC - VAC - Data Collection.tsv".
+# Field mappings
 # ---------------------------------------------------------------------------
 
 # preclinicalHostSpecies.name -> (scientific name, NCBI taxon id).
@@ -99,7 +98,7 @@ HOST_DESCRIPTIONS = {"NHP": "non-human primate"}
 # Host and route notes that name no subject.
 NON_SUBJECT = re.compile(r"(in vitro|in silico|n/a)\b.*", re.I)
 
-# immunizationRoute abbreviations (Mapping rows 192, 267). SC is VAC's SQ.
+# immunizationRoute abbreviations. SC is VAC's SQ.
 ROUTES = {
     "IM": "intramuscular immunization",
     "SQ": "subcutaneous immunization",
@@ -120,7 +119,8 @@ PHASES = {
     "EUA": "Emergency Use Authorization",
 }
 
-# pathogen.name / clinicalPathogen.name -> healthCondition (name, url).
+# VAC disease area (pathogen.name / clinicalPathogen.name) -> grouping
+# healthCondition (name, url). One DataCollection per area.
 DISEASE_AREAS = {
     "Allergy": ("allergic disease", "http://purl.obolibrary.org/obo/MONDO_0005271"),
     "Autoimmunity": ("autoimmune disease", "http://purl.obolibrary.org/obo/MONDO_0007179"),
@@ -134,11 +134,8 @@ DISEASE_AREAS = {
 }
 GROUPING_TERMS = {name.casefold(): (name, url) for name, url in DISEASE_AREAS.values()}
 
-# Areas named in the description's "as well as" clause.
-DESCRIBED_AREAS = ("Cancer", "Allergy", "Autoimmunity")
-
-# pathogen.note / clinicalPathogen.note values naming a disease or an organism
-# (Mapping row 272), casefolded. Other values go to keywords.
+# pathogen.note / clinicalPathogen.note values naming a disease or an organism,
+# casefolded. Other values go to keywords.
 AREA_NOTE_TERMS = {
     "pancreatic cancer": ("healthCondition", "pancreatic cancer"),
     "alzheimer's disease": ("healthCondition", "Alzheimer disease"),
@@ -154,15 +151,15 @@ AREA_NOTE_TERMS = {
     "ebv": ("infectiousAgent", "EBV"),
 }
 
-# pathogen.note values describing the study design (Mapping row 272).
+# pathogen.note values describing the study design.
 STUDY_DESIGN_NOTE = re.compile(
     r"(in vitro|model antigen|biodistribution).*|ovalbumin|toxicology|mechanistic studies|general", re.I
 )
 
-# clinicalParentOrganism.note values naming only a trial or phase (Mapping row 66).
+# clinicalParentOrganism.note values naming only a trial or phase.
 TRIAL_LABEL = re.compile(r"\((trial|study) [^)]*\)|phase \d+", re.I)
 
-# pocInstitute.name spellings of one institute (Mapping row 186).
+# pocInstitute.name spellings of one institute.
 INSTITUTE_ALIASES = {
     "UCSD": "University of California, San Diego",
     "Vaxine LTD": "Vaxine Pty Ltd",
@@ -196,25 +193,27 @@ IS_BASED_ON = {
         "How this VAC ChemicalSubstance DataCollection record was generated for the NIAID Data Ecosystem."
     ),
     "description": (
-        "This record aggregated all VAC ChemicalSubstance records into a single collection. Collection size and "
-        "dates are derived from the underlying records; descriptive fields such as topic categories, conditions "
-        "of access and usage information are manually curated."
+        "This record aggregated VAC ChemicalSubstance records into a single collection, grouped by VAC disease "
+        "area. Collection size and dates are derived from the underlying records; descriptive fields such as topic "
+        "categories, conditions of access and usage information are manually curated."
     ),
     "actionProcess": {
         "@type": "HowTo",
         "step": [
             "1. Page through https://vac.niaid.nih.gov/api/adjuvant/search?clinicalTrial=-1&page={n}&pageSize=100 "
-            "to list every adjuvant id; the response's count gives collectionSize.",
+            "to list every adjuvant id.",
             "2. Fetch each record from https://vac.niaid.nih.gov/api/adjuvant/get?id={id} and keep those with "
             "status 'Published' and isActive true, and their active preclinical and clinical entries.",
-            "3. Aggregate and de-duplicate the mapped fields across all adjuvants and their preclinical and "
-            "clinical entries (organisms, host species, trial age bands, readouts, antigens, routes, receptors, "
-            "points of contact, PubMed IDs, NCT IDs), keeping the 100 values of each field reported by the most "
-            "adjuvants.",
-            "4. Take the earliest createdDate and the latest lastUpdated across all adjuvants for dateCreated and "
-            "dateModified.",
-            "5. Create a single DataCollection record with the templated description and one hasPart entry per "
-            "adjuvant.",
+            "3. Group the adjuvants by the disease area (pathogen) of their preclinical and clinical entries, as "
+            "VAC's browse filter does (https://vac.niaid.nih.gov/browse?pathogenIds={id}); an adjuvant with entries "
+            "in several areas is in each. The search's count with pathogenIds={id} gives collectionSize.",
+            "4. For each area, aggregate and de-duplicate the mapped fields across its adjuvants and their entries "
+            "in that area (organisms, host species, trial age bands, readouts, antigens, routes, receptors, points "
+            "of contact, PubMed IDs, NCT IDs), keeping the 100 values of each field reported by the most adjuvants.",
+            "5. Take the earliest createdDate and the latest lastUpdated across each area's adjuvants for "
+            "dateCreated and dateModified.",
+            "6. Create one DataCollection record per disease area with the templated description and one hasPart "
+            "entry per adjuvant.",
         ],
     },
 }
@@ -259,8 +258,8 @@ CREDIT_TEXT = (
     "to cite the Vaccine Ontology ID (VO-ID) of each adjuvant in publications."
 )
 
-# nde.py types `about` as {@type, description, displayName, name, url}; the
-# sheet's identifier and inDefinedTermSet are left out.
+# nde.py types `about` as {@type, description, displayName, name, url}: no
+# identifier or inDefinedTermSet.
 ABOUT = {
     "@type": "DefinedTerm",
     "name": "ChemicalSubstance",
@@ -372,11 +371,11 @@ def iter_vac_records():
             yield record.json()
 
 
-def get_collection_size():
-    """The count field of the adjuvant search."""
+def get_collection_size(pathogen_id):
+    """The count field of the adjuvant search, filtered to one disease area."""
     resp = requests.get(
         f"{VAC_URL}/api/adjuvant/search",
-        params={"clinicalTrial": -1, "page": 1, "pageSize": 1},
+        params={"clinicalTrial": -1, "pathogenIds": pathogen_id, "page": 1, "pageSize": 1},
         timeout=120,
     )
     resp.raise_for_status()
@@ -415,6 +414,11 @@ def _join(items):
     """'a, b and c'."""
     items = list(items)
     return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _plural(count, singular, plural):
+    """'1 study', '2 studies'."""
+    return f"{count} {singular if count == 1 else plural}"
 
 
 def is_uninformative(value):
@@ -492,6 +496,36 @@ def preclinicals(record):
 def clinicals(record):
     """The adjuvant's active clinical entries."""
     return [entry for entry in record.get("clinicals") or [] if entry.get("isActive")]
+
+
+# ---------------------------------------------------------------------------
+# Disease areas
+# ---------------------------------------------------------------------------
+
+
+def area_slug(area):
+    """'Eukaryotic Pathogens' -> 'eukaryotic_pathogens'."""
+    return re.sub(r"\W+", "_", area.casefold()).strip("_")
+
+
+def area_pathogen_ids(records):
+    """Disease area -> VAC pathogen id, as used by /browse?pathogenIds=."""
+    ids = {}
+    for record in records:
+        areas = [entry.get("pathogen") for entry in preclinicals(record)]
+        areas += [entry.get("clinicalPathogen") for entry in clinicals(record)]
+        for area in areas:
+            if isinstance(area, dict) and (name := _clean(area.get("name"))):
+                ids.setdefault(name, area.get("id"))
+    return ids
+
+
+def in_area(record, area):
+    """record with only its active entries in one disease area, or None when it has none."""
+    subset = dict(record)
+    subset["preclinicals"] = [e for e in preclinicals(record) if _clean(_get(e, "pathogen", "name")) == area]
+    subset["clinicals"] = [e for e in clinicals(record) if _clean(_get(e, "clinicalPathogen", "name")) == area]
+    return subset if subset["preclinicals"] or subset["clinicals"] else None
 
 
 # ---------------------------------------------------------------------------
@@ -636,7 +670,7 @@ def routes(entry):
 
 
 def keyword_candidates(record):
-    """Every keyword source in the Mapping, for one adjuvant and its entries."""
+    """Every keyword source, for one adjuvant and its entries."""
     for field in (
         "adjuvantCharacteristics",
         "adjuvantCombinationFormulations",
@@ -811,26 +845,34 @@ def build_trials(records):
     return sorted(nct_ids[:MAX_VALUES]), related
 
 
-def build_description(records, collection_size, agents, areas):
-    """The templated description from the Data Collection sheet."""
+def build_description(records, collection_size, agents, condition):
+    """The templated description for one disease area."""
     hosts = Counter()
     for record in records:
         for entry in preclinicals(record):
             host = _clean(_get(entry, "preclinicalHostSpecies", "name"))
             if host and host != "Other":
                 hosts[HOST_DESCRIPTIONS.get(host, host.lower())] += 1
-    conditions = [DISEASE_AREAS[area][0] for area in areas.ranked() if area in DESCRIBED_AREAS]
     preclinical_count = sum(len(preclinicals(record)) for record in records)
     clinical_count = sum(len(clinicals(record)) for record in records)
     clinical_adjuvants = sum(1 for record in records if clinicals(record))
 
+    evaluated = "has" if collection_size == 1 else "have"
     in_hosts = f" in {_join(host for host, _ in hosts.most_common())}" if hosts else ""
-    against = f", against {len(agents)} pathogens including {_join(agents.ranked()[:5])}" if len(agents) else ""
-    as_well_as = f", as well as {_join(conditions)}" if conditions else ""
+    clinical = (
+        f", and {clinical_adjuvants} of them in {_plural(clinical_count, 'clinical study', 'clinical studies')}"
+        if clinical_count
+        else ""
+    )
+    against = (
+        f", against {_plural(len(agents), 'pathogen', 'pathogens')} including {_join(agents.ranked()[:5])}"
+        if len(agents)
+        else ""
+    )
     return (
-        "Vaccine adjuvant records available through the NIAID Vaccine Adjuvant Compendium (VAC). "
-        f"{collection_size} adjuvants have been evaluated in {preclinical_count} preclinical studies{in_hosts}, "
-        f"and {clinical_adjuvants} of them in {clinical_count} clinical studies{against}{as_well_as}. "
+        f"Vaccine adjuvant records for {condition} available through the NIAID Vaccine Adjuvant Compendium (VAC). "
+        f"{_plural(collection_size, 'adjuvant', 'adjuvants')} {evaluated} been evaluated in "
+        f"{_plural(preclinical_count, 'preclinical study', 'preclinical studies')}{in_hosts}{clinical}{against}. "
         "Each VAC record describes the adjuvant's receptor targets, immune profile, formulation and product grade, "
         "lists supporting publications, and names a point of contact at the intellectual property holder."
     )
@@ -841,21 +883,23 @@ def build_description(records, collection_size, agents, areas):
 # ---------------------------------------------------------------------------
 
 
-def build_record(records, collection_size):
-    """Build the VAC DataCollection record from the published adjuvants."""
+def build_record(records, area, pathogen_id, collection_size):
+    """Build the DataCollection record for one VAC disease area from its adjuvants."""
+    condition = DISEASE_AREAS[area][0]
+    url = f"{VAC_URL}/browse?pathogenIds={pathogen_id}"
     output = {
         "@context": "http://schema.org/",
         "@type": "DataCollection",
-        "_id": "vac_adjuvants",
-        "url": f"{VAC_URL}/browse",
+        "_id": f"vac_{area_slug(area)}",
+        "url": url,
         "includedInDataCatalog": {
             "@type": "DataCatalog",
             "name": "NIAID Vaccine Adjuvant Compendium (VAC)",
             "url": VAC_URL,
             "versionDate": datetime.date.today().isoformat(),
-            "archivedAt": f"{VAC_URL}/browse",
+            "archivedAt": url,
         },
-        "name": "Vaccine adjuvant records at the Vaccine Adjuvant Compendium",
+        "name": f"Vaccine adjuvant records for {condition} at the Vaccine Adjuvant Compendium",
         # minValue, as in pathoplexus.
         "collectionSize": {"@type": "QuantitativeValue", "minValue": collection_size, "unitText": "adjuvants"},
         "conditionsOfAccess": "Open",
@@ -868,8 +912,7 @@ def build_record(records, collection_size):
     }
 
     agents = tally(records, infectious_agents)
-    areas = tally(records, disease_areas)
-    insert_value(output, "description", build_description(records, collection_size, agents, areas), extend=True)
+    insert_value(output, "description", build_description(records, collection_size, agents, condition), extend=True)
 
     created = [_to_iso_date(record["createdDate"]) for record in records if record.get("createdDate")]
     modified = [_to_iso_date(record["lastUpdated"]) for record in records if record.get("lastUpdated")]
@@ -915,8 +958,15 @@ def build_record(records, collection_size):
 
 
 def parse():
-    """Yield the single VAC DataCollection record."""
-    collection_size = get_collection_size()
+    """Yield one DataCollection record per VAC disease area."""
     records = [record for record in iter_vac_records() if is_published(record)]
-    logger.info(f"Building the VAC DataCollection from {len(records)} published adjuvants")
-    yield build_record(records, collection_size)
+    pathogen_ids = area_pathogen_ids(records)
+    for area in sorted(pathogen_ids.keys() - DISEASE_AREAS.keys()):
+        logger.warning(f"Skipping VAC disease area {area!r}: not in the grouping-term table")
+    for area in DISEASE_AREAS:
+        members = [subset for subset in (in_area(record, area) for record in records) if subset]
+        if not members:
+            logger.warning(f"No published adjuvants in VAC disease area {area!r}")
+            continue
+        logger.info(f"Building the {area} DataCollection from {len(members)} adjuvants")
+        yield build_record(members, area, pathogen_ids[area], get_collection_size(pathogen_ids[area]))
