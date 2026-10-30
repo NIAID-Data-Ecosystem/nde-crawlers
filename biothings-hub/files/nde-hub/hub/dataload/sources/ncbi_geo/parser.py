@@ -48,12 +48,14 @@ def build_species(names, taxids):
 _BIOPROJECT_ACCESSION = re.compile(r"\bPRJ[A-Z]{2}\d+\b")
 
 
-def build_bioprojects(relations):
+def build_bioprojects(relations, series_title=None):
     """isBasedOn entries for the BioProjects a series lists in !Series_relation.
 
     "BioProject: https://www.ncbi.nlm.nih.gov/bioproject/PRJNA254351". The
     entries match the NCBI SRA crawler's, so a project's GEO series, SRA study
-    and BioProject records all name it the same way.
+    and BioProject records all name it the same way. A series lists the
+    BioProject GEO registered for it, which carries the series title; umbrella
+    projects such as ENCODE's aren't listed there.
     """
     if not relations:
         return []
@@ -67,8 +69,15 @@ def build_bioprojects(relations):
             entry = {
                 "@type": "CreativeWork",
                 "identifier": match.group(),
-                "additionalType": {"name": "BioProject", "url": "http://purl.obolibrary.org/obo/NCIT_C45293"},
+                "url": f"https://www.ncbi.nlm.nih.gov/bioproject/{match.group()}",
+                "includedInDataCatalog": {
+                    "@type": "DataCatalog",
+                    "name": "NCBI BioProject",
+                    "url": "https://www.ncbi.nlm.nih.gov/bioproject/",
+                },
             }
+            if series_title:
+                entry["name"] = series_title
             if entry not in bioprojects:
                 bioprojects.append(entry)
     return bioprojects
@@ -505,7 +514,7 @@ def parse_gse(data_folder):
         if species := build_species(item.get("!Series_platform_organism"), item.get("!Series_platform_taxid")):
             output["species"] = species
 
-        if bioprojects := build_bioprojects(item.get("!Series_relation")):
+        if bioprojects := build_bioprojects(item.get("!Series_relation"), output.get("name")):
             output["isBasedOn"] = bioprojects
 
         yield output
