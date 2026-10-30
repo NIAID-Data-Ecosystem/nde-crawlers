@@ -33,7 +33,7 @@ from scores import (
 from .common import as_list
 from .schema_types import is_type_or_descendant
 
-AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT")
+AUGMENTED_FLAGS = ("fromPMID", "fromGPT", "fromEXTRACT", "fromNCT", "fromMDC")
 
 CONDITIONS_OF_ACCESS = ["Closed", "Open", "Restricted", "Embargoed", "Varied", "Unknown"]
 CREATIVE_WORK_STATUS = ["Bespoke", "Available", "Backordered", "Retired"]
@@ -308,6 +308,11 @@ def check_schema(doc: Dict) -> Dict:
 
     assert_types("funding", ("MonetaryGrant",))
     assert_types("sourceOrganization", ("Organization", "ResearchProject"))
+    assert_types("interactionStatistic", ("InteractionCounter",))
+    # The index maps interactionType as an Action object, so a string fails here, not at indexing.
+    for counter in as_list(doc.get("interactionStatistic")):
+        if isinstance(counter, dict) and counter.get("interactionType") is not None:
+            assert_types("interactionStatistic.interactionType", ("Action",), counter.get("interactionType"))
 
     # Validate the objects nested inside the objects created by the utility stages.
     authors = as_list(doc.get("author")) + as_list(doc.get("creator"))
