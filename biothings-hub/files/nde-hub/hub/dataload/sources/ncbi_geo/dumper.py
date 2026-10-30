@@ -60,7 +60,8 @@ class NCBI_Geo_Dumper(dumper.BaseDumper):
         url = f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={acc}&targ=all&form=text&view=brief"
         resp = self.client.get(url, timeout=300)
         resp.raise_for_status()
-        return resp.text
+        # GEO sends geo/text with no charset, so resp.text would decode the UTF-8 body as Latin-1
+        return resp.content.decode("utf-8", errors="replace")
 
     @retry(5, 5)
     def count_all_acc(self):
