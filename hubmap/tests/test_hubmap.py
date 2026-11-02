@@ -73,13 +73,27 @@ SAMPLES = {
         "hubmap_id": "HBM999.BLCK.999",
         "mapped_sample_category": "Block",
         "description": "Block embedded in OCT.",
-        "metadata": {"notes": "Stored at -80C"},
+        "metadata": {
+            "notes": "Stored at -80C",
+            "storage_medium": "OCT",
+            "metadata_schema_id": "abc",
+            "tissue_weight_value": 62,
+            "tissue_weight_unit": "mg",
+            "preparation_medium": "None",
+        },
     },
     "s3": {
         "uuid": "s3",
         "hubmap_id": "HBM333.CCCC.333",
         "mapped_sample_category": "Section",
         "description": "Section for imaging",
+        "metadata": {
+            "thickness_value": 5,
+            "thickness_unit": "um",
+            "storage_medium": "OCT",
+            "SourceSampleType": "Slice",
+            "source_lab_id": "LAB-1",
+        },
         "ancestors": UPSTREAM,
     },
     "s4": {
@@ -147,6 +161,23 @@ class HubmapSampleFlatteningTest(unittest.TestCase):
         self.assertEqual(
             self.samples["HBM444.DDDD.444"]["description"],
             "Block embedded in OCT. Block notes: Stored at -80C. Organ: Left kidney",
+        )
+
+    def test_metadata_is_carried_with_upstream_keys_prefixed(self):
+        # IDs (source_lab_id, metadata_schema_id) and placeholders ("None") are skipped, and the block's
+        # storage_medium matches the section's, so only its tissue weight is added.
+        self.assertEqual(
+            self.samples["HBM333.CCCC.333"]["additionalProperty"],
+            [
+                {"@type": "PropertyValue", "propertyID": "thickness", "value": "5 um"},
+                {"@type": "PropertyValue", "propertyID": "storage_medium", "value": "OCT"},
+                {"@type": "PropertyValue", "propertyID": "source_sample_type", "value": "Slice"},
+                {"@type": "PropertyValue", "propertyID": "block_tissue_weight", "value": "62 mg"},
+            ],
+        )
+        self.assertEqual(
+            [p["propertyID"] for p in self.samples["HBM444.DDDD.444"]["additionalProperty"]],
+            ["block_storage_medium", "block_tissue_weight"],
         )
 
     def test_assayed_sample_is_basis_for_every_dataset_it_feeds(self):

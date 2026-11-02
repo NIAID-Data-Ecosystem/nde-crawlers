@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 
 import requests
 
@@ -156,6 +157,47 @@ def _build_donor_description(donor_mapped):
 
     text = ", ".join([p for p in parts if p])
     return text or None
+
+
+# Sample metadata keys that are IDs or bookkeeping, or are already mapped (description, notes).
+_SKIPPED_METADATA_KEYS = {
+    "description",
+    "sample_description",
+    "sampleDescription",
+    "notes",
+    "metadata_schema_id",
+    "entity_type",
+    "sample_category",
+    "HubmapId",
+    "source_lab_id",
+    "donor",
+    "PPID",
+    "tma_id",
+    "tis_code",
+    "LobeHasMultipleProcessingTypes",
+}
+_PLACEHOLDER_VALUES = {"", "na", "n/a", "nan", "none", "null", "unknown"}
+
+
+def _metadata_properties(sample_metadata):
+    """(key, value) pairs from a sample's `metadata`, with each `<x>_value`/`<x>_unit` pair joined into `<x>`."""
+    if not isinstance(sample_metadata, dict):
+        return []
+    pairs = []
+    for key, raw_value in sample_metadata.items():
+        if key in _SKIPPED_METADATA_KEYS or key.endswith("_unit"):
+            continue
+        value = _first_scalar(raw_value)
+        if value is None or str(value).strip().casefold() in _PLACEHOLDER_VALUES:
+            continue
+        if key.endswith("_value"):
+            key = key[: -len("_value")]
+            unit = _first_scalar(sample_metadata.get(f"{key}_unit"))
+            if unit is not None and str(unit).strip().casefold() not in _PLACEHOLDER_VALUES:
+                value = f"{value} {unit}"
+        # snake_case, which the portal turns into column titles
+        pairs.append((re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key).lower(), str(value).strip()))
+    return pairs
 
 
 def _sample_text(metadata):
@@ -443,15 +485,17 @@ def parse_samples(datasets_by_sample):
         if notes:
             combined_desc = f"{combined_desc}. Notes: {notes}" if combined_desc else f"Notes: {notes}"
 
-        # Upstream samples (organ, block, ...) aren't records of their own, so their descriptions and notes
-        # are carried on each assayed sample, labelled with their sample category.
-        seen_text = {text.rstrip(" .").casefold() for text in (sample_desc, notes) if text}
+        # Upstream samples (organ, block, ...) aren't records of their own, so their descriptions, notes and
+        # metadata are carried on each assayed sample, labelled with their sample category.
+        upstream = []
         for ancestor in _ensure_list(metadata.get("ancestors")):
-            if not isinstance(ancestor, dict) or ancestor.get("entity_type") != "Sample" or not ancestor.get("uuid"):
-                continue
-            ancestor_metadata = _fetch_browse_json("sample", ancestor["uuid"], timeout=30)
-            if not isinstance(ancestor_metadata, dict):
-                continue
+            if isinstance(ancestor, dict) and ancestor.get("entity_type") == "Sample" and ancestor.get("uuid"):
+                ancestor_metadata = _fetch_browse_json("sample", ancestor["uuid"], timeout=30)
+                if isinstance(ancestor_metadata, dict):
+                    upstream.append(ancestor_metadata)
+
+        seen_text = {text.rstrip(" .").casefold() for text in (sample_desc, notes) if text}
+        for ancestor_metadata in upstream:
             ancestor_desc, ancestor_notes = _sample_text(ancestor_metadata)
             label = (
                 ancestor_metadata.get("mapped_sample_category") or ancestor_metadata.get("sample_category") or "Sample"
@@ -460,11 +504,28 @@ def parse_samples(datasets_by_sample):
                 key = text.rstrip(" .").casefold() if text else None
                 if key and key not in seen_text:
                     seen_text.add(key)
-                    upstream = prefix + text.rstrip(" .")
-                    combined_desc = f"{combined_desc.rstrip(' .')}. {upstream}" if combined_desc else upstream
+                    upstream_text = prefix + text.rstrip(" .")
+                    combined_desc = f"{combined_desc.rstrip(' .')}. {upstream_text}" if combined_desc else upstream_text
 
         if combined_desc:
             output["description"] = combined_desc
+
+        # The sample's own metadata keeps HuBMAP's keys; an upstream sample's is prefixed with its category
+        # (block_storage_method). A key/value pair already listed isn't repeated.
+        properties = []
+        seen_properties = set()
+        levels = [("", metadata)]
+        for ancestor_metadata in upstream:
+            category = ancestor_metadata.get("sample_category") or ancestor_metadata.get("mapped_sample_category")
+            levels.append((f"{category or 'sample'}_".lower(), ancestor_metadata))
+        for prefix, level_metadata in levels:
+            for key, value in _metadata_properties(level_metadata.get("metadata")):
+                if (key, value.casefold()) not in seen_properties:
+                    seen_properties.add((key, value.casefold()))
+                    property_id = key if key.startswith(prefix) else prefix + key  # not section_section_index_number
+                    properties.append({"@type": "PropertyValue", "propertyID": property_id, "value": value})
+        if properties:
+            output["additionalProperty"] = properties
 
         # Every record is an assayed sample. It isBasisFor each crawled Dataset that lists it in source_samples,
         # processed datasets included, which matches the Dataset's sample collection.
