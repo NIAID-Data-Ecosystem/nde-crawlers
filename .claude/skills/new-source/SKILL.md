@@ -177,6 +177,7 @@ Three files:
 | `descriptions` | an eligible record type, a `description`, and missing taxonomy or `healthCondition` | Mines species + diseases out of the text via EXTRACT. Eligible types are `Dataset`, `DataCollection`, `ResourceCatalog`, or `Sample` with `additionalType: "BioSample"` |
 | `measurement_technique` | `measurementTechnique` **and** `/data/nde-hub/standardizers/measurement_technique_lookup/<source>.csv` | Maps repository techniques to ontology terms |
 | `nctid` | `nctid` **and** `/nvme/nde-hub/standardizers/nctid_lookup/nctid.csv` | measurementTechnique from the trial's study design |
+| `additional_type` | an `isBasedOn` or `hasPart` `additionalType` **and** `utils/additional_type_lookup/<source>.tsv` | Maps the repository's labels to ontology DefinedTerms; drops `DELETE` labels |
 | `topic_category` | `/data/nde-hub/topic_categories/<source>.json` | Adds curated EDAM topics |
 | `disambiguating_description` | `/data/nde-hub/disambiguating_descriptions/<source>.csv` | Adds the curated summary |
 | `lineage` | always | `_meta.lineage` for the taxonomy browser |

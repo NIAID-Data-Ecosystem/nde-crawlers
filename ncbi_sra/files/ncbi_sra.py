@@ -499,7 +499,13 @@ class NCBI_SRA(NDEDatabase):
                 run_dict = {"@type": "CreativeWork"}
                 if run_accession := run_metadata.get("run"):
                     run_dict["identifier"] = run_accession
-                    run_dict["additionalType"] = {"name": "Run", "url": "http://purl.obolibrary.org/obo/NCIT_C47911"}
+                    run_dict["additionalType"] = {
+                        "@type": "DefinedTerm",
+                        "name": "Run",
+                        "url": "http://purl.obolibrary.org/obo/NCIT_C47911",
+                        "identifier": "C47911",
+                        "inDefinedTermSet": "NCIT",
+                    }
                     run_dict["url"] = "https://www.ncbi.nlm.nih.gov/sra/" + run_accession
                 if published := run_metadata.get("published"):
                     try:
@@ -522,8 +528,11 @@ class NCBI_SRA(NDEDatabase):
                     experiment_dict["description"] = experiment_desc
                 if bool(experiment_dict) and experiment_dict not in is_based_on:
                     experiment_dict["additionalType"] = {
+                        "@type": "DefinedTerm",
                         "name": "Experiment",
                         "url": "http://purl.obolibrary.org/obo/NCIT_C42790",
+                        "identifier": "C42790",
+                        "inDefinedTermSet": "NCIT",
                     }
                     is_based_on.append(experiment_dict)
 

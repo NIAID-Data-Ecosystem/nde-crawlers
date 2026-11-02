@@ -1,0 +1,25 @@
+Repository Label	Term Name	Ontology	URL	Match	Records	Notes
+Study Protocol	Study Protocol	NCIT	http://purl.obolibrary.org/obo/NCIT_C70817	exact	645	
+Not Specified	DELETE				274	Placeholder
+Experiment	Experiment	NCIT	http://purl.obolibrary.org/obo/NCIT_C42790	exact	229	Same term SRA uses for its experiments
+Clinical Study Protocol	Clinical Study Protocol	NCIT	http://purl.obolibrary.org/obo/NCIT_C25320	exact	124	
+Assay	Assay	NCIT	http://purl.obolibrary.org/obo/NCIT_C60819	exact	94	OBI:0000070 'assay' is the OBI equivalent
+Other	DELETE				61	Placeholder
+Bio Sample Preparation	Biospecimen Preparation	NCIT	http://purl.obolibrary.org/obo/NCIT_C179746	close	51	
+Study Summary	Clinical Study Protocol Synopsis Documentation	NCIT	http://purl.obolibrary.org/obo/NCIT_C115628	close	26	A summary of the study protocol
+Materials and Methods section	methods section	IAO	http://purl.obolibrary.org/obo/IAO_0000317	close	23	
+Clinical				unmapped	21	Ambiguous: NCIT 'Clinical' (C25398) is an adjective, 'Clinical Trial Protocol' (C142451) a guess; needs ImmPort's definition
+Data Processing	Data Processing	NCIT	http://purl.obolibrary.org/obo/NCIT_C47925	exact	21	
+Data Transformation	Data Transformation	NCIT	http://purl.obolibrary.org/obo/NCIT_C43582	exact	17	OBI:0200000 'data transformation' is the OBI equivalent
+Statistical Analysis Documentation	Clinical Trial Statistical Analysis Plan Documentation	NCIT	http://purl.obolibrary.org/obo/NCIT_C115761	close	15	
+Case Report Form	Case Report Form	NCIT	http://purl.obolibrary.org/obo/NCIT_C40988	exact	13	
+Laboratory Sample Manual	Laboratory Sample Manual	NCIT	http://purl.obolibrary.org/obo/NCIT_C115541	exact	10	
+Subject Organism Treatment	administering substance in vivo	OBI	http://purl.obolibrary.org/obo/OBI_0600007	close	10	
+Bio Sample Treatment	sample treatment protocol	EFO	http://www.ebi.ac.uk/efo/EFO_0003809	exact	8	EFO's protocol type
+Clinical Trials Operational Procedure Manual	Clinical Trials Operational Procedure Manual Documentation	NCIT	http://purl.obolibrary.org/obo/NCIT_C115764	exact	8	NCIT's name adds 'Documentation'
+Institutional Review Board Independent Ethics Committee Informed Consent Document	Institutional Review Board Independent Ethics Committee Informed Consent Document	NCIT	http://purl.obolibrary.org/obo/NCIT_C115697	exact	8	
+Clinical Trial Monitoring Plan	Clinical Trial Monitoring Plan Documentation	NCIT	http://purl.obolibrary.org/obo/NCIT_C115753	exact	7	NCIT's name adds 'Documentation'
+Biomaterial Transformation	Biomaterial Treatment	NCIT	http://purl.obolibrary.org/obo/NCIT_C43442	close	6	MAGE's 'creating a biomaterial from source biomaterials'; OBI's 'material processing' is obsolete
+Experimental Sample	Biospecimen	NCIT	http://purl.obolibrary.org/obo/NCIT_C70699	close	5	
+Process Protocol	Process Protocol	NCIT	http://purl.obolibrary.org/obo/NCIT_C164368	exact	5	
+Specimen Collection Protocol	Specimen Collection Protocol	NCIT	http://purl.obolibrary.org/obo/NCIT_C164426	exact	2	OBI:0003070 'specimen collection protocol' is the OBI equivalent
