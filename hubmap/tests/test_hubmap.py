@@ -54,34 +54,41 @@ DATASETS = [
     },
 ]
 
+# Nearest first, as HuBMAP lists them.
+UPSTREAM = [
+    {"uuid": "s2", "entity_type": "Sample", "sample_category": "block"},
+    {"uuid": "s1", "entity_type": "Sample", "sample_category": "organ"},
+    {"uuid": "donor-1", "entity_type": "Donor"},
+]
+
 SAMPLES = {
     "s1": {
         "uuid": "s1",
         "hubmap_id": "HBM000.ORGN.000",
-        "sample_category": "organ",
-        "immediate_descendants": [{"uuid": "s2", "hubmap_id": "HBM999.BLCK.999", "entity_type": "Sample"}],
+        "mapped_sample_category": "Organ",
+        "description": "Left kidney",
     },
     "s2": {
         "uuid": "s2",
         "hubmap_id": "HBM999.BLCK.999",
-        "sample_category": "block",
-        "immediate_descendants": [
-            {"uuid": "s3", "hubmap_id": "HBM333.CCCC.333", "entity_type": "Sample"},
-            # An old revision: not crawled, so it must not be linked.
-            {"uuid": "d-old", "hubmap_id": "HBM777.OLDD.777", "entity_type": "Dataset"},
-        ],
+        "mapped_sample_category": "Block",
+        "description": "Block embedded in OCT.",
+        "metadata": {"notes": "Stored at -80C"},
     },
     "s3": {
         "uuid": "s3",
         "hubmap_id": "HBM333.CCCC.333",
-        "sample_category": "section",
-        "immediate_descendants": [{"uuid": "d1", "hubmap_id": "HBM111.AAAA.111", "entity_type": "Dataset"}],
+        "mapped_sample_category": "Section",
+        "description": "Section for imaging",
+        "ancestors": UPSTREAM,
     },
     "s4": {
         "uuid": "s4",
         "hubmap_id": "HBM444.DDDD.444",
-        "sample_category": "section",
-        "immediate_descendants": [{"uuid": "d3", "hubmap_id": "HBM555.EEEE.555", "entity_type": "Dataset"}],
+        "mapped_sample_category": "Section",
+        # Same text as its block, so the block's description isn't repeated.
+        "description": "Block embedded in OCT",
+        "ancestors": UPSTREAM,
     },
 }
 
@@ -128,29 +135,26 @@ class HubmapSampleFlatteningTest(unittest.TestCase):
         # "Unknown" race is dropped; the blood type remains.
         self.assertEqual(aggregate["associatedPhenotype"], [{"@type": "DefinedTerm", "name": "Blood Type O"}])
 
-    def test_source_sample_is_basis_for_every_dataset_it_feeds(self):
-        section = self.samples["HBM333.CCCC.333"]
-        self.assertEqual(section["additionalType"], "ExperimentalRunSample")
+    def test_only_assayed_samples_are_records(self):
+        self.assertEqual(sorted(self.samples), ["HBM333.CCCC.333", "HBM444.DDDD.444"])
+        self.assertEqual({s["additionalType"] for s in self.samples.values()}, {"ExperimentalRunSample"})
+
+    def test_upstream_sample_text_is_carried_on_the_assayed_sample(self):
         self.assertEqual(
-            [entry["identifier"] for entry in section["isBasisFor"]],
-            ["HBM111.AAAA.111", "HBM222.BBBB.222", "HBM555.EEEE.555"],
+            self.samples["HBM333.CCCC.333"]["description"],
+            "Section for imaging. Block: Block embedded in OCT. Block notes: Stored at -80C. Organ: Left kidney",
+        )
+        self.assertEqual(
+            self.samples["HBM444.DDDD.444"]["description"],
+            "Block embedded in OCT. Block notes: Stored at -80C. Organ: Left kidney",
         )
 
-    def test_upstream_samples_keep_the_sample_chain(self):
-        block = self.samples["HBM999.BLCK.999"]
-        self.assertEqual(block["additionalType"], "BioSample")
+    def test_assayed_sample_is_basis_for_every_dataset_it_feeds(self):
+        section = self.samples["HBM333.CCCC.333"]
         self.assertEqual(
-            block["isBasisFor"],
-            [
-                {
-                    "@type": "Sample",
-                    "identifier": "HBM333.CCCC.333",
-                    "url": "https://portal.hubmapconsortium.org/browse/sample/s3",
-                    "name": "HBM333.CCCC.333",
-                }
-            ],
+            [(entry["@type"], entry["identifier"]) for entry in section["isBasisFor"]],
+            [("Dataset", "HBM111.AAAA.111"), ("Dataset", "HBM222.BBBB.222"), ("Dataset", "HBM555.EEEE.555")],
         )
-        self.assertEqual(self.samples["HBM000.ORGN.000"]["additionalType"], "BioSample")
 
     def test_portal_lookup_matches_item_list(self):
         # The portal lists a Dataset's samples with isBasisFor.identifier:"<Dataset identifier>".

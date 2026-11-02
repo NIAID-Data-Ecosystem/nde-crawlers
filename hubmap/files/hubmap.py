@@ -158,6 +158,22 @@ def _build_donor_description(donor_mapped):
     return text or None
 
 
+def _sample_text(metadata):
+    """A sample's own (description, notes)."""
+    sample_metadata = metadata.get("metadata")
+    description = _first_text(metadata.get("description"))
+    notes = None
+    if isinstance(sample_metadata, dict):
+        description = (
+            description
+            or _first_text(sample_metadata.get("description"))
+            or _first_text(sample_metadata.get("sample_description"))
+            or _first_text(sample_metadata.get("sampleDescription"))
+        )
+        notes = _first_text(sample_metadata.get("notes"))
+    return description, notes
+
+
 def _anatomical_structures(metadata):
     """Organ DefinedTerms from an entity's origin samples, de-duped in order."""
     organs = []
@@ -275,7 +291,9 @@ def _build_sample_collection(metadata):
 
 
 def parse_samples(datasets_by_sample):
-    sample_ids = get_sample_ids()
+    # Only samples a crawled Dataset was assayed on become records; their upstream samples are folded in.
+    sample_ids = [sid for sid in get_sample_ids() if sid in datasets_by_sample]
+    logger.info("Assayed samples: %s", len(sample_ids))
     count = 0
     for sid in sample_ids:
         count += 1
@@ -411,14 +429,7 @@ def parse_samples(datasets_by_sample):
 
             donor_desc = _build_donor_description(donor_mapped)
 
-        sample_metadata = metadata.get("metadata")
-        sample_desc = _first_text(metadata.get("description"))
-        if not sample_desc and isinstance(sample_metadata, dict):
-            sample_desc = (
-                _first_text(sample_metadata.get("description"))
-                or _first_text(sample_metadata.get("sample_description"))
-                or _first_text(sample_metadata.get("sampleDescription"))
-            )
+        sample_desc, notes = _sample_text(metadata)
 
         # TSV rule: description = "{sample.description} from {donor.description}" only when donor description is known.
         combined_desc = None
@@ -429,40 +440,36 @@ def parse_samples(datasets_by_sample):
         elif donor_desc:
             combined_desc = donor_desc
 
-        notes = None
-        if isinstance(sample_metadata, dict):
-            notes = sample_metadata.get("notes")
-        notes = _first_text(notes)
         if notes:
             combined_desc = f"{combined_desc}. Notes: {notes}" if combined_desc else f"Notes: {notes}"
+
+        # Upstream samples (organ, block, ...) aren't records of their own, so their descriptions and notes
+        # are carried on each assayed sample, labelled with their sample category.
+        seen_text = {text.rstrip(" .").casefold() for text in (sample_desc, notes) if text}
+        for ancestor in _ensure_list(metadata.get("ancestors")):
+            if not isinstance(ancestor, dict) or ancestor.get("entity_type") != "Sample" or not ancestor.get("uuid"):
+                continue
+            ancestor_metadata = _fetch_browse_json("sample", ancestor["uuid"], timeout=30)
+            if not isinstance(ancestor_metadata, dict):
+                continue
+            ancestor_desc, ancestor_notes = _sample_text(ancestor_metadata)
+            label = (
+                ancestor_metadata.get("mapped_sample_category") or ancestor_metadata.get("sample_category") or "Sample"
+            )
+            for text, prefix in ((ancestor_desc, f"{label}: "), (ancestor_notes, f"{label} notes: ")):
+                key = text.rstrip(" .").casefold() if text else None
+                if key and key not in seen_text:
+                    seen_text.add(key)
+                    upstream = prefix + text.rstrip(" .")
+                    combined_desc = f"{combined_desc.rstrip(' .')}. {upstream}" if combined_desc else upstream
 
         if combined_desc:
             output["description"] = combined_desc
 
-        # HuBMAP lineage (all via isBasisFor, identified by HuBMAP ID):
-        # - Pre-processed sample isBasisFor post-processed sample
-        # - Sample isBasisFor every crawled Dataset listing it in source_samples, which includes processed
-        #   datasets (whose immediate ancestor is a Dataset) and matches the Dataset's sample collection
-        dataset_entries = datasets_by_sample.get(metadata.get("uuid"), [])
-        output["additionalType"] = "ExperimentalRunSample" if dataset_entries else "BioSample"
-
-        basis_for = []
-        for desc in _ensure_list(metadata.get("immediate_descendants")):
-            if not isinstance(desc, dict) or not desc.get("uuid") or desc.get("entity_type") != "Sample":
-                continue
-            sid2 = desc["uuid"]
-            entry = {
-                "@type": "Sample",
-                "identifier": desc.get("hubmap_id") or sid2,
-                "url": f"https://portal.hubmapconsortium.org/browse/sample/{sid2}",
-            }
-            if desc_name := desc.get("hubmap_id"):
-                entry["name"] = desc_name
-            basis_for.append(entry)
-        basis_for.extend(dataset_entries)
-
-        if basis_for:
-            output["isBasisFor"] = basis_for
+        # Every record is an assayed sample. It isBasisFor each crawled Dataset that lists it in source_samples,
+        # processed datasets included, which matches the Dataset's sample collection.
+        output["additionalType"] = "ExperimentalRunSample"
+        output["isBasisFor"] = datasets_by_sample[sid]
 
         yield output
 
