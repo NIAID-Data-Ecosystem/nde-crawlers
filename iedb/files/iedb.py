@@ -132,13 +132,21 @@ TAB_CONFIG = {
             "@type": "DefinedTerm",
             "name": "Epitope",
             "url": "http://purl.obolibrary.org/obo/NCIT_C13189",
+            "identifier": "C13189",
+            "inDefinedTermSet": "NCIT",
         },
         "endpoints": ("epitope_search",),
     },
     "antigens": {
         "label": "antigens",
         "unit": "antigens",
-        "about": {"@type": "DefinedTerm", "name": "Antigen"},
+        "about": {
+            "@type": "DefinedTerm",
+            "name": "Antigen",
+            "url": "http://purl.obolibrary.org/obo/NCIT_C268",
+            "identifier": "C268",
+            "inDefinedTermSet": "NCIT",
+        },
         "endpoints": ("antigen_search",),
     },
     "assays": {
@@ -171,6 +179,41 @@ ASSAY_TAGS = {
     "BCell": ("BCellId", "B-cell assay"),
     "MhcBinding": ("MhcBindingId", "MHC binding assay"),
     "MhcLigandElution": ("MhcLigandElutionId", "MHC ligand-elution assay"),
+}
+# Ontology terms for the additionalType of assay and receptor members, keyed by the label they're given
+ASSAY_TERMS = {
+    "T-cell assay": {
+        "url": "http://purl.obolibrary.org/obo/OBI_0003128",
+        "identifier": "0003128",
+        "inDefinedTermSet": "OBI",
+    },
+    "B-cell assay": {
+        "url": "http://purl.obolibrary.org/obo/OBI_0003127",
+        "identifier": "0003127",
+        "inDefinedTermSet": "OBI",
+    },
+    "MHC binding assay": {
+        "url": "http://purl.obolibrary.org/obo/OBI_1110126",
+        "identifier": "1110126",
+        "inDefinedTermSet": "OBI",
+    },
+    "MHC ligand-elution assay": {
+        "url": "http://purl.obolibrary.org/obo/OBI_1110125",
+        "identifier": "1110125",
+        "inDefinedTermSet": "OBI",
+    },
+}
+RECEPTOR_TERMS = {
+    "TCR": {
+        "url": "http://purl.obolibrary.org/obo/NCIT_C17065",
+        "identifier": "C17065",
+        "inDefinedTermSet": "NCIT",
+    },
+    "BCR": {
+        "url": "http://purl.obolibrary.org/obo/NCIT_C107558",
+        "identifier": "C107558",
+        "inDefinedTermSet": "NCIT",
+    },
 }
 MEMBERSHIP_ORGANISM_TAGS = {
     "SourceOrganismId",
@@ -545,6 +588,7 @@ def _assay_event(
         "additionalType": {
             "@type": "DefinedTerm",
             "name": label,
+            **ASSAY_TERMS[label],
         },
     }
     return {
@@ -943,6 +987,7 @@ def _supplement_antigens_and_receptors(store: _Store, session: requests.Session)
                     "additionalType": {
                         "@type": "DefinedTerm",
                         "name": receptor_family,
+                        **RECEPTOR_TERMS[receptor_family],
                         "alternateName": row.get("receptor_type"),
                     },
                 }
