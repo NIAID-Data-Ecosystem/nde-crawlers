@@ -116,6 +116,11 @@ class Dataverse(NDEDatabase):
         time.sleep(seconds)
 
     @staticmethod
+    def _is_handle(value):
+        """True for a Handle System ID (hdl:11272.1/AB2/OCZYSQ or its hdl.handle.net URL), which is not a DOI."""
+        return isinstance(value, str) and (value.startswith("hdl:") or "hdl.handle.net/" in value)
+
+    @staticmethod
     def _first_str(value):
         if isinstance(value, str):
             return value
@@ -890,13 +895,20 @@ class Dataverse(NDEDatabase):
                         .replace("http://doi.org/", "")
                         .replace("doi:", "")
                     )
+                    # Handle-based datasets (hdl:11272.1/AB2/OCZYSQ) get the same Dataverse_ prefix as DOIs.
                     dataset["_id"] = (
                         dataset.get("doi", "")
                         .replace("https://doi.org", "Dataverse")
                         .replace("http://doi.org", "Dataverse")
                         .replace("doi:", "Dataverse_")
+                        .replace("https://hdl.handle.net", "Dataverse")
+                        .replace("http://hdl.handle.net", "Dataverse")
+                        .replace("hdl:", "Dataverse_")
                         .replace("/", "_")
                     )
+                    # A handle is not a DOI: keep it in identifier only, so no doi.org link is built from it.
+                    if self._is_handle(dataset.get("doi")):
+                        dataset.pop("doi")
                     dataset["dateModified"] = (
                         datetime.datetime.strptime(dataset["dateModified"], "%Y-%m-%d").date().isoformat()
                     )
@@ -1026,15 +1038,24 @@ class Dataverse(NDEDatabase):
                 else:
                     # parse abridged search metadata
                     dataset["@context"] = "http://schema.org"
-                    if "type" in dataset:
-                        dataset["@type"] = dataset.pop("type")
-                    else:
-                        dataset["@type"] = "Dataset"
+                    # The search API names its result kind in lowercase ("dataset"), and the
+                    # crawl only requests type=dataset, so every record here is a Dataset.
+                    dataset.pop("type", None)
+                    dataset["@type"] = "Dataset"
                     dataset_url = dataset.get("url") or dataset.get("doi") or record[0]
                     if "global_id" in dataset:
                         dataset["doi"] = dataset.pop("global_id")
                     dataset["identifier"] = dataset.get("doi", "").replace("doi:", "")
-                    dataset["_id"] = dataset.get("doi", "").replace("doi:", "Dataverse_").replace("/", "_")
+                    # Handle-based datasets (hdl:11272.1/AB2/OCZYSQ) get the same Dataverse_ prefix as DOIs.
+                    dataset["_id"] = (
+                        dataset.get("doi", "")
+                        .replace("doi:", "Dataverse_")
+                        .replace("hdl:", "Dataverse_")
+                        .replace("/", "_")
+                    )
+                    # A handle is not a DOI: keep it in identifier only, so no doi.org link is built from it.
+                    if self._is_handle(dataset.get("doi")):
+                        dataset.pop("doi")
                     dataset["includedInDataCatalog"] = {
                         "@type": "DataCatalog",
                         "name": "Harvard Dataverse",
