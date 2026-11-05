@@ -540,6 +540,13 @@ def parse():
         if dsm := general.get("DSM-Number"):
             if f"DSM {dsm}" not in ccns:
                 ccns.append(f"DSM {dsm}")
+
+        # Matches the BacDive page name: species (first 3 of culture collection nos. + strain designations)
+        if species := (natc.get("LPSN") or {}).get("species") or natc.get("species"):
+            designations = [d.strip() for d in str(natc.get("strain designation") or "").split(",") if d.strip()]
+            strain_ids = list(dict.fromkeys(ccns + designations))[:3]
+            output["name"] = f"{species} ({', '.join(strain_ids)})" if strain_ids else species
+
         for ccn in dict.fromkeys(ccns):
             insert_value(output, "alternateIdentifier", ccn)
             if ccn.upper().startswith("DSM "):
