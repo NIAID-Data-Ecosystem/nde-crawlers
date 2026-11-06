@@ -154,21 +154,39 @@ def add_date(doc: Dict) -> Dict:
 
     `distribution.dateModified` is also considered, and is cloned up to
     `dateModified` when the document has none of its own.
+
+    Dates in the future are skipped, so an upstream typo (a Zenodo dataset
+    "published" in 6392) cannot lead every newest-first sort. The source fields
+    keep their values: NODE and MetaboLights give a scheduled release as a
+    future datePublished.
     """
+    # Tomorrow in UTC, so a source that dates in a time zone ahead of UTC is not cut off.
+    cutoff = (datetime.datetime.now(datetime.timezone.utc).date() + datetime.timedelta(days=1)).isoformat()
+
+    def not_future(value):
+        return str(value)[:10] <= cutoff
+
     distribution_dates = sorted(
-        dist.get("dateModified")
+        dist["dateModified"]
         for dist in as_list(doc.get("distribution"))
-        if isinstance(dist, dict) and dist.get("dateModified")
+        if isinstance(dist, dict) and dist.get("dateModified") and not_future(dist["dateModified"])
     )
 
     if not doc.get("dateModified") and distribution_dates:
         doc["dateModified"] = distribution_dates[-1]
 
-    dates = [doc[field] for field in ("date", "dateCreated", "dateModified", "datePublished") if doc.get(field)]
+    dates = [
+        doc[field]
+        for field in ("date", "dateCreated", "dateModified", "datePublished")
+        if doc.get(field) and not_future(doc[field])
+    ]
     dates.extend(distribution_dates)
     if dates:
         dates.sort()
         doc["date"] = datetime.datetime.fromisoformat(dates[-1]).date().isoformat()
+    else:
+        # A `date` set by the parser may itself be in the future.
+        doc.pop("date", None)
 
     return doc
 
