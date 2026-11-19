@@ -1,0 +1,75 @@
+Catalog Name	Identifier	Notes
+accessclinicaldata@NIAID (ACD@NIAID)	acd_niaid	
+American Type Culture Collection (ATCC)	atcc	
+AmoebaDB	amoebadb	
+Bacterial and Viral Bioinformatics Resource Center (BV-BRC)	bvbrc	
+Bacterial Diversity Metadatabase (BacDive)	bacdive	
+bio.tools	biotools	
+Biological and Emerging Infections Research Resources (BEIResources)	beiresources	
+BioStudies	biostudies_arrayexpress	
+Clinical Epidemiology Database (ClinEpiDB)	clinepidb	
+Clinical Genome Resource (ClinGen)	clingen	
+COVID Rapid Acceleration of Diagnostics (RADx) Data Hub	radx	
+CryptoDB	cryptodb	
+Culture Collection University of Gothenburg (CCUG)	ccug	
+Data Discovery Engine (DDE)	dde	
+Database of Antimicrobial Activity and Structure of Peptides (DBAASP)	dbaasp	
+Dryad Digital Repository (Dryad)	dryad	
+Electron Microscopy Data Bank (EMDB)	emdb	
+Electron Microscopy Public Image Archive (EMPIAR)	empiar	
+Eukaryotic Pathogen, Vector and Host Informatics Resource (VEuPathDB)	veupathdb	
+Figshare	figshare	
+Flow Repository	flow_repository	
+FungiDB	fungidb	
+Gene Expression Atlas (GXA)	gxa	The GXA crawler sends GXA; this replaces it
+GiardiaDB	giardiadb	
+Harvard Dataverse	dataverse	
+HostDB	hostdb	
+Human Biomolecular Atlas Program (HuBMAP)	hubmap	
+Human Cell Atlas (HCA)	hca	
+Immune Epitope Database (IEDB)	iedb	
+ImmuneSpace	immunespace	
+Immunology Database and Analysis Portal (ImmPort)	immport	
+Japan Collection of Microorganisms (JCM)	jcm	
+Korean Collection for Type Cultures (KCTC)	kctc	
+Leibniz-Institute DSMZ	dsmz	
+Library of Integrated Network-based Cellular Signatures (LINCS)	lincs	
+Malaria Genomic Epidemiology Network (MalariaGEN)	malariagen	
+Mass Spectrometry Interactive Virtual Environment (MassIVE)	massive	
+Mendeley Data	mendeley	
+MicrobiomeDB	microbiomedb	
+MicrosporidiaDB	microsporidiadb	
+National Omics Data Encyclopedia (NODE)	node	
+NCBI BioProject	ncbi_bioproject	
+NCBI BioSample	ncbi_biosample	
+NCBI Database of Genotypes and Phenotypes (NCBI dbGaP)	dbgap	
+NCBI Gene Expression Omnibus (NCBI GEO)	ncbi_geo	
+NCBI Sequence Read Archive (NCBI SRA)	ncbi_sra	
+NCBI Virus	ncbivirus	
+NIAID CEIRR Network Resources	ceirr	
+NIAID VAC Program Resources	vac	The sheet's current name for VAC
+NIAID Vaccine Adjuvant Compendium (VAC)	vac	The name the VAC crawler sends
+NICHD Data and Specimen Hub (NICHD DASH)	nichd_dash	
+Omics Discovery Index (OmicsDI)	omicsdi	
+Pathoplexus	pathoplexus	
+PiroplasmaDB	piroplasmadb	
+PlasmoDB	plasmodb	
+Polygenic Score Catalog (PGS Catalog)	pgscatalog	
+Project Tycho	tycho	
+Protein Data Bank (PDB)	pdb	
+ProteomeXchange	proteomexchange	
+Qiita	qiita	
+Repurposing, Focused Rescue, and Accelerated Medchem Database (REFRAMEdb)	reframedb	
+SAGE Arthritis and Autoimmune and Related Diseases Knowledge Portal (SAGE ARK Portal)	sage_ark	
+The Multicenter AIDS Cohort Study (MACS) / Women’s Interagency HIV Study (WIHS) Combined Cohort Study (MWCCS)	mwccs	
+The Network Data Exchange (NDEx)	ndex	
+ToxoDB	toxodb	
+TrichDB	trichdb	
+TriTrypDB	tritrypdb	
+UniProt	uniprot	
+United States Immunodeficiency Network (USIDNET)	usidnet	
+University of Coimbra Bacteria Culture Collection (UCCCB)	ucccb	
+VDJServer	vdjserver	
+VectorBase	vectorbase	
+Vivli	vivli	
+Zenodo	zenodo	

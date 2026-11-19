@@ -43,7 +43,8 @@ The base class already decorates `load_data`. Override it (keeping
 settings on the uploader change the pipeline:
 
     post_process(self, doc)      applied after every stage but before
-                                 `lineage` and `corrections`; return the
+                                 `lineage`, `corrections` and
+                                 `catalog_identifier`; return the
                                  document or None to drop it
     skip_stages = ("...",)       stage names this source should not run
 """
@@ -432,6 +433,12 @@ def _run_corrections(docs, source):
     return [apply_corrections(doc) for doc in docs]
 
 
+def _run_catalog_identifier(docs, source):
+    from .catalog_identifier import add_catalog_identifiers
+
+    return add_catalog_identifiers(docs, source)
+
+
 def _reset_terms():
     from .terms import reset_caches
 
@@ -452,6 +459,12 @@ def _reset_nctid():
 
 def _reset_additional_type():
     from .additional_type import reset_caches
+
+    reset_caches()
+
+
+def _reset_catalog_identifier():
+    from .catalog_identifier import reset_caches
 
     reset_caches()
 
@@ -486,9 +499,17 @@ def _disambiguating_description_file(source):
     return lookup_file(source)
 
 
+def _catalog_identifier_file(source):
+    from .catalog_identifier import lookup_file
+
+    return lookup_file()
+
+
 # The pipeline, in order. Citations run first because they add funding, species
-# and health conditions the later stages then standardize. Corrections run last,
-# once funding is final, because they match on funding identifiers.
+# and health conditions the later stages then standardize. Corrections run after
+# the augmenting stages, once funding is final, because they match on funding
+# identifiers. Catalog identifiers come last, after an uploader's `post_process`,
+# so they also reach catalogs a source adds there.
 STAGES = (
     Stage(
         "citations",
@@ -550,6 +571,14 @@ STAGES = (
     ),
     Stage("lineage", _run_lineage, _always, tracked_fields=("_meta.lineage",)),
     Stage("corrections", _run_corrections, _always, tracked_fields=("sourceOrganization",)),
+    Stage(
+        "catalog_identifier",
+        _run_catalog_identifier,
+        _any_doc(lambda doc: bool(doc.get("includedInDataCatalog"))),
+        _catalog_identifier_file,
+        reset=_reset_catalog_identifier,
+        tracked_fields=("includedInDataCatalog",),
+    ),
 )
 
 STAGE_NAMES = tuple(stage.name for stage in STAGES)

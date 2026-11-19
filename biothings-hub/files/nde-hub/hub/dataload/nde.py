@@ -697,6 +697,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "text"},
                     "archivedAt": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                     "versionDate": {"type": "date"},
@@ -1847,6 +1848,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "text"},
                     "archivedAt": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                     "versionDate": {"type": "date"},
