@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import re
 import traceback
 from pathlib import Path
 
@@ -42,6 +43,44 @@ def build_species(names, taxids):
         if term not in species:
             species.append(term)
     return species
+
+
+_BIOPROJECT_ACCESSION = re.compile(r"\bPRJ[A-Z]{2}\d+\b")
+
+
+def build_bioprojects(relations, series_title=None):
+    """isBasedOn entries for the BioProjects a series lists in !Series_relation.
+
+    "BioProject: https://www.ncbi.nlm.nih.gov/bioproject/PRJNA254351". The
+    entries match the NCBI SRA crawler's, so a project's GEO series, SRA study
+    and BioProject records all name it the same way. A series lists the
+    BioProject GEO registered for it, which carries the series title; umbrella
+    projects such as ENCODE's aren't listed there.
+    """
+    if not relations:
+        return []
+    relations = relations if isinstance(relations, list) else [relations]
+
+    bioprojects = []
+    for relation in relations:
+        if not relation.startswith("BioProject:"):
+            continue
+        if match := _BIOPROJECT_ACCESSION.search(relation):
+            entry = {
+                "@type": "CreativeWork",
+                "identifier": match.group(),
+                "url": f"https://www.ncbi.nlm.nih.gov/bioproject/{match.group()}",
+                "includedInDataCatalog": {
+                    "@type": "DataCatalog",
+                    "name": "NCBI BioProject",
+                    "url": "https://www.ncbi.nlm.nih.gov/bioproject/",
+                },
+            }
+            if series_title:
+                entry["name"] = series_title
+            if entry not in bioprojects:
+                bioprojects.append(entry)
+    return bioprojects
 
 
 # The only GSM fields a parent GSE document reads. Keep in sync with
@@ -474,5 +513,8 @@ def parse_gse(data_folder):
 
         if species := build_species(item.get("!Series_platform_organism"), item.get("!Series_platform_taxid")):
             output["species"] = species
+
+        if bioprojects := build_bioprojects(item.get("!Series_relation"), output.get("name")):
+            output["isBasedOn"] = bioprojects
 
         yield output

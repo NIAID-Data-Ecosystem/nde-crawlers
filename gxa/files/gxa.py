@@ -37,6 +37,8 @@ DESIGN_TERM_COLUMN_RE = re.compile(
 )
 GXA_GEO_SERIES_ACCESSION_RE = re.compile(r"^E-GEOD-(?P<number>\d+)$", re.IGNORECASE)
 GEO_SERIES_ACCESSION_RE = re.compile(r"^GSE(?P<number>\d+)(?=$|[^A-Za-z0-9])", re.IGNORECASE)
+# ArrayExpress experiment accessions: E-MTAB-9209, E-MEXP-1304, E-CURD-1, ...
+ARRAYEXPRESS_ACCESSION_RE = re.compile(r"^E-[A-Z]{4}-\d+$", re.IGNORECASE)
 RESULT_FILE_EXTENSIONS = (".tsv",)
 
 INVALID_VALUES = {
@@ -675,6 +677,17 @@ def _nde_geo_dataset_identifier(accession, assay_accessions):
     return None
 
 
+def _nde_dataset_identifier(accession, assay_accessions):
+    """Return the NDE document identifier for the dataset a GXA experiment comes from."""
+    if geo_identifier := _nde_geo_dataset_identifier(accession, assay_accessions):
+        return geo_identifier
+    # Experiments submitted straight to ArrayExpress have no GEO Series. NDE holds
+    # them from BioStudies and OmicsDI under the lowercase accession (e-mtab-9209).
+    if ARRAYEXPRESS_ACCESSION_RE.fullmatch(accession or ""):
+        return accession.lower()
+    return None
+
+
 def _dataset_subject(accession, description, contrast):
     url = EXPERIMENT_RESULTS_URL_TEMPLATE.format(accession=accession)
     assay_accessions = _assay_accessions(contrast)
@@ -686,7 +699,7 @@ def _dataset_subject(accession, description, contrast):
         "name": description or accession,
         "url": url,
     }
-    if nde_identifier := _nde_geo_dataset_identifier(accession, assay_accessions):
+    if nde_identifier := _nde_dataset_identifier(accession, assay_accessions):
         dataset["_id"] = nde_identifier
     return dataset
 

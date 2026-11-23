@@ -177,10 +177,12 @@ Three files:
 | `descriptions` | an eligible record type, a `description`, and missing taxonomy or `healthCondition` | Mines species + diseases out of the text via EXTRACT. Eligible types are `Dataset`, `DataCollection`, `ResourceCatalog`, or `Sample` with `additionalType: "BioSample"` |
 | `measurement_technique` | `measurementTechnique` **and** `/data/nde-hub/standardizers/measurement_technique_lookup/<source>.csv` | Maps repository techniques to ontology terms |
 | `nctid` | `nctid` **and** `/nvme/nde-hub/standardizers/nctid_lookup/nctid.csv` | measurementTechnique from the trial's study design |
+| `additional_type` | an `isBasedOn` or `hasPart` `additionalType` **and** `utils/additional_type_lookup/<source>.tsv` | Maps the repository's labels to ontology DefinedTerms; drops `DELETE` labels |
 | `topic_category` | `/data/nde-hub/topic_categories/<source>.json` | Adds curated EDAM topics |
 | `disambiguating_description` | `/data/nde-hub/disambiguating_descriptions/<source>.csv` | Adds the curated summary |
 | `lineage` | always | `_meta.lineage` for the taxonomy browser |
 | `corrections` | always | Curated `sourceOrganization` corrections, matched by record `_id` or funding identifier |
+| `catalog_identifier` | `includedInDataCatalog` | Sets each catalog's `identifier` to its short ResourceCatalog identifier (e.g. `immport`) from `utils/catalog_identifier_lookup.tsv`, keyed by catalog `name`. A new catalog name needs a row there; the identifier comes from the RepoMetaCuration sheet |
 
 Then every record gets `date`, `_meta.completeness`, a cleaned description, placeholder-term removal and `check_schema`.
 
@@ -188,7 +190,7 @@ The pipeline collects repository-wide statistics for every active stage (`Pipeli
 
 Two optional settings on the uploader change the pipeline:
 
-- `post_process(self, doc)` — the source's last word on a record, after every stage but before `lineage` and `corrections`. Return the document, or `None` to drop it. Use it for source-specific fixups or filtering (see [bei](biothings-hub/files/nde-hub/hub/dataload/sources/bei/uploader.py), [pdb](biothings-hub/files/nde-hub/hub/dataload/sources/pdb/uploader.py), [covid_radx](biothings-hub/files/nde-hub/hub/dataload/sources/covid_radx/uploader.py)).
+- `post_process(self, doc)` — the source's last word on a record, after every stage but before `lineage`, `corrections` and `catalog_identifier`. Return the document, or `None` to drop it. Use it for source-specific fixups or filtering (see [bei](biothings-hub/files/nde-hub/hub/dataload/sources/bei/uploader.py), [pdb](biothings-hub/files/nde-hub/hub/dataload/sources/pdb/uploader.py), [covid_radx](biothings-hub/files/nde-hub/hub/dataload/sources/covid_radx/uploader.py)).
 - `skip_stages = ("descriptions",)` — opt out of a stage. Use it when a source's volume makes a stage's per-record API calls impractical, not to express a metadata decision.
 
 **When to override `load_data`:** only when the records don't come straight out of `data.ndjson` — a custom parser ([ncbi_geo](biothings-hub/files/nde-hub/hub/dataload/sources/ncbi_geo/gse_uploader.py)), per-file jobs ([biostudies](biothings-hub/files/nde-hub/hub/dataload/sources/biostudies/uploader.py)), or source-restricted curation ([dde](biothings-hub/files/nde-hub/hub/dataload/sources/dde/uploader.py), [vivli](biothings-hub/files/nde-hub/hub/dataload/sources/vivli/uploader.py)). Then keep `@nde_upload_wrapper` on it and yield plain dicts:

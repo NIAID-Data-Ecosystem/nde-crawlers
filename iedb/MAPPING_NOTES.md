@@ -1,13 +1,26 @@
 # IEDB DataCollection parser decisions
 
-- Emit one `DataCollection` per non-empty IEDB results tab for each exact eligible source organism: Epitopes, Antigens, Assays, Receptors, and References.
-- Use `_id = iedb_<tab>_<OrganismId>` and `identifier = IEDB:<TAB>:<OrganismId>` so sibling tab collections cannot merge.
+- Emit one `DataCollection` per non-empty IEDB results tab for each species-level taxon: Epitopes, Antigens, Assays, Receptors, and References.
+- Group at species level, as IEDB recommended and ODSET agreed (Oct 2026). Members curated from a strain, isolate, subspecies, other taxon below the species, or IEDB-only organism count toward the species. This matches IEDB's own search, which returns a taxon's node plus everything below it. Strains do not get records of their own.
+- "Species level" follows the organism tree behind IEDB's searches, which is IEDB's own and differs from NCBI's for many viruses. Each curated organism goes to the highest taxon on its IEDB lineage that is still at or below an NCBI species:
+  - Where IEDB's tree keeps the NCBI species, the group is that species. Examples: *Mycobacterium tuberculosis*, and HIV-1 under *Lentivirus humimdef1*.
+  - Where IEDB's tree skips it, the group is the taxon IEDB treats as the species. SARS-CoV-2, Influenza A virus and Dengue virus sit directly under a subgenus, genus or IEDB grouping, not under *Betacoronavirus pandemicum*, *Alphainfluenzavirus influenzae* or *Orthoflavivirus denguei*.
+  - That way a record's IEDB search link returns the record's results; IEDB's search for *Betacoronavirus pandemicum* is empty.
+- IEDB lineages come from the Query API: `epitope_search` lists each epitope's source organisms and the union of their lineages (`source_organism_iri_search`). Paging through all ~2.9M rows by `structure_id` takes about 300 requests, roughly 5 minutes.
+  - An epitope with one source organism gives that organism's lineage exactly, and those lineages are trusted as they are.
+  - An organism never curated alone (about 800 of ~4,800) gets the intersection of the epitopes it shares. That can also contain the organisms it always appears with, e.g. cross-reactive snake toxins or sibling strains. So only the nodes that are also its ancestors in the organism list are used.
+- "At or below an NCBI species" uses the IEDB organism list (`OrganismList`: parents, names and IEDB-only organisms) and NCBI `taxdump.tar.gz` ranks. IEDB-only organisms have no NCBI rank and defer to their parents. An organism missing from the Query API lineages takes the group of its nearest ancestor that has one, else its NCBI species. Organisms above species rank (genus, species group and higher) are excluded and logged.
+- The curation export still uses some retired NCBI tax IDs (e.g. LCMV 11623). They are mapped to their replacements with `merged.dmp` before grouping.
+- Use `_id = iedb_<tab>_<group taxon ID>` and `identifier = IEDB:<TAB>:<group taxon ID>` so sibling tab collections cannot merge.
+- `url` (and `includedInDataCatalog.archivedAt`) is IEDB's result-tab search, `https://www.iedb.org/query/<tab>?epitope_source_organism=NCBITaxon:<id>`, for every tab. IEDB launched these links on test.iedb.org, and `IEDB_SEARCH_BASE` overrides the host.
+  - IEDB's searches do not resolve IEDB-only taxa (e.g. "SARS-CoV1", 10002316) as `NCBITaxon:`, `taxon:` or `IEDBTaxon:`. Those groups link to the Query API (`taxon:<id>`) for the tab's first endpoint instead.
+- `isBasedOn` lists the Query API records behind each tab, `source_organism_iri_search=cs.{<CURIE>}`, which also searches the subtree. Assays use `tcell_search`, `bcell_search` and `mhc_search`; Receptors use `tcr_search` and `bcr_search`.
+- `species` is one DefinedTerm for the group with no `inDefinedTermSet`, so the hub's terms stage standardizes it and moves pathogens to `infectiousAgent`. An NCBI taxon carries its name and numeric tax ID; an IEDB-only taxon carries only its name. The crawler itself does not populate `infectiousAgent`.
+- The organisms curated below the group most often are named in `description` (up to 5) and `keywords` (up to 10), so a record is still found by strain or isolate name.
 - Stream the complete curation XML archive for Epitopes, Assays, and References. The archive is reference-oriented and expands to tens of gigabytes, so aggregation is disk-backed.
-- Use the official `antigen_search`, `tcr_search`, and `bcr_search` Query API views for Antigens and Receptors because those tab entities do not have stable standalone records in `Curation.xsd`.
+- Use the official `antigen_search`, `tcr_search`, and `bcr_search` Query API views for Antigens and Receptors because those tab entities do not have stable standalone records in `Curation.xsd`. Their organism IRIs are `NCBITaxon:<id>`, or `taxon:<id>` for IEDB-only organisms.
 - Group only by primary epitope-structure source-organism roles. Assay `HostOrganism` and `RecipientOrganism` values are context, not collection keys.
-- Resolve NCBI rank through `taxdump.tar.gz` and retain species-rank taxa plus descendants. IEDB-only nodes are retained when their `ParentTaxId` is at or below species.
-- Do not populate `infectiousAgent` in the crawler. The host/source/infectious-agent distinction remains a post-first-pass review item.
 - `collectionSize.unitText` matches the UI tab labels: `epitopes`, `antigens`, `assays`, `receptors`, and `references`.
-- Deduplicate by the tab's stable key. `hasPart` is emitted only when the complete member set is at or below `IEDB_HAS_PART_LIMIT` (default 1000); larger collections omit `hasPart` entirely instead of publishing a truncated list.
+- Deduplicate by the tab's stable key across the whole group. `hasPart` is emitted only when the complete member set is at or below `IEDB_HAS_PART_LIMIT` (default 1000). Larger collections omit `hasPart` entirely instead of publishing a truncated list.
 - Omit `distribution`, top-level `version`, and `sample`. Preserve the complete XML export URL and tab query URLs in `isBasedOn`.
-- The Query API `_iri_search` fields expand through taxonomy descendants. Public links and membership crosswalks use exact `source_organism_iri` or `source_organism_iris` fields instead.
+- `IEDB_SPECIES_IDS` (comma-separated group taxon IDs) limits a development run to those groups.

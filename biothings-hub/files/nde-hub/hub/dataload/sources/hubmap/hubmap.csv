@@ -33,3 +33,14 @@ file.type,distribution.encodingFormat
 version,version
 metadata.dag_provenance_list,isBasedOn.name
 metadata.protocols_io_doi,isBasedOn.doi
+hubmap_id,identifier
+source_samples.hubmap_id,sample.itemListElement.identifier
+source_samples.uuid,sample.itemListElement.url
+source_samples,sample.numberOfItems.value
+source_samples.mapped_sample_category,sample.aggregateElement.sampleType.name
+origin_samples_unique_mapped_organs,sample.aggregateElement.anatomicalStructure.name
+donor.mapped_metadata.sex,sample.aggregateElement.sex
+donor.mapped_metadata.age_value,sample.aggregateElement.developmentalStage.value
+donor.mapped_metadata.age_unit,sample.aggregateElement.developmentalStage.unitText
+donor.mapped_metadata.race,sample.aggregateElement.associatedPhenotype.name
+donor.mapped_metadata.abo_blood_group_system,sample.aggregateElement.associatedPhenotype.name

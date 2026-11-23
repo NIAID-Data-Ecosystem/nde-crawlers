@@ -43,9 +43,9 @@ The base class already decorates `load_data`. Override it (keeping
 settings on the uploader change the pipeline:
 
     post_process(self, doc)      applied after every stage but before
-                                 `make_data_count`, `lineage` and
-                                 `corrections`; return the document or None
-                                 to drop it
+                                 `make_data_count`, `lineage`,
+                                 `corrections` and `catalog_identifier`;
+                                 return the document or None to drop it
     skip_stages = ("...",)       stage names this source should not run
 """
 
@@ -346,6 +346,10 @@ def _needs_descriptions(doc):
     return ("species" not in doc and "infectiousAgent" not in doc) or "healthCondition" not in doc
 
 
+def _has_additional_type(doc):
+    return any(entry.get("additionalType") for field in ("isBasedOn", "hasPart") for entry in dict_entries(doc, field))
+
+
 def _needs_make_data_count(doc):
     return "Dataset" in as_list(doc.get("@type"))
 
@@ -403,6 +407,12 @@ def _run_nctid(docs, source):
     return add_nct_measurement_techniques(docs)
 
 
+def _run_additional_type(docs, source):
+    from .additional_type import curate_additional_types
+
+    return curate_additional_types(docs, source)
+
+
 def _run_topic_category(docs, source):
     from .topic_category import add_topic_category
 
@@ -438,6 +448,12 @@ def _run_corrections(docs, source):
     return [apply_corrections(doc) for doc in docs]
 
 
+def _run_catalog_identifier(docs, source):
+    from .catalog_identifier import add_catalog_identifiers
+
+    return add_catalog_identifiers(docs, source)
+
+
 def _reset_terms():
     from .terms import reset_caches
 
@@ -456,8 +472,20 @@ def _reset_nctid():
     reset_caches()
 
 
+def _reset_additional_type():
+    from .additional_type import reset_caches
+
+    reset_caches()
+
+
 def _reset_make_data_count():
     from .make_data_count import reset_caches
+
+    reset_caches()
+
+
+def _reset_catalog_identifier():
+    from .catalog_identifier import reset_caches
 
     reset_caches()
 
@@ -472,6 +500,12 @@ def _nctid_file(source):
     from .nctid import lookup_file
 
     return lookup_file()
+
+
+def _additional_type_file(source):
+    from .additional_type import lookup_file
+
+    return lookup_file(source)
 
 
 def _topic_category_file(source):
@@ -492,10 +526,18 @@ def _make_data_count_file(source):
     return lookup_file()
 
 
+def _catalog_identifier_file(source):
+    from .catalog_identifier import lookup_file
+
+    return lookup_file()
+
+
 # The pipeline, in order. Citations run first because they add funding, species
 # and health conditions the later stages then standardize. make_data_count runs
 # after post_process, so records a source drops are never looked up. Corrections
-# run last, once funding is final, because they match on funding identifiers.
+# run after the augmenting stages, once funding is final, because they match on
+# funding identifiers. Catalog identifiers come last, after an uploader's
+# `post_process`, so they also reach catalogs a source adds there.
 STAGES = (
     Stage(
         "citations",
@@ -534,6 +576,14 @@ STAGES = (
         tracked_fields=("measurementTechnique",),
     ),
     Stage(
+        "additional_type",
+        _run_additional_type,
+        _any_doc(_has_additional_type),
+        _additional_type_file,
+        reset=_reset_additional_type,
+        tracked_fields=("isBasedOn", "hasPart"),
+    ),
+    Stage(
         "topic_category",
         _run_topic_category,
         _always,
@@ -557,6 +607,14 @@ STAGES = (
     ),
     Stage("lineage", _run_lineage, _always, tracked_fields=("_meta.lineage",)),
     Stage("corrections", _run_corrections, _always, tracked_fields=("sourceOrganization",)),
+    Stage(
+        "catalog_identifier",
+        _run_catalog_identifier,
+        _any_doc(lambda doc: bool(doc.get("includedInDataCatalog"))),
+        _catalog_identifier_file,
+        reset=_reset_catalog_identifier,
+        tracked_fields=("includedInDataCatalog",),
+    ),
 )
 
 STAGE_NAMES = tuple(stage.name for stage in STAGES)

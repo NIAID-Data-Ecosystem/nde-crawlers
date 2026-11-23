@@ -1,3 +1,4 @@
+import datetime
 import math
 
 import dateutil.parser
@@ -10,6 +11,23 @@ except ImportError:
     import logging
 
     logger = logging.getLogger(__name__)
+
+
+# Two parse defaults that differ in year, month and day: any part dateutil had to
+# take from the default comes out different between the two parses.
+_DATE_DEFAULTS = (datetime.datetime(2000, 1, 1), datetime.datetime(2001, 2, 2))
+
+
+def parse_full_date(value):
+    """ISO date for `value`, which must give a year, month and day.
+
+    dateutil fills a missing part from today, so the "date: Nov-07" (November
+    2007) on GSM568740 would otherwise become November 7 of the current year.
+    """
+    first, second = (dateutil.parser.parse(value, ignoretz=True, default=default) for default in _DATE_DEFAULTS)
+    if first != second:
+        raise ValueError("no explicit year, month and day")
+    return first.date().isoformat()
 
 
 # JSON-LD @type for each object-valued field in gsm_nde_mapping.json /
@@ -439,7 +457,7 @@ def parse_sample_characteristics(output, value, sample_mapping, nde_mapping, sex
                     if k == "date":
                         try:
                             if not output.get("date"):
-                                v = dateutil.parser.parse(v, ignoretz=True).date().isoformat()
+                                v = parse_full_date(v)
                                 insert_value(output, k, v)
                         except Exception as e:
                             logger.warning(f"Error parsing date '{v}': {e}")

@@ -4,7 +4,9 @@ Generates dense-vector embeddings for Dataset, DataCollection,
 ComputationalTool, and ResourceCatalog documents and writes them back to the
 same ES index.
 Embeddings are reused from a local SQLite cache when possible, and model
-inference is delegated to a remote embed server (see embed_server.py).
+inference is delegated to a remote embed server (see embed_server.py) or a
+SageMaker endpoint running Text Embeddings Inference, which is created for each
+run and deleted afterwards.
 Documents are processed by ``EMBED_WORKERS`` worker processes, each scanning
 one slice of the index.
 
@@ -17,6 +19,7 @@ or executed standalone::
 import contextlib
 import gc
 import hashlib
+import json
 import logging
 import multiprocessing
 import os
@@ -28,7 +31,10 @@ import traceback
 from array import array
 from collections import Counter
 
+import boto3
 import requests
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 from elasticsearch import Elasticsearch, helpers
 
 logger = logging.getLogger(__name__)
@@ -46,8 +52,18 @@ DOC_TYPES = ["Dataset", "DataCollection", "ComputationalTool", "ResourceCatalog"
 ES_COMPATIBLE_WITH = os.getenv("ES_COMPATIBLE_WITH", "9").strip().lower()
 ES_REQUEST_TIMEOUT = int(os.getenv("ES_REQUEST_TIMEOUT", "120"))
 
-EMBED_SERVER_URL = os.getenv("EMBED_SERVER_URL", "http://su10:8485").rstrip("/")
+EMBED_SERVER_URL = os.getenv(
+    "EMBED_SERVER_URL",
+    "https://runtime.sagemaker.us-east-1.amazonaws.com/endpoints/nde-granite-embeddings-gpu/invocations",
+).rstrip("/")
 EMBED_REQUEST_TIMEOUT = int(os.getenv("EMBED_REQUEST_TIMEOUT", "300"))
+# Profile whose credentials sign the requests when EMBED_SERVER_URL is a SageMaker endpoint.
+EMBED_AWS_PROFILE = os.getenv("EMBED_AWS_PROFILE", "nde-embed").strip()
+# Endpoint config that each run creates the EMBED_SERVER_URL endpoint from, deleting the endpoint when embedding ends
+# so that it only bills while in use. Empty if the endpoint is kept up by hand.
+EMBED_SAGEMAKER_ENDPOINT_CONFIG = os.getenv(
+    "EMBED_SAGEMAKER_ENDPOINT_CONFIG", "nde-granite-embeddings-gpu-tei182-pools"
+).strip()
 EMBED_CACHE_INDEX = os.getenv("EMBED_CACHE_INDEX", "").strip()
 EMBED_CACHE_DB_PATH = os.getenv(
     "EMBED_CACHE_DB_PATH",
@@ -73,8 +89,30 @@ MODEL_CONFIGS = {
 
 
 # ── remote embed helper ─────────────────────────────────────────────────────
+# A SageMaker endpoint's invocation URL, e.g.
+# https://runtime.sagemaker.us-west-2.amazonaws.com/endpoints/nde-granite-embeddings-gpu/invocations
+_SAGEMAKER_URL_RE = re.compile(
+    r"^https://runtime\.sagemaker\.([a-z0-9-]+)\.amazonaws\.com/endpoints/([^/]+)/invocations$"
+)
+# SageMaker rejects request bodies over 6 MB.
+_SAGEMAKER_MAX_REQUEST_BYTES = 4_000_000
+# The model reads at most 512 tokens, which end long before this many characters.
+_SAGEMAKER_MAX_TEXT_CHARS = 20_000
+# How long to wait for an endpoint to come up, or for one that is still being created to become deletable.
+_SAGEMAKER_WAIT_SECONDS = 3600
+_SAGEMAKER_POLL_SECONDS = 30
+_SAGEMAKER_TAGS = [{"Key": "project", "Value": "nde-embeddings"}]
+_sagemaker_clients = {}
+
+
 def _remote_embed(texts):
     """Send texts to the remote embedding server and return vectors."""
+    # The cached vectors came from su10's server, whose LangChain wrapper turns newlines into spaces before encoding,
+    # so every backend gets the same input.
+    texts = [text.replace("\n", " ") for text in texts]
+    sagemaker_endpoint = _SAGEMAKER_URL_RE.match(EMBED_SERVER_URL)
+    if sagemaker_endpoint:
+        return _sagemaker_embed(texts, *sagemaker_endpoint.groups())
     resp = requests.post(
         f"{EMBED_SERVER_URL}/embed",
         json={"texts": texts},
@@ -82,6 +120,117 @@ def _remote_embed(texts):
     )
     resp.raise_for_status()
     return resp.json()["embeddings"]
+
+
+def _aws_client(service, region):
+    return boto3.Session(profile_name=EMBED_AWS_PROFILE or None).client(
+        service,
+        region_name=region,
+        config=BotoConfig(read_timeout=EMBED_REQUEST_TIMEOUT, retries={"mode": "standard", "max_attempts": 5}),
+    )
+
+
+def _describe_sagemaker_endpoint(client, endpoint_name):
+    """Return the endpoint's description, or None if there is no such endpoint."""
+    try:
+        return client.describe_endpoint(EndpointName=endpoint_name)
+    except ClientError as exc:
+        if "Could not find endpoint" in str(exc):
+            return None
+        raise
+
+
+def _start_sagemaker_endpoint(region, endpoint_name, config_name, log):
+    """Create the endpoint from *config_name* unless it already exists, and wait until it is in service."""
+    client = _aws_client("sagemaker", region)
+    start = time.time()
+    created = deleting_failed = False
+    while True:
+        endpoint = _describe_sagemaker_endpoint(client, endpoint_name)
+        status = endpoint["EndpointStatus"] if endpoint else None
+        if status == "InService":
+            break
+        if status == "Failed" and created:
+            raise RuntimeError(f"SageMaker endpoint '{endpoint_name}' failed: {endpoint.get('FailureReason')}")
+        if status == "Failed" and not deleting_failed:
+            log.warning("Deleting failed SageMaker endpoint '%s' left by an earlier run", endpoint_name)
+            client.delete_endpoint(EndpointName=endpoint_name)
+            deleting_failed = True
+        elif status is None and not created:
+            log.info("Creating SageMaker endpoint '%s' from '%s'", endpoint_name, config_name)
+            client.create_endpoint(EndpointName=endpoint_name, EndpointConfigName=config_name, Tags=_SAGEMAKER_TAGS)
+            created = True
+        if time.time() - start > _SAGEMAKER_WAIT_SECONDS:
+            raise RuntimeError(
+                f"SageMaker endpoint '{endpoint_name}' is still {status} after {_fmt_duration(time.time() - start)}"
+            )
+        time.sleep(_SAGEMAKER_POLL_SECONDS)
+
+    instance_types = [
+        pool["InstanceType"]
+        for variant in endpoint.get("ProductionVariants", [])
+        for pool in variant.get("InstancePools") or []
+        if pool.get("CurrentInstanceCount")
+    ]
+    log.info(
+        "SageMaker endpoint '%s' is in service%s after %s",
+        endpoint_name,
+        f" on {', '.join(instance_types)}" if instance_types else "",
+        _fmt_duration(time.time() - start),
+    )
+
+
+def _delete_sagemaker_endpoint(region, endpoint_name, log):
+    """Delete the endpoint so that it stops billing.
+
+    Failures are logged rather than raised, so that they do not hide whatever error ended the run.
+    """
+    start = time.time()
+    while True:
+        try:
+            _aws_client("sagemaker", region).delete_endpoint(EndpointName=endpoint_name)
+            log.info("Deleted SageMaker endpoint '%s'", endpoint_name)
+            return
+        except Exception as exc:
+            if "Could not find endpoint" in str(exc):
+                return
+            # An endpoint that is still being created can only be deleted once it is in service or has failed.
+            if "in-progress" in str(exc) and time.time() - start < _SAGEMAKER_WAIT_SECONDS:
+                time.sleep(_SAGEMAKER_POLL_SECONDS)
+                continue
+            log.exception("Could not delete SageMaker endpoint '%s'; it bills until it is deleted", endpoint_name)
+            return
+
+
+def _sagemaker_embed(texts, region, endpoint_name):
+    """Embed *texts* with a SageMaker endpoint running Text Embeddings Inference."""
+    # Embedding workers are forked, so each process makes its own client rather than sharing the parent's connections.
+    client = _sagemaker_clients.get(os.getpid())
+    if client is None:
+        client = _sagemaker_clients[os.getpid()] = _aws_client("sagemaker-runtime", region)
+
+    # Split the batch so that every request body stays under SageMaker's limit.
+    chunks = []
+    chunk_bytes = 0
+    for text in texts:
+        text = text[:_SAGEMAKER_MAX_TEXT_CHARS]
+        text_bytes = len(json.dumps(text)) + 2
+        if not chunks or chunk_bytes + text_bytes > _SAGEMAKER_MAX_REQUEST_BYTES:
+            chunks.append([])
+            chunk_bytes = 0
+        chunks[-1].append(text)
+        chunk_bytes += text_bytes
+
+    vectors = []
+    for chunk in chunks:
+        resp = client.invoke_endpoint(
+            EndpointName=endpoint_name,
+            ContentType="application/json",
+            Accept="application/json",
+            Body=json.dumps({"inputs": chunk, "truncate": True, "normalize": True}),
+        )
+        vectors.extend(json.loads(resp["Body"].read()))
+    return vectors
 
 
 # ── ES helpers ───────────────────────────────────────────────────────────────
@@ -684,8 +833,12 @@ def run_embeddings(es_hosts, index_name, cache_index_name=None, log=None):
     if cache_index_name == index_name:
         log.warning("Ignoring embedding cache index '%s' because it matches target index", cache_index_name)
         cache_index_name = None
+    sagemaker_endpoint = _SAGEMAKER_URL_RE.match(EMBED_SERVER_URL)
+    managed_endpoint = sagemaker_endpoint.groups() if sagemaker_endpoint and EMBED_SAGEMAKER_ENDPOINT_CONFIG else None
 
     try:
+        if managed_endpoint:
+            _start_sagemaker_endpoint(*managed_endpoint, EMBED_SAGEMAKER_ENDPOINT_CONFIG, log)
         for model_name, model_info in MODEL_CONFIGS.items():
             sqlite_cache = _run_model_embeddings(
                 es,
@@ -700,6 +853,8 @@ def run_embeddings(es_hosts, index_name, cache_index_name=None, log=None):
     finally:
         if sqlite_cache:
             sqlite_cache.close()
+        if managed_endpoint:
+            _delete_sagemaker_endpoint(*managed_endpoint, log)
 
 
 def _run_model_embeddings(es, es_hosts, index_name, model_name, model_info, sqlite_cache, cache_index_name, log):

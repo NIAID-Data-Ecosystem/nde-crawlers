@@ -605,13 +605,7 @@ class NDESourceUploader(BaseSourceUploader):
                         "type": "text",
                         "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                     },
-                    "additionalType": {
-                        "properties": {
-                            "@type": {"type": "keyword"},
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "text"},
-                        }
-                    },
+                    "additionalType": defined_term_mapping,
                     "author": {
                         "properties": {
                             "@type": {"type": "text"},
@@ -705,6 +699,7 @@ class NDESourceUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "text"},
                     "archivedAt": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                     "versionDate": {"type": "date"},
@@ -801,12 +796,7 @@ class NDESourceUploader(BaseSourceUploader):
                             "step": {"type": "text"},
                         }
                     },
-                    "additionalType": {
-                        "properties": {
-                            "name": {"type": "keyword", "copy_to": ["all"]},
-                            "url": {"type": "text"},
-                        }
-                    },
+                    "additionalType": defined_term_mapping,
                     "author": {
                         "properties": {
                             "@type": {"type": "text"},
@@ -1876,6 +1866,7 @@ class NDESourceSampleUploader(BaseSourceUploader):
                 "properties": {
                     "@type": {"type": "text"},
                     "archivedAt": {"type": "text", "copy_to": ["all"]},
+                    "identifier": {"type": "keyword", "copy_to": ["all"]},
                     "name": {"type": "keyword", "copy_to": ["all"]},
                     "url": {"type": "text"},
                     "versionDate": {"type": "date"},

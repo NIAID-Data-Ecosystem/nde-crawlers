@@ -1,0 +1,75 @@
+Repository Label	Term Name	Ontology	URL	Match	Records	Notes
+List of Publications	Publication	NCIT	http://purl.obolibrary.org/obo/NCIT_C48471	close	1995	NCIT 'Publication'; the document lists them
+De-Identification Methodology	Deidentification	NCIT	http://purl.obolibrary.org/obo/NCIT_C45970	close	1290	The process the document describes
+Study Protocol	Study Protocol	NCIT	http://purl.obolibrary.org/obo/NCIT_C70817	exact	1209	
+Variable Information	data dictionary	T4FS	http://purl.obolibrary.org/obo/T4FS_0000073	close	797	T4FS 'data dictionary' (terms4FAIRskills) is the only exact term; NCIT's nearest is 'Data Definitions for Analysis Dataset Document' (C115679)
+Data Collection Instruments	Data Collection Instrument	NCIT	http://purl.obolibrary.org/obo/NCIT_C142472	exact	778	
+Data Analysis Plan	Statistical Analysis Plan	NCIT	http://purl.obolibrary.org/obo/NCIT_C208443	close	714	
+Additional Information for Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	652	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Data Description	Clinical Study Data Description	NCIT	http://purl.obolibrary.org/obo/NCIT_C188846	close	432	
+Dataset Instruction	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	close	414	
+Information for ATN 015 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	310	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Clarification Memo				unmapped	226	No specific term; only NCIT 'Document' (C19498) fits
+Information for Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	222	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 032 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	196	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 109 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	174	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Additional Info for Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	170	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 025 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	162	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 024 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	154	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 110 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	154	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 113 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	148	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 004 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	146	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN064 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	130	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 063 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	116	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 021b Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	104	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+COLT2 Informed Consent Form Templates	Template Informed Consent Form Documentation	NCIT	http://purl.obolibrary.org/obo/NCIT_C208325	exact	86	
+Information for ATN 069 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	84	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 021a Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	78	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+information for ATN 078 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	74	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 095 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	70	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+CHIME Supporting Document				unmapped	65	Study-specific; only NCIT 'Document' (C19498) fits
+SMARTT Collaboratons and Data Requests	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	65	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 026 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	60	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 081 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	60	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Status 1 Clinical Study Report	Clinical Study Report	NCIT	http://purl.obolibrary.org/obo/NCIT_C142439	exact	58	
+Information for ATN 108 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	56	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 135 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	56	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for request of additional data	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	56	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 034 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	48	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 072 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	46	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 093 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	44	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Study Manual	Clinical Trials Operational Procedure Manual Documentation	NCIT	http://purl.obolibrary.org/obo/NCIT_C115764	close	44	
+Biospecimen Sharing Policy	Policy	NCIT	http://purl.obolibrary.org/obo/NCIT_C17735	broad	42	
+Information for ATN 048 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	42	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Proposed Label Change	Medical Product Label	NCIT	http://purl.obolibrary.org/obo/NCIT_C41203	close	42	
+Status 2 PK Report	Reports of Human Pharmacokinetic (PK) Studies	NCIT	http://purl.obolibrary.org/obo/NCIT_C79282	close	42	
+ACY01 Pharmacokinetics Report	Reports of Human Pharmacokinetic (PK) Studies	NCIT	http://purl.obolibrary.org/obo/NCIT_C79282	close	40	
+Information for ATN 067 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	40	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 104 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	40	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 125 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	40	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Clinical Study Report	Clinical Study Report	NCIT	http://purl.obolibrary.org/obo/NCIT_C142439	exact	39	
+Information for ATN 084 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	36	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 112 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	36	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 116_128 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	36	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Data Request Information	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	34	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 089 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	24	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 130 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	24	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 076 Data Requeters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	22	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 023B Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	20	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 123 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	18	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 065 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	16	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 090 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	16	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+NICHD-2011-POP01 Doxycycline PK Analysis Data Dictionary	data dictionary	T4FS	http://purl.obolibrary.org/obo/T4FS_0000073	exact	15	T4FS 'data dictionary' (terms4FAIRskills) is the only exact term; NCIT's nearest is 'Data Definitions for Analysis Dataset Document' (C115679)
+ACY 02 Pediatrix Dataset Report	Report	NCIT	http://purl.obolibrary.org/obo/NCIT_C25375	broad	14	
+RMN Biospecimen Sharing Policy	Policy	NCIT	http://purl.obolibrary.org/obo/NCIT_C17735	broad	14	
+Information for requests of additional data	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	11	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 062 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	10	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Project Summaries	Clinical Study Protocol Synopsis Documentation	NCIT	http://purl.obolibrary.org/obo/NCIT_C115628	close	10	Same term as ImmPort's 'Study Summary'
+Recommended Label Revisions for Caffeine Citrate	Medical Product Label	NCIT	http://purl.obolibrary.org/obo/NCIT_C41203	close	9	
+Information for ATN 052 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	8	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Information for ATN 073 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	8	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+PK Report	Reports of Human Pharmacokinetic (PK) Studies	NCIT	http://purl.obolibrary.org/obo/NCIT_C79282	close	8	
+Summary Statistics	Report	NCIT	http://purl.obolibrary.org/obo/NCIT_C25375	broad	7	
+Information for ATN 020 Data Requesters	Instruction	NCIT	http://purl.obolibrary.org/obo/NCIT_C42688	broad	2	No term for information for data requesters; alternatives: 'Data Sharing Plan' (C219697) or a new NDE term
+Intervention Description/Materials	Intervention Description	NCIT	http://purl.obolibrary.org/obo/NCIT_C177931	close	2	
+Codebook/Variable Dictionary	data dictionary	T4FS	http://purl.obolibrary.org/obo/T4FS_0000073	exact	12499	T4FS 'data dictionary' (terms4FAIRskills) is the only exact term; NCIT's nearest is 'Data Definitions for Analysis Dataset Document' (C115679)

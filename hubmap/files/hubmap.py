@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 
 import requests
 
@@ -70,38 +71,40 @@ def _fetch_browse_json(entity_type, uuid, timeout=20):
         return None
 
 
-def get_ids():
-    logger.info("Getting datasets")
+def _search_entity_ids(entity_type, page_size=5000):
+    """uuids of every current (latest revision, no sub_status) entity of `entity_type`.
+
+    A single search returns at most 10,000 hits, so this pages with search_after.
+    """
     url = "https://search.api.hubmapconsortium.org/v3/portal/search"
     payload = {
         "query": {
             "bool": {
-                "must": [
-                    {
-                        "bool": {
-                            "must_not": [
-                                {"exists": {"field": "next_revision_uuid"}},
-                                {"exists": {"field": "sub_status"}},
-                            ]
-                        }
-                    },
-                    {
-                        "bool": {
-                            "must_not": [
-                                {"exists": {"field": "next_revision_uuid"}},
-                                {"exists": {"field": "sub_status"}},
-                            ]
-                        }
-                    },
-                ]
+                "must_not": [
+                    {"exists": {"field": "next_revision_uuid"}},
+                    {"exists": {"field": "sub_status"}},
+                ],
+                "filter": [{"term": {"entity_type.keyword": entity_type}}],
             }
         },
-        "post_filter": {"term": {"entity_type.keyword": "Dataset"}},
         "_source": False,
-        "size": 10000,
+        "size": page_size,
+        "sort": [{"uuid.keyword": "asc"}],
     }
-    r = requests.post(url, json=payload).json()
-    ids = [x["_id"] for x in r["hits"]["hits"]]
+    ids = []
+    while True:
+        resp = requests.post(url, json=payload, timeout=60)
+        resp.raise_for_status()
+        hits = resp.json()["hits"]["hits"]
+        ids.extend(hit["_id"] for hit in hits)
+        if len(hits) < page_size:
+            return ids
+        payload["search_after"] = hits[-1]["sort"]
+
+
+def get_ids():
+    logger.info("Getting datasets")
+    ids = _search_entity_ids("Dataset")
     logger.info("Total datasets: %s", len(ids))
     count = 0
     datasets = []
@@ -121,36 +124,7 @@ def get_ids():
 
 def get_sample_ids():
     logger.info("Getting samples")
-    url = "https://search.api.hubmapconsortium.org/v3/portal/search"
-    payload = {
-        "query": {
-            "bool": {
-                "must": [
-                    {
-                        "bool": {
-                            "must_not": [
-                                {"exists": {"field": "next_revision_uuid"}},
-                                {"exists": {"field": "sub_status"}},
-                            ]
-                        }
-                    },
-                    {
-                        "bool": {
-                            "must_not": [
-                                {"exists": {"field": "next_revision_uuid"}},
-                                {"exists": {"field": "sub_status"}},
-                            ]
-                        }
-                    },
-                ]
-            }
-        },
-        "post_filter": {"term": {"entity_type.keyword": "Sample"}},
-        "_source": False,
-        "size": 10000,
-    }
-    r = requests.post(url, json=payload, timeout=30).json()
-    ids = [x["_id"] for x in r.get("hits", {}).get("hits", [])]
+    ids = _search_entity_ids("Sample")
     logger.info("Total samples: %s", len(ids))
     return ids
 
@@ -185,8 +159,183 @@ def _build_donor_description(donor_mapped):
     return text or None
 
 
-def parse_samples():
-    sample_ids = get_sample_ids()
+# Sample metadata keys that are IDs or bookkeeping, or are already mapped (description, notes).
+_SKIPPED_METADATA_KEYS = {
+    "description",
+    "sample_description",
+    "sampleDescription",
+    "notes",
+    "metadata_schema_id",
+    "entity_type",
+    "sample_category",
+    "HubmapId",
+    "source_lab_id",
+    "donor",
+    "PPID",
+    "tma_id",
+    "tis_code",
+    "LobeHasMultipleProcessingTypes",
+}
+_PLACEHOLDER_VALUES = {"", "na", "n/a", "nan", "none", "null", "unknown"}
+
+
+def _metadata_properties(sample_metadata):
+    """(key, value) pairs from a sample's `metadata`, with each `<x>_value`/`<x>_unit` pair joined into `<x>`."""
+    if not isinstance(sample_metadata, dict):
+        return []
+    pairs = []
+    for key, raw_value in sample_metadata.items():
+        if key in _SKIPPED_METADATA_KEYS or key.endswith("_unit"):
+            continue
+        value = _first_scalar(raw_value)
+        if value is None or str(value).strip().casefold() in _PLACEHOLDER_VALUES:
+            continue
+        if key.endswith("_value"):
+            key = key[: -len("_value")]
+            unit = _first_scalar(sample_metadata.get(f"{key}_unit"))
+            if unit is not None and str(unit).strip().casefold() not in _PLACEHOLDER_VALUES:
+                value = f"{value} {unit}"
+        # snake_case, which the portal turns into column titles
+        pairs.append((re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key).lower(), str(value).strip()))
+    return pairs
+
+
+def _sample_text(metadata):
+    """A sample's own (description, notes)."""
+    sample_metadata = metadata.get("metadata")
+    description = _first_text(metadata.get("description"))
+    notes = None
+    if isinstance(sample_metadata, dict):
+        description = (
+            description
+            or _first_text(sample_metadata.get("description"))
+            or _first_text(sample_metadata.get("sample_description"))
+            or _first_text(sample_metadata.get("sampleDescription"))
+        )
+        notes = _first_text(sample_metadata.get("notes"))
+    return description, notes
+
+
+def _anatomical_structures(metadata):
+    """Organ DefinedTerms from an entity's origin samples, de-duped in order."""
+    organs = []
+    for organ in _ensure_list(metadata.get("origin_samples_unique_mapped_organs")):
+        organ_value = _first_scalar(organ)
+        if organ_value:
+            organs.append(organ_value)
+    if not organs:
+        for origin in _ensure_list(metadata.get("origin_samples")):
+            if isinstance(origin, dict):
+                organ_value = origin.get("mapped_organ") or origin.get("organ")
+                organ_value = _first_scalar(organ_value)
+                if organ_value:
+                    organs.append(organ_value)
+
+    seen = set()
+    anatomical = []
+    for organ in organs:
+        key = str(organ).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        anatomical.append({"@type": "DefinedTerm", "name": str(organ)})
+    return anatomical
+
+
+def _index_source_samples(datasets):
+    """Map each sample uuid to isBasisFor entries for the crawled Datasets that list it in `source_samples`."""
+    datasets_by_sample = {}
+    for metadata in datasets:
+        if not isinstance(metadata, dict) or not (uuid := metadata.get("uuid")):
+            continue
+        entry = {
+            "@type": "Dataset",
+            "identifier": metadata.get("hubmap_id") or uuid,
+            "url": f"https://portal.hubmapconsortium.org/browse/dataset/{uuid}",
+        }
+        if name := metadata.get("hubmap_id"):
+            entry["name"] = name
+        for source in _ensure_list(metadata.get("source_samples")):
+            if isinstance(source, dict) and source.get("uuid"):
+                entries = datasets_by_sample.setdefault(source["uuid"], [])
+                if entry not in entries:
+                    entries.append(entry)
+    return datasets_by_sample
+
+
+def _build_sample_collection(metadata):
+    """Flatten a Dataset's provenance into a SampleCollection of its source samples.
+
+    HuBMAP chains Donor -> Organ -> Block -> Section/Suspension -> Dataset -> processed Dataset.
+    `source_samples` is HuBMAP's resolution of that chain to the samples that were assayed, so it
+    also covers processed datasets, and it is what numberOfItems counts. The organ and donor
+    upstream of those samples are summarized in aggregateElement.
+    """
+    items = []
+    sample_types = []
+    seen_samples = set()
+    seen_types = set()
+    for source in _ensure_list(metadata.get("source_samples")):
+        if not isinstance(source, dict) or not source.get("uuid") or source["uuid"] in seen_samples:
+            continue
+        seen_samples.add(source["uuid"])
+        items.append(
+            {
+                "@type": "Sample",
+                "identifier": source.get("hubmap_id") or source["uuid"],
+                "url": f"https://portal.hubmapconsortium.org/browse/sample/{source['uuid']}",
+            }
+        )
+        sample_category = _first_text(source.get("mapped_sample_category") or source.get("sample_category"))
+        if sample_category and str(sample_category).casefold() not in seen_types:
+            seen_types.add(str(sample_category).casefold())
+            sample_types.append({"@type": "DefinedTerm", "name": str(sample_category)})
+
+    aggregate = {"@type": "Sample", "additionalType": "ExperimentalRunSample"}
+    donor = metadata.get("donor")
+    donor_mapped = donor.get("mapped_metadata") if isinstance(donor, dict) else None
+    if isinstance(donor_mapped, dict) and donor_mapped:
+        sex_value = _first_text(donor_mapped.get("sex"))
+        if sex_value:
+            aggregate["sex"] = sex_value
+
+        age_value = _first_scalar(donor_mapped.get("age_value"))
+        age_unit = _first_scalar(donor_mapped.get("age_unit"))
+        if age_value is not None and age_unit:
+            aggregate["developmentalStage"] = {
+                "@type": "QuantitativeValue",
+                "value": age_value,
+                "unitText": age_unit,
+            }
+
+        phenotypes = []
+        race_value = _first_text(donor_mapped.get("race"))
+        if race_value:
+            phenotypes.append({"@type": "DefinedTerm", "name": str(race_value)})
+        blood_type = _first_text(donor_mapped.get("abo_blood_group_system"))
+        if blood_type:
+            phenotypes.append({"@type": "DefinedTerm", "name": str(blood_type)})
+        if phenotypes:
+            aggregate["associatedPhenotype"] = phenotypes
+
+    if sample_types:
+        aggregate["sampleType"] = sample_types
+    if anatomical := _anatomical_structures(metadata):
+        aggregate["anatomicalStructure"] = anatomical
+
+    collection = {"@type": "SampleCollection"}
+    if items:
+        collection["itemListElement"] = items
+        collection["numberOfItems"] = {"@type": "QuantitativeValue", "value": len(items), "unitText": "sample"}
+    if len(aggregate) > 2:
+        collection["aggregateElement"] = aggregate
+    return collection if len(collection) > 1 else None
+
+
+def parse_samples(datasets_by_sample):
+    # Only samples a crawled Dataset was assayed on become records; their upstream samples are folded in.
+    sample_ids = [sid for sid in get_sample_ids() if sid in datasets_by_sample]
+    logger.info("Assayed samples: %s", len(sample_ids))
     count = 0
     for sid in sample_ids:
         count += 1
@@ -230,30 +379,8 @@ def parse_samples():
         if sample_category:
             output["sampleType"] = [{"@type": "DefinedTerm", "name": str(sample_category)}]
 
-        organs = []
-        for organ in _ensure_list(metadata.get("origin_samples_unique_mapped_organs")):
-            organ_value = _first_scalar(organ)
-            if organ_value:
-                organs.append(organ_value)
-        if not organs:
-            for origin in _ensure_list(metadata.get("origin_samples")):
-                if isinstance(origin, dict):
-                    organ_value = origin.get("mapped_organ") or origin.get("organ")
-                    organ_value = _first_scalar(organ_value)
-                    if organ_value:
-                        organs.append(organ_value)
-
-        if organs:
-            seen = set()
-            anatomical = []
-            for organ in organs:
-                key = str(organ).casefold()
-                if key in seen:
-                    continue
-                seen.add(key)
-                anatomical.append({"@type": "DefinedTerm", "name": str(organ)})
-            if anatomical:
-                output["anatomicalStructure"] = anatomical
+        if anatomical := _anatomical_structures(metadata):
+            output["anatomicalStructure"] = anatomical
 
         donor_desc = None
         donor = metadata.get("donor") if isinstance(metadata, dict) else None
@@ -344,14 +471,7 @@ def parse_samples():
 
             donor_desc = _build_donor_description(donor_mapped)
 
-        sample_metadata = metadata.get("metadata")
-        sample_desc = _first_text(metadata.get("description"))
-        if not sample_desc and isinstance(sample_metadata, dict):
-            sample_desc = (
-                _first_text(sample_metadata.get("description"))
-                or _first_text(sample_metadata.get("sample_description"))
-                or _first_text(sample_metadata.get("sampleDescription"))
-            )
+        sample_desc, notes = _sample_text(metadata)
 
         # TSV rule: description = "{sample.description} from {donor.description}" only when donor description is known.
         combined_desc = None
@@ -362,61 +482,62 @@ def parse_samples():
         elif donor_desc:
             combined_desc = donor_desc
 
-        notes = None
-        if isinstance(sample_metadata, dict):
-            notes = sample_metadata.get("notes")
-        notes = _first_text(notes)
         if notes:
             combined_desc = f"{combined_desc}. Notes: {notes}" if combined_desc else f"Notes: {notes}"
+
+        # Upstream samples (organ, block, ...) aren't records of their own, so their descriptions, notes and
+        # metadata are carried on each assayed sample, labelled with their sample category.
+        upstream = []
+        for ancestor in _ensure_list(metadata.get("ancestors")):
+            if isinstance(ancestor, dict) and ancestor.get("entity_type") == "Sample" and ancestor.get("uuid"):
+                ancestor_metadata = _fetch_browse_json("sample", ancestor["uuid"], timeout=30)
+                if isinstance(ancestor_metadata, dict):
+                    upstream.append(ancestor_metadata)
+
+        seen_text = {text.rstrip(" .").casefold() for text in (sample_desc, notes) if text}
+        for ancestor_metadata in upstream:
+            ancestor_desc, ancestor_notes = _sample_text(ancestor_metadata)
+            label = (
+                ancestor_metadata.get("mapped_sample_category") or ancestor_metadata.get("sample_category") or "Sample"
+            )
+            for text, prefix in ((ancestor_desc, f"{label}: "), (ancestor_notes, f"{label} notes: ")):
+                key = text.rstrip(" .").casefold() if text else None
+                if key and key not in seen_text:
+                    seen_text.add(key)
+                    upstream_text = prefix + text.rstrip(" .")
+                    combined_desc = f"{combined_desc.rstrip(' .')}. {upstream_text}" if combined_desc else upstream_text
 
         if combined_desc:
             output["description"] = combined_desc
 
-        # HuBMAP lineage (all via isBasisFor):
-        # - Pre-processed sample isBasisFor post-processed sample
-        # - Post-processed sample isBasisFor Dataset
+        # The sample's own metadata keeps HuBMAP's keys; an upstream sample's is prefixed with its category
+        # (block_storage_method). A key/value pair already listed isn't repeated.
+        properties = []
+        seen_properties = set()
+        levels = [("", metadata)]
+        for ancestor_metadata in upstream:
+            category = ancestor_metadata.get("sample_category") or ancestor_metadata.get("mapped_sample_category")
+            levels.append((f"{category or 'sample'}_".lower(), ancestor_metadata))
+        for prefix, level_metadata in levels:
+            for key, value in _metadata_properties(level_metadata.get("metadata")):
+                if (key, value.casefold()) not in seen_properties:
+                    seen_properties.add((key, value.casefold()))
+                    property_id = key if key.startswith(prefix) else prefix + key  # not section_section_index_number
+                    properties.append({"@type": "PropertyValue", "propertyID": property_id, "value": value})
+        if properties:
+            output["additionalProperty"] = properties
 
-        has_dataset_descendant = any(
-            isinstance(desc, dict) and desc.get("entity_type") == "Dataset"
-            for desc in _ensure_list(metadata.get("immediate_descendants"))
-        )
-        output["additionalType"] = "ExperimentalRunSample" if has_dataset_descendant else "BioSample"
-
-        basis_for = []
-        for desc in _ensure_list(metadata.get("immediate_descendants")):
-            if not isinstance(desc, dict) or not desc.get("uuid"):
-                continue
-            if desc.get("entity_type") == "Sample":
-                sid2 = desc["uuid"]
-                entry = {
-                    "@type": "Sample",
-                    "identifier": sid2,
-                    "url": f"https://portal.hubmapconsortium.org/browse/sample/{sid2}",
-                }
-                if desc_name := desc.get("hubmap_id"):
-                    entry["name"] = desc_name
-                basis_for.append(entry)
-            elif desc.get("entity_type") == "Dataset":
-                did = desc["uuid"]
-                entry = {
-                    "@type": "Dataset",
-                    "identifier": did,
-                    "url": f"https://portal.hubmapconsortium.org/browse/dataset/{did}",
-                }
-                if desc_name := desc.get("hubmap_id"):
-                    entry["name"] = desc_name
-                basis_for.append(entry)
-
-        if basis_for:
-            output["isBasisFor"] = basis_for
+        # Every record is an assayed sample. It isBasisFor each crawled Dataset that lists it in source_samples,
+        # processed datasets included, which matches the Dataset's sample collection.
+        output["additionalType"] = "ExperimentalRunSample"
+        output["isBasisFor"] = datasets_by_sample[sid]
 
         yield output
 
     logger.info("Finished parsing %s samples", count)
 
 
-def parse_datasets():
-    datasets = get_ids()
+def parse_datasets(datasets):
     count = 0
     for metadata in datasets:
         count += 1
@@ -578,6 +699,8 @@ def parse_datasets():
                 output["distribution"] = distribution_list
 
         if hubmap_id := metadata.get("hubmap_id"):
+            # Sample isBasisFor entries carry this identifier; the portal finds a Dataset's samples by it.
+            output["identifier"] = hubmap_id
             output["name"] = hubmap_id
 
         # `version` is deliberately not emitted: check_schema rejects it on every
@@ -617,82 +740,10 @@ def parse_datasets():
                 #     if 'distribution' in output:
                 #         print(output['distribution'])
 
-        # Minimal Sample info on Dataset records (derived from donor + one related sample).
-        # This supports UI layouts that conditionally render sample sections even when info is sparse.
-        try:
-            sample_entry = {"@type": "Sample", "additionalType": "ExperimentalRunSample"}
-
-            donor = metadata.get("donor") if isinstance(metadata, dict) else None
-            donor_mapped = donor.get("mapped_metadata", {}) if isinstance(donor, dict) else {}
-            if isinstance(donor_mapped, dict) and donor_mapped:
-                sex_value = _first_scalar(donor_mapped.get("sex"))
-                if sex_value:
-                    sample_entry["sex"] = sex_value
-
-                age_value = _first_scalar(donor_mapped.get("age_value"))
-                age_unit = _first_scalar(donor_mapped.get("age_unit"))
-                if age_value is not None and age_unit:
-                    sample_entry["developmentalStage"] = {
-                        "@type": "QuantitativeValue",
-                        "value": age_value,
-                        "unitText": age_unit,
-                    }
-
-                phenotypes = []
-                race_value = _first_scalar(donor_mapped.get("race"))
-                if race_value:
-                    phenotypes.append({"@type": "DefinedTerm", "name": race_value})
-                blood_type = _first_scalar(donor_mapped.get("abo_blood_group_system"))
-                if blood_type:
-                    phenotypes.append({"@type": "DefinedTerm", "name": blood_type})
-                if phenotypes:
-                    sample_entry["associatedPhenotype"] = phenotypes
-
-            sample_ids = []
-            for anc in _ensure_list(metadata.get("ancestors")):
-                if isinstance(anc, dict) and anc.get("entity_type") == "Sample" and anc.get("uuid"):
-                    sample_ids.append(anc["uuid"])
-
-            sample_payload = _fetch_browse_json("sample", sample_ids[0]) if sample_ids else None
-            if isinstance(sample_payload, dict):
-                sample_category = (
-                    sample_payload.get("mapped_sample_category")
-                    or sample_payload.get("sample_category")
-                    or sample_payload.get("display_subtype")
-                )
-                if sample_category:
-                    sample_entry["sampleType"] = [{"@type": "DefinedTerm", "name": str(sample_category)}]
-
-                organs = []
-                for organ in _ensure_list(sample_payload.get("origin_samples_unique_mapped_organs")):
-                    organ_value = _first_scalar(organ)
-                    if organ_value:
-                        organs.append(organ_value)
-                if not organs:
-                    for origin in _ensure_list(sample_payload.get("origin_samples")):
-                        if isinstance(origin, dict):
-                            organ_value = origin.get("mapped_organ") or origin.get("organ")
-                            organ_value = _first_scalar(organ_value)
-                            if organ_value:
-                                organs.append(organ_value)
-
-                if organs:
-                    # De-dupe while preserving order
-                    seen = set()
-                    anatomical = []
-                    for organ in organs:
-                        key = str(organ).casefold()
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        anatomical.append({"@type": "DefinedTerm", "name": str(organ)})
-                    if anatomical:
-                        sample_entry["anatomicalStructure"] = anatomical
-
-            if len(sample_entry.keys()) > 1:
-                output["sample"] = sample_entry
-        except Exception:
-            pass
+        # The Dataset lists its source samples directly (with a count) instead of leaving them to be
+        # found through HuBMAP's Organ -> Block -> Section chain.
+        if sample_collection := _build_sample_collection(metadata):
+            output["sample"] = sample_collection
 
         if title := metadata.get("title"):
             output["description"] = title
@@ -703,5 +754,6 @@ def parse_datasets():
 
 
 def parse():
-    yield from parse_datasets()
-    yield from parse_samples()
+    datasets = get_ids()
+    yield from parse_datasets(datasets)
+    yield from parse_samples(_index_source_samples(datasets))

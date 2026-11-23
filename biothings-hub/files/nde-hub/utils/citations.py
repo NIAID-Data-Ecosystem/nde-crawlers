@@ -75,6 +75,9 @@ _PMID_COLUMN, _CONCEPT_ID_COLUMN, _MENTIONS_COLUMN = 0, 2, 3
 # Rows per executemany when loading a dump; also how often the load commits.
 _DUMP_INSERT_BATCH = 50_000
 
+# PMIDs per `IN (...)` lookup; SQLite caps bound variables per statement (999 before 3.32).
+_SQL_IN_CHUNK = 900
+
 # NCBI rejects an entire request if any id in it is malformed.
 _VALID_PMID_RE = re.compile(r"^[1-9]\d{0,8}$")
 
@@ -348,12 +351,12 @@ def _stream_and_store(filename, entity_type):
 def get_data_for_pmids(pmids, entity_type):
     """Return {entity_id: [names]} PubTator annotated on any of `pmids`."""
     cur = _get_pmid_conn().cursor()
-    placeholders = ", ".join("?" for _ in pmids)
-    cur.execute(f"SELECT entity_id, names FROM {entity_type}_data WHERE pmid IN ({placeholders})", pmids)
-
     data = {}
-    for entity_id, names in cur.fetchall():
-        data.setdefault(entity_id, []).extend(names.split("|"))
+    for chunk in batched(pmids, _SQL_IN_CHUNK):
+        placeholders = ", ".join("?" * len(chunk))
+        cur.execute(f"SELECT entity_id, names FROM {entity_type}_data WHERE pmid IN ({placeholders})", chunk)
+        for entity_id, names in cur.fetchall():
+            data.setdefault(entity_id, []).extend(names.split("|"))
     return data
 
 
@@ -879,9 +882,11 @@ def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
     if not pmid_list:
         return {}
 
-    placeholders = ", ".join("?" for _ in pmid_list)
-    cur.execute(f"SELECT pmid, data FROM eutils_cache WHERE pmid IN ({placeholders})", pmid_list)
-    cached_results = {row[0]: orjson.loads(row[1]) for row in cur.fetchall()}
+    cached_results = {}
+    for chunk in batched(pmid_list, _SQL_IN_CHUNK):
+        placeholders = ", ".join("?" * len(chunk))
+        cur.execute(f"SELECT pmid, data FROM eutils_cache WHERE pmid IN ({placeholders})", chunk)
+        cached_results.update({row[0]: orjson.loads(row[1]) for row in cur.fetchall()})
     uncached_pmids = [p for p in pmid_list if p not in cached_results]
 
     if cached_results:
