@@ -1,8 +1,8 @@
 """Article→dataset citations from Make Data Count (MDC).
 
-Runs for Dataset records once the `make_data_count` dumper has loaded a release.
-A record's `_id`, `identifier` and `doi`, and its URL for SRA accessions, are
-looked up in that release:
+Runs for Dataset records once the `make_data_count` source is uploaded. A
+record's `_id`, `identifier` and `doi`, and its URL for SRA accessions, are
+looked up in the source's collection:
 
   * Primary papers are added to `citation` when the record has none,
   * Secondary (reuse) papers are added to `citedBy`,
@@ -10,8 +10,8 @@ looked up in that release:
 
 Papers the record already lists in `citation` or `citedBy`, by DOI, PMID or
 PMCID, are not added again. Citing papers are described from PubMed (PMC ID
-converter, ESearch, ESummary) or else Crossref. Answers are cached next to the
-release; misses are retried after 90 days.
+converter, ESearch, ESummary) or else Crossref. Answers are cached in SQLite;
+misses are retried after 90 days.
 
 https://github.com/digital-science/ds-make-data-count-pipeline-external
 """
@@ -19,10 +19,9 @@ https://github.com/digital-science/ds-make-data-count-pipeline-external
 import html
 import os
 import re
-import sqlite3
 import time
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from itertools import batched
 from urllib.parse import urlparse
 
@@ -30,15 +29,20 @@ import bson
 import requests
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
+from . import lookups
 from .cache import SqliteCache
 from .common import as_list, dict_entries, sqlite
 
 DB_DIR = "/data/nde-hub/standardizers/make_data_count"
 DB_PATH = os.path.join(DB_DIR, "mdc.db")
 
+# Links uploaded by the `make_data_count` source, one document per link.
+COLLECTION = "make_data_count"
+_LINK_FIELDS = ("dataset_key", "publication_doi", "citation_type", "repository", "release", "created")
+
 # 202610 was built from a stale Europe PMC accession input (MDC methods, §13).
 MIN_RELEASE = "202611"
-# Release columns the loader reads.
+# Release columns `kept_links` reads.
 _COLUMNS = frozenset({"publication_doi", "dataset_id", "dataset_id_type", "repository", "citation_type"})
 
 # Accession families matched against NDE in nde-portal#569. Other families are not loaded.
@@ -92,8 +96,6 @@ _RETRY_SECONDS = 5
 _MAX_RETRY_AFTER = 120
 _TIMEOUT = (10, 120)
 
-_SQL_CHUNK_SIZE = 900
-_INSERT_BATCH = 50_000
 _BUSY_TIMEOUT = "PRAGMA busy_timeout = 60000"
 
 # A record gaining more reuse papers than this is size-checked. Above the limit
@@ -103,7 +105,7 @@ _SIZE_LIMIT = 15 * 1024 * 1024
 
 
 class _Cache(SqliteCache):
-    """A SqliteCache in the release database, waiting out the loader's writes."""
+    """A SqliteCache that waits out other processes' writes."""
 
     def _connect(self):
         return sqlite(self.db_path, _BUSY_TIMEOUT, self._ddl)
@@ -120,112 +122,17 @@ PUBMED_MISSES = _Cache(DB_PATH, "pubmed_misses", "doi", "checked", memoize=False
 CROSSREF_MISSES = _Cache(DB_PATH, "crossref_misses", "doi", "checked", memoize=False)
 _CACHES = (PUBMED_IDS, PUBMED, CROSSREF, PUBMED_MISSES, CROSSREF_MISSES)
 
-# {"release", "created"} pinned for the current upload by reset_caches().
-_release = None
-
-
-def _connect():
-    return sqlite(DB_PATH, _BUSY_TIMEOUT)
-
-
-# ---------------------------------------------------------------------------
-# Releases
-# ---------------------------------------------------------------------------
-def current_release():
-    """{"release", "created"} of the newest loaded release, or None."""
-    if not os.path.exists(DB_PATH):
-        return None
-    with _connect() as conn:
-        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'releases'").fetchone():
-            return None
-        row = conn.execute("SELECT release, created FROM releases ORDER BY release DESC LIMIT 1").fetchone()
-    return {"release": row[0], "created": row[1]} if row else None
-
-
-def lookup_file():
-    """The release database, once a release has been loaded into it."""
-    return DB_PATH if current_release() else None
-
 
 def reset_caches():
-    """Pin the newest release for this upload."""
-    global _release
-    _release = current_release()
+    """Forget the cached answers held in memory."""
     for cache in _CACHES:
         cache.reset()
 
 
-def load_release(rows, release, created, row_count):
-    """Load one release into `links_<release>` and make it the newest.
-
-    `rows` are the release's CSV rows as dicts. The release is recorded only
-    when `row_count` rows were read and every kept row landed. The previous
-    release's table is kept for uploads still pinned to it.
-    """
-    if not re.fullmatch(r"\d{6}", release):
-        raise ValueError(f"Unexpected Make Data Count release: {release!r}")
-    os.makedirs(DB_DIR, exist_ok=True)
-    table = f"links_{release}"
-    staging = f"{table}_staging"
-    counts = Counter()
-
-    conn = sqlite3.connect(DB_PATH, timeout=60)
-    try:
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS releases "
-            "(release TEXT PRIMARY KEY, created TEXT, row_count INTEGER, loaded_at TEXT)"
-        )
-        conn.execute(f"DROP TABLE IF EXISTS {staging}")
-        conn.execute(
-            f"CREATE TABLE {staging} (dataset_key TEXT, publication_doi TEXT, citation_type TEXT, repository TEXT)"
-        )
-        conn.commit()
-
-        for chunk in batched(_kept_links(rows, counts), _INSERT_BATCH):
-            conn.executemany(f"INSERT INTO {staging} VALUES (?, ?, ?, ?)", chunk)
-            conn.commit()
-        if counts["read"] != row_count:
-            raise RuntimeError(f"Read {counts['read']:,} rows of release {release}, expected {row_count:,}")
-        if not counts["kept"]:
-            raise RuntimeError(f"No usable links in release {release}")
-        conn.execute(f"CREATE INDEX {table}_key_{int(time.time())} ON {staging} (dataset_key)")
-        stored = conn.execute(f"SELECT COUNT(*) FROM {staging}").fetchone()[0]
-        if stored != counts["kept"]:
-            raise RuntimeError(f"Stored {stored:,} links of release {release}, expected {counts['kept']:,}")
-
-        conn.execute("BEGIN IMMEDIATE")
-        conn.execute(f"DROP TABLE IF EXISTS {table}")
-        conn.execute(f"ALTER TABLE {staging} RENAME TO {table}")
-        conn.execute(
-            "INSERT OR REPLACE INTO releases VALUES (?, ?, ?, ?)",
-            (release, created, row_count, datetime.now(timezone.utc).isoformat(timespec="seconds")),
-        )
-        conn.commit()
-
-        # Keep this release and the one before it.
-        older = [row[0] for row in conn.execute("SELECT release FROM releases ORDER BY release DESC")][2:]
-        for old in older:
-            conn.execute(f"DROP TABLE IF EXISTS links_{old}")
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        conn.execute(f"DROP TABLE IF EXISTS {staging}")
-        conn.commit()
-        raise
-    finally:
-        conn.close()
-
-    logger.info(
-        "Loaded Make Data Count release %s (created %s): rows=%s links_kept=%s",
-        release,
-        created,
-        counts["read"],
-        counts["kept"],
-    )
-
-
-def _kept_links(rows, counts):
+# ---------------------------------------------------------------------------
+# Release rows, read by the make_data_count uploader
+# ---------------------------------------------------------------------------
+def kept_links(rows, counts):
     """(dataset_key, publication_doi, citation_type, repository) of the rows the stage uses."""
     for row in rows:
         if not counts["read"] and (missing := _COLUMNS - row.keys()):
@@ -271,7 +178,7 @@ def version_base(key):
 
 
 def dataset_key(value):
-    """The lookup key of a dataset ID, as stored in `links_<release>`."""
+    """The lookup key of a dataset ID, as stored in the make_data_count collection."""
     key = normalize_id(value)
     return version_base(key) if key else None
 
@@ -289,18 +196,10 @@ def record_keys(doc):
 
 
 def _links(keys):
-    """{dataset_key: [(publication_doi, citation_type, repository)]} in the pinned release."""
-    table = f"links_{_release['release']}"
+    """{dataset_key: [link]} from the make_data_count collection, a link being its uploaded document."""
     links = {}
-    with _connect() as conn:
-        for chunk in batched(sorted(keys), _SQL_CHUNK_SIZE):
-            placeholders = ",".join("?" for _ in chunk)
-            for key, doi, citation_type, repository in conn.execute(
-                f"SELECT dataset_key, publication_doi, citation_type, repository FROM {table} "
-                f"WHERE dataset_key IN ({placeholders})",
-                chunk,
-            ):
-                links.setdefault(key, []).append((doi, citation_type, repository))
+    for link in lookups.find_in(COLLECTION, "dataset_key", keys, _LINK_FIELDS):
+        links.setdefault(link["dataset_key"], []).append(link)
     return links
 
 
@@ -636,8 +535,8 @@ def _paper(doi, description, with_author):
     return entry
 
 
-def _reuse_counter(count):
-    """The InteractionCounter for `count` reuse papers in the pinned release."""
+def _reuse_counter(count, created):
+    """The InteractionCounter for `count` reuse papers in a release created on `created`."""
     counter = {
         "@type": "InteractionCounter",
         "name": "Data Reuse Citations",
@@ -650,12 +549,12 @@ def _reuse_counter(count):
         "owner": {"@type": "Organization", "name": "Make Data Count", "parentOrganization": "DataCite"},
         "fromMDC": True,
     }
-    if _release.get("created"):
-        counter["endTime"] = _release["created"]
+    if created:
+        counter["endTime"] = created
     return counter
 
 
-def _attach(doc, papers, described, failed, stats):
+def _attach(doc, papers, described, failed, stats, created):
     """Add one record's MDC papers and reuse counter, skipping papers it already lists."""
     dois, pmids, pmcids = _known_papers(doc)
     has_citation = _has_citation(doc)
@@ -683,7 +582,7 @@ def _attach(doc, papers, described, failed, stats):
         doc["citedBy"] = as_list(doc.get("citedBy")) + cited_by
         stats["citedBy_added"] += len(cited_by)
     if reuse := sum(citation_type == "Secondary" for citation_type in papers.values()):
-        doc["interactionStatistic"] = as_list(doc.get("interactionStatistic")) + [_reuse_counter(reuse)]
+        doc["interactionStatistic"] = as_list(doc.get("interactionStatistic")) + [_reuse_counter(reuse, created)]
         stats["counters"] += 1
 
     if len(cited_by) > _SIZE_CHECK_ENTRIES and len(bson.BSON.encode(doc)) > _SIZE_LIMIT:
@@ -708,36 +607,42 @@ def add_data_citations(docs):
     `docs` is one pipeline batch; every record in it is looked up at once.
     """
     docs = list(docs)
-    if _release is None:
-        return docs
     keys_by_doc = [record_keys(doc) for doc in docs]
     links = _links(set().union(*keys_by_doc))
 
     stats = Counter()
+    releases = set()
     papers_by_doc = []
+    created_by_doc = []
     for keys in keys_by_doc:
         papers = {}
         repositories = set()
+        created = set()
         for key in keys:
-            for doi, citation_type, repository in links.get(key, ()):
+            for link in links.get(key, ()):
+                doi = link["publication_doi"]
                 # A link from the dataset to itself under another version.
                 if version_base(doi) in keys:
                     continue
                 if papers.get(doi) != "Primary":
-                    papers[doi] = citation_type
-                repositories.add("DOI" if key.startswith("10.") else repository)
+                    papers[doi] = link["citation_type"]
+                repositories.add("DOI" if key.startswith("10.") else link["repository"])
+                releases.add(link["release"])
+                if link.get("created"):
+                    created.add(link["created"])
         stats.update(f"matched_{repository}" for repository in repositories)
         papers_by_doc.append(papers)
+        created_by_doc.append(max(created, default=None))
 
     described, failed = _describe(doi for papers in papers_by_doc for doi in papers)
-    for doc, papers in zip(docs, papers_by_doc):
+    for doc, papers, created in zip(docs, papers_by_doc, created_by_doc):
         if papers:
             stats["records_matched"] += 1
-            _attach(doc, papers, described, failed, stats)
+            _attach(doc, papers, described, failed, stats, created)
 
     logger.info(
         "Make Data Count %s: records=%s %s",
-        _release["release"],
+        ",".join(sorted(releases)) or "no release matched",
         len(docs),
         " ".join(f"{key}={value}" for key, value in sorted(stats.items())) or "no matches",
     )

@@ -6,7 +6,9 @@ through every applicable stage. A stage is applicable when
   * the records in front of it carry the field it works on (`funding`,
     `species`, `pmids`, ...), and
   * for the stages driven by a curated file (`measurementTechnique`,
-    `topicCategory`, ...), that file exists for this source.
+    `topicCategory`, ...), that file exists for this source, and for the
+    stages driven by a lookup source (`make_data_count`), its collection
+    holds data.
 
 An inapplicable stage does not open its lookup tables, a database connection
 or the network. Whole-pipeline statistics count every defined tracked field,
@@ -70,14 +72,15 @@ MONGO_DOC_SIZE_LIMIT = 16 * 1024 * 1024
 # Stage definition
 # ---------------------------------------------------------------------------
 class Stage:
-    __slots__ = ("name", "tracked_fields", "_run", "_applies", "_lookup_file", "_reset")
+    __slots__ = ("name", "tracked_fields", "_run", "_applies", "_lookup_file", "_lookup_collection", "_reset")
 
-    def __init__(self, name, run, applies, lookup_file=None, reset=None, tracked_fields=()):
+    def __init__(self, name, run, applies, lookup_file=None, reset=None, tracked_fields=(), lookup_collection=None):
         self.name = name
         self.tracked_fields = tuple(tracked_fields)
         self._run = run
         self._applies = applies
         self._lookup_file = lookup_file
+        self._lookup_collection = lookup_collection
         self._reset = reset
 
     def run(self, docs, source):
@@ -92,7 +95,15 @@ class Stage:
             self._reset()
 
     def available(self, source):
-        """False when this stage is driven by a per-source lookup file the source has none of."""
+        """False when the lookup file or lookup collection driving this stage is missing."""
+        if self._lookup_collection is not None:
+            from .lookups import ready
+
+            name = self._lookup_collection(source)
+            if ready(name):
+                return True
+            logger.debug("Pipeline: lookup collection %s is empty or missing, skipping stage %s", name, self.name)
+            return False
         if self._lookup_file is None:
             return True
         path = self._lookup_file(source)
@@ -520,10 +531,10 @@ def _disambiguating_description_file(source):
     return lookup_file(source)
 
 
-def _make_data_count_file(source):
-    from .make_data_count import lookup_file
+def _make_data_count_collection(source):
+    from .make_data_count import COLLECTION
 
-    return lookup_file()
+    return COLLECTION
 
 
 def _catalog_identifier_file(source):
@@ -601,9 +612,9 @@ STAGES = (
         "make_data_count",
         _run_make_data_count,
         _any_doc(_needs_make_data_count),
-        _make_data_count_file,
         reset=_reset_make_data_count,
         tracked_fields=("citation", "citedBy", "interactionStatistic"),
+        lookup_collection=_make_data_count_collection,
     ),
     Stage("lineage", _run_lineage, _always, tracked_fields=("_meta.lineage",)),
     Stage("corrections", _run_corrections, _always, tracked_fields=("sourceOrganization",)),
@@ -659,7 +670,7 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
         if stage.name in skip:
             skipped[stage.name] = "skip_stages"
         elif not stage.available(source):
-            skipped[stage.name] = "no lookup file"
+            skipped[stage.name] = "no lookup data"
         else:
             stages.append(stage)
 

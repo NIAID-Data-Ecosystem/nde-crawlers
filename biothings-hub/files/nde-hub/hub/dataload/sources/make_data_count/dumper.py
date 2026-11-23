@@ -1,8 +1,8 @@
 """Make Data Count data-citation releases for the make_data_count pipeline stage.
 
-Dumper only: `post_dump` loads each release into the stage's SQLite database.
-There is no uploader, and the source is never part of a build. Releases are
-BigQuery tables, read as in MDC's own downloader:
+The uploader loads each release into the `make_data_count` collection. The
+source is never part of a build. Releases are BigQuery tables, read as in MDC's
+own downloader:
 https://github.com/digital-science/ds-make-data-count-pipeline-external/blob/main/examples/download_releases.py
 """
 
@@ -17,7 +17,7 @@ import config
 biothings.config_for_app(config)
 from biothings.hub.dataload.dumper import BaseDumper
 from config import DATA_ARCHIVE_ROOT, MDC_GOOGLE_CREDENTIALS
-from utils.make_data_count import MIN_RELEASE, current_release, load_release
+from utils.make_data_count import COLLECTION, MIN_RELEASE
 
 DATA_PROJECT = "ds-make-data-count"
 DATA_DATASET = "public"
@@ -42,8 +42,7 @@ class MakeDataCountDumper(BaseDumper):
     SRC_NAME = "make_data_count"
     SRC_ROOT_FOLDER = os.path.join(DATA_ARCHIVE_ROOT, SRC_NAME)
     SCHEDULE = "0 12 3 * *"  # 3rd of each month at 12:00; MDC publishes on the 2nd at 06:00 UTC
-    ARCHIVE = False  # releases are kept in the stage's database
-    AUTO_UPLOAD = False  # no uploader; post_dump loads the release
+    ARCHIVE = False
     DISABLED = not MDC_GOOGLE_CREDENTIALS
 
     @property
@@ -60,8 +59,13 @@ class MakeDataCountDumper(BaseDumper):
     def need_prepare(self):
         return False
 
+    def uploaded_release(self):
+        """The release of the last successful upload, or None."""
+        job = (self.src_doc or {}).get("upload", {}).get("jobs", {}).get(COLLECTION) or {}
+        return job.get("release") if job.get("status") == "success" else None
+
     def create_todump_list(self, force=False, **kwargs):
-        """Queue the newest release in the changelog when it is newer than the loaded one."""
+        """Queue the newest release in the changelog when it is newer than the uploaded one."""
         client = _bigquery_client()
         changelog = client.get_table(f"{DATA_PROJECT}.{DATA_DATASET}.{CHANGELOG_TABLE}")
         snapshots = {}
@@ -71,8 +75,8 @@ class MakeDataCountDumper(BaseDumper):
                 # snapshot_table is recorded as "public.data_citations_YYYYMM"
                 snapshots[str(row["release"])] = row["snapshot_table"].split(".")[-1]
 
-        loaded = current_release()
-        if not snapshots or (not force and loaded and loaded["release"] >= max(snapshots)):
+        uploaded = self.uploaded_release()
+        if not snapshots or (not force and uploaded and uploaded >= max(snapshots)):
             self.to_dump = []
             return
         self.release = max(snapshots)
@@ -108,11 +112,3 @@ class MakeDataCountDumper(BaseDumper):
         }
         with open(os.path.join(os.path.dirname(localfile), RELEASE_FILE), "w") as handle:
             json.dump(release, handle)
-
-    def post_dump(self, *args, **kwargs):
-        folder = self.new_data_folder
-        with open(os.path.join(folder, RELEASE_FILE)) as handle:
-            release = json.load(handle)
-        path = os.path.join(folder, f"{release['table']}.csv.gz")
-        with gzip.open(path, "rt", newline="", encoding="utf-8") as handle:
-            load_release(csv.DictReader(handle), release["release"], release["created"], release["row_count"])
