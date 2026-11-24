@@ -296,7 +296,8 @@ def _file_needs_update(url, local_filename):
 def _dump_rows(filename):
     """Yield (pmid, concept id, mentions) from a PubTator dump, skipping short rows."""
     with gzip.open(os.path.join(PUBTATOR_DIR, filename), "rt") as file:
-        for row in csv.reader(file, delimiter="\t"):
+        # Fields are not quoted; a mention can start with a literal '"'.
+        for row in csv.reader(file, delimiter="\t", quoting=csv.QUOTE_NONE):
             if len(row) <= _MENTIONS_COLUMN:
                 continue
             yield row[_PMID_COLUMN], row[_CONCEPT_ID_COLUMN], row[_MENTIONS_COLUMN]
