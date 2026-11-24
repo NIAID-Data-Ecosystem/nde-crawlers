@@ -6,9 +6,9 @@ Runs whenever a batch of records carries `funding`:
     whole entry is replaced with the curated NIH RePORTER grant,
   * otherwise each `funding.funder` name is standardized against CrossRef.
 
-Both lookups are cached in SQLite, so a repeat run costs no HTTP requests. The
-cache is populated offline by `update_funding` -- upload never calls the
-RePORTER API itself.
+Both lookups are cached (`cache.Cache`), so a repeat run costs no HTTP
+requests. The grant cache is populated offline by `update_funding` -- upload
+never calls the RePORTER API itself.
 """
 
 import json
@@ -17,22 +17,14 @@ import re
 import requests
 from config import logger
 
-from .cache import SqliteCache
+from .cache import Cache
 from .common import as_list
-
-DB_PATH = "/data/nde-hub/standardizers/funding_lookup/funding_lookup.db"
 
 # normalize=False: both tables are keyed by the caller's own spelling -- grants by
 # `_funding_key` (which strips every space, not just the ends) and funders by the
 # raw name the source supplied.
-FUNDING_LOOKUP = SqliteCache(DB_PATH, "funding_lookup", "funding_id", "funding", memoize=False, normalize=False)
-FUNDERS = SqliteCache(DB_PATH, "funder_cache", "funder_name", "funder_data", normalize=False)
-
-
-def reset_caches():
-    """Drop the process-wide caches so a new upload sees fresh lookup data."""
-    FUNDING_LOOKUP.reset()
-    FUNDERS.reset()
+FUNDING_LOOKUP = Cache("nih_grants", normalize=False)
+FUNDERS = Cache("crossref_funders", normalize=False)
 
 
 def _funding_key(identifier):

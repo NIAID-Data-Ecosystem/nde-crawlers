@@ -5,15 +5,13 @@ intervention model, allocation, masking) is looked up on clinicaltrials.gov and
 matched against the curated NCIT mapping CSV, which yields up to three NCIT
 terms per design.
 
-Designs are fetched a few hundred trials per request and cached in SQLite next
-to the mapping CSV. A cached design is refetched once it is `_CACHE_DAYS` old,
+Designs are fetched a few hundred trials per request and cached
+(`cache.Cache`). A cached design is refetched once it is `_CACHE_DAYS` old,
 since a trial's design can be amended while it is still recruiting; if
 clinicaltrials.gov cannot answer, the stale design is used instead.
 """
 
-import os
 import re
-from datetime import date, timedelta
 from functools import cache
 from itertools import batched
 
@@ -21,11 +19,10 @@ import pandas as pd
 import requests
 from config import logger
 
-from .cache import SqliteCache
+from .cache import Cache
 from .common import as_list, retry
 
 CSV_FILE = "/nvme/nde-hub/standardizers/nctid_lookup/nctid.csv"
-DB_PATH = os.path.join(os.path.dirname(CSV_FILE), "nctid_lookup.db")
 
 STUDIES_URL = "https://clinicaltrials.gov/api/v2/studies"
 NCIT_TERMS_URL = "https://www.ebi.ac.uk/ols4/api/ontologies/ncit/terms"
@@ -39,10 +36,10 @@ _NCT_ID = re.compile(r"NCT\d{8}")
 _DESIGN_COLUMNS = ["studytype", "studymodel", "designmodel", "designmethod"]
 _IRI_COLUMNS = ["IRI", "IRI.1", "IRI.2"]
 
-# nctid -> {"design": the trial's designModule, "fetched": ISO date}
-DESIGNS = SqliteCache(DB_PATH, "trial_designs", "nctid", "design", normalize=False)
+# nctid -> the trial's designModule
+DESIGNS = Cache("trial_designs", normalize=False)
 # NCIT IRI -> label, only for labels OLS actually returned
-NCIT_NAMES = SqliteCache(DB_PATH, "ncit_names", "iri", "name", preload=True, normalize=False)
+NCIT_NAMES = Cache("ncit_names", normalize=False)
 
 
 def lookup_file():
@@ -50,10 +47,8 @@ def lookup_file():
 
 
 def reset_caches():
-    """Re-read the mapping CSV and the SQLite caches on the next upload."""
+    """Re-read the mapping CSV on the next upload."""
     load_mapping.cache_clear()
-    DESIGNS.reset()
-    NCIT_NAMES.reset()
 
 
 @cache
@@ -101,10 +96,7 @@ def _fetch_designs(nctids):
 def trial_designs(nctids):
     """{nctid: designModule} for `nctids`, from the cache or clinicaltrials.gov."""
     nctids = set(nctids)
-    today = date.today()
-    fresh_after = (today - timedelta(days=_CACHE_DAYS)).isoformat()
-    cached = DESIGNS.get_many(nctids)
-    designs = {nctid: entry["design"] for nctid, entry in cached.items() if entry["fetched"] > fresh_after}
+    designs = DESIGNS.get_many(nctids, max_age=_CACHE_DAYS * 86400)
 
     to_fetch = sorted(nctids - designs.keys())
     fetched = {}
@@ -115,11 +107,11 @@ def trial_designs(nctids):
         except Exception as e:
             failed.update(chunk)
             logger.error("Could not fetch %s trial designs from clinicaltrials.gov: %s", len(chunk), e)
-    DESIGNS.put_many({nctid: {"design": design, "fetched": today.isoformat()} for nctid, design in fetched.items()})
+    DESIGNS.put_many(fetched)
     designs.update(fetched)
 
     unanswered = set(to_fetch) - fetched.keys()
-    stale = {nctid: cached[nctid]["design"] for nctid in unanswered if nctid in cached}
+    stale = DESIGNS.get_many(unanswered)
     designs.update(stale)
 
     logger.info(

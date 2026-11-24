@@ -2,20 +2,17 @@
 
 Adds `_meta.lineage` to the record types the portal exposes, from the numeric
 taxonomy identifiers on `species` / `infectiousAgent`. Taxon lookups are cached
-in SQLite so they persist across runs.
+(`cache.Cache`) so they persist across runs.
 """
 
-import json
-import os
 from itertools import batched
 from typing import Set
 
 from biothings_client import get_client
 from config import logger
 
-from .common import as_list, dict_entries, sqlite
-
-DB_PATH = "/data/nde-hub/standardizers/lineage_lookup/lineage_lookup.db"
+from .cache import Cache
+from .common import as_list, dict_entries
 
 _TAXA_CHUNK_SIZE = 1000
 _BATCH_SIZE = 1000
@@ -32,55 +29,25 @@ def _get_client():
     return _mt
 
 
-_TAXON_DDL = (
-    "CREATE TABLE IF NOT EXISTS taxon_lineage (taxid INTEGER PRIMARY KEY, lineage TEXT NOT NULL)",
-    "CREATE TABLE IF NOT EXISTS taxon_parent (taxid INTEGER PRIMARY KEY, parent_taxid INTEGER)",
-)
+# taxid -> its ancestors' taxids
+LINEAGES = Cache("taxon_lineage", normalize=False)
+# taxid -> its parent's taxid, or None
+PARENTS = Cache("taxon_parent", normalize=False)
 
 
-def taxon_db():
-    """Open the taxon cache, creating it and its tables if needed."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    return sqlite(DB_PATH, *_TAXON_DDL)
-
-
-def _load_cached(taxon_ids: Set[int], cache: dict, table: str, column: str, decode=None):
+def _load_cached(taxon_ids: Set[int], cache: dict, table: Cache):
     """Load `table` rows for the taxon ids not already in `cache`."""
     missing_ids = set(taxon_ids) - set(cache)
-    if not missing_ids:
-        return
-
-    with taxon_db() as conn:
-        for chunk in batched(sorted(missing_ids), _TAXA_CHUNK_SIZE):
-            placeholders = ",".join("?" for _ in chunk)
-            rows = conn.execute(f"SELECT taxid, {column} FROM {table} WHERE taxid IN ({placeholders})", chunk)
-            for taxid, value in rows:
-                cache[taxid] = decode(value) if decode else value
+    if missing_ids:
+        cache.update({int(taxid): value for taxid, value in table.get_many(missing_ids).items()})
 
 
 def _load_cached_lineages(taxon_ids: Set[int], lineage_cache: dict):
-    _load_cached(taxon_ids, lineage_cache, "taxon_lineage", "lineage", json.loads)
+    _load_cached(taxon_ids, lineage_cache, LINEAGES)
 
 
 def _load_cached_parents(taxon_ids: Set[int], parent_cache: dict):
-    _load_cached(taxon_ids, parent_cache, "taxon_parent", "parent_taxid")
-
-
-def _save_to_db(lineage_rows: list, parent_rows: list):
-    """Persist newly fetched taxon data to SQLite."""
-    if not lineage_rows and not parent_rows:
-        return
-    with taxon_db() as conn:
-        if lineage_rows:
-            conn.executemany(
-                "INSERT OR REPLACE INTO taxon_lineage (taxid, lineage) VALUES (?, ?)",
-                lineage_rows,
-            )
-        if parent_rows:
-            conn.executemany(
-                "INSERT OR REPLACE INTO taxon_parent (taxid, parent_taxid) VALUES (?, ?)",
-                parent_rows,
-            )
+    _load_cached(taxon_ids, parent_cache, PARENTS)
 
 
 def _iter_string_values(value):
@@ -146,8 +113,8 @@ def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: di
     new_ids = set(taxon_ids) - set(lineage_cache)
 
     mt = None
-    lineage_rows: list = []
-    parent_rows: list = []
+    new_lineages: dict = {}
+    new_parents: dict = {}
 
     if new_ids:
         mt = _get_client()
@@ -161,8 +128,8 @@ def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: di
                     lineage_cache[taxid] = lineage
                     parent = parent_taxid if parent_taxid else None
                     parent_cache[taxid] = parent
-                    lineage_rows.append((taxid, json.dumps(lineage)))
-                    parent_rows.append((taxid, parent))
+                    new_lineages[taxid] = lineage
+                    new_parents[taxid] = parent
 
     lineage_taxon_ids: Set[int] = set(taxon_ids)
     for lineage in lineage_cache.values():
@@ -186,11 +153,12 @@ def _fetch_taxon_info(taxon_ids: Set[int], lineage_cache: dict, parent_cache: di
                     if taxid is not None:
                         parent = parent_taxid if parent_taxid else None
                         parent_cache[taxid] = parent
-                        parent_rows.append((taxid, parent))
+                        new_parents[taxid] = parent
             except Exception as e:
                 logger.error("Error fetching lineage taxon info chunk: %s", e)
 
-    _save_to_db(lineage_rows, parent_rows)
+    LINEAGES.put_many(new_lineages)
+    PARENTS.put_many(new_parents)
 
 
 def _get_lineage_entries(taxid: int, lineage_cache: dict, parent_cache: dict):

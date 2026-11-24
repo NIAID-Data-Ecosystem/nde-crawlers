@@ -471,12 +471,6 @@ def _reset_terms():
     reset_caches()
 
 
-def _reset_descriptions():
-    from .descriptions import reset_caches
-
-    reset_caches()
-
-
 def _reset_nctid():
     from .nctid import reset_caches
 
@@ -485,12 +479,6 @@ def _reset_nctid():
 
 def _reset_additional_type():
     from .additional_type import reset_caches
-
-    reset_caches()
-
-
-def _reset_make_data_count():
-    from .make_data_count import reset_caches
 
     reset_caches()
 
@@ -568,7 +556,6 @@ STAGES = (
         "descriptions",
         _run_descriptions,
         _any_doc(_needs_descriptions),
-        reset=_reset_descriptions,
         tracked_fields=("species", "infectiousAgent", "healthCondition"),
     ),
     Stage(
@@ -612,7 +599,6 @@ STAGES = (
         "make_data_count",
         _run_make_data_count,
         _any_doc(_needs_make_data_count),
-        reset=_reset_make_data_count,
         tracked_fields=("citation", "citedBy", "interactionStatistic"),
         lookup_collection=_make_data_count_collection,
     ),

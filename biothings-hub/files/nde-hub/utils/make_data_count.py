@@ -10,18 +10,17 @@ looked up in the source's collection:
 
 Papers the record already lists in `citation` or `citedBy`, by DOI, PMID or
 PMCID, are not added again. Citing papers are described from PubMed (PMC ID
-converter, ESearch, ESummary) or else Crossref. Answers are cached in SQLite;
-misses are retried after 90 days.
+converter, ESearch, ESummary) or else Crossref. Answers are cached
+(`cache.Cache`); misses are retried after 90 days.
 
 https://github.com/digital-science/ds-make-data-count-pipeline-external
 """
 
 import html
-import os
 import re
 import time
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date
 from itertools import batched
 from urllib.parse import urlparse
 
@@ -30,11 +29,8 @@ import requests
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
 from . import lookups
-from .cache import SqliteCache
-from .common import as_list, dict_entries, sqlite
-
-DB_DIR = "/data/nde-hub/standardizers/make_data_count"
-DB_PATH = os.path.join(DB_DIR, "mdc.db")
+from .cache import Cache
+from .common import as_list, dict_entries
 
 # Links uploaded by the `make_data_count` source, one document per link.
 COLLECTION = "make_data_count"
@@ -89,14 +85,12 @@ _CROSSREF_SIZE = 100
 _NCBI_PAUSE = 0.11 if GEO_API_KEY else 0.34
 _CROSSREF_PAUSE = 0.4 if GEO_EMAIL else 1.0
 
-_MISS_DAYS = 90
+_MISS_SECONDS = 90 * 86400
 _ATTEMPTS = 5
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 _RETRY_SECONDS = 5
 _MAX_RETRY_AFTER = 120
 _TIMEOUT = (10, 120)
-
-_BUSY_TIMEOUT = "PRAGMA busy_timeout = 60000"
 
 # A record gaining more reuse papers than this is size-checked. Above the limit
 # its MDC citedBy entries are dropped, so finalize does not drop the record.
@@ -104,29 +98,12 @@ _SIZE_CHECK_ENTRIES = 300
 _SIZE_LIMIT = 15 * 1024 * 1024
 
 
-class _Cache(SqliteCache):
-    """A SqliteCache that waits out other processes' writes."""
-
-    def _connect(self):
-        return sqlite(self.db_path, _BUSY_TIMEOUT, self._ddl)
-
-
-# DOI -> {"pmid", "pmcid"}
-PUBMED_IDS = _Cache(DB_PATH, "pubmed_ids", "doi", "ids", memoize=False)
+# DOI -> {"pmid", "pmcid"}; a miss is a DOI PubMed has no paper for
+PUBMED_IDS = Cache("doi_pubmed_ids")
 # PMID -> description
-PUBMED = _Cache(DB_PATH, "pubmed_descriptions", "pmid", "description", memoize=False)
-# DOI -> description
-CROSSREF = _Cache(DB_PATH, "crossref_descriptions", "doi", "description", memoize=False)
-# DOI -> {"checked": ISO date}
-PUBMED_MISSES = _Cache(DB_PATH, "pubmed_misses", "doi", "checked", memoize=False)
-CROSSREF_MISSES = _Cache(DB_PATH, "crossref_misses", "doi", "checked", memoize=False)
-_CACHES = (PUBMED_IDS, PUBMED, CROSSREF, PUBMED_MISSES, CROSSREF_MISSES)
-
-
-def reset_caches():
-    """Forget the cached answers held in memory."""
-    for cache in _CACHES:
-        cache.reset()
+PUBMED = Cache("pubmed_summaries")
+# DOI -> description; a miss is a DOI Crossref has no work for
+CROSSREF = Cache("crossref_works")
 
 
 # ---------------------------------------------------------------------------
@@ -451,12 +428,10 @@ def _describe(dois):
     dois = sorted(set(dois))
     if not dois:
         return {}, set()
-    today = date.today().isoformat()
-    fresh_after = (date.today() - timedelta(days=_MISS_DAYS)).isoformat()
     failed = set()
 
     ids = PUBMED_IDS.get_many(dois)
-    pubmed_misses = {doi for doi, miss in PUBMED_MISSES.get_many(dois).items() if miss["checked"] > fresh_after}
+    pubmed_misses = PUBMED_IDS.misses(dois, max_age=_MISS_SECONDS)
     unknown = [doi for doi in dois if doi not in ids and doi not in pubmed_misses]
     if unknown:
         found, uncertain = _pmc_ids(unknown)
@@ -472,7 +447,7 @@ def _describe(dois):
         uncertain |= search_failed | (rest_set if summary_failed else set())
         missing = [doi for doi in unknown if doi not in found]
         PUBMED_IDS.put_many(found)
-        PUBMED_MISSES.put_many({doi: {"checked": today} for doi in missing if doi not in uncertain})
+        PUBMED_IDS.miss_many(doi for doi in missing if doi not in uncertain)
         ids.update(found)
         pubmed_misses.update(doi for doi in missing if doi not in uncertain)
         failed.update(doi for doi in missing if doi in uncertain)
@@ -490,14 +465,12 @@ def _describe(dois):
 
     crossref_dois = [doi for doi in dois if doi in pubmed_misses and doi not in ids]
     works = CROSSREF.get_many(crossref_dois)
-    crossref_misses = {
-        doi for doi, miss in CROSSREF_MISSES.get_many(crossref_dois).items() if miss["checked"] > fresh_after
-    }
+    crossref_misses = CROSSREF.misses(crossref_dois, max_age=_MISS_SECONDS)
     ask = [doi for doi in crossref_dois if doi not in works and doi not in crossref_misses]
     if ask:
         fetched, absent, crossref_failed = _crossref_descriptions(ask)
         CROSSREF.put_many(fetched)
-        CROSSREF_MISSES.put_many({doi: {"checked": today} for doi in absent})
+        CROSSREF.miss_many(absent)
         works.update(fetched)
         failed |= crossref_failed
     described.update(works)

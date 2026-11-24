@@ -2,10 +2,8 @@
 
 import functools
 import os
-import sqlite3
 import time
 import traceback
-from contextlib import contextmanager
 
 import orjson
 from config import logger
@@ -51,23 +49,6 @@ def iter_ndjson(data_folder, filename="data.ndjson"):
                 yield orjson.loads(line)
             except orjson.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON on line {line_number} of {path}: {e}") from e
-
-
-@contextmanager
-def sqlite(path, *setup):
-    """Open `path`, run any `setup` DDL, commit on success and always close.
-
-    A connection per call rather than a shared one: the species resolvers write
-    from a thread pool and SQLite connections cannot cross threads.
-    """
-    conn = sqlite3.connect(path)
-    try:
-        with conn:
-            for statement in setup:
-                conn.execute(statement)
-            yield conn
-    finally:
-        conn.close()
 
 
 def as_list(value):

@@ -3,12 +3,12 @@
 Runs for resource records and Samples whose `additionalType` is `BioSample`
 when they have a description but are missing taxonomy or health conditions.
 Descriptions go to the EXTRACT tagger (tagger.jensenlab.org), whose response is
-cached in SQLite per record id, so only records seen for the first time cost a
-request. Request failures are cached briefly and repeated service failures open
-a worker-local circuit breaker. The tagged names are then validated against
-EXTRACT's candidate NCBI taxon ids and standardized with UniProt taxonomy.
-Successful taxa and deterministic rejections are cached, and accepted terms
-are marked `fromEXTRACT`.
+cached (`cache.Cache`) per record id, so only records seen for the first time
+cost a request. Request failures are cached briefly and repeated service
+failures open a worker-local circuit breaker. The tagged names are then
+validated against EXTRACT's candidate NCBI taxon ids and standardized with
+UniProt taxonomy. Successful taxa and deterministic rejections are cached, and
+accepted terms are marked `fromEXTRACT`.
 """
 
 import json
@@ -20,8 +20,8 @@ from itertools import batched
 import requests
 from config import logger
 
-from .cache import SqliteCache, SqliteKeySet
-from .common import as_list, sqlite, supports_description_enrichment
+from .cache import Cache
+from .common import as_list, supports_description_enrichment
 from .taxonomy import classify_from_lineage
 from .term_matching import (
     compact_term_text,
@@ -32,12 +32,7 @@ from .term_matching import (
     term_labels,
     term_matches_mention,
 )
-from .terms import DB_PATH as PUBTATOR_DB_PATH, SPECIES_CACHE_DB_PATH as DB_PATH, fetch_taxon, normalize_taxon_id, query_condition
-
-_NEGATIVE_DISEASE_TABLE = "health_conditions_negative"
-_NEGATIVE_SPECIES_TABLE = "description_species_negative"
-_TAXON_DETAILS_TABLE = "extract_taxon_details"
-_TAXON_FAILURE_TABLE = "extract_taxon_failures"
+from .terms import HEALTH_CONDITION_TERMS, SPECIES_DETAILS, fetch_taxon, normalize_taxon_id, query_condition
 
 # Include a version in rejection keys so a future matching-rule change can
 # invalidate old rejections without a data migration.
@@ -68,10 +63,7 @@ _CONTEXT_REQUIRED_DISEASES = frozenset(
 # EXTRACT entity type codes.
 _SPECIES_TYPE = "-2"
 _DISEASE_TYPE = "-26"
-_CACHE_TABLES = {_SPECIES_TYPE: "species", _DISEASE_TYPE: "disease"}
 
-# SQLite allows 999 bound variables by default; keep headroom.
-_SQL_CHUNK_SIZE = 900
 _EXTRACT_CHUNK_SIZE = 5000
 _EXTRACT_URL = "https://tagger.jensenlab.org/GetEntities"
 _EXTRACT_TIMEOUT = (5, 60)
@@ -227,50 +219,17 @@ ADVANCED_DROP_RULES = {
 
 ONTOLOGY_PRIORITY = {"MONDO": 0, "HPO": 1, "DOID": 2, "NCIT": 3}
 
-_RESPONSE_CACHE_DDL = (
-    "CREATE TABLE IF NOT EXISTS species (ndeid TEXT PRIMARY KEY, text_response TEXT)",
-    "CREATE TABLE IF NOT EXISTS disease (ndeid TEXT PRIMARY KEY, text_response TEXT)",
-)
-_FAILURE_CACHE_DDL = """
-CREATE TABLE IF NOT EXISTS extract_failures (
-    ndeid TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    retry_after REAL NOT NULL,
-    error TEXT,
-    PRIMARY KEY (ndeid, entity_type)
-)
-"""
-_EXTRACT_CACHE_DDL = (*_RESPONSE_CACHE_DDL, _FAILURE_CACHE_DDL)
-
-# All but TAXON_DETAILS are preloaded whole; they're read for nearly every term.
-SPECIES_DETAILS = SqliteCache(DB_PATH, "species_details", preload=True)
-TAXON_DETAILS = SqliteCache(
-    DB_PATH,
-    _TAXON_DETAILS_TABLE,
-    key_column="identifier",
-    value_column="standard_dict",
-    normalize=False,
-)
-FAILED_TAXA = SqliteKeySet(DB_PATH, _TAXON_FAILURE_TABLE, key_column="identifier", preload=True, normalize=False)
-REJECTED_SPECIES = SqliteKeySet(
-    DB_PATH,
-    _NEGATIVE_SPECIES_TABLE,
-    key_column="lookup_key",
-    preload=True,
-    normalize=False,
-)
-HEALTH_CONDITIONS = SqliteCache(PUBTATOR_DB_PATH, "health_conditions", preload=True)
-NEGATIVE_DISEASES = SqliteKeySet(PUBTATOR_DB_PATH, _NEGATIVE_DISEASE_TABLE, preload=True)
-
-
-def reset_caches():
-    """Drop the process-wide caches so a new upload sees fresh lookup data."""
-    SPECIES_DETAILS.reset()
-    TAXON_DETAILS.reset()
-    FAILED_TAXA.reset()
-    REJECTED_SPECIES.reset()
-    HEALTH_CONDITIONS.reset()
-    NEGATIVE_DISEASES.reset()
+# Record _id -> EXTRACT's TSV response; a miss is a failed request, retried after
+# _EXTRACT_FAILURE_TTL_SECONDS.
+EXTRACT_RESPONSES = {
+    _SPECIES_TYPE: Cache("extract_species", normalize=False),
+    _DISEASE_TYPE: Cache("extract_disease", normalize=False),
+}
+# NCBI taxon id -> UniProt taxonomy details; a miss is a permanent UniProt failure.
+TAXON_DETAILS = Cache("taxon_details", normalize=False)
+# Rejected species mention/candidate keys and disease lookup keys, as misses.
+REJECTED_SPECIES = Cache("description_species_rejects", normalize=False)
+REJECTED_DISEASES = Cache("health_condition_rejects")
 
 
 # ---------------------------------------------------------------------------
@@ -470,57 +429,12 @@ def _response_for_entity_type(text_response, entity_type):
     return "\n".join(lines)
 
 
-def _fetch_cached_responses(cursor, entity_type, ndeids):
-    """Fetch cached EXTRACT responses for many record ids: {ndeid: text_response}."""
-    table = _CACHE_TABLES.get(entity_type)
-    if not table or not ndeids:
-        return {}
-
-    out = {}
-    for chunk in batched(ndeids, _SQL_CHUNK_SIZE):
-        placeholders = ",".join("?" for _ in chunk)
-        cursor.execute(f"SELECT ndeid, text_response FROM {table} WHERE ndeid IN ({placeholders})", chunk)
-        out.update(cursor.fetchall())
-    return out
-
-
-def _fetch_cached_failures(cursor, entity_type, ndeids, now):
-    """Fetch record ids whose latest EXTRACT failure is still cooling down."""
-    if not ndeids:
-        return set()
-
-    out = set()
-    for chunk in batched(ndeids, _SQL_CHUNK_SIZE):
-        placeholders = ",".join("?" for _ in chunk)
-        cursor.execute(
-            f"SELECT ndeid FROM extract_failures "
-            f"WHERE entity_type = ? AND retry_after > ? AND ndeid IN ({placeholders})",
-            (entity_type, now, *chunk),
-        )
-        out.update(row[0] for row in cursor.fetchall())
-    return out
-
-
-def _cache_extract_results(rows_by_type, failed_rows):
-    """Write fetched responses and temporary failures after network I/O."""
-    if not any(rows_by_type.values()) and not failed_rows:
-        return
-
-    with sqlite(DB_PATH, *_EXTRACT_CACHE_DDL) as conn:
-        if failed_rows:
-            conn.executemany(
-                "INSERT OR REPLACE INTO extract_failures "
-                "(ndeid, entity_type, retry_after, error) VALUES (?, ?, ?, ?)",
-                failed_rows,
-            )
-        for entity_type, rows in rows_by_type.items():
-            table = _CACHE_TABLES.get(entity_type)
-            if table and rows:
-                conn.executemany(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)", rows)
-                conn.executemany(
-                    "DELETE FROM extract_failures WHERE ndeid = ? AND entity_type = ?",
-                    ((ndeid, entity_type) for ndeid, _ in rows),
-                )
+def _cache_extract_results(responses_by_type, failures_by_type):
+    """Write fetched responses and failed requests after network I/O."""
+    for entity_type, ndeids in failures_by_type.items():
+        EXTRACT_RESPONSES[entity_type].miss_many(ndeids)
+    for entity_type, responses in responses_by_type.items():
+        EXTRACT_RESPONSES[entity_type].put_many(responses)
 
 
 def _tagged_entities(response_text, entity_type):
@@ -561,18 +475,14 @@ def _extract_entities(doc_list):
             if "healthCondition" not in doc:
                 disease_ids.append(doc["_id"].lower())
 
-        with sqlite(DB_PATH, *_EXTRACT_CACHE_DDL) as conn:
-            c = conn.cursor()
-            cached_species = _fetch_cached_responses(c, _SPECIES_TYPE, species_ids)
-            cached_disease = _fetch_cached_responses(c, _DISEASE_TYPE, disease_ids)
-            now = time.time()
-            failed_species = _fetch_cached_failures(c, _SPECIES_TYPE, species_ids, now)
-            failed_disease = _fetch_cached_failures(c, _DISEASE_TYPE, disease_ids, now)
-
-        cached_by_type = {_SPECIES_TYPE: cached_species, _DISEASE_TYPE: cached_disease}
-        failed_by_type = {_SPECIES_TYPE: failed_species, _DISEASE_TYPE: failed_disease}
-        pending_writes = {_SPECIES_TYPE: [], _DISEASE_TYPE: []}
-        pending_failures = []
+        ids_by_type = {_SPECIES_TYPE: species_ids, _DISEASE_TYPE: disease_ids}
+        cached_by_type = {kind: EXTRACT_RESPONSES[kind].get_many(ids) for kind, ids in ids_by_type.items()}
+        failed_by_type = {
+            kind: EXTRACT_RESPONSES[kind].misses(ids, max_age=_EXTRACT_FAILURE_TTL_SECONDS)
+            for kind, ids in ids_by_type.items()
+        }
+        pending_writes = {_SPECIES_TYPE: {}, _DISEASE_TYPE: {}}
+        pending_failures = {_SPECIES_TYPE: [], _DISEASE_TYPE: []}
 
         for doc in chunk_docs:
             count += 1
@@ -619,10 +529,8 @@ def _extract_entities(doc_list):
                     except Exception as e:
                         error = _extract_error_summary(e)
                         logger.error("Error querying EXTRACT for document %s: %s", doc.get("_id"), error)
-                        retry_after = time.time() + _EXTRACT_FAILURE_TTL_SECONDS
-                        pending_failures.extend(
-                            (ndeid, entity_type, retry_after, error) for entity_type in missing_types
-                        )
+                        for entity_type in missing_types:
+                            pending_failures[entity_type].append(ndeid)
                     else:
                         for entity_type in missing_types:
                             # A combined request is split before caching, preserving
@@ -634,7 +542,7 @@ def _extract_entities(doc_list):
                             )
                             responses[entity_type] = response_text
                             cached_by_type[entity_type][ndeid] = response_text
-                            pending_writes[entity_type].append((ndeid, response_text))
+                            pending_writes[entity_type][ndeid] = response_text
                     finally:
                         api_seconds += time.monotonic() - api_started
 
@@ -1017,7 +925,7 @@ def _load_candidate_taxa(identifiers):
         return {}, set()
 
     started = time.monotonic()
-    failed_ids = FAILED_TAXA.known(identifiers)
+    failed_ids = TAXON_DETAILS.misses(identifiers)
     details_by_id = TAXON_DETAILS.get_many(set(identifiers) - failed_ids)
     missing = [
         identifier for identifier in identifiers if identifier not in failed_ids and identifier not in details_by_id
@@ -1044,7 +952,7 @@ def _load_candidate_taxa(identifiers):
                     logger.warning("Transient UniProt taxonomy failure for %s: %s", identifier, error)
 
     TAXON_DETAILS.put_many(fetched_details)
-    FAILED_TAXA.add_many(permanent_failures)
+    TAXON_DETAILS.miss_many(permanent_failures)
 
     logger.info(
         "Species candidate taxonomy: ids=%s cache_hits=%s negative_hits=%s api_calls=%s "
@@ -1074,13 +982,14 @@ def _resolve_missing_species(missing_terms, candidate_identifiers=None):
     pending = {}
     rejection_cache_hits = 0
 
+    rejection_keys = {name: _species_rejection_key(name, candidate_identifiers.get(name, ())) for name in missing_terms}
+    rejected = REJECTED_SPECIES.misses(rejection_keys.values())
     for original_name in missing_terms:
-        raw_identifiers = candidate_identifiers.get(original_name, ())
-        rejection_key = _species_rejection_key(original_name, raw_identifiers)
-        if rejection_key in REJECTED_SPECIES:
+        rejection_key = rejection_keys[original_name]
+        if rejection_key in rejected:
             rejection_cache_hits += 1
             continue
-        pending[original_name] = (_candidate_taxon_ids(raw_identifiers), rejection_key)
+        pending[original_name] = (_candidate_taxon_ids(candidate_identifiers.get(original_name, ())), rejection_key)
 
     candidate_ids = [identifier for identifiers, _ in pending.values() for identifier in identifiers]
     details_by_id, transient_failures = _load_candidate_taxa(candidate_ids)
@@ -1110,7 +1019,7 @@ def _resolve_missing_species(missing_terms, candidate_identifiers=None):
             rejected_keys.append(rejection_key)
 
     SPECIES_DETAILS.put_many(resolved_cache)
-    REJECTED_SPECIES.add_many(rejected_keys)
+    REJECTED_SPECIES.miss_many(rejected_keys)
 
     failed = len(missing_terms) - len(resolved)
     logger.info(
@@ -1291,11 +1200,11 @@ def _standardize_extracted_diseases(doc_list):
         disease_key = disease_name.lower().strip()
         mapping_key = (disease_key, candidate_id)
         cache_key = _disease_lookup_key(disease_name, candidate_id)
-        if cache_key in NEGATIVE_DISEASES:
+        if REJECTED_DISEASES.misses([cache_key]):
             incompatible_lookups.add(mapping_key)
             continue
 
-        if standardized := HEALTH_CONDITIONS.get(cache_key):
+        if standardized := HEALTH_CONDITION_TERMS.get(cache_key):
             identifier_matches = not candidate_id or _disease_term_ontology_id(standardized) == candidate_id
             mention_matches = term_matches_mention(standardized, disease_name) or bool(
                 candidate_id and is_ambiguous_short_mention(disease_name)
@@ -1323,7 +1232,7 @@ def _standardize_extracted_diseases(doc_list):
             continue
 
         if not disease_details:
-            NEGATIVE_DISEASES.add(cache_key)
+            REJECTED_DISEASES.miss_many([cache_key])
             incompatible_lookups.add(mapping_key)
             continue
         identifier_matches = not candidate_id or _disease_term_ontology_id(disease_details) == candidate_id
@@ -1342,7 +1251,7 @@ def _standardize_extracted_diseases(doc_list):
         disease_details.setdefault("originalName", disease_name)
         disease_details.pop("curatedBy", None)
         disease_mapping[mapping_key] = dict(disease_details, fromEXTRACT=True)
-        HEALTH_CONDITIONS.put(cache_key, disease_details)
+        HEALTH_CONDITION_TERMS.put(cache_key, disease_details)
 
     if incompatible_lookups:
         for doc in doc_list:
