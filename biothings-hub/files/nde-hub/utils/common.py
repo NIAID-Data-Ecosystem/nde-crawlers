@@ -59,7 +59,11 @@ def sqlite(path, *setup):
 
     A connection per call rather than a shared one: the species resolvers write
     from a thread pool and SQLite connections cannot cross threads.
+
+    Creates the parent directory if missing: sqlite3.connect() won't, and a
+    fresh volume has none of the cache directories.
     """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     conn = sqlite3.connect(path)
     try:
         with conn:

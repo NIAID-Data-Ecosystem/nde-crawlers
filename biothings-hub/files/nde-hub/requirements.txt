@@ -1,7 +1,7 @@
-# -e git+https://github.com/biothings/biothings.api@1.0.x#egg=biothings[hub,docker]
-# biothings[hub, docker] @ git+https://github.com/biothings/biothings.api.git@1.2.x
-biothings[hub, docker]==1.2.2
+biothings[hub, docker, kubernetes] @ git+https://github.com/biothings/biothings.api@feature/kubernetes-job-dumper
 biopython>=1.79     # for pmids to make citation/funding in utils (ncbi_geo crawler)
+biopython>=1.79     # for pmids to make citation/funding in utils (ncbi_geo crawler)
+orjson              # utils/citations.py, utils/common.py
 text2term       # for topic_category helper in utils
 timeout-decorator   # for timeout in biostudies
 lxml        # for utils to remove html tags

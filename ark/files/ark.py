@@ -3,14 +3,23 @@ from __future__ import annotations
 
 import datetime
 import logging
+import os
 import re
 from typing import Any, Dict, Generator, List, Optional
 
 import pandas as pd
 import requests
 import synapseclient
-from api_secret import SYNAPSE_TOKEN
 from synapseclient import Synapse
+
+try:
+    # su07: gitignored api_secret.py baked into the image.
+    from api_secret import SYNAPSE_TOKEN
+except ImportError:
+    # Kubernetes: env var from a Secret (biothings-infra/environments/nde-hub/secrets.tf).
+    # Empty until the Secret is populated. Synapse has no anonymous access,
+    # so the crawl fails at login.
+    SYNAPSE_TOKEN = os.environ.get("SYNAPSE_TOKEN", "")
 
 # Synapse table containing ARK datasets
 ARK_DATASETS_TABLE = "syn68554562"

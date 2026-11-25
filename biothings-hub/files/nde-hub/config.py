@@ -11,6 +11,18 @@ mongo_host = os.environ.get("MONGO_HOST", "su09:27017,su11:27017/?replicaSet=rs0
 mongo_parsed = urllib.parse.urlparse(f"mongodb://{mongo_host}")
 data_folder = os.environ.get("DATA_FOLDER", "/data/nde-hub")
 
+# Defaults for utils/citations.py. Empty means unauthenticated NCBI calls
+# (lower rate limit). Skipped if already defined.
+if 'GEO_API_KEY' not in dir():
+    GEO_API_KEY = os.environ.get('GEO_API_KEY', '')
+if 'GEO_EMAIL' not in dir():
+    GEO_EMAIL = os.environ.get('GEO_EMAIL', '')
+
+# GitHub token for utils/corrections.py. Empty means unauthenticated calls
+# (60 req/hour instead of 5000). Skipped if already defined.
+if 'token' not in dir():
+    token = os.environ.get('CORRECTIONS_GITHUB_TOKEN', '')
+
 # create directories in case volume changed
 for _ in ["datasources", "plugins", "dataupload", "diff", "logs", "release", "cache", "run", "esbackup"]:
     os.makedirs(f"{data_folder}/{_}", exist_ok=True)
@@ -97,7 +109,7 @@ HUB_API_PORT = 19580
 READONLY_HUB_API_PORT = 19581
 
 # Hub name/icon url/version, for display purpose
-HUB_NAME = "NDE Data Hub"
+HUB_NAME = os.environ.get('HUB_NAME', 'NDE Data Hub')
 HUB_ICON = "https://biothings.io/static/img/sdk-icon.svg"
 
 USE_RELOADER = True  # so no need to restart hub when a datasource has changed
@@ -111,6 +123,12 @@ del os, urllib, setup_default_log, mongo_host, mongo_parsed
 # This is the root data folder from output files NDEFileSystemDumper
 # is monitoring, where all crawlers save output files
 CRAWLER_OUTPUT_DATA_ROOT = "/data"
+
+# Used by KubernetesJobDumper. The Hub runs in the same cluster as the crawlers,
+# so it authenticates with its pod ServiceAccount; no kubeconfig needed.
+KUBERNETES_CONFIG = {
+    "in-cluster": {"in_cluster": True},
+}
 
 # Allow to override any default settings with a config_local.py file
 try:

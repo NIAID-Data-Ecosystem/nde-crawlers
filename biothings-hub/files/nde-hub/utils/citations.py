@@ -208,6 +208,8 @@ def _get_pmid_conn():
 def _get_pubtator_conn():
     global _pubtator_conn
     if _pubtator_conn is None:
+        # terms.py's lookup_db() usually creates this directory first; don't rely on it.
+        os.makedirs(os.path.dirname(PUBTATOR_DB_PATH), exist_ok=True)
         _pubtator_conn = sqlite3.connect(PUBTATOR_DB_PATH)
     return _pubtator_conn
 
@@ -706,8 +708,9 @@ def _convert_doi(doi, doi_pmid):
 
     api_key = GEO_API_KEY
     Entrez.email = GEO_EMAIL
-    if api_key:
-        Entrez.api_key = api_key
+    # Biopython drops None but sends "", and NCBI rejects an empty key ("API key invalid").
+    # Set it on every call so a stale value can't carry over.
+    Entrez.api_key = api_key or None
 
     conn = _get_pmid_conn()
     cur = conn.cursor()
@@ -717,7 +720,11 @@ def _convert_doi(doi, doi_pmid):
         doi_pmid[doi] = row[0]  # may be None if previously resolved to nothing
         return
 
-    handle = Entrez.esearch(db="pubmed", term=f"{doi}[DOI]", retmode="json")
+    try:
+        handle = Entrez.esearch(db="pubmed", term=f"{doi}[DOI]", retmode="json")
+    except urllib.error.HTTPError as err:
+        logger.error("_convert_doi failed for doi=%r url=%s body=%s", doi, err.url, err.read()[:500])
+        raise
     data = json.loads(handle.read())
     handle.close()
     pmids = data.get("esearchresult", {}).get("idlist", [])
@@ -814,8 +821,8 @@ def _parse_citation(record):
 def batch_get_pmid_eutils(pmids: Iterable[str], email: str, api_key: Optional[str] = None) -> Dict:
     """Fetch citation and funding metadata for `pmids` in one pair of requests."""
     Entrez.email = email
-    if api_key:
-        Entrez.api_key = api_key
+    # Same as _convert_doi: reset every call.
+    Entrez.api_key = api_key or None
 
     ct_fd = {}
     try:

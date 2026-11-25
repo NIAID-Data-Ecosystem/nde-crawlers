@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.2
+# syntax=docker/dockerfile:1.4
 ARG PYTHON_VERSION=3.12
 # This leverages a multistage build so that
 # dependencies are not always downloaded from the internet, speeding up the process
@@ -21,9 +21,10 @@ RUN pip wheel cryptography
 RUN pip wheel -r requirements.txt
 
 FROM python:${PYTHON_VERSION}-slim
-# BioThings Hub depends on git (the executable)
+# git: required by BioThings Hub.
+# libgomp1: required by sparse_dot_topn (via text2term); not in python:slim.
 RUN apt-get -y -qq update && \
-    apt-get install -y --no-install-recommends git wget && \
+    apt-get install -y --no-install-recommends git wget libgomp1 && \
     apt-get clean -y && apt-get autoclean -y && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 # in config.py it will read environment variables
