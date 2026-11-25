@@ -13,7 +13,7 @@ from itertools import batched, islice
 from config import logger
 
 from .common import iter_ndjson
-from .descriptions import augment_from_descriptions, reset_caches
+from .descriptions import augment_from_descriptions
 
 
 def _augment_for_prewarm(docs):
@@ -33,7 +33,6 @@ def prewarm_descriptions(path, batch_size=1000, limit=None, augment=_augment_for
     if limit is not None:
         docs = islice(docs, limit)
 
-    reset_caches()
     started = time.monotonic()
     total = 0
     for batch in batched(docs, batch_size):

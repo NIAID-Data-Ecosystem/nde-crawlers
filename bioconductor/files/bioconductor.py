@@ -108,7 +108,7 @@ def parse():
                 output["interactionStatistic"] = {
                     "@type": "InteractionCounter",
                     "userInteractionCount": downloads,
-                    "interactionType": "Downloads in the last 12 months",
+                    "interactionType": {"@type": "Action", "name": "Downloads in the last 12 months"},
                 }
 
         if version := metadata.get("Version"):

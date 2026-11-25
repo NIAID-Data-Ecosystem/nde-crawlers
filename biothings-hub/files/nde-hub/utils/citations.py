@@ -4,9 +4,10 @@ Runs whenever a batch of records carries `pmids`, `pmcs` or a `citation.doi`:
 
   * `pmcs` and `citation.doi` are converted to PMIDs,
   * PMIDs are batch-queried against NCBI E-utilities for citation + funding
-    metadata (cached in SQLite, so repeat runs skip NCBI entirely),
+    metadata (cached, so repeat runs skip NCBI entirely),
   * species and diseases PubTator annotated on those PMIDs are added to the
     record when the term also appears in its title / abstract / description.
+    The annotations are read from the `pubtator` source's collections.
 
 Helpful links used to write this module:
 https://biopython.org/docs/1.76/api/Bio.Entrez.html
@@ -14,24 +15,20 @@ https://www.nlm.nih.gov/bsd/mms/medlineelements.html
 https://www.ncbi.nlm.nih.gov/pmc/tools/id-converter-api/
 """
 
-import csv
-import gzip
 import json
-import os
 import re
-import sqlite3
 import time
 import urllib.error
 from datetime import datetime
-from email.utils import parsedate_to_datetime
 from itertools import batched
 from typing import Dict, Iterable, Optional
 
-import orjson
 import requests
 from Bio import Entrez, Medline
 from config import GEO_API_KEY, GEO_EMAIL, logger
 
+from . import lookups
+from .cache import Cache
 from .common import as_list, dict_entries, retry
 from .funding import standardize_funder
 from .term_matching import (
@@ -41,22 +38,20 @@ from .term_matching import (
     species_term_matches_mention as _species_term_matches_mention,
     term_matches_mention as _term_matches_mention,
 )
-from .terms import DB_PATH as PUBTATOR_DB_PATH, get_species_details, query_condition
+from .terms import HEALTH_CONDITION_TERMS, SPECIES_TERMS, get_species_details, query_condition
 
-PMID_DB_PATH = "/data/nde-hub/standardizers/pmid_lookup/pmid_lookup.db"
-PUBTATOR_DIR = "/data/nde-hub/standardizers/pmid_lookup/"
+# PMID -> its E-utilities citation and funding
+PUBMED_RECORDS = Cache("pubmed_efetch", normalize=False)
+# DOI as written -> PMID; a miss is a DOI PubMed has no paper for
+DOI_PMIDS = Cache("doi_pmid", normalize=False)
+_TERMS = {"species": SPECIES_TERMS, "health_conditions": HEALTH_CONDITION_TERMS}
 
-# PubTator3 annotation dumps, keyed by the table they populate. Updated monthly.
-# Five tab-separated columns: PMID, Type, Concept ID, Mentions, Resource --
-# https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator3/README.txt
-PUBTATOR_DUMPS = {
-    "species": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator3/species2pubtator3.gz",
-    "disease": "https://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator3/disease2pubtator3.gz",
-}
+# PubTator3 annotations by entity type, as uploaded by the `pubtator` source:
+# {"_id": <int pmid>, "annotations": [{"id": <concept id>, "mentions": [...]}]}.
+PUBTATOR_COLLECTIONS = {"species": "pubtator_species", "disease": "pubtator_disease"}
 
-# We keep three of them. They become `{species,disease}_data` rows of
-# (pmid, entity_id, names), which `get_data_for_pmids` reads back as
-# {concept id: [mentions]}. In the document that finally gets yielded:
+# `get_data_for_pmids` reads a record's annotations as {concept id: [mentions]}.
+# In the document that finally gets yielded:
 # The uniprot lineage of a species is used to classify it as either `species` or `infectiousAgent`.
 #   Concept ID -> the term's `identifier` and `url`. A taxon id for
 #                 species (resolved against UniProt); a MeSH id for disease, used to
@@ -70,13 +65,9 @@ PUBTATOR_DUMPS = {
 #
 # So a "goats" mention on taxon 9925 yields species: [{name: "Capra hircus",
 # identifier: "9925", fromPMID: True, ...}] -- the mention itself is gone.
-_PMID_COLUMN, _CONCEPT_ID_COLUMN, _MENTIONS_COLUMN = 0, 2, 3
 
-# Rows per executemany when loading a dump; also how often the load commits.
-_DUMP_INSERT_BATCH = 50_000
-
-# PMIDs per `IN (...)` lookup; SQLite caps bound variables per statement (999 before 3.32).
-_SQL_IN_CHUNK = 900
+# Seconds to wait for a PubTator collection that is missing, e.g. during an upload's rename.
+_PUBTATOR_WAIT = 10
 
 # NCBI rejects an entire request if any id in it is malformed.
 _VALID_PMID_RE = re.compile(r"^[1-9]\d{0,8}$")
@@ -173,191 +164,39 @@ _NON_CONDITION_TERM_NAMES = frozenset(
 )
 _NON_CONDITION_TERM_PREFIXES = ("how often experienced ", "obsolete ")
 
-_pmid_conn = None
-_pubtator_conn = None
-_pubtator_cache = {}
 _incompatible_disease_terms = set()
-_dumps_checked = False
-
-
-class PubTatorDumpUnavailable(RuntimeError):
-    """A PubTator annotation dump could not be reached at its configured URL."""
 
 
 # ---------------------------------------------------------------------------
-# Connections and one-time setup
+# PubTator annotations
 # ---------------------------------------------------------------------------
-def _get_pmid_conn():
-    """Open (once) the PMID lookup DB, creating its tables if needed."""
-    global _pmid_conn
-    if _pmid_conn is None:
-        os.makedirs(os.path.dirname(PMID_DB_PATH), exist_ok=True)
-        _pmid_conn = sqlite3.connect(PMID_DB_PATH)
-        cur = _pmid_conn.cursor()
-        for entity_type in PUBTATOR_DUMPS:
-            cur.execute(
-                f"""CREATE TABLE IF NOT EXISTS {entity_type}_data
-                       (pmid TEXT, entity_id TEXT, names TEXT, PRIMARY KEY (pmid, entity_id))"""
-            )
-        cur.execute("""CREATE TABLE IF NOT EXISTS eutils_cache (pmid TEXT PRIMARY KEY, data TEXT)""")
-        cur.execute("""CREATE TABLE IF NOT EXISTS doi_cache (doi TEXT PRIMARY KEY, pmid TEXT)""")
-        _pmid_conn.commit()
-    return _pmid_conn
+def pubtator_annotations(pmids):
+    """{entity type: {pmid: annotations}} for `pmids` from the PubTator collections.
 
-
-def _get_pubtator_conn():
-    global _pubtator_conn
-    if _pubtator_conn is None:
-        _pubtator_conn = sqlite3.connect(PUBTATOR_DB_PATH)
-    return _pubtator_conn
-
-
-def _refresh_pubtator_dumps():
-    """Download and load the PubTator annotation dumps if they changed upstream.
-
-    Runs at most once per successful check per process, and only once a source
-    actually has PMIDs to look up -- the dumps are large and the freshness check
-    costs a request each. Raises `PubTatorDumpUnavailable` if a dump can't be
-    reached, rather than carrying on with whatever was loaded last.
+    Raises when a collection is not loaded.
     """
-    global _dumps_checked
-    if _dumps_checked:
-        return
-    _get_pmid_conn()
-    os.makedirs(PUBTATOR_DIR, exist_ok=True)
-
-    for entity_type, url in PUBTATOR_DUMPS.items():
-        filename = os.path.basename(url)
-        if not _file_needs_update(url, filename):
+    ids = sorted({int(pmid) for pmid in pmids})
+    found = {}
+    for entity_type, name in PUBTATOR_COLLECTIONS.items():
+        if not ids:
+            found[entity_type] = {}
             continue
-        logger.info("Downloading %s data from %s...", entity_type, url)
-        _download_file(url, filename)
-        logger.info("Storing %s data...", entity_type)
-        _stream_and_store(filename, entity_type)
-
-    # Only after every dump checked out, so a failure is raised again on the
-    # next call instead of being skipped as "already checked".
-    _dumps_checked = True
+        if not lookups.ready(name, wait=_PUBTATOR_WAIT):
+            raise RuntimeError(f"Lookup collection {name} is not loaded; dump and upload the pubtator source")
+        found[entity_type] = {str(doc["_id"]): doc["annotations"] for doc in lookups.find_in(name, "_id", ids)}
+    return found
 
 
-def _download_file(url, local_filename):
-    full_path = os.path.join(PUBTATOR_DIR, local_filename)
-    partial_path = f"{full_path}.part"
-    try:
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(partial_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-        os.replace(partial_path, full_path)
-    except Exception:
-        try:
-            os.remove(partial_path)
-        except FileNotFoundError:
-            pass
-        raise
+def get_data_for_pmids(pmids, annotations):
+    """Return {entity_id: [names]} PubTator annotated on any of `pmids`.
 
-
-def _file_needs_update(url, local_filename):
-    """True when the remote dump is newer than our copy.
-
-    Raises `PubTatorDumpUnavailable` if the URL doesn't resolve. NCBI has moved
-    these files before (PubTatorCentral -> PubTator3) and swallowing that just
-    means the annotation tables quietly serve years-old data, so a dead URL
-    fails the upload until `PUBTATOR_DUMPS` is corrected.
+    `annotations` is one entity type's {pmid: annotations} for the batch. PMIDs are
+    read in string order and each PMID's concepts in ID order.
     """
-    full_path = os.path.join(PUBTATOR_DIR, local_filename)
-    response = requests.head(url)
-    if response.status_code != 200:
-        raise PubTatorDumpUnavailable(
-            f"PubTator dump unreachable (HTTP {response.status_code}): {url}. "
-            f"Check {os.path.dirname(url)}/ and update PUBTATOR_DUMPS in utils/citations.py."
-        )
-
-    # No local copy: take whatever is there, headers or not.
-    if not os.path.exists(full_path):
-        return True
-
-    last_modified = response.headers.get("Last-Modified")
-    if not last_modified:
-        logger.warning("No Last-Modified for %s; keeping the copy already on disk", url)
-        return False
-
-    # parsedate_to_datetime handles every date form HTTP allows and returns an
-    # aware datetime, so compare POSIX timestamps and stay clear of naive/aware.
-    try:
-        remote_timestamp = parsedate_to_datetime(last_modified).timestamp()
-    except (TypeError, ValueError) as e:
-        logger.warning("Unparseable Last-Modified %r for %s: %s", last_modified, url, e)
-        return False
-    return remote_timestamp > os.path.getmtime(full_path)
-
-
-def _dump_rows(filename):
-    """Yield (pmid, concept id, mentions) from a PubTator dump, skipping short rows."""
-    with gzip.open(os.path.join(PUBTATOR_DIR, filename), "rt") as file:
-        # Fields are not quoted; a mention can start with a literal '"'.
-        for row in csv.reader(file, delimiter="\t", quoting=csv.QUOTE_NONE):
-            if len(row) <= _MENTIONS_COLUMN:
-                continue
-            yield row[_PMID_COLUMN], row[_CONCEPT_ID_COLUMN], row[_MENTIONS_COLUMN]
-
-
-def _stream_and_store(filename, entity_type):
-    """Replace one PubTator annotation table from a complete dump.
-
-    The staging table is committed in batches because these dumps contain
-    hundreds of millions of rows. The active table remains untouched until the
-    load completes, then the two are swapped in one transaction. This both
-    preserves the old cache after an interrupted load and removes annotations
-    that disappeared upstream instead of retaining them through upserts.
-    """
-    if entity_type not in PUBTATOR_DUMPS:
-        raise ValueError(f"Unknown PubTator entity type: {entity_type}")
-
-    conn = _get_pmid_conn()
-    active_table = f"{entity_type}_data"
-    staging_table = f"{active_table}_staging"
-    conn.execute(f"DROP TABLE IF EXISTS {staging_table}")
-    conn.execute(
-        f"""CREATE TABLE {staging_table}
-               (pmid TEXT, entity_id TEXT, names TEXT, PRIMARY KEY (pmid, entity_id))"""
-    )
-    conn.commit()
-
-    total = 0
-    try:
-        insert = f"""INSERT INTO {staging_table} (pmid, entity_id, names) VALUES (?, ?, ?)
-                     ON CONFLICT(pmid, entity_id) DO UPDATE SET names=excluded.names"""
-        for rows in batched(_dump_rows(filename), _DUMP_INSERT_BATCH):
-            conn.executemany(insert, rows)
-            conn.commit()
-            total += len(rows)
-            if total % (_DUMP_INSERT_BATCH * 20) == 0:
-                logger.info("Loaded %s %s annotations", f"{total:,}", entity_type)
-
-        conn.execute("BEGIN IMMEDIATE")
-        conn.execute(f"DROP TABLE {active_table}")
-        conn.execute(f"ALTER TABLE {staging_table} RENAME TO {active_table}")
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        conn.execute(f"DROP TABLE IF EXISTS {staging_table}")
-        conn.commit()
-        raise
-
-    logger.info("Loaded %s %s annotations from %s", f"{total:,}", entity_type, filename)
-
-
-def get_data_for_pmids(pmids, entity_type):
-    """Return {entity_id: [names]} PubTator annotated on any of `pmids`."""
-    cur = _get_pmid_conn().cursor()
     data = {}
-    for chunk in batched(pmids, _SQL_IN_CHUNK):
-        placeholders = ", ".join("?" * len(chunk))
-        cur.execute(f"SELECT entity_id, names FROM {entity_type}_data WHERE pmid IN ({placeholders})", chunk)
-        for entity_id, names in cur.fetchall():
-            data.setdefault(entity_id, []).extend(names.split("|"))
+    for pmid in sorted(pmids):
+        for annotation in sorted(annotations.get(pmid, ()), key=lambda annotation: annotation["id"]):
+            data.setdefault(annotation["id"], []).extend(annotation["mentions"])
     return data
 
 
@@ -366,28 +205,12 @@ def get_data_for_pmids(pmids, entity_type):
 # ---------------------------------------------------------------------------
 def pubtator_lookup(name, table):
     """Return a fresh copy of the cached standardized term for `name`, if any."""
-    cache_key = (name.lower().strip(), table)
-    if cache_key in _pubtator_cache:
-        return json.loads(_pubtator_cache[cache_key])
-    c = _get_pubtator_conn().cursor()
-    c.execute(f"SELECT * FROM {table} WHERE original_name=?", (cache_key[0],))
-    result = c.fetchone()
-    if result:
-        _pubtator_cache[cache_key] = result[1]
-        return json.loads(result[1])
-    return None
+    return _TERMS[table].get(name)
 
 
 def pubtator_add(name, table, standard_dict):
-    conn = _get_pubtator_conn()
-    c = conn.cursor()
-    normalized_name = name.lower().strip()
-    # Keep one authoritative mapping for each mention. This also lets a newly
-    # validated result replace a stale incompatible entry already on disk.
-    c.execute(f"DELETE FROM {table} WHERE original_name=?", (normalized_name,))
-    c.execute(f"INSERT INTO {table} VALUES (?, ?)", (normalized_name, standard_dict))
-    conn.commit()
-    _pubtator_cache[(normalized_name, table)] = standard_dict
+    # One mapping per mention: a newly validated result replaces a stale incompatible one.
+    _TERMS[table].put(name, standard_dict)
 
 
 def _as_augmented(term):
@@ -489,7 +312,7 @@ def get_disease_details(identifier, original_name):
                 non_mesh_result.get("name"),
             )
         else:
-            pubtator_add(original_name, "health_conditions", json.dumps(non_mesh_result))
+            pubtator_add(original_name, "health_conditions", non_mesh_result)
             return _as_augmented(non_mesh_result)
 
     logger.debug("Fetching details for %s with ID %s", original_name, identifier)
@@ -523,7 +346,7 @@ def get_disease_details(identifier, original_name):
         _incompatible_disease_terms.add(cache_key)
         return None
 
-    pubtator_add(original_name, "health_conditions", json.dumps(standard_dict))
+    pubtator_add(original_name, "health_conditions", standard_dict)
     standard_dict["fromPMID"] = True
     return standard_dict
 
@@ -658,7 +481,7 @@ def update_record_species(rec, species_data):
                         standardized_dict.get("name"),
                     )
                     continue
-                pubtator_add(name, "species", json.dumps(standardized_dict))
+                pubtator_add(name, "species", standardized_dict)
                 standardized_dict = _as_augmented(standardized_dict)
 
             if any(spec.get("name", "").lower() == name.lower() for spec in rec.get("species", [])):
@@ -709,12 +532,8 @@ def _convert_doi(doi, doi_pmid):
     if api_key:
         Entrez.api_key = api_key
 
-    conn = _get_pmid_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT pmid FROM doi_cache WHERE doi = ?", (doi,))
-    row = cur.fetchone()
-    if row is not None:
-        doi_pmid[doi] = row[0]  # may be None if previously resolved to nothing
+    if (pmid := DOI_PMIDS.get(doi)) is not None or DOI_PMIDS.misses([doi]):
+        doi_pmid[doi] = pmid  # None if previously resolved to nothing
         return
 
     handle = Entrez.esearch(db="pubmed", term=f"{doi}[DOI]", retmode="json")
@@ -724,8 +543,10 @@ def _convert_doi(doi, doi_pmid):
     result_pmid = pmids[0] if pmids else None
     doi_pmid[doi] = result_pmid
 
-    cur.execute("INSERT OR REPLACE INTO doi_cache (doi, pmid) VALUES (?, ?)", (doi, result_pmid))
-    conn.commit()
+    if result_pmid:
+        DOI_PMIDS.put(doi, result_pmid)
+    else:
+        DOI_PMIDS.miss_many([doi])
     time.sleep(0.05 if api_key else 0.35)
 
 
@@ -875,19 +696,12 @@ def _filter_valid_pmids(pmid_list):
 
 
 def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
-    """`batch_get_pmid_eutils` backed by a SQLite cache of previous results."""
-    conn = _get_pmid_conn()
-    cur = conn.cursor()
-
+    """`batch_get_pmid_eutils` backed by a cache of previous results."""
     pmid_list = _filter_valid_pmids(pmid_list)
     if not pmid_list:
         return {}
 
-    cached_results = {}
-    for chunk in batched(pmid_list, _SQL_IN_CHUNK):
-        placeholders = ", ".join("?" * len(chunk))
-        cur.execute(f"SELECT pmid, data FROM eutils_cache WHERE pmid IN ({placeholders})", chunk)
-        cached_results.update({row[0]: orjson.loads(row[1]) for row in cur.fetchall()})
+    cached_results = PUBMED_RECORDS.get_many(pmid_list)
     uncached_pmids = [p for p in pmid_list if p not in cached_results]
 
     if cached_results:
@@ -896,12 +710,7 @@ def cached_batch_get_pmid_eutils(pmid_list, email, api_key):
     fresh_results = {}
     if uncached_pmids:
         fresh_results = batch_get_pmid_eutils(uncached_pmids, email, api_key)
-        for pmid, data in fresh_results.items():
-            cur.execute(
-                "INSERT OR REPLACE INTO eutils_cache (pmid, data) VALUES (?, ?)",
-                (str(pmid), orjson.dumps(data).decode("utf-8")),
-            )
-        conn.commit()
+        PUBMED_RECORDS.put_many(fresh_results)
 
     results = {**cached_results, **fresh_results}
     for info in results.values():
@@ -987,18 +796,19 @@ def add_citations(docs):
     a single request.
     """
     docs = list(docs)
-    _refresh_pubtator_dumps()
 
     pmid_list = _collect_pmids(docs)
     eutils_info = cached_batch_get_pmid_eutils(pmid_list, GEO_EMAIL, GEO_API_KEY) if pmid_list else {}
+    valid_pmids = {pmid for pmid in (raw.strip().lstrip("0") for raw in pmid_list) if _VALID_PMID_RE.match(pmid)}
+    annotations = pubtator_annotations(valid_pmids) if pmid_list else {}
 
     for rec in docs:
         if pmids := rec.pop("pmids", None):
             # fixes issue where pmid numbers under 10 are read as 04 instead of 4
             pmids = sorted({pmid.strip().lstrip("0") for pmid in pmids.split(",")})
-            if species := get_data_for_pmids(pmids, "species"):
+            if species := get_data_for_pmids(pmids, annotations["species"]):
                 update_record_species(rec, species)
-            if diseases := get_data_for_pmids(pmids, "disease"):
+            if diseases := get_data_for_pmids(pmids, annotations["disease"]):
                 update_record_disease(rec, diseases)
 
             for pmid in pmids:

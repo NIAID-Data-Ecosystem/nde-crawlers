@@ -3,9 +3,10 @@
 Runs whenever a batch of records carries any of those three fields. Each term
 is resolved in this order:
 
-  1. the PubTator lookup DB (`pubtator_lookup.db`), matched on name, original
-     name or any alternate name,
-  2. the resolved-species cache (`extract_lookup.db`),
+  1. the standardized terms cached by mention (`SPECIES_TERMS`,
+     `HEALTH_CONDITION_TERMS`), matched on name, original name or any alternate
+     name,
+  2. the resolved-species cache (`SPECIES_DETAILS`),
   3. UniProt taxonomy, when the record supplies a numeric NCBI taxon id,
   4. text2term against ncbitaxon, for names with no usable identifier.
 
@@ -25,14 +26,10 @@ from urllib.parse import quote
 import requests
 from config import logger
 
-from .cache import SqliteCache, SqliteKeySet
-from .common import as_list, sqlite
+from .cache import Cache
+from .common import as_list
 from .taxonomy import classify_from_lineage
 
-DB_PATH = "/data/nde-hub/standardizers/pubtator_lookup/pubtator_lookup.db"
-SPECIES_CACHE_DB_PATH = "/data/nde-hub/standardizers/extract_lookup/extract_lookup.db"
-
-_NEGATIVE_SPECIES_TABLE = "species_negative"
 _TERM_FIELDS = ("species", "infectiousAgent", "healthCondition")
 _SPECIES_FIELDS = ("species", "infectiousAgent")
 
@@ -52,11 +49,11 @@ DROP_LIST_TERMS = {
 # Reuse HTTP connections for UniProt lookups.
 _UNIPROT_SESSION = requests.Session()
 
-# Species we resolved ourselves, and names that resolved to nothing. memoize=False
-# because a big source can meet hundreds of thousands of distinct species and each
-# batch only needs its own; writes still reach later batches through the table.
-SPECIES_DETAILS = SqliteCache(SPECIES_CACHE_DB_PATH, "species_details", memoize=False)
-NEGATIVE_SPECIES = SqliteKeySet(SPECIES_CACHE_DB_PATH, _NEGATIVE_SPECIES_TABLE)
+# Standardized terms by mention, written by citations and descriptions too.
+SPECIES_TERMS = Cache("pubtator_species_terms")
+HEALTH_CONDITION_TERMS = Cache("health_condition_terms")
+# Species resolved here or by descriptions; a miss is a name that resolved to nothing.
+SPECIES_DETAILS = Cache("species_details")
 
 _lookup_cache = None
 _identifier_resolutions = {}
@@ -67,8 +64,6 @@ def reset_caches():
     global _lookup_cache
     _lookup_cache = None
     _identifier_resolutions.clear()
-    SPECIES_DETAILS.reset()
-    NEGATIVE_SPECIES.reset()
 
 
 # ---------------------------------------------------------------------------
@@ -101,20 +96,6 @@ class AliasLookupDict(dict):
     aliases_indexed = True
 
 
-_LOOKUP_DDL = (
-    "CREATE TABLE IF NOT EXISTS health_conditions (original_name text, standard_dict text)",
-    "CREATE TABLE IF NOT EXISTS species (original_name text, standard_dict text)",
-)
-
-
-def lookup_db():
-    """Open the PubTator lookup DB, creating it and its tables if needed."""
-    db_dir = os.path.dirname(DB_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    return sqlite(DB_PATH, *_LOOKUP_DDL)
-
-
 def _add_lookup_alias(lookup_dict, alias, item_data):
     if not alias:
         return
@@ -127,10 +108,7 @@ def _build_lookup_dict(rows):
     lookup_dict = AliasLookupDict()
     loaded_items = []
 
-    for original_name, standard_dict in rows:
-        if not standard_dict:
-            continue
-        item_data = json.loads(standard_dict)
+    for original_name, item_data in rows:
         item_data.setdefault("@type", "DefinedTerm")
         if isinstance(item_data.get("curatedBy"), dict):
             item_data["curatedBy"].setdefault("@type", "SoftwareApplication")
@@ -150,10 +128,7 @@ def _lookup_dicts():
     """Load (once per upload) the health condition and species lookup dictionaries."""
     global _lookup_cache
     if _lookup_cache is None:
-        with lookup_db() as conn:
-            hc_rows = conn.execute("SELECT original_name, standard_dict FROM health_conditions").fetchall()
-            species_rows = conn.execute("SELECT original_name, standard_dict FROM species").fetchall()
-        _lookup_cache = (_build_lookup_dict(hc_rows), _build_lookup_dict(species_rows))
+        _lookup_cache = (_build_lookup_dict(HEALTH_CONDITION_TERMS.items()), _build_lookup_dict(SPECIES_TERMS.items()))
         logger.info(
             "Term lookup loaded: %s health conditions, %s species", len(_lookup_cache[0]), len(_lookup_cache[1])
         )
@@ -532,11 +507,8 @@ def _resolve_via_uniprot(lookups, resolved, *, cache_failures=True):
                 if cache_failures and permanent_failure:
                     permanent_failures.append(key)
 
-    if successful:
-        SPECIES_DETAILS.put_many(successful)
-        NEGATIVE_SPECIES.discard_many(successful)
-    if permanent_failures:
-        NEGATIVE_SPECIES.add_many(permanent_failures)
+    SPECIES_DETAILS.put_many(successful)
+    SPECIES_DETAILS.miss_many(permanent_failures)
     return failed
 
 
@@ -555,6 +527,7 @@ def _resolve_via_text2term(names, resolved):
 
     lookups = []
     mapped = set()
+    unresolved = []
     for _, row in results.iterrows():
         original_name = row["Source Term"]
         key = original_name.lower().strip()
@@ -563,12 +536,11 @@ def _resolve_via_text2term(names, resolved):
         if identifier:
             lookups.append((original_name, identifier))
         else:
-            NEGATIVE_SPECIES.add(key)
+            unresolved.append(key)
 
     # Remember the names text2term couldn't map at all.
-    for name in names:
-        if name.lower().strip() not in mapped:
-            NEGATIVE_SPECIES.add(name)
+    unresolved += [name for name in names if name.lower().strip() not in mapped]
+    SPECIES_DETAILS.miss_many(unresolved)
 
     _resolve_via_uniprot(lookups, resolved)
 
@@ -578,15 +550,8 @@ def _resolve_species(unstandardized):
     if not unstandardized:
         return {}
 
-    # A previous implementation could leave the same name in both caches when
-    # direct UniProt resolution failed but text2term fallback succeeded. Let a
-    # successful resolution win and clean up those stale negative rows.
     resolved = SPECIES_DETAILS.get_many(unstandardized)
-    negative_cache = NEGATIVE_SPECIES.known(unstandardized)
-    stale_negatives = negative_cache & resolved.keys()
-    if stale_negatives:
-        NEGATIVE_SPECIES.discard_many(stale_negatives)
-        negative_cache.difference_update(stale_negatives)
+    negative_cache = SPECIES_DETAILS.misses(unstandardized)
 
     need_uniprot = []
     need_text2term = []

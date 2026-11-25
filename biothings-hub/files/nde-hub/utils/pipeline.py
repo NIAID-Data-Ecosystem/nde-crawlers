@@ -6,7 +6,9 @@ through every applicable stage. A stage is applicable when
   * the records in front of it carry the field it works on (`funding`,
     `species`, `pmids`, ...), and
   * for the stages driven by a curated file (`measurementTechnique`,
-    `topicCategory`, ...), that file exists for this source.
+    `topicCategory`, ...), that file exists for this source, and for the
+    stages driven by a lookup source (`make_data_count`), its collection
+    holds data.
 
 An inapplicable stage does not open its lookup tables, a database connection
 or the network. Whole-pipeline statistics count every defined tracked field,
@@ -43,9 +45,9 @@ The base class already decorates `load_data`. Override it (keeping
 settings on the uploader change the pipeline:
 
     post_process(self, doc)      applied after every stage but before
-                                 `lineage`, `corrections` and
-                                 `catalog_identifier`; return the
-                                 document or None to drop it
+                                 `make_data_count`, `lineage`,
+                                 `corrections` and `catalog_identifier`;
+                                 return the document or None to drop it
     skip_stages = ("...",)       stage names this source should not run
 """
 
@@ -59,7 +61,7 @@ import bson
 import orjson
 from config import logger
 
-from .common import dict_entries, supports_description_enrichment, supports_term_standardization
+from .common import as_list, dict_entries, supports_description_enrichment, supports_term_standardization
 from .validate import add_date, add_metadata_score, check_schema, clean_description, drop_placeholder_terms
 
 DEFAULT_BATCH_SIZE = 10_000
@@ -70,14 +72,15 @@ MONGO_DOC_SIZE_LIMIT = 16 * 1024 * 1024
 # Stage definition
 # ---------------------------------------------------------------------------
 class Stage:
-    __slots__ = ("name", "tracked_fields", "_run", "_applies", "_lookup_file", "_reset")
+    __slots__ = ("name", "tracked_fields", "_run", "_applies", "_lookup_file", "_lookup_collection", "_reset")
 
-    def __init__(self, name, run, applies, lookup_file=None, reset=None, tracked_fields=()):
+    def __init__(self, name, run, applies, lookup_file=None, reset=None, tracked_fields=(), lookup_collection=None):
         self.name = name
         self.tracked_fields = tuple(tracked_fields)
         self._run = run
         self._applies = applies
         self._lookup_file = lookup_file
+        self._lookup_collection = lookup_collection
         self._reset = reset
 
     def run(self, docs, source):
@@ -92,7 +95,15 @@ class Stage:
             self._reset()
 
     def available(self, source):
-        """False when this stage is driven by a per-source lookup file the source has none of."""
+        """False when the lookup file or lookup collection driving this stage is missing."""
+        if self._lookup_collection is not None:
+            from .lookups import ready
+
+            name = self._lookup_collection(source)
+            if ready(name):
+                return True
+            logger.debug("Pipeline: lookup collection %s is empty or missing, skipping stage %s", name, self.name)
+            return False
         if self._lookup_file is None:
             return True
         path = self._lookup_file(source)
@@ -350,6 +361,10 @@ def _has_additional_type(doc):
     return any(entry.get("additionalType") for field in ("isBasedOn", "hasPart") for entry in dict_entries(doc, field))
 
 
+def _needs_make_data_count(doc):
+    return "Dataset" in as_list(doc.get("@type"))
+
+
 # ---------------------------------------------------------------------------
 # Stage runners. Each imports its module on call, so a hub process only loads
 # text2term, pandas, rdflib and Bio for the stages a source actually runs.
@@ -421,6 +436,17 @@ def _run_disambiguating_description(docs, source):
     return add_disambiguating_description(docs, source)
 
 
+def _run_make_data_count(docs, source):
+    from .make_data_count import add_data_citations
+
+    # Stage.applies only gates the batch. Only Datasets are looked up.
+    doc_list = list(docs)
+    eligible = [doc for doc in doc_list if _needs_make_data_count(doc)]
+    if eligible:
+        add_data_citations(eligible)
+    return doc_list
+
+
 def _run_lineage(docs, source):
     from .lineage import process_lineage
 
@@ -441,12 +467,6 @@ def _run_catalog_identifier(docs, source):
 
 def _reset_terms():
     from .terms import reset_caches
-
-    reset_caches()
-
-
-def _reset_descriptions():
-    from .descriptions import reset_caches
 
     reset_caches()
 
@@ -499,6 +519,12 @@ def _disambiguating_description_file(source):
     return lookup_file(source)
 
 
+def _make_data_count_collection(source):
+    from .make_data_count import COLLECTION
+
+    return COLLECTION
+
+
 def _catalog_identifier_file(source):
     from .catalog_identifier import lookup_file
 
@@ -506,10 +532,11 @@ def _catalog_identifier_file(source):
 
 
 # The pipeline, in order. Citations run first because they add funding, species
-# and health conditions the later stages then standardize. Corrections run after
-# the augmenting stages, once funding is final, because they match on funding
-# identifiers. Catalog identifiers come last, after an uploader's `post_process`,
-# so they also reach catalogs a source adds there.
+# and health conditions the later stages then standardize. make_data_count runs
+# after post_process, so records a source drops are never looked up. Corrections
+# run after the augmenting stages, once funding is final, because they match on
+# funding identifiers. Catalog identifiers come last, after an uploader's
+# `post_process`, so they also reach catalogs a source adds there.
 STAGES = (
     Stage(
         "citations",
@@ -529,7 +556,6 @@ STAGES = (
         "descriptions",
         _run_descriptions,
         _any_doc(_needs_descriptions),
-        reset=_reset_descriptions,
         tracked_fields=("species", "infectiousAgent", "healthCondition"),
     ),
     Stage(
@@ -569,6 +595,13 @@ STAGES = (
         _disambiguating_description_file,
         tracked_fields=("disambiguatingDescription",),
     ),
+    Stage(
+        "make_data_count",
+        _run_make_data_count,
+        _any_doc(_needs_make_data_count),
+        tracked_fields=("citation", "citedBy", "interactionStatistic"),
+        lookup_collection=_make_data_count_collection,
+    ),
     Stage("lineage", _run_lineage, _always, tracked_fields=("_meta.lineage",)),
     Stage("corrections", _run_corrections, _always, tracked_fields=("sourceOrganization",)),
     Stage(
@@ -587,9 +620,9 @@ STAGE_NAMES = tuple(stage.name for stage in STAGES)
 def _post_process_stage(post_process):
     """Wrap an uploader's `post_process` method as a stage.
 
-    It runs after every augmentation but before `lineage` and `corrections`, so
-    a source can still add, correct or drop taxonomy and have the lineage
-    reflect it.
+    It runs after every augmentation but before `make_data_count`, `lineage`
+    and `corrections`, so a source can still add, correct or drop taxonomy and
+    have the lineage reflect it, and dropped records skip the MDC lookups.
     """
 
     def run(docs, source):
@@ -623,7 +656,7 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
         if stage.name in skip:
             skipped[stage.name] = "skip_stages"
         elif not stage.available(source):
-            skipped[stage.name] = "no lookup file"
+            skipped[stage.name] = "no lookup data"
         else:
             stages.append(stage)
 
@@ -632,7 +665,8 @@ def run_pipeline(docs, source=None, skip=(), batch_size=None, post_process=None)
 
     if post_process is not None:
         finishing_index = next(
-            (i for i, stage in enumerate(stages) if stage.name in ("lineage", "corrections")), len(stages)
+            (i for i, stage in enumerate(stages) if stage.name in ("make_data_count", "lineage", "corrections")),
+            len(stages),
         )
         stages.insert(finishing_index, _post_process_stage(post_process))
 

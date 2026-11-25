@@ -112,6 +112,10 @@ del os, urllib, setup_default_log, mongo_host, mongo_parsed
 # is monitoring, where all crawlers save output files
 CRAWLER_OUTPUT_DATA_ROOT = "/data"
 
+# Service-account JSON the make_data_count dumper reads Make Data Count releases
+# from BigQuery with. Set it in config_local.py; the dumper is disabled without it.
+MDC_GOOGLE_CREDENTIALS = None
+
 # Allow to override any default settings with a config_local.py file
 try:
     from config_local import *  # noqa
